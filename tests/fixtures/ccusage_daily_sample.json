@@ -1,0 +1,42 @@
+{
+  "daily": [
+    {
+      "agent": "codex",
+      "cacheCreationTokens": 100,
+      "cacheReadTokens": 200,
+      "inputTokens": 1000,
+      "metadata": {
+        "sample": true
+      },
+      "modelBreakdowns": [
+        {
+          "cacheCreationTokens": 100,
+          "cacheReadTokens": 200,
+          "cost": 0.12,
+          "inputTokens": 1000,
+          "modelName": "gpt-5",
+          "outputTokens": 500
+        }
+      ],
+      "modelsUsed": [
+        "gpt-5"
+      ],
+      "outputTokens": 500,
+      "period": "2026-05-22",
+      "totalCost": 0.12,
+      "totalTokens": 1800
+    },
+    {
+      "cacheCreationTokens": 0,
+      "cacheReadTokens": 0,
+      "inputTokens": 10,
+      "modelBreakdowns": [],
+      "outputTokens": 20,
+      "period": "2026-05-21"
+    }
+  ],
+  "totals": {
+    "totalTokens": 1830
+  }
+}
+

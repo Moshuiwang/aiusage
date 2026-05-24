@@ -1,0 +1,68 @@
+{
+  "timezone": "Asia/Shanghai",
+  "sources": [
+    {
+      "source_id": "mac-local",
+      "type": "local",
+      "enabled": true,
+      "machine": "mac",
+      "host_label": "macbook",
+      "os_user": "local",
+      "reports": {
+        "daily": {
+          "command": "ccusage daily --json --timezone Asia/Shanghai"
+        }
+      },
+      "timeout_seconds": 20
+    },
+    {
+      "source_id": "linux-wang",
+      "type": "ssh",
+      "enabled": true,
+      "machine": "linux",
+      "host_label": "dev-server",
+      "os_user": "wang",
+      "ssh_user": "wang",
+      "ssh_host": "example.internal",
+      "ssh_port": 22,
+      "reports": {
+        "daily": {
+          "command": "ccusage daily --json --timezone Asia/Shanghai"
+        }
+      },
+      "timeout_seconds": 30
+    },
+    {
+      "source_id": "linux-ubuntu",
+      "type": "ssh",
+      "enabled": true,
+      "machine": "linux",
+      "host_label": "prod-server",
+      "os_user": "ubuntu",
+      "ssh_user": "ubuntu",
+      "ssh_host": "example.internal",
+      "ssh_port": 22,
+      "reports": {
+        "daily": {
+          "command": "ccusage daily --json --timezone Asia/Shanghai"
+        }
+      },
+      "timeout_seconds": 30
+    },
+    {
+      "source_id": "windows-manual",
+      "type": "file_import",
+      "enabled": false,
+      "machine": "windows",
+      "host_label": "windows-pc",
+      "os_user": "windows-user",
+      "reports": {
+        "daily": {
+          "path": "data/imports/windows-pc-daily.json"
+        }
+      },
+      "timeout_seconds": 0
+    }
+  ]
+}
+

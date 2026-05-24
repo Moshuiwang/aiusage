@@ -1,0 +1,62 @@
+name: AIUsageWidget
+options:
+  bundleIdPrefix: com.local
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    MACOSX_DEPLOYMENT_TARGET: 14.0
+targets:
+  AIUsageWidgetCore:
+    type: framework
+    platform: macOS
+    sources:
+      - path: ../macos/Sources/AIUsageWidgetCore
+    info:
+      path: Config/AIUsageWidgetCore-Info.plist
+      properties:
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+
+  AIUsageWidgetApp:
+    type: application
+    platform: macOS
+    dependencies:
+      - target: AIUsageWidgetCore
+      - target: AIUsageWidgetExtension
+        embed: true
+    sources:
+      - path: Sources/AIUsageWidgetApp
+      - path: ../macos/Sources/AIUsageWidgetPreview/UsageWidgetView.swift
+    info:
+      path: Config/AIUsageWidgetApp-Info.plist
+      properties:
+        CFBundleDisplayName: AI Usage Widget
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.productivity
+
+  AIUsageWidgetExtension:
+    type: app-extension
+    platform: macOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.local.AIUsageWidgetApp.AIUsageWidgetExtension
+        ENABLE_APP_SANDBOX: YES
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
+    dependencies:
+      - target: AIUsageWidgetCore
+    sources:
+      - path: Sources/AIUsageWidgetExtension
+      - path: ../macos/Sources/AIUsageWidgetPreview/UsageWidgetView.swift
+    info:
+      path: Config/AIUsageWidgetExtension-Info.plist
+      properties:
+        CFBundleDisplayName: AI Usage
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

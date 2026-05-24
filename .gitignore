@@ -1,0 +1,14 @@
+.DS_Store
+.obsidian/
+ai-usage-widget/
+config/sources.local.json
+data/latest.json
+data/usage.sqlite
+data/history.sqlite
+data/*.tmp
+data/archive/
+data/imports/
+__pycache__/
+.pytest_cache/
+widget/macos/.build/
+widget/macos/.swiftpm/

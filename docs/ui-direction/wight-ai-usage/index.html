@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<title>AI Usage · iOS Widgets · 12 States</title>
+<style>
+  html, body {
+    margin:0; padding:0; background:#0a0a12; color:#f2f2f4;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  * { box-sizing: border-box; }
+  @keyframes wightSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="widgets.jsx"></script>
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+// Wallpaper container sizes per widget size
+const STAGE = {
+  small:  { w: 240, h: 240, pad: 28 },
+  medium: { w: 440, h: 240, pad: 28 },
+  large:  { w: 440, h: 460, pad: 28 },
+};
+
+function Row({ mode, state, sectionId, sectionTitle }) {
+  return (
+    <DCSection id={sectionId} title={sectionTitle}>
+      {(['small','medium','large']).map(size => (
+        <DCArtboard
+          key={size}
+          id={`${sectionId}-${size}`}
+          label={`${size.toUpperCase()} · ${mode}/${state === 'fg' ? 'foreground' : 'background'}`}
+          width={STAGE[size].w}
+          height={STAGE[size].h}
+        >
+          <Stage mode={mode} state={state} size={size}
+                 w={STAGE[size].w} h={STAGE[size].h} pad={STAGE[size].pad} />
+        </DCArtboard>
+      ))}
+    </DCSection>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas
+      title="AI Usage Widgets · 12 States"
+      subtitle="Apple-style widgets · Light/Dark × Foreground/Background × S/M/L · Layer 1 (5h + week quotas) + Layer 2 (input cache hit/miss + output, with time scale)"
+    >
+      <Row mode="light" state="fg" sectionId="row-lf"
+           sectionTitle="① Light · Foreground   ·   主屏点亮 · 满色 · 立体阴影" />
+
+      <Row mode="light" state="bg" sectionId="row-lb"
+           sectionTitle="② Light · Background  ·   主屏未聚焦 / Sleep Focus 暗化" />
+
+      <Row mode="dark"  state="fg" sectionId="row-df"
+           sectionTitle="③ Dark · Foreground    ·   暗色主屏 · 玻璃高光 · 颜色发光" />
+
+      <Row mode="dark"  state="bg" sectionId="row-db"
+           sectionTitle="④ Dark · Background   ·   StandBy / AOD 暗化 · 极简对比" />
+
+      <DCSection id="sec-spec" title="信息架构 · 两层数据">
+        <DCArtboard id="ab-spec" label="Information Architecture" width={920} height={400}>
+          <div style={{
+            width:920, height:400, padding:32,
+            background:'#0f0f14', color:'#f2f2f4',
+            fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+            display:'flex', flexDirection:'column', gap:14, fontSize:13, lineHeight:1.55,
+          }}>
+            <div style={{ fontSize:18, fontWeight:700, letterSpacing:'-0.02em' }}>设计要点</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px 32px', color:'rgba(242,242,244,0.78)' }}>
+              <div>
+                <b style={{color:'#f2f2f4'}}>Layer 1 · 配额视图（必现于所有尺寸）</b><br/>
+                · 当前用量占总额度比例 ── <b>5 小时窗口</b> 与 <b>本周窗口</b>，各自显示 Claude 与 Codex 的百分比与到期倒计时。<br/>
+                · Small 仅高亮 5h，week 折叠为底部一行；Medium / Large 两个窗口对等并排。
+              </div>
+              <div>
+                <b style={{color:'#f2f2f4'}}>Layer 2 · 用量结构（Large 独有）</b><br/>
+                · 输入 ÷ 输出，输入再分缓存 <b>HIT</b> / <b>MISS</b>。<br/>
+                · 顶部时间维度：15m · 60m · 1d · 7d · 30d，柱图按维度重采样并保持三层堆叠（HIT / MISS / OUT）。
+              </div>
+              <div>
+                <b style={{color:'#f2f2f4'}}>苹果四态规范</b><br/>
+                · <b>前台 (Foreground)</b>：高对比、阴影立体、品牌色发光；用户主动浏览主屏时显示。<br/>
+                · <b>后台 (Background)</b>：veil 蒙层 + 透明度降低 + 颜色去饱和；模拟 Sleep Focus / StandBy / AOD。
+              </div>
+              <div>
+                <b style={{color:'#f2f2f4'}}>明暗模式</b><br/>
+                · Light：白色磨砂玻璃 / 深字 / 淡阴影 / 暖色壁纸；<br/>
+                · Dark：深玻璃 / 浅字 / 强投影 / 紫蓝色壁纸；色板 hue 保持一致，仅明度与饱和度调整。
+              </div>
+              <div>
+                <b style={{color:'#f2f2f4'}}>视觉系统</b><br/>
+                · 一致 hue：Claude 琥珀 #E08855，Codex 林绿 #3FA77A；HIT/MISS/OUT 用同色不同 alpha 区分。<br/>
+                · 字号梯度：标签 9–10pt 单色等宽，正文 11–12pt SF Pro，数字 tabular-nums。
+              </div>
+              <div>
+                <b style={{color:'#f2f2f4'}}>原创性</b><br/>
+                只复刻 iOS 通用磨砂玻璃 + 圆角比例 + 字号系统，不使用任何具体厂商的品牌图标或专有图形。Agent 颜色为原创近似色，便于在用户工具链之间区分。
+              </div>
+            </div>
+          </div>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
