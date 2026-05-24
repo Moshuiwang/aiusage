@@ -1,10 +1,10 @@
-# Baseline Widget 展示层说明
+# Baseline Display Contract
 
 ## 定位
 
-P0 baseline 展示层选择 macOS Widget 形态。
+Baseline 展示层当前以 macOS Widget 为第一入口，但 Widget 不是架构核心。
 
-Widget 是 `data/latest.json` 的只读消费者，只负责把已经标准化的 token 统计结果展示出来。采集、SSH、ccusage 原始 JSON 解析、SQLite upsert、历史归档都不属于展示层。
+Widget 是 `data/latest.json` 的只读消费者，只负责把 snapshot 中已经标准化和聚合过的数据展示出来。采集、SSH、ccusage 原始 JSON 解析、SQLite upsert、历史归档都不属于展示层。
 
 当前 UI 方向参考已归档在：
 
@@ -12,7 +12,7 @@ Widget 是 `data/latest.json` 的只读消费者，只负责把已经标准化�
 docs/ui-direction/wight-ai-usage/
 ```
 
-该方向是当前后续 SwiftUI / WidgetKit 视觉和布局目标。其中 quota、reset time、usage percentage、趋势切换等能力由 `docs/subscription-usage-source.md` 定义数据来源；没有数据时，本文件描述的 baseline 视图仍然成立。
+该方向是后续 SwiftUI / WidgetKit 视觉和布局参考。其中 limits/quota、reset time、usage percentage、趋势切换等能力由 `docs/subscription-usage-source.md` 定义数据来源；没有数据时，本文件描述的 baseline 视图仍然成立。
 
 ## 输入
 
@@ -34,7 +34,7 @@ Widget 读取字段：
 
 - `source_status[*].source_id`、`status`、`error_type`、`message`：source 采集状态。
 
-如果后续要展示 quota/reset，collector 需要在 `latest.json` 增加稳定字段，例如 `quota_windows`。展示层不自行推断官方额度或 reset time。
+如果后续要展示 limits/quota，snapshot builder 需要在 `latest.json` 增加稳定字段，例如 `limits`。展示层不自行推断官方额度或 reset time。
 
 ## 展示内容
 
@@ -109,7 +109,7 @@ Baseline Widget 只需要被动展示，不要求复杂交互。
 - 点击 Widget 打开 `data/latest.json` 所在目录或项目目录。
 - 显示最近采集时间，方便判断数据是否过旧。
 
-不在 MVP 内实现：
+不在 baseline display 内实现：
 
 - 手动触发 collector。
 - 配置 source。

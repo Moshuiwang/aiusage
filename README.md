@@ -1,11 +1,18 @@
 # AI Usage Widget
 
-macOS 端 AI usage widget，用来汇总多台机器、多 OS 用户、多 AI coding agent 的 token 使用和额度窗口状态。
+本机优先的 AI coding usage 观测工具，用来汇总多台机器、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
 
-当前项目分两层推进：
+当前项目正在从 Widget-first 原型重设为工程化数据产品：
 
-- **Daily usage baseline**：collector 采集 `ccusage daily --json`，写入 `data/latest.json` 和 `data/usage.sqlite`，Widget 展示今日 token 和 source 状态。
-- **Quota/reset-aware Widget**：补充 5h / week quota、reset time、usage percentage，并靠近 `docs/ui-direction/wight-ai-usage/` 的目标 UI。
+- **Baseline pipeline**：稳定采集 `ccusage daily --json`，写入 SQLite canonical store，并生成展示快照。
+- **Snapshot presentation**：Widget、SwiftUI preview 和 CLI report 都只读 `latest.json` 派生快照。
+- **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
+
+## 当前边界
+
+- 先完成产品文档和任务包。
+- 文档收敛前不开发代码。
+- 后续开发遵守 TDD：先写失败测试，再实现最小代码。
 
 ## 数据源
 
@@ -17,7 +24,7 @@ macOS 端 AI usage widget，用来汇总多台机器、多 OS 用户、多 AI co
 | `linux-wang` | `ai.chunbai.com` | `wang` | `ssh wang@ai.chunbai.com 'ccusage daily --json'` |
 | `linux-ubuntu` | `ai.chunbai.com` | `ubuntu` | `ssh ubuntu@ai.chunbai.com 'ccusage daily --json'` |
 
-quota/reset source 仍在设计和验证阶段，见 `docs/subscription-usage-source.md`。
+limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-source.md`。
 
 硬规则：
 
@@ -28,7 +35,7 @@ quota/reset source 仍在设计和验证阶段，见 `docs/subscription-usage-so
 
 ## 常用命令
 
-运行测试：
+运行 Python 测试：
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
@@ -66,6 +73,13 @@ cd widget/macos
 swift run ai-usage-widget-preview
 ```
 
+Swift 测试：
+
+```bash
+cd widget/macos
+swift test
+```
+
 WidgetKit App 构建：
 
 ```bash
@@ -82,42 +96,28 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 
 - `AGENTS.md`：每次会话自动读取的最小硬规则和文档路由。
 - `docs/status.md`：当前阶段、有效决策和下一步。
-- `docs/product-brief.md`：产品目标、阶段范围和 non-goals。
-- `docs/architecture.md`：collector、schema、SQLite、错误模型。
-- `docs/task-plan.md`：当前可执行任务和验收标准。
+- `docs/product-brief.md`：产品定位、能力域、阶段边界和关键技术决策。
+- `docs/architecture.md`：工程架构、数据链路、schema 目标和测试架构。
+- `docs/task-plan.md`：旧任务入口兼容层，指向任务包目录。
+- `docs/task-packages/README.md`：任务包目录入口。
+- `docs/task-packages/RULES.md`：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
+- `docs/task-packages/v1/INDEX.md`：V1 任务包索引。
 - `docs/display-options.md`：Widget 展示候选和信息块。
-- `docs/subscription-usage-source.md`：quota/reset 数据源方向。
+- `docs/subscription-usage-source.md`：limits/quota 数据源方向。
 - `docs/widget-macos.md`：SwiftUI/WidgetKit 构建、预览和同步。
 - `docs/ui-direction/wight-ai-usage/README.md`：目标 UI 设计稿归档说明。
 
-## `latest.json`
+## 快照方向
 
-Widget 的第一读取入口是 `data/latest.json`。当前 baseline 字段：
+`latest.json` 是展示层读取入口。当前原型字段是：
 
 ```json
 {
-  "generated_at": "2026-05-22T08:30:00+08:00",
+  "generated_at": "2026-05-24T12:30:00+08:00",
   "timezone": "Asia/Shanghai",
-  "items": [
-    {
-      "machine": "macbook",
-      "account": "local",
-      "agent": "codex",
-      "date": "2026-05-22",
-      "input_tokens": 12345,
-      "output_tokens": 6789,
-      "cache_creation_tokens": 1000,
-      "cache_read_tokens": 2000,
-      "total_tokens": 22134
-    }
-  ],
-  "source_status": [
-    {
-      "source_id": "mac-local",
-      "status": "ok"
-    }
-  ]
+  "items": [],
+  "source_status": []
 }
 ```
 
-quota/reset 扩展会在不破坏 `items` 和 `source_status` 的前提下新增字段。
+工程化目标是 versioned display snapshot，详见 `docs/architecture.md`。迁移期需要保留 `items` 和 `source_status`，避免立即破坏现有 Widget。
