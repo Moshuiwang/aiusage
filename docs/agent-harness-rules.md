@@ -1,3 +1,8 @@
+---
+name: ai-usage-widget-agent-harness
+description: Agent behavior and document-routing rules for ai-usage-widget. Use when deciding which Markdown files to read, how to keep AGENTS.md minimal, how to protect the daily usage baseline, and how to avoid speculative quota/reset claims.
+---
+
 # Agent Harness Rules
 
 ## 用途
@@ -5,6 +10,17 @@
 这份文档定义本项目的 harness 文档规则，也就是用来驾驭 AI agent 的 Markdown 文档体系。它不描述程序架构，不替代 `docs/architecture.md`，也不承载完整任务拆解。
 
 当用户提到“harness 文档”“驾驭文档”“AI 协作文档架构”“下次怎么让 agent 读懂项目”时，优先读这份文档。
+
+## 执行原则
+
+这组原则参考 skill/rules 文件的写法，但在本项目里仍作为按需文档使用，不替代 `AGENTS.md`。
+
+1. **先保护 baseline**：任何实现或文档调整，都不能破坏已落地的 `ccusage daily --json` -> `latest.json` / `usage.sqlite` 主链路。
+2. **不伪装 quota/reset**：没有可信 source 时，只能降级展示或标为估算；不能把 daily token history、`ccusage blocks` 或本地推断写成官方 quota 状态。
+3. **按需读取文档**：先用 `AGENTS.md` 判断硬规则，再按任务读取对应 `docs/*.md`；不要因为上下文焦虑而全量读取所有 Markdown。
+4. **精确修改**：只更新和当前任务直接相关的文档或代码；发现无关问题可以记录或提示，不顺手重构、不顺手扩 MVP。
+5. **用结果验证**：涉及代码、数据、Git 状态、测试结果或生成文件时，以仓库实际内容和命令输出为准，不只根据文档推断。
+6. **状态要收敛**：完成实质变更后，必要时同步 `docs/status.md` 或 `docs/task-plan.md`，删除过期说法，避免多个入口互相冲突。
 
 ## 术语边界
 
