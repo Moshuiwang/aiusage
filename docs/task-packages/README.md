@@ -10,14 +10,14 @@
 
 1. 本文件。
 2. [任务包详细规则](RULES.md)。
-3. 当前版本索引：[V1 Index](v1/INDEX.md)。
-4. 被分配的具体任务包，例如 `v1/TP-V1-001-config-schema-contract.md`。
+3. 当前版本索引：[V2 Index](v2/INDEX.md)。
+4. 被分配的具体任务包，例如 `v2/TP-V2-001-http-ingest-contract.md`。
 
 ## 当前版本
 
-- Active version: `V1`
-- Index: [v1/INDEX.md](v1/INDEX.md)
-- First executable package: `TP-V1-001`
+- Active version: `V2`
+- Index: [v2/INDEX.md](v2/INDEX.md)
+- First executable package: `TP-V2-001`
 
 ## 目录结构
 
@@ -25,6 +25,10 @@
 docs/task-packages/
   README.md
   RULES.md
+  v2/
+    INDEX.md
+    TP-V2-001-*.md
+    TP-V2-002-*.md
   v1/
     INDEX.md
     TP-V1-001-*.md
@@ -42,7 +46,7 @@ TP-V<major>-<nnn>
 示例：
 
 ```text
-TP-V1-001
+TP-V2-001
 ```
 
 规则：

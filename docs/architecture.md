@@ -2,39 +2,39 @@
 
 ## 架构目标
 
-项目目标从“简单 Widget 读取 `latest.json`”升级为工程化的本机数据管道：
+项目目标从“简单 Widget 读取 `latest.json`”升级为个人 HTTP 汇聚数据管道：
 
 ```text
-Sources -> Collectors -> Normalizers -> Canonical Store -> Snapshot Builder -> Presentation
+Devices -> Local Collectors -> HTTP Ingest -> Canonical Store -> Snapshot Builder/API -> Presentation
 ```
 
-Widget 只位于 Presentation 层。它不拥有采集逻辑、不直接读取 SQLite、不推断 quota/reset。
+Web dashboard 和 Widget 都位于 Presentation 层。它们不拥有终端采集逻辑、不执行 SSH、不推断 quota/reset。
 
 ## 总体链路
 
 ```mermaid
 flowchart TD
-    config["Versioned Config"] --> orchestrator["Collector Orchestrator"]
-    orchestrator --> local["Local ccusage daily"]
-    orchestrator --> ssh["SSH ccusage daily"]
-    orchestrator --> import["File Import"]
-    orchestrator --> limits["Optional Limits Source"]
+    deviceConfig["Device Config"] --> deviceCollector["Device Collector / Pusher"]
+    deviceCollector --> ccusage["Local ccusage daily"]
+    ccusage --> pushPayload["Usage Push Payload"]
+    pushPayload --> httpIngest["HTTP Ingest API"]
+    manualImport["Manual File Import"] --> httpIngest
+    limits["Optional Limits Source"] --> limitPayload["Limit Payload"]
+    limitPayload --> httpIngest
 
-    local --> envelope["Report Envelope"]
-    ssh --> envelope
-    import --> envelope
-    limits --> limitEnvelope["Limit Envelope"]
-
-    envelope --> usageNormalizer["Usage Normalizer"]
-    limitEnvelope --> limitNormalizer["Limit Normalizer"]
+    httpIngest --> auth["Auth + Schema + Idempotency"]
+    auth --> usageNormalizer["Usage Normalizer"]
+    auth --> limitNormalizer["Limit Normalizer"]
 
     usageNormalizer --> sqlite["SQLite Canonical Store"]
     limitNormalizer --> sqlite
-    orchestrator --> health["Source Health"]
+    httpIngest --> health["Source Health"]
     health --> sqlite
 
     sqlite --> snapshot["Snapshot Builder"]
     snapshot --> latest["latest.json"]
+    sqlite --> webApi["Web API"]
+    webApi --> dashboard["Web Dashboard"]
     latest --> widget["SwiftUI / WidgetKit"]
     latest --> cliReport["CLI Report"]
 ```
@@ -45,17 +45,19 @@ flowchart TD
 
 每个 source 只能在自己的账户上下文运行：
 
-- Mac source：在 Mac 当前用户下执行 `ccusage daily --json`。
-- Linux `wang` source：通过 SSH 登录 `wang` 后执行 `ccusage daily --json`。
-- Linux `ubuntu` source：通过 SSH 登录 `ubuntu` 后执行 `ccusage daily --json`。
+- Mac source：在 Mac 当前用户下执行 `ccusage daily --json`，再 HTTP push。
+- Linux source：在对应 Linux OS 用户下执行 `ccusage daily --json`，再 HTTP push。
+- Windows source：在当前 Windows 用户下执行 `ccusage daily --json`，再 HTTP push。
 - File import source：只读取明确配置的结构化报表文件。
 - Limits source：只读取明确设计的结构化导出文件或后续官方/手动来源。
 
 禁止：
 
 - 禁止 `wang` 读取 `/home/ubuntu`。
+- 禁止汇聚端通过 SSH 登录远端机器抓取 usage。
 - 禁止 Mac 直接读取、同步或解析远程 `.claude`、`.codex` 原始日志目录。
 - 禁止把远程 home 目录同步到 Mac 后再解析。
+- 禁止终端侧上传 `.claude`、`.codex` 原始日志目录。
 - 禁止在未授权前修改生产账户配置。
 
 ### Trust Boundary
@@ -71,13 +73,13 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 
 ## 分层职责
 
-### Config
+### Device Config
 
 职责：
 
-- 读取本地配置。
-- 校验 schema version、source id、source type、timeout、timezone。
-- 拒绝未知必需字段缺失的 source。
+- 读取终端侧本地配置。
+- 校验 schema version、source id、host label、OS user label、server URL、timeout、timezone。
+- 保存本机 pusher 所需的认证 token 引用，不把 token 提交到仓库。
 
 要求：
 
@@ -85,17 +87,45 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - `config/sources.local.json` 不提交。
 - 测试使用临时配置和 fixtures。
 
-### Runner
+### Device Runner / Pusher
 
 职责：
 
-- 执行 local command、SSH command 或读取 file import。
+- 执行本机 `ccusage daily --json --timezone <tz>` 或读取 file import fixture。
+- 把采集结果包装成 HTTP ingest payload。
+- push 到 server，并记录 HTTP status、duration、timeout、错误类型。
+
+要求：
+
+- 测试不调用真实 HTTP server。
+- runner 必须可注入 fake executor 和 fake HTTP client。
+- 所有 command 和 HTTP request 有 timeout。
+
+### HTTP Ingest
+
+职责：
+
+- 提供个人 server 的 usage ingest endpoint。
+- 校验认证、schema version、source id、timezone、observed_at、payload size 和幂等 key。
+- 只接收结构化 usage payload，不接收原始日志目录。
+- 对成功、重复、认证失败、schema 错误、stale payload 输出结构化响应。
+
+要求：
+
+- 测试不依赖真实网络端口。
+- 认证失败和 malformed payload 必须有 contract tests。
+- 重复 push 必须幂等。
+
+### Server Runner
+
+职责：
+
+- 接收 HTTP ingest 已校验 payload 或读取 file import。
 - 只返回 `ReportEnvelope`，不解析业务字段。
 - 捕获 exit code、stderr、duration、timeout、错误类型。
 
 要求：
 
-- 测试不调用真实 SSH。
 - runner 必须可注入 fake executor。
 - 所有 command 有 timeout。
 
@@ -150,6 +180,8 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 
 职责：
 
+- Web API 查询 canonical store 或派生快照。
+- Web dashboard 展示总量、分组、source health、stale source 和错误摘要。
 - Swift core 解码 snapshot。
 - SwiftUI / WidgetKit 根据 snapshot 展示状态。
 - WidgetKit sandbox 只读同步后的快照。
@@ -159,7 +191,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - 不执行 collector。
 - 不执行 SSH。
 - 不执行 `ccusage`。
-- 不读取 SQLite。
+- Widget 不读取 SQLite。
 - 不从 token history 推断官方 quota。
 
 ## 目标 `latest.json` v1
@@ -238,7 +270,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 
 ## SQLite 目标口径
 
-SQLite 是 canonical store，不是服务端数据库。
+SQLite 是个人 HTTP server 的 canonical store，不直接暴露给外部客户端。
 
 设计原则：
 
@@ -265,7 +297,9 @@ SQLite 是 canonical store，不是服务端数据库。
 - `invalid_config`
 - `command_failed`
 - `timeout`
-- `ssh_failed`
+- `http_auth_failed`
+- `http_request_failed`
+- `http_schema_invalid`
 - `missing_file`
 - `invalid_json`
 - `unsupported_shape`
@@ -287,14 +321,15 @@ TDD 是落地硬规则。
 测试分层：
 
 - Unit tests：config、normalizer、snapshot builder、formatting。
-- Contract tests：fixture 输入到目标 JSON 输出。
-- Integration tests：fake runner + temp SQLite + temp latest path。
+- Contract tests：HTTP ingest fixture 输入到目标 JSON 输出。
+- Integration tests：fake device runner + fake HTTP client + temp SQLite + temp latest path。
 - Swift tests：snapshot decode、summary mapping、empty/error state。
 - Smoke tests：使用临时目录跑 CLI，不触碰真实配置和生产账户。
 
 测试禁令：
 
 - 不在单元测试里执行真实 SSH。
+- 不在单元测试里监听真实公网端口。
 - 不读取真实 `.claude`、`.codex`。
 - 不依赖本机当天真实 usage。
 - 不写生产 `data/latest.json` 或 `data/usage.sqlite`。
@@ -303,17 +338,19 @@ TDD 是落地硬规则。
 
 当前阶段：
 
-- 手动 CLI 采集。
-- 手动同步 Widget snapshot。
+- 手动运行 server。
+- 手动运行终端侧 CLI pusher。
+- 手动查看 Web dashboard。
 
 后续阶段：
 
-- launchd 定时触发 collector。
+- launchd / systemd / Windows Task Scheduler 定时触发终端侧 pusher。
+- server 以本机或内网个人服务运行。
 - App Group container 作为 Widget snapshot 共享目录。
-- 菜单栏 app 可以触发采集，但仍通过 collector CLI 或库调用，不把采集逻辑塞进 Widget extension。
+- 菜单栏 app 可以触发本机 pusher，但仍通过 CLI 或库调用，不把采集逻辑塞进 Widget extension。
 
 不做：
 
-- 不部署远程 daemon。
-- 不启动本地 HTTP 服务作为 Widget 数据源。
-- 不把 SQLite 暴露成长期运行服务。
+- 不暴露 SSH 给汇聚端抓取 usage。
+- 不做团队 SaaS 或多租户权限系统。
+- 不把 SQLite 直接暴露成外部服务接口。

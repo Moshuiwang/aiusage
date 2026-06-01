@@ -1,11 +1,12 @@
 # AI Usage Widget
 
-本机优先的 AI coding usage 观测工具，用来汇总多台机器、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
+个人使用的 AI coding usage 观测工具，用来汇总多台设备、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
 
-当前项目正在从 Widget-first 原型重设为工程化数据产品：
+当前项目正在从 Widget-first 原型重设为个人 HTTP 汇聚数据产品：
 
-- **Baseline pipeline**：稳定采集 `ccusage daily --json`，写入 SQLite canonical store，并生成展示快照。
-- **Snapshot presentation**：Widget、SwiftUI preview 和 CLI report 都只读 `latest.json` 派生快照。
+- **Device push pipeline**：每台设备在自己的账户上下文运行 `ccusage daily --json`，把结构化用量主动 push 到个人 HTTP server。
+- **Server canonical store**：HTTP server 校验 ingest payload，写入 SQLite canonical store，并生成展示快照。
+- **Web presentation**：Web dashboard 是主要查看入口；Widget、SwiftUI preview 和 CLI report 都只读派生快照。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
 
 ## 当前边界
@@ -16,13 +17,14 @@
 
 ## 数据源
 
-固定 daily source：
+目标 daily source：
 
 | Source ID | 机器 | OS 用户 | 执行方式 |
 | --- | --- | --- | --- |
-| `mac-local` | Mac 本机 | 当前 macOS 用户 | `ccusage daily --json` |
-| `linux-wang` | `ai.chunbai.com` | `wang` | `ssh wang@ai.chunbai.com 'ccusage daily --json'` |
-| `linux-ubuntu` | `ai.chunbai.com` | `ubuntu` | `ssh ubuntu@ai.chunbai.com 'ccusage daily --json'` |
+| `mac-local` | Mac 终端 | 当前 macOS 用户 | 本机采集后 HTTP push |
+| `linux-server-1` | Linux 服务器 | 该服务器上的目标 OS 用户 | 本机采集后 HTTP push |
+| `linux-server-2` | Linux 服务器 | 该服务器上的目标 OS 用户 | 本机采集后 HTTP push |
+| `windows-desktop` | Windows 台式机 | 当前 Windows 用户 | 本机采集后 HTTP push |
 
 limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-source.md`。
 
@@ -30,6 +32,9 @@ limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-s
 
 - 每个 OS 用户只在自己的账户上下文运行 `ccusage`。
 - `wang` 不读取 `/home/ubuntu`。
+- 不暴露 SSH 给汇聚端抓取 usage。
+- 汇聚端不主动登录远端机器。
+- 各终端不上传 `.claude`、`.codex` 原始日志目录，只上传设计过的结构化 usage payload。
 - Mac 不同步或解析远程 `.claude`、`.codex` 原始日志目录。
 - `config/sources.local.json`、`data/latest.json`、`data/usage.sqlite` 不提交。
 
@@ -49,6 +54,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
   --output data/latest.json \
   --sqlite data/usage.sqlite
 ```
+
+目标形态下，终端侧命令会演进为本机采集后 push 到 HTTP server；当前 CLI 命令仍是旧 baseline 的本地验证入口，具体以 `docs/task-packages/v2/INDEX.md` 后续任务包为准。
 
 采集后同步给 WidgetKit extension：
 
@@ -101,7 +108,8 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - `docs/task-plan.md`：旧任务入口兼容层，指向任务包目录。
 - `docs/task-packages/README.md`：任务包目录入口。
 - `docs/task-packages/RULES.md`：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
-- `docs/task-packages/v1/INDEX.md`：V1 任务包索引。
+- `docs/task-packages/v2/INDEX.md`：V2 任务包索引，面向个人 HTTP push 架构。
+- `docs/task-packages/v1/INDEX.md`：V1 任务包索引，旧 SSH pull / Widget-first 执行序列，仅作历史参考。
 - `docs/display-options.md`：Widget 展示候选和信息块。
 - `docs/subscription-usage-source.md`：limits/quota 数据源方向。
 - `docs/widget-macos.md`：SwiftUI/WidgetKit 构建、预览和同步。

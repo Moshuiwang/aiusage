@@ -23,7 +23,7 @@ TP-V<major>-<nnn>
 示例：
 
 ```text
-TP-V1-001
+TP-V2-001
 ```
 
 规则：
@@ -115,7 +115,7 @@ ID: TP-V1-000
 Status: ready
 Type: implementation
 Depends on: none
-Parallel with: TP-V1-001
+Parallel with: TP-V2-001
 
 ## Goal
 
