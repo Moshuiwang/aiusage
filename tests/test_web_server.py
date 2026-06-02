@@ -93,6 +93,23 @@ class TestWebServerSummary(unittest.TestCase):
             urllib.request.urlopen(url)
         self.assertEqual(ctx.exception.code, 401)
 
+    def test_health_requires_auth_and_returns_low_cost_status(self) -> None:
+        health_url = f"http://127.0.0.1:{self.port}/api/health"
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(health_url)
+        self.assertEqual(ctx.exception.code, 401)
+
+        req = urllib.request.Request(health_url, headers={"Authorization": f"Bearer {self.token}"})
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.status, 200)
+            data = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["database"]["path"], self.db_path)
+        self.assertGreaterEqual(data["database"]["size_bytes"], 0)
+        self.assertIn("source_status", data)
+        self.assertIn("generated_at", data)
+
     def test_ingest_auth_failure(self) -> None:
         """测试推送时未提供 token 或提供错误 token 导致 401 失败"""
         url = f"http://127.0.0.1:{self.port}/ingest"

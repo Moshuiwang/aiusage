@@ -45,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     backup_parser = subparsers.add_parser("backup", help="Create a safe SQLite backup")
     backup_parser.add_argument("--db", default="data/usage.sqlite")
     backup_parser.add_argument("--backup-dir", default="data/backups")
+    backup_parser.add_argument("--keep", type=int, default=14, help="Number of backups to keep")
+    backup_parser.add_argument("--max-total-mb", type=int, default=512, help="Maximum backup directory size")
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -94,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "backup":
         try:
-            result = backup_sqlite(args.db, args.backup_dir)
+            result = backup_sqlite(args.db, args.backup_dir, keep=args.keep, max_total_mb=args.max_total_mb)
         except (OSError, sqlite3.Error, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1

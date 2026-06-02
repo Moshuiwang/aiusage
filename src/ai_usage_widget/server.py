@@ -36,6 +36,11 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
                 self.send_error_json(401, "auth_required", "Authentication required")
                 return
             self.handle_get_summary(parsed_url)
+        elif parsed_url.path == "/api/health":
+            if not self._is_authenticated():
+                self.send_error_json(401, "auth_required", "Authentication required")
+                return
+            self.handle_get_health()
         elif parsed_url.path in {"/", "/dashboard"}:
             if not self._is_authenticated():
                 self.send_login_page()
@@ -230,6 +235,63 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         self._send_security_headers()
         self.end_headers()
         self.wfile.write(snapshot_data.encode("utf-8"))
+
+    def handle_get_health(self) -> None:
+        latest_data: Dict[str, Any] = {}
+        if os.path.exists(self.server.latest_path):
+            try:
+                with open(self.server.latest_path, "r", encoding="utf-8") as f:
+                    latest_data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                latest_data = {}
+
+        source_status = latest_data.get("source_status") if isinstance(latest_data, dict) else []
+        if not isinstance(source_status, list):
+            source_status = []
+        counts: Dict[str, int] = {}
+        for source in source_status:
+            if not isinstance(source, dict):
+                continue
+            status = str(source.get("status") or "unknown")
+            counts[status] = counts.get(status, 0) + 1
+
+        db_size = os.path.getsize(self.server.db_path) if os.path.exists(self.server.db_path) else 0
+        latest_mtime = (
+            datetime.fromtimestamp(os.path.getmtime(self.server.latest_path), dt_timezone.utc).astimezone().isoformat()
+            if os.path.exists(self.server.latest_path)
+            else None
+        )
+        payload = {
+            "status": "ok",
+            "generated_at": datetime.now(dt_timezone.utc).astimezone().isoformat(),
+            "database": {
+                "path": self.server.db_path,
+                "size_bytes": db_size,
+                "exists": os.path.exists(self.server.db_path),
+            },
+            "snapshot": {
+                "path": self.server.latest_path,
+                "exists": os.path.exists(self.server.latest_path),
+                "updated_at": latest_mtime,
+            },
+            "source_status": {
+                "total": len(source_status),
+                "counts": counts,
+                "non_ok": [
+                    {
+                        "source_id": str(source.get("source_id") or ""),
+                        "status": str(source.get("status") or "unknown"),
+                    }
+                    for source in source_status
+                    if isinstance(source, dict) and str(source.get("status") or "unknown") != "ok"
+                ],
+            },
+        }
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._send_security_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
     def handle_get_dashboard(self) -> None:
         """返回 Web Dashboard 静态页面"""

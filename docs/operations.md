@@ -74,13 +74,53 @@ cp data/usage.sqlite* /path/to/backup/dir/
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
   --db data/usage.sqlite \
-  --backup-dir data/backups
+  --backup-dir data/backups \
+  --keep 14 \
+  --max-total-mb 512
 ```
+
+`--keep` 控制最多保留多少份备份，`--max-total-mb` 控制备份目录总量上限。线上小机器建议用更保守的 `--keep 7 --max-total-mb 128`。
 
 也可以在进程运行期间使用 SQLite 命令行工具生成一致性备份：
 
 ```bash
 sqlite3 data/usage.sqlite ".backup '/path/to/backup/dir/usage_backup_$(date +%F).sqlite'"
+```
+
+### 3.3 每日 systemd 备份 timer
+
+服务端可加每日低频备份，避免高频 IO 和磁盘增长：
+
+```ini
+# /etc/systemd/system/ai-usage-backup.service
+[Unit]
+Description=AI Usage SQLite Backup
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/ubuntu/ai-usage-widget
+Environment=PYTHONPATH=/home/ubuntu/ai-usage-widget/src
+ExecStart=/usr/bin/python3 -m ai_usage_widget.cli backup --db data/usage.sqlite --backup-dir data/backups --keep 7 --max-total-mb 128
+```
+
+```ini
+# /etc/systemd/system/ai-usage-backup.timer
+[Unit]
+Description=Run AI Usage SQLite Backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+健康检查接口：
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/health
 ```
 
 ---

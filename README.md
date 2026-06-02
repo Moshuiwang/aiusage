@@ -70,7 +70,15 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli push \
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
   --db data/usage.sqlite \
-  --backup-dir data/backups
+  --backup-dir data/backups \
+  --keep 14 \
+  --max-total-mb 512
+```
+
+服务端健康检查：
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/health
 ```
 
 采集后同步给 WidgetKit extension：
