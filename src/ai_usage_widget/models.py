@@ -50,9 +50,41 @@ class UsageItem:
 
 
 @dataclass
+class UsageHourlyItem:
+    source_id: str
+    machine: str
+    account: str
+    agent: str
+    hour: str
+    input_tokens: int
+    output_tokens: int
+    cache_creation_tokens: int
+    cache_read_tokens: int
+    total_tokens: int
+    total_cost: Optional[float] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UsageBlockItem:
+    source_id: str
+    machine: str
+    account: str
+    agent: str
+    start_time: str
+    end_time: str
+    input_tokens: int
+    output_tokens: int
+    cache_creation_tokens: int
+    cache_read_tokens: int
+    total_tokens: int
+    total_cost: Optional[float] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class NormalizeResult:
     items: List[UsageItem] = field(default_factory=list)
     status: str = "ok"
     error_type: Optional[str] = None
     error_message: Optional[str] = None
-

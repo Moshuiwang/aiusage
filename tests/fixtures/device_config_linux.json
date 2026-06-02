@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "linux-server-1",
+  "host": "ubuntu-primary",
+  "os_user": "ubuntu",
+  "platform": "linux",
+  "timezone": "UTC",
+  "server_url": "http://vpn2.chunbai.com:8000/ingest",
+  "timeout_seconds": 30,
+  "token_env": "AI_USAGE_TOKEN"
+}

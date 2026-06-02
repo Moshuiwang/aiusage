@@ -88,7 +88,7 @@ public struct SourceStatus: Decodable, Equatable, Sendable, Identifiable {
         case sourceID = "source_id"
         case status
         case errorType = "error_type"
-        case message
+        case message = "error_message"
     }
 
     public init(sourceID: String, status: String, errorType: String?, message: String?) {

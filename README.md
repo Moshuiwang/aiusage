@@ -101,19 +101,22 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 
 ## 关键文件
 
-- `AGENTS.md`：每次会话自动读取的最小硬规则和文档路由。
-- `docs/status.md`：当前阶段、有效决策和下一步。
-- `docs/product-brief.md`：产品定位、能力域、阶段边界和关键技术决策。
-- `docs/architecture.md`：工程架构、数据链路、schema 目标和测试架构。
-- `docs/task-plan.md`：旧任务入口兼容层，指向任务包目录。
-- `docs/task-packages/README.md`：任务包目录入口。
-- `docs/task-packages/RULES.md`：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
-- `docs/task-packages/v2/INDEX.md`：V2 任务包索引，面向个人 HTTP push 架构。
-- `docs/task-packages/v1/INDEX.md`：V1 任务包索引，旧 SSH pull / Widget-first 执行序列，仅作历史参考。
-- `docs/display-options.md`：Widget 展示候选和信息块。
-- `docs/subscription-usage-source.md`：limits/quota 数据源方向。
-- `docs/widget-macos.md`：SwiftUI/WidgetKit 构建、预览和同步。
-- `docs/ui-direction/wight-ai-usage/README.md`：目标 UI 设计稿归档说明。
+- [AGENTS.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/AGENTS.md)：每次会话自动读取的最小硬规则和文档路由。
+- [status.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/status.md)：当前阶段、有效决策和下一步。
+- [product-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
+- [architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture.md)：工程架构、数据链路、schema 目标和测试架构。
+- [task-plan.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-plan.md)：旧任务入口兼容层，指向任务包目录。
+- [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。
+- [task-packages/RULES.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
+- [task-packages/v2/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/v2/INDEX.md)：V2 任务包索引，面向个人 HTTP push 架构。
+- [task-packages/v1/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/v1/INDEX.md)：V1 任务包索引，旧 SSH pull / Widget-first 执行序列，仅作历史参考。
+- [operations.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
+- [schedulers.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/schedulers.md)：各平台终端定时任务配置文档。
+- [handoff.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/handoff.md)：项目重构完成后的交接及后续部署指引。
+- [display-options.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/display-options.md)：Widget 展示候选和信息块。
+- [subscription-usage-source.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/subscription-usage-source.md)：limits/quota 数据源方向。
+- [widget-macos.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/widget-macos.md)：SwiftUI/WidgetKit 构建、预览和同步。
+- [ui-direction/wight-ai-usage/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/ui-direction/wight-ai-usage/README.md)：目标 UI 设计稿归档说明。
 
 ## 快照方向
 

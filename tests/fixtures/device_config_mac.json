@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source_id": "mac-local",
+  "host": "macbook-pro",
+  "os_user": "wangzhipeng",
+  "platform": "darwin",
+  "timezone": "Asia/Shanghai",
+  "server_url": "http://vpn2.chunbai.com:8000/ingest",
+  "timeout_seconds": 30,
+  "token_env": "AI_USAGE_TOKEN"
+}

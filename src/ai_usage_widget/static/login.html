@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Usage Login</title>
+  <link rel="stylesheet" href="/static/dashboard.css?v=wight-20260601">
+</head>
+<body class="login-page">
+  <form class="login-card" method="POST" action="/login">
+    <h1>AI Usage Dashboard</h1>
+    <p>输入访问 token 后，浏览器会记住本次登录。</p>
+    {{ERROR_BLOCK}}
+    <input name="token" type="password" autocomplete="current-password" placeholder="Access token" autofocus>
+    <button type="submit">Sign in</button>
+  </form>
+</body>
+</html>

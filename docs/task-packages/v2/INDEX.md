@@ -15,7 +15,7 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 
 ## 当前执行顺序
 
-先固化 ingest contract，再做终端 pusher，再接 store/snapshot，再做 Web dashboard，最后补 Widget 和 limits。
+先固化 ingest contract，再做终端 pusher，再接 store/snapshot，再做 Web dashboard，最后补 Widget 和官方 limits provider。
 
 推荐顺序：
 
@@ -24,6 +24,7 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 3. TP-V2-007 到 TP-V2-009：Canonical store and snapshot。
 4. TP-V2-010 到 TP-V2-012：Web dashboard v1。
 5. TP-V2-013 到 TP-V2-015：Operations and optional Widget.
+6. TP-V2-016 到 TP-V2-021：Official limits provider MVP.
 
 ## 任务列表
 
@@ -44,6 +45,12 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 | TP-V2-013 | [TP-V2-013-server-operations.md](TP-V2-013-server-operations.md) | ready | TP-V2-010 | TP-V2-014 |
 | TP-V2-014 | [TP-V2-014-device-schedulers.md](TP-V2-014-device-schedulers.md) | ready | TP-V2-005 | TP-V2-013 |
 | TP-V2-015 | [TP-V2-015-widget-optional-snapshot.md](TP-V2-015-widget-optional-snapshot.md) | ready | TP-V2-008 | none |
+| TP-V2-016 | [TP-V2-016-official-limits-contract.md](TP-V2-016-official-limits-contract.md) | ready | TP-V2-010 | none |
+| TP-V2-017 | [TP-V2-017-codex-official-provider.md](TP-V2-017-codex-official-provider.md) | ready | TP-V2-016 | none |
+| TP-V2-018 | [TP-V2-018-claude-official-provider.md](TP-V2-018-claude-official-provider.md) | ready | TP-V2-016 | none |
+| TP-V2-019 | [TP-V2-019-limit-windows-store.md](TP-V2-019-limit-windows-store.md) | ready | TP-V2-016 | none |
+| TP-V2-020 | [TP-V2-020-limits-snapshot-api.md](TP-V2-020-limits-snapshot-api.md) | ready | TP-V2-017, TP-V2-018, TP-V2-019 | none |
+| TP-V2-021 | [TP-V2-021-limits-presentation.md](TP-V2-021-limits-presentation.md) | ready | TP-V2-020 | none |
 
 ## subagent 分配建议
 
@@ -51,4 +58,5 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 - Device pusher agent：TP-V2-004 到 TP-V2-006、TP-V2-014。
 - Web UI agent：TP-V2-010 到 TP-V2-012。
 - Widget agent：TP-V2-015。
+- Limits provider agent：TP-V2-016 到 TP-V2-020。
 - Docs / QA agent：检查 V2 链接、验收记录和文档一致性，不改实现。

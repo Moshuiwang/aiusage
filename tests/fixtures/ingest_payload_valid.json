@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "source_id": "mac-local",
+  "host": "macbook-pro",
+  "os_user": "wangzhipeng",
+  "platform": "darwin",
+  "timezone": "Asia/Shanghai",
+  "observed_at": "2026-06-01T10:40:00+08:00",
+  "collection_window": "daily",
+  "usage_daily": [
+    {
+      "agent": "all",
+      "cacheCreationTokens": 862753,
+      "cacheReadTokens": 1951001,
+      "inputTokens": 75299,
+      "outputTokens": 79513,
+      "totalTokens": 2968566,
+      "period": "2026-06-01",
+      "modelBreakdowns": [
+        {
+          "modelName": "claude-opus-4-8",
+          "inputTokens": 2510,
+          "outputTokens": 60135,
+          "cacheCreationTokens": 862753,
+          "cacheReadTokens": 859929
+        }
+      ]
+    }
+  ]
+}

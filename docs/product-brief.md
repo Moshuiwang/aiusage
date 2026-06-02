@@ -106,12 +106,19 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 - quota/reset 是可插拔能力，不是 baseline 的前置依赖。
 - 只有可验证来源才能显示为 observed quota。
 - 估算来源必须标记为 estimated，并在 UI 上弱化。
+- Claude Code 和 Codex 的 MVP 目标是稳定获取官方 reset time 和 window usage。
 
 禁止：
 
 - 不从 `ccusage daily` 推断官方 quota。
 - 不把 `ccusage blocks` 的本地窗口说成官方订阅额度。
 - 不读取或同步 `.claude`、`.codex` 原始日志目录来倒推状态。
+
+优先级：
+
+- Claude Code：OAuth Usage API -> Claude CLI `/usage` -> Claude Web API。
+- Codex：`~/.codex/auth.json` OAuth/WHAM usage -> `codex app-server` RPC `account/rateLimits/read`。
+- Antigravity：后续通过本地 Language Server spike，不进入 Claude + Codex MVP。
 
 ## 展示面
 
@@ -200,8 +207,9 @@ Widget 是可选 glanceable 展示面，只读快照：
 
 - Widget 作为可选只读展示面。
 - 在 baseline 稳定后引入 limits/quota source。
-- 先支持结构化导出文件和 fixture。
+- 先支持 Claude Code + Codex 的 official limits provider contract 和 fixtures。
 - 每个字段都有 `source_type`、`confidence`、`observed_at`、`status`。
+- Web dashboard / Widget 只读 `limits` 快照，不直接调用官方 API。
 
 ### Phase 6: Visual Polish and Operations
 
@@ -234,6 +242,7 @@ Widget 是可选 glanceable 展示面，只读快照：
 - 不做 SSH pull 采集。
 - 不做远程 agent 安装器；终端侧 pusher 先用可手动安装和配置的 CLI。
 - 不做官方 quota 抓取的逆向方案。
+- 不做从本地历史 token 推官方 reset time 的方案。
 - 不做多租户、云同步、团队看板。
 
 ## 非功能需求

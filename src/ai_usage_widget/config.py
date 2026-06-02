@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import socket
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
 
 
 class ConfigError(ValueError):
@@ -59,4 +61,57 @@ def _validate_source(source: Dict[str, Any]) -> None:
         for key in ["ssh_user", "ssh_host"]:
             if not source.get(key):
                 raise ConfigError(f"{source['source_id']} {key} is required")
+
+
+@dataclass
+class DeviceConfig:
+    schema_version: int
+    source_id: str
+    host: str
+    machine: str
+    os_user: str
+    platform: str
+    timezone: str
+    server_url: str
+    timeout_seconds: int = 30
+    token_env: Optional[str] = None
+
+
+def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
+    """
+    校验终端本地的推送配置，如果有缺项或含有敏感 SSH 配置，抛出 ConfigError
+    """
+    if not isinstance(data, dict):
+        raise ConfigError("Device config must be a JSON object")
+
+    # 1. SSH 防御性拦截
+    for key in data.keys():
+        if "ssh" in str(key).lower():
+            raise ConfigError("SSH parameters are forbidden in device config")
+
+    # 2. 必需字段校验
+    required = ["source_id", "server_url", "timezone", "platform"]
+    for field in required:
+        if not data.get(field):
+            raise ConfigError(f"Missing required device config field: {field}")
+
+    # 3. 平台转换与校验
+    platform = str(data["platform"]).lower()
+    if platform == "mac":
+        platform = "darwin"
+    if platform not in {"darwin", "linux", "windows"}:
+        raise ConfigError(f"Unsupported device platform: {platform}")
+
+    return DeviceConfig(
+        schema_version=int(data.get("schema_version", 1)),
+        source_id=str(data["source_id"]),
+        host=str(data.get("host", "unknown")),
+        machine=str(data.get("machine") or socket.gethostname() or data.get("host", "unknown")),
+        os_user=str(data.get("os_user", "unknown")),
+        platform=platform,
+        timezone=str(data["timezone"]),
+        server_url=str(data["server_url"]),
+        timeout_seconds=int(data.get("timeout_seconds", 30)),
+        token_env=data.get("token_env"),
+    )
 

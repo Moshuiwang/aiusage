@@ -19,7 +19,8 @@ flowchart TD
     ccusage --> pushPayload["Usage Push Payload"]
     pushPayload --> httpIngest["HTTP Ingest API"]
     manualImport["Manual File Import"] --> httpIngest
-    limits["Optional Limits Source"] --> limitPayload["Limit Payload"]
+    officialLimits["Official Limits Provider"] --> limitPayload["Limit Payload"]
+    limits["Optional Structured Limits Source"] --> limitPayload
     limitPayload --> httpIngest
 
     httpIngest --> auth["Auth + Schema + Idempotency"]
@@ -49,7 +50,8 @@ flowchart TD
 - Linux source：在对应 Linux OS 用户下执行 `ccusage daily --json`，再 HTTP push。
 - Windows source：在当前 Windows 用户下执行 `ccusage daily --json`，再 HTTP push。
 - File import source：只读取明确配置的结构化报表文件。
-- Limits source：只读取明确设计的结构化导出文件或后续官方/手动来源。
+- Official limits source：只调用官方运行时接口、官方客户端本地 RPC，或读取明确设计的结构化导出文件。
+- Historical usage source：可以读取本地 session/log history 做 token/cost 统计，但不能参与 reset time 计算。
 
 禁止：
 
@@ -59,6 +61,7 @@ flowchart TD
 - 禁止把远程 home 目录同步到 Mac 后再解析。
 - 禁止终端侧上传 `.claude`、`.codex` 原始日志目录。
 - 禁止在未授权前修改生产账户配置。
+- 禁止从本地 token history、`ccusage daily` 或 `ccusage blocks` 推断官方 quota / reset time。
 
 ### Trust Boundary
 
@@ -100,6 +103,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - 测试不调用真实 HTTP server。
 - runner 必须可注入 fake executor 和 fake HTTP client。
 - 所有 command 和 HTTP request 有 timeout。
+- 定时调度器（如 cron, launchd, task scheduler）调度的运行必须具有超时或单实例锁保护，防止前一次运行挂起导致后台进程不断堆积。
 
 ### HTTP Ingest
 
@@ -109,6 +113,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - 校验认证、schema version、source id、timezone、observed_at、payload size 和幂等 key。
 - 只接收结构化 usage payload，不接收原始日志目录。
 - 对成功、重复、认证失败、schema 错误、stale payload 输出结构化响应。
+- 必须显式捕获并保存终端上报的时区（timezone）属性，为后续数据按统一时区汇总和快照生成提供对齐依据。
 
 要求：
 
@@ -142,6 +147,32 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - 每种输入 shape 都有 fixture。
 - malformed JSON、缺字段、未知 agent 都有测试。
 
+### Official Limits Provider
+
+职责：
+
+- 为 Claude Code、Codex、后续 Antigravity 提供官方额度窗口读取。
+- 输出 provider/window 级 `LimitPayload`，包含 used percent、remaining percent、reset time、observed_at、source_type、confidence、status。
+- 与 daily usage pipeline 分离；provider 失败不能阻塞 token usage 上报。
+
+推荐优先级：
+
+- Claude Code：OAuth Usage API -> CLI `/usage` PTY -> Web API。
+- Codex：OAuth/WHAM usage -> `codex app-server` RPC `account/rateLimits/read`。
+- Antigravity：Language Server `GetUserStatus` -> `GetCommandModelConfigs`，后续 spike。
+
+CodexBar 源码核验结论：
+
+- App runtime 的 Codex auto 顺序是 OAuth/WHAM first，CLI RPC second。
+- CLI runtime 的 auto 顺序不同：web dashboard first，CLI RPC second。
+- 本项目后台采集采用 app runtime 思路，不默认依赖 web dashboard cookies。
+
+禁止：
+
+- 不读取或上传 `.claude`、`.codex` 原始日志目录来推断 reset。
+- 不把 local history、`ccusage blocks` 或手动估算标成 `confidence: "observed"`。
+- 不在单元测试里调用真实官方 API。
+
 ### Canonical Store
 
 职责：
@@ -149,6 +180,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - SQLite 保存事实和采集状态。
 - 用 stable primary key 做 upsert。
 - 保留 first_seen_at、last_seen_at。
+- 必须启用 SQLite 的 WAL (Write-Ahead Logging) 模式，并配置合理的繁忙等待超时（busy timeout，如 5.0 秒），以防止多设备并发 push 或 build 快照时发生锁定冲突。
 
 当前逻辑表：
 
@@ -162,6 +194,8 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - `limit_windows`
 - `snapshot_builds`
 
+`limit_windows` 只保存设计过的 official/provider facts，不保存 provider 原始 token、cookie、完整 API 响应或本地原始日志。
+
 ### Snapshot Builder
 
 职责：
@@ -169,6 +203,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - 从 canonical store 和本轮采集状态构建展示快照。
 - 生成今日 summary、source health、token type totals、group totals。
 - 只把展示层需要的聚合写入 `latest.json`。
+- 在跨设备 daily 聚合计算时，必须将各终端在各自时区下上报的数据，按照统一的目标展示时区（Snapshot Timezone，如 `"timezone": "Asia/Shanghai"`）做对齐，防止数据在自然日跨天边界产生重叠或统计漂移。
 
 要求：
 
@@ -193,6 +228,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 - 不执行 `ccusage`。
 - Widget 不读取 SQLite。
 - 不从 token history 推断官方 quota。
+- reset time 只展示来自 `limits` 中 `confidence: "observed"` 的 provider fact；缺失时降级。
 
 ## 目标 `latest.json` v1
 
@@ -311,6 +347,7 @@ SQLite 是个人 HTTP server 的 canonical store，不直接暴露给外部客�
 
 - 错误必须结构化写入 source status。
 - 错误 message 需要截断。
+- 错误信息记录时需进行脱敏处理，防止泄露本地系统环境路径、Token/Key 或代码敏感信息。
 - 不把 stderr 或原始报表完整写入 `latest.json`。
 - 部分失败时，run status 是 `partial_failed`。
 
