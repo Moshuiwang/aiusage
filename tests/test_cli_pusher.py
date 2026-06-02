@@ -46,3 +46,31 @@ class TestCliPusher(unittest.TestCase):
         finally:
             if os.path.exists(path):
                 os.remove(path)
+
+    def test_push_command_rejects_existing_lock_file(self) -> None:
+        config_data = {
+            "schema_version": 1,
+            "source_id": "mac-local",
+            "host": "macbook-pro",
+            "os_user": "wangzhipeng",
+            "platform": "darwin",
+            "timezone": "Asia/Shanghai",
+            "server_url": "http://127.0.0.1:8000/ingest",
+            "timeout_seconds": 30,
+            "token_env": "AI_USAGE_INGEST_TOKEN",
+        }
+
+        config_fd, config_path = tempfile.mkstemp(suffix=".json")
+        lock_fd, lock_path = tempfile.mkstemp(suffix=".lock")
+        try:
+            with os.fdopen(config_fd, "w", encoding="utf-8") as handle:
+                json.dump(config_data, handle)
+            os.close(lock_fd)
+
+            code = cli.main(["push", "--config", config_path, "--lock-file", lock_path])
+
+            self.assertEqual(code, 1)
+        finally:
+            for path in [config_path, lock_path]:
+                if os.path.exists(path):
+                    os.remove(path)

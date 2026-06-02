@@ -57,6 +57,22 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
 
 目标形态下，终端侧命令会演进为本机采集后 push 到 HTTP server；当前 CLI 命令仍是旧 baseline 的本地验证入口，具体以 `docs/task-packages/v2/INDEX.md` 后续任务包为准。
 
+HTTP push 终端侧命令：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli push \
+  --config config/sources.local.json \
+  --lock-file /tmp/ai-usage-pusher.lock
+```
+
+服务端 SQLite 在线备份：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
+  --db data/usage.sqlite \
+  --backup-dir data/backups
+```
+
 采集后同步给 WidgetKit extension：
 
 ```bash

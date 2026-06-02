@@ -4,6 +4,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from .auth import TokenAuthenticator
+
 
 class IngestValidationError(ValueError):
     """Ingest payload 校验失败时抛出的异常，支持结构化错误类型"""
@@ -52,16 +54,18 @@ def validate_ingest_payload(
     payload: Dict[str, Any],
     token: Optional[str] = None,
     expected_token: Optional[str] = None,
+    authenticator: Optional[TokenAuthenticator] = None,
 ) -> IngestRequest:
     """
     校验终端 push 上报的数据 payload，包含认证验证与大小限制。
     如果不符合契约或认证失败，抛出 IngestValidationError。
     """
     # 1. 认证校验 (TP-V2-002 Ingest Auth)
-    if expected_token:
+    active_authenticator = authenticator or TokenAuthenticator.from_values(expected_token)
+    if active_authenticator.is_required:
         if not token:
             raise IngestValidationError("Missing authorization token", error_type="http_auth_failed")
-        if token != expected_token:
+        if not active_authenticator.verify(token):
             # 异常信息中不能泄露明文 token
             raise IngestValidationError("Invalid authorization token", error_type="http_auth_failed")
 

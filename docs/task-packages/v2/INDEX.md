@@ -25,6 +25,7 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 4. TP-V2-010 到 TP-V2-012：Web dashboard v1。
 5. TP-V2-013 到 TP-V2-015：Operations and optional Widget.
 6. TP-V2-016 到 TP-V2-021：Official limits provider MVP.
+7. TP-V2-022 起：Production hardening.
 
 ## 任务列表
 
@@ -51,6 +52,7 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 | TP-V2-019 | [TP-V2-019-limit-windows-store.md](TP-V2-019-limit-windows-store.md) | ready | TP-V2-016 | none |
 | TP-V2-020 | [TP-V2-020-limits-snapshot-api.md](TP-V2-020-limits-snapshot-api.md) | ready | TP-V2-017, TP-V2-018, TP-V2-019 | none |
 | TP-V2-021 | [TP-V2-021-limits-presentation.md](TP-V2-021-limits-presentation.md) | ready | TP-V2-020 | none |
+| TP-V2-022 | [TP-V2-022-production-hardening-baseline.md](TP-V2-022-production-hardening-baseline.md) | done | TP-V2-013, TP-V2-014 | none |
 
 ## subagent 分配建议
 

@@ -3,10 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sqlite3
 import sys
 
 from .collector import collect
+from .backup import backup_sqlite
 from .config import ConfigError, load_config, validate_device_config
+from .lock import FileLock, LockAlreadyHeld
 from .pusher import DevicePusher
 from .server import run_server
 from .widget_sync import sync_latest_to_widget
@@ -24,6 +27,7 @@ def main(argv: list[str] | None = None) -> int:
 
     push_parser = subparsers.add_parser("push", help="Collect local ccusage daily report and push it to the ingest server")
     push_parser.add_argument("--config", default="config/sources.local.json")
+    push_parser.add_argument("--lock-file", default=None, help="Optional single-instance lock file")
 
     sync_parser = subparsers.add_parser("sync-widget", help="Copy latest.json into the local Widget container")
     sync_parser.add_argument("--input", default="data/latest.json")
@@ -35,7 +39,12 @@ def main(argv: list[str] | None = None) -> int:
     server_parser.add_argument("--db", default="data/usage.sqlite")
     server_parser.add_argument("--latest", default="data/latest.json")
     server_parser.add_argument("--token", default=None, help="Bearer token")
+    server_parser.add_argument("--tokens-env", default="AI_USAGE_INGEST_TOKENS", help="Comma-separated token list env")
     server_parser.add_argument("--timezone", default="Asia/Shanghai")
+
+    backup_parser = subparsers.add_parser("backup", help="Create a safe SQLite backup")
+    backup_parser.add_argument("--db", default="data/usage.sqlite")
+    backup_parser.add_argument("--backup-dir", default="data/backups")
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -55,7 +64,14 @@ def main(argv: list[str] | None = None) -> int:
             with open(args.config, "r", encoding="utf-8") as handle:
                 config_data = json.load(handle)
             device_config = validate_device_config(config_data)
-            result = DevicePusher(device_config).push()
+            if args.lock_file:
+                with FileLock(args.lock_file):
+                    result = DevicePusher(device_config).push()
+            else:
+                result = DevicePusher(device_config).push()
+        except LockAlreadyHeld as exc:
+            print(json.dumps({"success": False, "error_type": "lock_already_held", "error_message": str(exc)}), file=sys.stderr)
+            return 1
         except (ConfigError, OSError, ValueError, json.JSONDecodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -76,8 +92,18 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
 
+    if args.command == "backup":
+        try:
+            result = backup_sqlite(args.db, args.backup_dir)
+        except (OSError, sqlite3.Error, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
+
     if args.command == "server":
         token = args.token or os.environ.get("AI_USAGE_INGEST_TOKEN")
+        token_specs = os.environ.get(args.tokens_env) if args.tokens_env else None
         try:
             run_server(
                 host=args.host,
@@ -85,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
                 db_path=args.db,
                 latest_path=args.latest,
                 token=token,
+                token_specs=token_specs,
                 timezone=args.timezone,
             )
         except Exception as exc:

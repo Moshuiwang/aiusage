@@ -39,6 +39,12 @@ Ingest 接口要求客户端提供 Bearer Token。你可以通过以下两种方
    ```bash
    export AI_USAGE_INGEST_TOKEN="your-secret-token-here"
    ```
+3. **多 Token 轮换（推荐用于线上）**：
+   ```bash
+   export AI_USAGE_INGEST_TOKENS="ai-ubuntu:token-one,biai-wangzp:token-two"
+   ```
+
+`AI_USAGE_INGEST_TOKEN` 用于保持旧部署兼容；`AI_USAGE_INGEST_TOKENS` 用于新增或轮换终端 token。两者可以同时存在，服务端会接受任一 active token。`label` 只用于本地识别，不会返回给客户端。
 
 > [!WARNING]
 > **绝对不要**将真实 Token 提交到 Git 仓库，也不要提交 `config/sources.local.json` 等包含敏感鉴权信息的本地配置文件。
@@ -63,7 +69,15 @@ cp data/usage.sqlite* /path/to/backup/dir/
 ```
 
 ### 3.2 在线热备份 (SQLite Online Backup)
-可以在进程运行期间使用 SQLite 命令行工具生成一致性备份：
+推荐使用 CLI 内置备份命令。它会先执行 `PRAGMA integrity_check`，再通过 SQLite online backup API 生成一致性备份：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
+  --db data/usage.sqlite \
+  --backup-dir data/backups
+```
+
+也可以在进程运行期间使用 SQLite 命令行工具生成一致性备份：
 
 ```bash
 sqlite3 data/usage.sqlite ".backup '/path/to/backup/dir/usage_backup_$(date +%F).sqlite'"
@@ -87,6 +101,7 @@ User=root
 WorkingDirectory=/home/ubuntu/ai-usage-widget
 Environment=PYTHONPATH=/home/ubuntu/ai-usage-widget/src
 Environment=AI_USAGE_INGEST_TOKEN="admin-secret-token"
+Environment=AI_USAGE_INGEST_TOKENS="ai-ubuntu:token-one,biai-wangzp:token-two"
 ExecStart=/usr/bin/python3 -m ai_usage_widget.cli server --host 0.0.0.0 --port 8000 --db data/usage.sqlite --latest data/latest.json
 Restart=always
 

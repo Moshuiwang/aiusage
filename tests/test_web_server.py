@@ -114,6 +114,31 @@ class TestWebServerSummary(unittest.TestCase):
             urllib.request.urlopen(req_no_auth)
         self.assertEqual(ctx.exception.code, 401)
 
+    def test_ingest_accepts_rotated_token_specs(self) -> None:
+        self.httpd.shutdown()
+        self.server_thread.join()
+        self.httpd.server_close()
+        self.server_thread, self.httpd = start_test_server(
+            host="127.0.0.1",
+            port=self.port,
+            db_path=self.db_path,
+            latest_path=self.out_path,
+            token=self.token,
+            token_specs="ai:rotated-token",
+            timezone="Asia/Shanghai",
+        )
+        time.sleep(0.5)
+
+        url = f"http://127.0.0.1:{self.port}/ingest"
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(self.valid_payload).encode("utf-8"),
+            headers={"Authorization": "Bearer rotated-token", "Content-Type": "application/json"},
+        )
+
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.status, 200)
+
     def test_ingest_success_and_query_summary(self) -> None:
         """测试正常流程：推送成功后，查询 summary 能够获取累加的 token 和设备状态"""
         url_ingest = f"http://127.0.0.1:{self.port}/ingest"

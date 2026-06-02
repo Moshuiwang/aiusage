@@ -21,7 +21,8 @@ V2 HTTP push 部署应使用终端侧 pusher 命令：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli push \
-  --config config/sources.local.json
+  --config config/sources.local.json \
+  --lock-file /tmp/ai-usage-pusher.lock
 ```
 
 > [!IMPORTANT]
@@ -53,6 +54,8 @@ macOS 平台推荐使用系统自带的 `launchd` 配置定时任务。
         <string>push</string>
         <string>--config</string>
         <string>/Users/<user>/Documents/ai-usage-widget/config/sources.local.json</string>
+        <string>--lock-file</string>
+        <string>/Users/<user>/Library/Caches/ai_usage_pusher.lock</string>
     </array>
     <key>EnvironmentVariables</key>
     <dict>
@@ -99,7 +102,7 @@ Type=oneshot
 WorkingDirectory=%h/ai-usage-widget
 Environment=PYTHONPATH=%h/ai-usage-widget/src
 Environment=AI_USAGE_INGEST_TOKEN="admin-secret-token"
-ExecStart=/usr/bin/python3 -m ai_usage_widget.cli push --config %h/ai-usage-widget/config/sources.local.json
+ExecStart=/usr/bin/python3 -m ai_usage_widget.cli push --config %h/ai-usage-widget/config/sources.local.json --lock-file %h/.cache/ai_usage_pusher.lock
 StandardOutput=append:%h/.local/state/ai_usage_pusher.log
 StandardError=append:%h/.local/state/ai_usage_pusher.err
 ```
@@ -140,7 +143,7 @@ Windows 平台推荐使用任务计划程序（**Task Scheduler**）来定时触
 ```powershell
 $env:PYTHONPATH="C:\path\to\ai-usage-widget\src"
 $env:AI_USAGE_INGEST_TOKEN="admin-secret-token"
-python.exe -m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\config\sources.local.json
+python.exe -m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\config\sources.local.json --lock-file C:\Users\<user>\AppData\Local\Temp\ai_usage_pusher.lock
 ```
 
 ### 4.2 配置步骤
@@ -149,7 +152,7 @@ python.exe -m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\confi
 3. 触发器选择：**每天**，并在高级设置中配置为“每隔 30 分钟重复一次”。
 4. 操作选择：**启动程序**：
    - **程序/脚本**: `python.exe`
-   - **添加参数**: `-m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\config\sources.local.json`
+   - **添加参数**: `-m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\config\sources.local.json --lock-file C:\Users\<user>\AppData\Local\Temp\ai_usage_pusher.lock`
    - **起始于**: `C:\path\to\ai-usage-widget`
 5. 在条件选项卡中，确保勾选“只有在以下网络连接可用时才启动：任何连接”，以防止无网络时报错。
 6. 日志将输出至系统事件查看器，也可以在启动参数中重定向输出。

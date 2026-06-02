@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
+from .auth import TokenAuthenticator
 from .config import ConfigError
 from .ingest import IngestValidationError, validate_ingest_payload, IngestResponse
 from .normalize import normalize_ingest_block_request, normalize_ingest_hourly_request, normalize_ingest_request
@@ -67,8 +68,7 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             parsed = parse_qs(body.decode("utf-8"))
             token = parsed.get("token", [""])[0]
 
-        expected_token = self.server.token
-        if not expected_token or not hmac.compare_digest(token, expected_token):
+        if not self.server.authenticator.verify(token):
             self.send_login_page(status_code=401, message="Invalid token")
             return
 
@@ -103,7 +103,9 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         # 4. 执行契约校验
         try:
             req = validate_ingest_payload(
-                payload, token=token, expected_token=self.server.token
+                payload,
+                token=token,
+                authenticator=self.server.authenticator,
             )
         except IngestValidationError as exc:
             status_code = 401 if exc.error_type == "http_auth_failed" else 400
@@ -310,14 +312,14 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(resp, ensure_ascii=False).encode("utf-8"))
 
     def _is_authenticated(self) -> bool:
-        token = self.server.token
-        if not token:
+        authenticator = self.server.authenticator
+        if not authenticator.is_required:
             return True
 
         auth_header = self.headers.get("Authorization", "")
         if auth_header.lower().startswith("bearer "):
             supplied = auth_header[7:].strip()
-            if hmac.compare_digest(supplied, token):
+            if authenticator.verify(supplied):
                 return True
 
         cookie_header = self.headers.get("Cookie", "")
@@ -328,7 +330,7 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         return False
 
     def _session_cookie_value(self) -> str:
-        token = self.server.token or ""
+        token = self.server.authenticator.session_secret
         return hmac.new(
             token.encode("utf-8"),
             b"ai-usage-dashboard-session-v1",
@@ -356,11 +358,13 @@ class ThreadedHTTPServer(HTTPServer):
         latest_path: str,
         token: Optional[str],
         timezone: str,
+        token_specs: Optional[str] = None,
     ) -> None:
         super().__init__(server_address, RequestHandlerClass)
         self.db_path = db_path
         self.latest_path = latest_path
         self.token = token
+        self.authenticator = TokenAuthenticator.from_values(token, token_specs)
         self.timezone = timezone
 
 
@@ -370,6 +374,7 @@ def start_test_server(
     db_path: str,
     latest_path: str,
     token: Optional[str] = None,
+    token_specs: Optional[str] = None,
     timezone: str = "Asia/Shanghai",
 ) -> tuple[threading.Thread, ThreadedHTTPServer]:
     """启动本地轻量测试服务器并跑在后台线程中"""
@@ -379,6 +384,7 @@ def start_test_server(
         db_path=db_path,
         latest_path=latest_path,
         token=token,
+        token_specs=token_specs,
         timezone=timezone,
     )
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -392,6 +398,7 @@ def run_server(
     db_path: str,
     latest_path: str,
     token: Optional[str] = None,
+    token_specs: Optional[str] = None,
     timezone: str = "Asia/Shanghai",
 ) -> None:
     """启动 HTTP Ingest 与 Web API 服务进程 (阻塞主线程)"""
@@ -401,6 +408,7 @@ def run_server(
         db_path=db_path,
         latest_path=latest_path,
         token=token,
+        token_specs=token_specs,
         timezone=timezone,
     )
     print(f"Starting AI Usage server on {host}:{port} with timezone={timezone} ...")
