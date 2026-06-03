@@ -17,7 +17,7 @@
 
 - Active version: `V2`
 - Index: [v2/INDEX.md](v2/INDEX.md)
-- First executable package: `TP-V2-001`
+- First executable package: none; current V2 published packages are done.
 
 ## 目录结构
 
