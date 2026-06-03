@@ -273,9 +273,12 @@ class ClaudeCliUsageProvider:
             try:
                 return parse_claude_active_limits(_load_active_limits_cache(self.env), observed_at=observed_at)
             except ClaudeProviderError:
-                return self._probe_limit_message(observed_at)
+                return self._probe_limit_message(
+                    observed_at,
+                    allow_unknown_subscription=_is_subscription_only_usage(result.stdout),
+                )
 
-    def _probe_limit_message(self, observed_at: str) -> List[LimitWindow]:
+    def _probe_limit_message(self, observed_at: str, *, allow_unknown_subscription: bool = False) -> List[LimitWindow]:
         try:
             result = self.runner.run(self.limit_probe_command, self.timeout, self.env)
         except Exception as exc:
@@ -283,6 +286,8 @@ class ClaudeCliUsageProvider:
         try:
             return parse_claude_cli_usage(result.stdout, observed_at=observed_at)
         except LimitContractError as exc:
+            if allow_unknown_subscription and result.returncode == 0:
+                return [_unknown_subscription_window(observed_at)]
             raise ClaudeProviderError("provider_failed", "Claude CLI limit probe did not return limits") from exc
 
 
@@ -439,6 +444,27 @@ def _load_active_limits_cache(env: dict[str, str] | None) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise ClaudeProviderError("missing_credentials", "Claude active limits cache has unsupported shape")
     return payload
+
+
+def _is_subscription_only_usage(text: str) -> bool:
+    return "using your subscription to power your Claude Code usage" in text
+
+
+def _unknown_subscription_window(observed_at: str) -> LimitWindow:
+    return parse_limit_window(
+        {
+            "provider": "claude",
+            "window": "unknown",
+            "used_percent": 0,
+            "remaining_percent": 0,
+            "reset_at": observed_at,
+            "window_duration_minutes": 0,
+            "observed_at": observed_at,
+            "source_type": "official_cli_subscription",
+            "confidence": "missing",
+            "status": "unknown",
+        }
+    )
 
 
 def _datetime_value(payload: Dict[str, Any], *names: str) -> str:

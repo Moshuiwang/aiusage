@@ -372,6 +372,69 @@ class TestCliLimits(unittest.TestCase):
             self.assertFalse(os.path.exists(latest_path))
             self.assertNotIn(tmpdir, output)
 
+    def test_push_limits_fixture_posts_windows(self) -> None:
+        calls = []
+
+        def fake_push_limits(url, token, payload, timeout=10.0):
+            calls.append((url, token, payload, timeout))
+            return {"success": True, "windows_written": len(payload["windows"])}
+
+        stdout = io.StringIO()
+        with patch.object(cli, "push_limits_payload", fake_push_limits), redirect_stdout(stdout):
+            code = cli.main([
+                "push-limits",
+                "--provider-fixture",
+                str(FIXTURES / "limits_runtime_fixture.json"),
+                "--url",
+                "https://example.test/ingest-limits",
+                "--token-env",
+                "AI_USAGE_TEST_PUSH_TOKEN",
+            ])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(calls, [])
+
+        with patch.dict(os.environ, {"AI_USAGE_TEST_PUSH_TOKEN": "secret-token"}):
+            stdout = io.StringIO()
+            with patch.object(cli, "push_limits_payload", fake_push_limits), redirect_stdout(stdout):
+                code = cli.main([
+                    "push-limits",
+                    "--provider-fixture",
+                    str(FIXTURES / "limits_runtime_fixture.json"),
+                    "--url",
+                    "https://example.test/ingest-limits",
+                    "--token-env",
+                    "AI_USAGE_TEST_PUSH_TOKEN",
+                ])
+
+        output = json.loads(stdout.getvalue())
+        self.assertEqual(code, 0)
+        self.assertTrue(output["success"])
+        self.assertEqual(output["windows_written"], 2)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], "https://example.test/ingest-limits")
+        self.assertEqual(calls[0][1], "secret-token")
+        self.assertEqual({row["source_id"] for row in calls[0][2]["windows"]}, {"claude", "codex"})
+
+    def test_push_limits_dry_run_does_not_post(self) -> None:
+        stdout = io.StringIO()
+        with patch.object(cli, "push_limits_payload") as push_mock, redirect_stdout(stdout):
+            code = cli.main([
+                "push-limits",
+                "--provider-fixture",
+                str(FIXTURES / "limits_runtime_fixture.json"),
+                "--url",
+                "https://example.test/ingest-limits",
+                "--dry-run",
+            ])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(code, 0)
+        self.assertTrue(payload["success"])
+        self.assertTrue(payload["dry_run"])
+        self.assertEqual(payload["windows_collected"], 2)
+        push_mock.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

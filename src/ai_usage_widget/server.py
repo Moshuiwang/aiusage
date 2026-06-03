@@ -14,8 +14,9 @@ from urllib.parse import parse_qs, urlparse
 from .auth import TokenAuthenticator
 from .config import ConfigError
 from .ingest import IngestValidationError, validate_ingest_payload, IngestResponse
+from .limits import LimitContractError, parse_limit_window
 from .normalize import normalize_ingest_block_request, normalize_ingest_hourly_request, normalize_ingest_request
-from .storage_sqlite import write_sqlite
+from .storage_sqlite import write_limit_windows, write_sqlite
 from .snapshot_builder import build_snapshot
 
 
@@ -24,6 +25,8 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         if parsed_url.path == "/ingest":
             self.handle_ingest()
+        elif parsed_url.path == "/ingest-limits":
+            self.handle_ingest_limits()
         elif parsed_url.path == "/login":
             self.handle_login()
         else:
@@ -190,6 +193,60 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         self._send_security_headers()
         self.end_headers()
         self.wfile.write(json.dumps(resp.to_dict(), ensure_ascii=False).encode("utf-8"))
+
+    def handle_ingest_limits(self) -> None:
+        auth_header = self.headers.get("Authorization", "")
+        token = None
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:].strip()
+        if not self.server.authenticator.verify(token):
+            self.send_error_json(401, "http_auth_failed", "Invalid or missing token")
+            return
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        if content_length == 0:
+            self.send_error_json(400, "limit_schema_invalid", "Missing payload body")
+            return
+
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            self.send_error_json(400, "limit_schema_invalid", f"Malformed JSON: {exc}")
+            return
+
+        try:
+            observed_at, windows = _validate_limits_ingest_payload(payload)
+        except LimitContractError as exc:
+            self.send_error_json(400, exc.error_type, str(exc))
+            return
+
+        try:
+            write_limit_windows(self.server.db_path, windows, seen_at=observed_at)
+        except Exception as exc:
+            self.send_error_json(500, "write_failed", f"Failed to save limits: {exc}")
+            return
+
+        try:
+            build_snapshot(
+                db_path=self.server.db_path,
+                output_path=self.server.latest_path,
+                date_str=observed_at[:10],
+                timezone_str=self.server.timezone,
+                current_time_str=observed_at,
+            )
+        except Exception as exc:
+            print(f"Failed to build snapshot during limits ingest: {exc}")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._send_security_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "success": True,
+            "status": "accepted",
+            "windows_written": len(windows),
+            "accepted_at": observed_at,
+        }, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
     def handle_get_summary(self, parsed_url: Any) -> None:
         # 1. 提取日期查询参数
@@ -428,6 +485,41 @@ class ThreadedHTTPServer(HTTPServer):
         self.token = token
         self.authenticator = TokenAuthenticator.from_values(token, token_specs)
         self.timezone = timezone
+
+
+def _validate_limits_ingest_payload(payload: Any):
+    if not isinstance(payload, dict):
+        raise LimitContractError("limit_schema_invalid", "limits payload must be an object")
+    _reject_sensitive_payload_keys(payload)
+
+    if payload.get("schema_version") != 1:
+        raise LimitContractError("limit_schema_invalid", "schema_version must be 1")
+    observed_at = payload.get("observed_at")
+    if not isinstance(observed_at, str) or not observed_at.strip():
+        raise LimitContractError("limit_schema_invalid", "observed_at must be a non-empty string")
+    observed_at = observed_at.strip()
+    try:
+        datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LimitContractError("limit_schema_invalid", "observed_at must be an ISO 8601 datetime") from exc
+
+    windows_payload = payload.get("windows")
+    if not isinstance(windows_payload, list):
+        raise LimitContractError("limit_schema_invalid", "windows must be a list")
+    windows = []
+    for item in windows_payload:
+        if not isinstance(item, dict):
+            raise LimitContractError("limit_schema_invalid", "limit window must be an object")
+        _reject_sensitive_payload_keys(item)
+        windows.append(parse_limit_window(item))
+    return observed_at, windows
+
+
+def _reject_sensitive_payload_keys(payload: Dict[str, Any]) -> None:
+    sensitive_keys = {"token", "auth_file", "api_key", "secret", "env", "raw_json", "raw"}
+    present = sorted(key for key in payload if key in sensitive_keys)
+    if present:
+        raise LimitContractError("limit_schema_invalid", "sensitive fields are not accepted: " + ", ".join(present))
 
 
 def start_test_server(

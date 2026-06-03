@@ -93,6 +93,31 @@ class TestClaudeCliAdapter(unittest.TestCase):
             ("session", 100.0, "official_cli_limit_message")
         ])
 
+    def test_cli_provider_maps_subscription_only_text_to_unknown_window(self) -> None:
+        runner = RecordingRunner(
+            [
+                ClaudeCommandResult(
+                    returncode=0,
+                    stdout="You are currently using your subscription to power your Claude Code usage",
+                    stderr="",
+                ),
+                ClaudeCommandResult(returncode=0, stdout="OK", stderr=""),
+            ]
+        )
+
+        windows = ClaudeCliUsageProvider(
+            runner=runner,
+            env={"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"},
+            observed_at_provider=lambda: "2026-06-03T11:45:00+08:00",
+        ).collect()
+
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0].window, "unknown")
+        self.assertEqual(windows[0].source_type, "official_cli_subscription")
+        self.assertEqual(windows[0].confidence, "missing")
+        self.assertEqual(windows[0].status, "unknown")
+        self.assertFalse(windows[0].is_official)
+
     def test_cli_provider_maps_nonzero_exit_to_provider_failed(self) -> None:
         runner = RecordingRunner(ClaudeCommandResult(returncode=1, stdout="", stderr="login required"))
 

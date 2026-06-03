@@ -222,6 +222,95 @@ class TestWebServerSummary(unittest.TestCase):
         self.assertEqual(summary_data["limits"][0]["window"], "week")
         self.assertEqual(summary_data["limits"][0]["reset_at"], "2026-06-08T00:00:00+08:00")
 
+    def test_ingest_limits_requires_auth(self) -> None:
+        payload = {
+            "schema_version": 1,
+            "observed_at": "2026-06-01T10:45:00+08:00",
+            "windows": [
+                {
+                    "source_id": "codex-main",
+                    "provider": "codex",
+                    "window": "session",
+                    "used_percent": 40,
+                    "remaining_percent": 60,
+                    "reset_at": "2026-06-01T15:45:00+08:00",
+                    "window_duration_minutes": 300,
+                    "observed_at": "2026-06-01T10:45:00+08:00",
+                    "source_type": "runtime_api",
+                    "confidence": "observed",
+                    "status": "ok",
+                }
+            ],
+        }
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/ingest-limits",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req)
+
+        self.assertEqual(ctx.exception.code, 401)
+
+    def test_ingest_limits_accepts_authorized_payload_and_updates_summary(self) -> None:
+        payload = {
+            "schema_version": 1,
+            "observed_at": "2026-06-01T10:45:00+08:00",
+            "timezone": "Asia/Shanghai",
+            "windows": [
+                {
+                    "source_id": "codex-main",
+                    "provider": "codex",
+                    "window": "session",
+                    "used_percent": 40,
+                    "remaining_percent": 60,
+                    "reset_at": "2026-06-01T15:45:00+08:00",
+                    "window_duration_minutes": 300,
+                    "observed_at": "2026-06-01T10:45:00+08:00",
+                    "source_type": "runtime_api",
+                    "confidence": "observed",
+                    "status": "ok",
+                },
+                {
+                    "source_id": "claude-w",
+                    "provider": "claude",
+                    "window": "session",
+                    "used_percent": 100,
+                    "remaining_percent": 0,
+                    "reset_at": "2026-06-01T11:40:00+08:00",
+                    "window_duration_minutes": 300,
+                    "observed_at": "2026-06-01T10:45:00+08:00",
+                    "source_type": "official_cli_limit_message",
+                    "confidence": "observed",
+                    "status": "ok",
+                },
+            ],
+        }
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/ingest-limits",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+        )
+
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.status, 200)
+            response_payload = json.loads(response.read().decode("utf-8"))
+
+        self.assertTrue(response_payload["success"])
+        self.assertEqual(response_payload["windows_written"], 2)
+
+        req_summary = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/summary?date=2026-06-01",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        with urllib.request.urlopen(req_summary) as response:
+            summary_data = json.loads(response.read().decode("utf-8"))
+
+        limits_by_source = {row["source_id"]: row for row in summary_data["limits"]}
+        self.assertEqual(limits_by_source["codex-main"]["provider"], "codex")
+        self.assertEqual(limits_by_source["claude-w"]["remaining_percent"], 0)
+
     def test_summary_period_query_uses_period_parameter(self) -> None:
         """测试 /api/summary?period=week 返回 period 字段和范围聚合结构"""
         url_ingest = f"http://127.0.0.1:{self.port}/ingest"

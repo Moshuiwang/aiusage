@@ -29,6 +29,7 @@ class LimitsRuntimeResult:
     success: bool
     windows_written: int
     provider_results: list[ProviderRuntimeResult]
+    windows: list[LimitWindow]
 
 
 class FixtureLimitsProvider:
@@ -113,6 +114,7 @@ class LimitsRuntime:
                 success=all(result.status == "ok" for result in provider_results),
                 windows_written=0,
                 provider_results=provider_results,
+                windows=all_windows,
             )
 
         write_limit_windows(self.db_path, all_windows, seen_at=seen_at)
@@ -129,6 +131,7 @@ class LimitsRuntime:
             success=all(result.status == "ok" for result in provider_results),
             windows_written=len(all_windows),
             provider_results=provider_results,
+            windows=all_windows,
         )
 
 
