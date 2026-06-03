@@ -81,6 +81,72 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
 curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/health
 ```
 
+离线 fixture 采集 official limits 并写入 SQLite：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --provider-fixture tests/fixtures/limits_runtime_fixture.json \
+  --sqlite data/usage.sqlite \
+  --latest data/latest.json
+```
+
+使用本地 limits config 采集 official limits：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json
+```
+
+部署前 dry-run 验证 limits config，不写 SQLite / latest：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
+  --dry-run
+```
+
+显式指定 Codex auth 文件采集 WHAM usage：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --provider codex \
+  --codex-auth-file /path/to/codex/auth.json \
+  --sqlite data/usage.sqlite \
+  --latest data/latest.json
+```
+
+显式指定 Codex app-server RPC 采集 rate limits：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --provider codex \
+  --codex-rpc \
+  --codex-rpc-sock /path/to/codex-app-server.sock \
+  --sqlite data/usage.sqlite \
+  --latest data/latest.json
+```
+
+显式指定 Claude auth 文件和 Usage API URL 采集 OAuth usage：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --provider claude \
+  --claude-auth-file /path/to/claude/auth.json \
+  --claude-usage-url https://example.invalid/claude/usage \
+  --sqlite data/usage.sqlite \
+  --latest data/latest.json
+```
+
+显式指定 Claude CLI `/usage` 采集 usage：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --provider claude \
+  --claude-cli \
+  --sqlite data/usage.sqlite \
+  --latest data/latest.json
+```
+
 采集后同步给 WidgetKit extension：
 
 ```bash

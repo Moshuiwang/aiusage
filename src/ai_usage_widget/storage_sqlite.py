@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+from .limits import LimitWindow
 from .models import CommandResult, UsageBlockItem, UsageHourlyItem, UsageItem
 
 
@@ -36,6 +37,17 @@ def write_sqlite(
             _upsert_hourly_item(conn, item, collected_at)
         for item in block_items or []:
             _upsert_block_item(conn, item, collected_at)
+
+
+def write_limit_windows(path: str, windows: Iterable[LimitWindow], seen_at: str) -> None:
+    db_path = Path(path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
+        _ensure_schema(conn)
+        for window in windows:
+            _upsert_limit_window(conn, window, seen_at)
 
 
 def build_source_report(source: Dict[str, Any], result: CommandResult, status: str) -> Dict[str, Any]:
@@ -155,6 +167,22 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           platform TEXT,
           first_seen_at TEXT NOT NULL,
           last_seen_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS limit_windows (
+          provider TEXT NOT NULL,
+          window TEXT NOT NULL,
+          used_percent REAL NOT NULL,
+          remaining_percent REAL NOT NULL,
+          reset_at TEXT NOT NULL,
+          window_duration_minutes INTEGER NOT NULL,
+          source_type TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          status TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          PRIMARY KEY(provider, source_type, window)
         );
         """
     )
@@ -375,6 +403,41 @@ def _upsert_block_item(conn: sqlite3.Connection, item: UsageBlockItem, collected
             else None,
             collected_at,
             collected_at,
+        ),
+    )
+
+
+def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO limit_windows (
+          provider, window, used_percent, remaining_percent, reset_at,
+          window_duration_minutes, source_type, confidence, status, observed_at,
+          first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider, source_type, window) DO UPDATE SET
+          used_percent=excluded.used_percent,
+          remaining_percent=excluded.remaining_percent,
+          reset_at=excluded.reset_at,
+          window_duration_minutes=excluded.window_duration_minutes,
+          confidence=excluded.confidence,
+          status=excluded.status,
+          observed_at=excluded.observed_at,
+          last_seen_at=excluded.last_seen_at
+        """,
+        (
+            window.provider,
+            window.window,
+            window.used_percent,
+            window.remaining_percent,
+            window.reset_at,
+            window.window_duration_minutes,
+            window.source_type,
+            window.confidence,
+            window.status,
+            window.observed_at,
+            seen_at,
+            seen_at,
         ),
     )
 

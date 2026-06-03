@@ -1,0 +1,32 @@
+{
+  "providers": {
+    "codex": [
+      {
+        "provider": "codex",
+        "window": "session",
+        "used_percent": 41.2,
+        "remaining_percent": 58.8,
+        "reset_at": "2026-06-03T14:00:00+08:00",
+        "window_duration_minutes": 300,
+        "observed_at": "2026-06-03T10:00:00+08:00",
+        "source_type": "runtime_api",
+        "confidence": "observed",
+        "status": "ok"
+      }
+    ],
+    "claude": [
+      {
+        "provider": "claude",
+        "window": "week",
+        "used_percent": 31.5,
+        "remaining_percent": 68.5,
+        "reset_at": "2026-06-09T00:00:00+08:00",
+        "window_duration_minutes": 10080,
+        "observed_at": "2026-06-03T10:01:00+08:00",
+        "source_type": "oauth_usage_api",
+        "confidence": "observed",
+        "status": "ok"
+      }
+    ]
+  }
+}

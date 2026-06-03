@@ -83,6 +83,52 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.chunbai.aiusage.push
 launchctl kickstart -k gui/$(id -u)/com.chunbai.aiusage.pusher
 ```
 
+### 2.3 Official Limits Collector
+
+limits provider 必须在拥有对应 Codex / Claude credential 的当前 macOS 用户上下文运行。不要用 `root` 或其他用户代跑，否则 CLI/keychain/app-server socket 可能不可见。
+
+部署前先 dry-run：
+
+```bash
+PYTHONPATH=/Users/<user>/Documents/ai-usage-widget/src \
+python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config /Users/<user>/Documents/ai-usage-widget/config/limits.local.json \
+  --dry-run
+```
+
+launchd 模板：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.chunbai.aiusage.limits</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>-m</string>
+        <string>ai_usage_widget.cli</string>
+        <string>collect-limits</string>
+        <string>--limits-config</string>
+        <string>/Users/<user>/Documents/ai-usage-widget/config/limits.local.json</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONPATH</key>
+        <string>/Users/<user>/Documents/ai-usage-widget/src</string>
+    </dict>
+    <key>StartInterval</key>
+    <integer>1800</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/<user>/Library/Logs/ai_usage_limits.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/<user>/Library/Logs/ai_usage_limits.stderr.log</string>
+</dict>
+</plist>
+```
+
 ---
 
 ## 3. Linux 平台定时任务配置 (`systemd` timer)
@@ -132,6 +178,59 @@ systemctl --user enable --now ai-usage-pusher.timer
 systemctl --user start ai-usage-pusher.service
 ```
 
+### 3.4 Official Limits Collector
+
+limits provider 应使用用户级 systemd timer，并在拥有 Codex / Claude credential 的 OS 用户下运行。不要用 `root` 代跑普通用户的 Claude/Codex credential。
+
+部署前先 dry-run：
+
+```bash
+PYTHONPATH=%h/ai-usage-widget/src \
+python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config %h/ai-usage-widget/config/limits.local.json \
+  --dry-run
+```
+
+Service：
+
+```ini
+# ~/.config/systemd/user/ai-usage-limits.service
+[Unit]
+Description=AI Usage Official Limits Collector
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/ai-usage-widget
+Environment=PYTHONPATH=%h/ai-usage-widget/src
+ExecStart=/usr/bin/python3 -m ai_usage_widget.cli collect-limits --limits-config %h/ai-usage-widget/config/limits.local.json
+StandardOutput=append:%h/.local/state/ai_usage_limits.log
+StandardError=append:%h/.local/state/ai_usage_limits.err
+```
+
+Timer：
+
+```ini
+# ~/.config/systemd/user/ai-usage-limits.timer
+[Unit]
+Description=Run AI Usage Official Limits Collector every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+激活：
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now ai-usage-limits.timer
+systemctl --user start ai-usage-limits.service
+```
+
 ---
 
 ## 4. Windows 平台定时任务配置 (`Task Scheduler`)
@@ -156,3 +255,20 @@ python.exe -m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\confi
    - **起始于**: `C:\path\to\ai-usage-widget`
 5. 在条件选项卡中，确保勾选“只有在以下网络连接可用时才启动：任何连接”，以防止无网络时报错。
 6. 日志将输出至系统事件查看器，也可以在启动参数中重定向输出。
+
+### 4.3 Official Limits Collector
+
+在拥有 Claude / Codex 登录态的 Windows 用户上下文执行 dry-run：
+
+```powershell
+$env:PYTHONPATH="C:\path\to\ai-usage-widget\src"
+python.exe -m ai_usage_widget.cli collect-limits `
+  --limits-config C:\path\to\ai-usage-widget\config\limits.local.json `
+  --dry-run
+```
+
+Task Scheduler 操作配置：
+
+- **程序/脚本**: `python.exe`
+- **添加参数**: `-m ai_usage_widget.cli collect-limits --limits-config C:\path\to\ai-usage-widget\config\limits.local.json`
+- **起始于**: `C:\path\to\ai-usage-widget`

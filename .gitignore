@@ -2,6 +2,7 @@
 .obsidian/
 ai-usage-widget/
 config/sources.local.json
+config/limits.local.json
 data/latest.json
 data/usage.sqlite
 data/history.sqlite

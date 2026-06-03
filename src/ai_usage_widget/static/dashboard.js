@@ -41,6 +41,9 @@
     streamTooltip: document.getElementById("streamTooltip"),
     axisRow: document.getElementById("axisRow"),
     emptyState: document.getElementById("emptyState"),
+    limitsSection: document.getElementById("limitsSection"),
+    limitsGrid: document.getElementById("limitsGrid"),
+    limitsCount: document.getElementById("limitsCount"),
     dashboardContent: document.getElementById("dashboardContent"),
     byAgentList: document.getElementById("byAgentList"),
     modelList: document.getElementById("modelList"),
@@ -259,6 +262,7 @@
     renderBreakdown(el.byAgentList, data.agents, data.total);
     renderBreakdown(el.modelList, normalizeModelShares(data.models), data.total, true);
     renderStream(data.layers, data.period.axis, data.trendPoints);
+    renderLimits(latestSnapshot.limits || []);
     renderDonut(data.hosts);
     renderSources(latestSnapshot.source_status || []);
   }
@@ -699,6 +703,70 @@
       .join("\n");
   }
 
+  function renderLimits(limits) {
+    if (!el.limitsSection || !el.limitsGrid) return;
+    const rows = (limits || []).filter((limit) => {
+      const provider = String(limit.provider || "").toLowerCase();
+      return provider === "claude" || provider === "codex";
+    });
+    el.limitsSection.hidden = rows.length === 0;
+    el.limitsGrid.replaceChildren();
+    if (el.limitsCount) el.limitsCount.textContent = `${rows.length} windows`;
+    if (!rows.length) return;
+
+    rows.forEach((limit) => {
+      const provider = String(limit.provider || "unknown").toLowerCase();
+      const observed = limit.official === true && limit.confidence === "observed" && limit.status === "ok";
+      const usedPercent = Number(limit.used_percent || 0);
+      const row = document.createElement("div");
+      row.className = `limit-row${observed ? " observed" : " muted"}`;
+      row.style.color = colorForAgent(provider);
+
+      const head = document.createElement("div");
+      head.className = "limit-head";
+      const title = document.createElement("strong");
+      title.textContent = `${displayAgent(provider)} · ${windowLabel(limit.window)}`;
+      const value = document.createElement("em");
+      value.textContent = observed ? `${trimFixed(usedPercent, 1)}%` : limitStatusLabel(limit);
+      head.append(title, value);
+
+      const track = document.createElement("div");
+      track.className = "limit-track";
+      const fill = document.createElement("i");
+      fill.style.width = observed ? `${Math.max(1, Math.min(100, usedPercent))}%` : "0%";
+      fill.style.background = `linear-gradient(90deg, ${withAlpha(colorForAgent(provider), 0.72)}, ${colorForAgent(provider)})`;
+      track.appendChild(fill);
+
+      const meta = document.createElement("div");
+      meta.className = "limit-meta";
+      const reset = document.createElement("span");
+      reset.textContent = observed ? `Reset ${formatDateTime(limit.reset_at)}` : limitStatusLabel(limit);
+      const confidence = document.createElement("span");
+      confidence.textContent = observed ? "observed" : String(limit.confidence || limit.status || "missing");
+      meta.append(reset, confidence);
+
+      row.append(head, track, meta);
+      el.limitsGrid.appendChild(row);
+    });
+  }
+
+  function windowLabel(value) {
+    const raw = String(value || "").toLowerCase();
+    if (raw === "session") return "5h";
+    if (raw === "week" || raw === "weekly") return "Week";
+    return raw || "Window";
+  }
+
+  function limitStatusLabel(limit) {
+    const status = String(limit.status || "").toLowerCase();
+    const confidence = String(limit.confidence || "").toLowerCase();
+    if (status === "stale") return "stale";
+    if (status === "provider_failed") return "failed";
+    if (status === "missing" || confidence === "missing") return "missing";
+    if (confidence === "estimated") return "estimated";
+    return status || confidence || "unavailable";
+  }
+
   function statusLabel(status) {
     if (status === "stale") return "静默";
     if (status === "command_failed") return "失败";
@@ -728,6 +796,13 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "--";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   }
 
   function formatPointLabel(value) {

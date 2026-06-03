@@ -1,0 +1,17 @@
+{
+  "observed_at": "2026-06-03T09:31:00+08:00",
+  "rate_limits": {
+    "primary": {
+      "usedPercent": 63,
+      "resetsAt": "2026-06-03T14:30:00+08:00",
+      "windowDurationMins": 300,
+      "status": "ok"
+    },
+    "secondary": {
+      "usedPercent": 44,
+      "resetsAt": "2026-06-08T00:00:00+08:00",
+      "windowDurationMins": 10080,
+      "status": "ok"
+    }
+  }
+}

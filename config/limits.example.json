@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "timezone": "Asia/Shanghai",
+  "sqlite": "data/usage.sqlite",
+  "latest": "data/latest.json",
+  "providers": [
+    {
+      "provider": "codex",
+      "enabled": true,
+      "auth_file": "/path/to/codex/auth.json",
+      "rpc": true,
+      "rpc_sock": "/path/to/codex-app-server.sock"
+    },
+    {
+      "provider": "claude",
+      "enabled": true,
+      "auth_file": "/path/to/claude/auth.json",
+      "usage_url": "https://example.invalid/claude/usage",
+      "cli": true
+    }
+  ]
+}
