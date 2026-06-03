@@ -2,9 +2,9 @@
 
 ## 产品定位
 
-AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI coding usage 观测工具。
+AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI coding usage 观测工具。项目名称暂时保留历史命名，但后续产品形态不再以 macOS Widget 为核心。
 
-它要把多台设备、多个 OS 用户、多个 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态，汇总成一个可信的个人数据产品。Web dashboard 是主要查看入口；Widget 只是可选的只读展示面，不是系统边界。
+它要把多台设备、多个 OS 用户、多个 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态，汇总成一个可信的个人数据产品。Web dashboard 是当前主要查看入口；下一阶段客户端方向是 iPhone App + iOS Widget。macOS Widget 退出后续产品路线，只保留历史兼容和参考价值。
 
 ## 核心问题
 
@@ -21,7 +21,7 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 - 不知道主要用量来自哪台机器、哪个 OS 用户、哪个 agent。
 - 采集失败容易被误判成“没有用量”。
 - quota/reset 信息如果没有可靠来源，容易被历史 token 估算误导。
-- Widget UI 一旦直接追设计稿，会把 mock 数据和真实能力混在一起。
+- 展示 UI 一旦直接追设计稿，会把 mock 数据和真实能力混在一起。
 
 ## 产品原则
 
@@ -30,8 +30,9 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 3. **主动上报**：各终端主动 push 结构化 usage payload；汇聚端不通过 SSH 登录远端机器抓取。
 4. **账户隔离**：每个 OS 用户只在自己的账户上下文执行 `ccusage` 或读取明确设计过的结构化导出文件。
 5. **数据产品先于 UI**：先稳定采集、ingest、存储、快照契约和错误模型，再做展示升级。
-6. **展示只读**：Web dashboard、Widget 和预览层只读 canonical store 或派生快照，不执行终端采集，不执行 SSH。
+6. **展示只读**：Web dashboard、iPhone App、iOS Widget 和预览层只读 canonical store、Web API 或派生快照，不执行终端采集，不执行 SSH。
 7. **TDD 驱动落地**：每个开发任务先写失败测试或契约测试，再实现最小代码。
+8. **移动端优先设计**：后续原生客户端先围绕 iPhone App 的信息架构和交互设计推进，iOS Widget 只承载 glanceable 摘要。
 
 ## 用户范围
 
@@ -146,18 +147,36 @@ Web dashboard 是主要用户界面，目标是从浏览器查看所有终端：
 - 有可信 limits 时显示 5h / week 进度和 reset time。
 - 没有可信 limits 时降级为 daily usage。
 
+### iPhone App
+
+iPhone App 是下一阶段目标客户端，负责承载完整个人查看体验：
+
+- 今日、本周期和关键窗口的 usage / limits 摘要。
+- 按机器、OS 用户、agent、模型和日期的 drilldown。
+- source health、stale source、最近上报时间和非敏感错误摘要。
+- 可靠 limits 来源存在时展示 5h / week 进度和 reset time。
+- 没有可信 limits 时降级为 daily usage 和采集健康状态。
+
+### iOS Widget
+
+iOS Widget 是 iPhone App 的轻量 glanceable 展示面，只读 App 或 server 准备好的摘要数据：
+
+- 今日 total tokens 或当前窗口使用进度。
+- 关键 limits reset time。
+- source health / stale 摘要。
+- 最近更新时间。
+
+Widget 不承载完整 dashboard，不做复杂 drilldown，不直接调用采集命令或官方 provider。
+
 ### macOS Widget
 
-Widget 是可选 glanceable 展示面，只读快照：
+macOS Widget 不再作为后续产品交付目标。
 
-- 今日 total tokens。
-- source health 摘要。
-- 关键机器或 agent 拆分。
-- 没有可信 limits 时降级为 daily usage。
+既有 macOS Widget / SwiftUI / WidgetKit 代码和文档只保留为历史兼容、snapshot decode 参考或临时调试入口。后续不要围绕 macOS Widget 新增视觉、签名、发布或交互任务。
 
 ### 后续展示
 
-菜单栏详情页、历史报表导出都是后续扩展，不作为当前工程化基础的前置条件。
+菜单栏详情页、历史报表导出、ChatGPT Apps 内嵌查看都是后续扩展，不作为当前工程化基础或 iPhone App 设计的前置条件。
 
 ## 阶段边界
 
@@ -201,21 +220,21 @@ Widget 是可选 glanceable 展示面，只读快照：
 - 缺失数据和失败 source 有可靠 UI。
 - 页面只展示 canonical store 或快照中已有字段，不现场执行采集。
 
-### Phase 5: Widget v1 and Limits Source
+### Phase 5: Mobile App Design and Limits Source
 
 目标：
 
-- Widget 作为可选只读展示面。
+- 启动 iPhone App 信息架构、手机尺寸可交互原型和 iOS Widget 信息密度设计。
 - 在 baseline 稳定后引入 limits/quota source。
 - 先支持 Claude Code + Codex 的 official limits provider contract 和 fixtures。
 - 每个字段都有 `source_type`、`confidence`、`observed_at`、`status`。
-- Web dashboard / Widget 只读 `limits` 快照，不直接调用官方 API。
+- Web dashboard / iPhone App / iOS Widget 只读 `limits` 快照或只读 API，不直接调用官方 API。
 
-### Phase 6: Visual Polish and Operations
+### Phase 6: iOS Implementation and Operations
 
 目标：
 
-- 向 `docs/ui-direction/wight-ai-usage/` 的 Apple-style 视觉靠近。
+- 将认可后的手机原型收敛成 SwiftUI App、WidgetKit、API contract、缓存和状态测试任务包。
 - 补各平台定时 pusher、server 启动、认证、备份、App Group、签名、构建和运行文档。
 
 ## 关键技术决策
@@ -226,15 +245,16 @@ Widget 是可选 glanceable 展示面，只读快照：
 - 保留 SQLite 作为个人 server canonical store。
 - 保留 `latest.json` 作为展示层读取入口。
 - 保留 `ccusage daily --json` 作为 daily usage baseline。
-- 保留 SwiftUI / WidgetKit 作为可选 macOS 展示实现。
+- 保留 Web dashboard 作为当前主展示面。
+- 保留既有 macOS SwiftUI / WidgetKit 代码作为历史兼容和参考，不再作为后续产品路线。
 
 ### 调整
 
 - 从 SSH pull 改为 device push：汇聚端提供 HTTP ingest，各终端主动上报。
-- Web dashboard 成为主要展示面；Widget 不再定义项目主架构，它只是 read-only presentation surface。
+- Web dashboard 成为当前主要展示面；后续客户端路线从 macOS Widget 调整为 iPhone App + iOS Widget。
 - quota/reset 不再作为当前主线前置项；它是 limits 插件域。
 - `latest.json` 不应只是一组扁平 `items`；需要演进为 versioned display snapshot。
-- 趋势图优先由 server 从 canonical store 聚合；Widget 趋势仍由 snapshot builder 预聚合后输出。
+- 趋势图优先由 server 从 canonical store 聚合；移动端只消费 Web API 或预聚合快照，不重复实现事实聚合。
 - 配置需要 schema 和校验，不能靠隐式字典字段扩散。
 
 ### 暂不做
@@ -264,6 +284,7 @@ Widget 是可选 glanceable 展示面，只读快照：
 - 任一终端离线或 stale 时，Web dashboard 能明确显示最近上报状态。
 - HTTP ingest payload schema 有 fixture、认证失败测试和幂等 upsert 测试。
 - `latest.json` schema 有版本、fixture 和 Swift/Python 双侧解码测试。
-- Web dashboard 和 Widget 的每个展示块都能追溯到 canonical store 或快照字段。
+- Web dashboard 和当前/历史展示消费者的每个展示块都能追溯到 canonical store 或快照字段。
+- iPhone App / iOS Widget 的每个展示块都能追溯到 canonical store、Web API 或快照字段。
 - limits/quota 缺失时仍有可用产品体验。
 - 每个实现任务都有先红后绿的测试记录。

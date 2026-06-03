@@ -8,7 +8,8 @@
 
 - 产品方向：个人使用的多设备 AI usage 观测数据产品。
 - 采集方向：各终端在自己的 OS 用户上下文运行 `ccusage`，主动 push 结构化 usage payload 到个人 HTTP server。
-- 展示方向：Web dashboard 是主要查看入口；Widget 是可选只读展示面。
+- 展示方向：Web dashboard 继续作为当前主要查看入口；macOS Widget 退出后续产品路线；下一阶段客户端方向是 iPhone App + iOS Widget。
+- 客户端设计方向：先做 iPhone App 信息架构、手机尺寸可交互原型和 iOS Widget 信息密度设计，再进入 SwiftUI / WidgetKit 实现任务包。
 - 工程顺序：HTTP ingest、终端 pusher、canonical store / snapshot、Web dashboard 已形成 baseline；official limits contract、Codex / Claude offline provider parser、limits store、snapshot/API、Web 展示、`collect-limits` fixture runtime、Codex WHAM 显式 auth adapter、Claude OAuth 显式 auth adapter、Codex app-server RPC adapter、Claude CLI `/usage` adapter、limits 本地配置契约、doctor readiness、dry-run、config-only check、scheduler 模板、真实 smoke handoff、V2 索引状态对齐、V2 backlog 入口清理和 Antigravity limits fixture parser baseline 已形成 baseline。
 - 任务入口：`docs/task-packages/README.md` + `docs/task-packages/v2/INDEX.md`。
 - 执行规则：所有开发任务必须 TDD。
@@ -18,10 +19,14 @@
 
 ## 下一步
 
-下一步需要新增任务包后再继续：准备本机 `config/limits.local.json` 后执行真实命令 smoke、Antigravity real LS reader、或提交/PR 整理。
+下一步需要新增任务包后再继续：
+
+- App 设计：以 `docs/mobile-app-design-brief.md` 为入口，下一步做手机尺寸可交互 prototype，再写 iOS 实现任务包。
+- 工程延续：准备本机 `config/limits.local.json` 后执行真实命令 smoke、Antigravity real LS reader、或提交/PR 整理。
 
 ## 注意
 
 - `docs/agent-harness-rules.md` 有既有未提交改动，本文件不覆盖它。
 - 不要把任务细节重新写回本文件。
 - V1 任务包代表旧的 SSH pull / Widget-first 方向；新开发默认不要从 V1 继续执行。
+- 既有 macOS Widget 文档和任务包只作为历史/兼容资料；不要再把 macOS Widget 当成后续产品交付目标。

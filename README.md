@@ -2,11 +2,12 @@
 
 个人使用的 AI coding usage 观测工具，用来汇总多台设备、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
 
-当前项目正在从 Widget-first 原型重设为个人 HTTP 汇聚数据产品：
+当前项目已经从 Widget-first 原型重设为个人 HTTP 汇聚数据产品，并开始进入 iPhone App + iOS Widget 的客户端设计阶段：
 
 - **Device push pipeline**：每台设备在自己的账户上下文运行 `ccusage daily --json`，把结构化用量主动 push 到个人 HTTP server。
 - **Server canonical store**：HTTP server 校验 ingest payload，写入 SQLite canonical store，并生成展示快照。
-- **Web presentation**：Web dashboard 是主要查看入口；Widget、SwiftUI preview 和 CLI report 都只读派生快照。
+- **Web presentation**：Web dashboard 是当前主要查看入口；CLI report 只读派生快照。
+- **Mobile client direction**：后续产品客户端方向是 iPhone App + iOS Widget；macOS Widget 退出产品路线，只保留历史兼容和参考。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
 
 ## 当前边界
@@ -163,7 +164,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --latest data/latest.json
 ```
 
-采集后同步给 WidgetKit extension：
+采集后同步给 legacy macOS WidgetKit extension：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
@@ -179,21 +180,21 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
 PYTHONPATH=src python3 -m ai_usage_widget.cli sync-widget --input data/latest.json
 ```
 
-SwiftUI 预览：
+Legacy macOS SwiftUI 预览：
 
 ```bash
 cd widget/macos
 swift run ai-usage-widget-preview
 ```
 
-Swift 测试：
+Legacy macOS Swift 测试：
 
 ```bash
 cd widget/macos
 swift test
 ```
 
-WidgetKit App 构建：
+Legacy macOS WidgetKit App 构建：
 
 ```bash
 cd widget/macos-xcode
@@ -211,6 +212,7 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [status.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/status.md)：当前阶段、有效决策和下一步。
 - [product-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
 - [architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture.md)：工程架构、数据链路、schema 目标和测试架构。
+- [mobile-app-design-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/mobile-app-design-brief.md)：iPhone App + iOS Widget 的设计入口、信息架构和原型协作方式。
 - [task-plan.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-plan.md)：旧任务入口兼容层，指向任务包目录。
 - [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。
 - [task-packages/RULES.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
@@ -219,9 +221,9 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [operations.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
 - [schedulers.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/schedulers.md)：各平台终端定时任务配置文档。
 - [handoff.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/handoff.md)：项目重构完成后的交接及后续部署指引。
-- [display-options.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/display-options.md)：Widget 展示候选和信息块。
+- [display-options.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/display-options.md)：历史 Widget 展示候选和信息块，仅作移动端设计参考。
 - [subscription-usage-source.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/subscription-usage-source.md)：limits/quota 数据源方向。
-- [widget-macos.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/widget-macos.md)：SwiftUI/WidgetKit 构建、预览和同步。
+- [widget-macos.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/widget-macos.md)：legacy macOS SwiftUI/WidgetKit 构建、预览和同步。
 - [ui-direction/wight-ai-usage/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/ui-direction/wight-ai-usage/README.md)：目标 UI 设计稿归档说明。
 
 ## 快照方向
@@ -237,4 +239,4 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 }
 ```
 
-工程化目标是 versioned display snapshot，详见 `docs/architecture.md`。迁移期需要保留 `items` 和 `source_status`，避免立即破坏现有 Widget。
+工程化目标是 versioned display snapshot，详见 `docs/architecture.md`。迁移期需要保留 `items` 和 `source_status`，避免立即破坏现有 legacy macOS Widget 和 CLI report；后续 iPhone App / iOS Widget 可以改读 Web API 或移动端专用摘要。

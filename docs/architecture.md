@@ -8,7 +8,7 @@
 Devices -> Local Collectors -> HTTP Ingest -> Canonical Store -> Snapshot Builder/API -> Presentation
 ```
 
-Web dashboard 和 Widget 都位于 Presentation 层。它们不拥有终端采集逻辑、不执行 SSH、不推断 quota/reset。
+Web dashboard、iPhone App 和 iOS Widget 都位于 Presentation 层。它们不拥有终端采集逻辑、不执行 SSH、不推断 quota/reset。既有 macOS Widget 仅作为历史兼容展示面，不再作为后续产品交付目标。
 
 ## 总体链路
 
@@ -36,7 +36,9 @@ flowchart TD
     snapshot --> latest["latest.json"]
     sqlite --> webApi["Web API"]
     webApi --> dashboard["Web Dashboard"]
-    latest --> widget["SwiftUI / WidgetKit"]
+    webApi --> iphoneApp["iPhone App"]
+    latest --> iosWidget["iOS Widget Snapshot"]
+    latest --> legacyWidget["Legacy macOS Widget"]
     latest --> cliReport["CLI Report"]
 ```
 
@@ -217,16 +219,17 @@ CodexBar 源码核验结论：
 
 - Web API 查询 canonical store 或派生快照。
 - Web dashboard 展示总量、分组、source health、stale source 和错误摘要。
-- Swift core 解码 snapshot。
-- SwiftUI / WidgetKit 根据 snapshot 展示状态。
-- WidgetKit sandbox 只读同步后的快照。
+- iPhone App 通过只读 Web API 或派生快照展示总览、drilldown、source health 和 limits。
+- iOS Widget 只读 App 或 server 准备好的轻量摘要，不承载完整 dashboard。
+- Swift core 解码 snapshot 的能力可复用到 iOS 客户端。
+- 既有 macOS SwiftUI / WidgetKit 只作为历史兼容展示面。
 
 禁止：
 
 - 不执行 collector。
 - 不执行 SSH。
 - 不执行 `ccusage`。
-- Widget 不读取 SQLite。
+- iPhone App / iOS Widget / macOS Widget 不读取 SQLite。
 - 不从 token history 推断官方 quota。
 - reset time 只展示来自 `limits` 中 `confidence: "observed"` 的 provider fact；缺失时降级。
 
@@ -300,9 +303,9 @@ CodexBar 源码核验结论：
 兼容要求：
 
 - `items` 和 `source_status` 在迁移期继续存在。
-- `limits` 缺失或为空时，Widget 降级为 usage baseline。
+- `limits` 缺失或为空时，Web dashboard、iPhone App 和 Widget 展示降级为 usage baseline。
 - `source_id` 应进入 `items`，方便 UI 关联 source health。
-- `summary` 和 `groups` 由 snapshot builder 生成，Widget 不重复实现复杂聚合。
+- `summary` 和 `groups` 由 snapshot builder 生成，展示客户端不重复实现复杂聚合。
 
 ## SQLite 目标口径
 
@@ -383,11 +386,13 @@ TDD 是落地硬规则。
 
 - launchd / systemd / Windows Task Scheduler 定时触发终端侧 pusher。
 - server 以本机或内网个人服务运行。
-- App Group container 作为 Widget snapshot 共享目录。
-- 菜单栏 app 可以触发本机 pusher，但仍通过 CLI 或库调用，不把采集逻辑塞进 Widget extension。
+- iPhone App 通过只读 API 或同步快照查看个人 usage 状态。
+- iOS Widget 通过 App Group 或系统推荐机制读取 App 准备好的摘要，不直接访问 server store。
+- 菜单栏 app 如后续保留，只能触发本机 pusher 或打开 dashboard，不承载主要产品体验。
 
 不做：
 
 - 不暴露 SSH 给汇聚端抓取 usage。
 - 不做团队 SaaS 或多租户权限系统。
 - 不把 SQLite 直接暴露成外部服务接口。
+- 不继续推进 macOS Widget 的视觉、发布或交互路线。
