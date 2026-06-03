@@ -12,7 +12,7 @@ from .config import ConfigError, load_config, validate_device_config
 from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider, ClaudeOAuthWithCliFallbackProvider
 from .codex_limits_provider import CodexAppServerRPCProvider, CodexWhamProvider, CodexWhamWithRPCFallbackProvider
 from .lock import FileLock, LockAlreadyHeld
-from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config
+from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
 from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .pusher import DevicePusher
 from .server import run_server
@@ -68,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
     limits_parser.add_argument("--date", default=None, help="Snapshot date in YYYY-MM-DD")
     limits_parser.add_argument("--no-snapshot", action="store_true", help="Do not rebuild latest snapshot")
     limits_parser.add_argument("--dry-run", action="store_true", help="Collect and validate without writing SQLite or latest snapshot")
+    limits_parser.add_argument("--check-config", action="store_true", help="Validate limits config and print a redacted provider plan")
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -127,6 +128,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "collect-limits":
         try:
             limits_config = load_limits_config(args.limits_config) if args.limits_config else None
+            if args.check_config:
+                if limits_config is None:
+                    raise ValueError("check-config requires --limits-config")
+                summary = summarize_limits_config(limits_config)
+                print(json.dumps({
+                    "success": True,
+                    "check_config": True,
+                    **summary,
+                }, ensure_ascii=False, sort_keys=True))
+                return 0
             providers = load_fixture_providers(args.provider_fixture) if args.provider_fixture else {}
             if limits_config:
                 providers.update(_providers_from_limits_config(limits_config.enabled_providers))

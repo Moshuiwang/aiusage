@@ -151,6 +151,16 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 
 `--dry-run` 会执行 provider/config 校验和采集路径，但不会写入 SQLite，也不会生成 `latest.json`。
 
+只检查配置形状和脱敏 provider plan：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
+  --check-config
+```
+
+`--check-config` 不会实例化真实 provider，也不会检查 auth 文件是否存在；它只用于确认 config schema 和启用模式。
+
 配置边界：
 
 - `auth_file` 只能是本机 credential 文件路径，不存 token 明文。

@@ -4,7 +4,7 @@ import json
 import tempfile
 import unittest
 
-from ai_usage_widget.limits_config import ConfigError, load_limits_config, parse_limits_config
+from ai_usage_widget.limits_config import ConfigError, load_limits_config, parse_limits_config, summarize_limits_config
 
 
 class TestLimitsConfig(unittest.TestCase):
@@ -75,6 +75,39 @@ class TestLimitsConfig(unittest.TestCase):
             config = load_limits_config(handle.name)
 
         self.assertEqual([provider.provider for provider in config.enabled_providers], ["claude"])
+
+    def test_summarize_limits_config_redacts_paths_and_urls(self) -> None:
+        config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "sqlite": "data/usage.sqlite",
+                "latest": "data/latest.json",
+                "providers": [
+                    {
+                        "provider": "codex",
+                        "auth_file": "/Users/me/.codex/auth.json",
+                        "rpc": True,
+                        "rpc_sock": "/tmp/codex.sock",
+                    },
+                    {
+                        "provider": "claude",
+                        "auth_file": "/Users/me/.claude/auth.json",
+                        "usage_url": "https://example.invalid/usage",
+                        "cli": True,
+                    },
+                ],
+            }
+        )
+
+        summary = summarize_limits_config(config)
+
+        self.assertEqual(summary["providers"][0]["provider"], "codex")
+        self.assertTrue(summary["providers"][0]["has_auth_file"])
+        self.assertTrue(summary["providers"][0]["codex_rpc"])
+        self.assertTrue(summary["providers"][0]["has_codex_rpc_sock"])
+        self.assertTrue(summary["providers"][1]["has_usage_url"])
+        self.assertNotIn("/Users/me", json.dumps(summary))
+        self.assertNotIn("example.invalid", json.dumps(summary))
 
 
 if __name__ == "__main__":

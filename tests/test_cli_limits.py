@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import sqlite3
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -230,6 +232,53 @@ class TestCliLimits(unittest.TestCase):
                     os.remove(path)
 
         self.assertEqual(code, 0)
+
+    def test_collect_limits_check_config_outputs_redacted_plan(self) -> None:
+        config_fd, config_path = tempfile.mkstemp(suffix=".json")
+        os.close(config_fd)
+        try:
+            with open(config_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "timezone": "Asia/Shanghai",
+                        "sqlite": "data/usage.sqlite",
+                        "latest": "data/latest.json",
+                        "providers": [
+                            {
+                                "provider": "codex",
+                                "auth_file": "/Users/me/.codex/auth.json",
+                                "rpc": True,
+                                "rpc_sock": "/tmp/codex.sock",
+                            }
+                        ],
+                    },
+                    handle,
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main([
+                    "collect-limits",
+                    "--limits-config",
+                    config_path,
+                    "--check-config",
+                ])
+        finally:
+            if os.path.exists(config_path):
+                os.remove(config_path)
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["success"])
+        self.assertTrue(payload["check_config"])
+        self.assertTrue(payload["providers"][0]["has_auth_file"])
+        self.assertNotIn("/Users/me", stdout.getvalue())
+        self.assertNotIn("/tmp/codex.sock", stdout.getvalue())
+
+    def test_collect_limits_check_config_requires_limits_config(self) -> None:
+        code = cli.main(["collect-limits", "--check-config"])
+
+        self.assertEqual(code, 1)
 
 
 if __name__ == "__main__":
