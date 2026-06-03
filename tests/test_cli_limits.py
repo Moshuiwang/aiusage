@@ -280,6 +280,60 @@ class TestCliLimits(unittest.TestCase):
 
         self.assertEqual(code, 1)
 
+    def test_collect_limits_doctor_without_config_outputs_json_failure(self) -> None:
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout):
+            code = cli.main(["collect-limits", "--doctor"])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(code, 1)
+        self.assertFalse(payload["success"])
+        self.assertTrue(payload["doctor"])
+        self.assertEqual(payload["checks"][0]["status"], "missing")
+
+    def test_collect_limits_doctor_outputs_redacted_readiness_without_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            auth_path = os.path.join(tmpdir, "codex-auth.json")
+            sqlite_path = os.path.join(tmpdir, "usage.sqlite")
+            latest_path = os.path.join(tmpdir, "latest.json")
+            config_path = os.path.join(tmpdir, "limits.local.json")
+            with open(auth_path, "w", encoding="utf-8") as handle:
+                handle.write("{}")
+            with open(config_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "timezone": "Asia/Shanghai",
+                        "sqlite": sqlite_path,
+                        "latest": latest_path,
+                        "providers": [
+                            {
+                                "provider": "codex",
+                                "auth_file": auth_path,
+                            }
+                        ],
+                    },
+                    handle,
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main([
+                    "collect-limits",
+                    "--limits-config",
+                    config_path,
+                    "--doctor",
+                ])
+
+            output = stdout.getvalue()
+            payload = json.loads(output)
+            self.assertEqual(code, 0)
+            self.assertTrue(payload["success"])
+            self.assertTrue(payload["providers"][0]["ready"])
+            self.assertFalse(os.path.exists(sqlite_path))
+            self.assertFalse(os.path.exists(latest_path))
+            self.assertNotIn(tmpdir, output)
+
 
 if __name__ == "__main__":
     unittest.main()

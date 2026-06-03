@@ -97,12 +97,12 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json
 ```
 
-部署前 dry-run 验证 limits config，不写 SQLite / latest：
+真实 smoke 前做本机 readiness 诊断，不读取 auth 内容、不写 SQLite / latest：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json \
-  --dry-run
+  --doctor
 ```
 
 只检查 limits config 并输出脱敏 provider plan：
@@ -111,6 +111,14 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json \
   --check-config
+```
+
+部署前 dry-run 验证 provider 采集路径，不写 SQLite / latest：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
+  --dry-run
 ```
 
 显式指定 Codex auth 文件采集 WHAM usage：
