@@ -2,14 +2,14 @@
 
 ## 当前阶段
 
-项目已完成个人 HTTP push 架构的基础部署，并完成 official limits provider MVP 的离线可测基线、runtime wiring、Codex WHAM 显式 auth adapter、Claude OAuth 显式 auth adapter、Codex app-server RPC adapter、Claude CLI `/usage` adapter、limits 本地配置契约、limits dry-run、config-only check、scheduler 模板和真实 smoke handoff。
+项目已完成个人 HTTP push 架构的基础部署，并完成 official limits provider MVP 的离线可测基线、runtime wiring、Codex WHAM 显式 auth adapter、Claude OAuth 显式 auth adapter、Codex app-server RPC adapter、Claude CLI `/usage` adapter、limits 本地配置契约、limits dry-run、config-only check、scheduler 模板、真实 smoke handoff 和 V2 索引状态对齐。
 
 有效决策：
 
 - 产品方向：个人使用的多设备 AI usage 观测数据产品。
 - 采集方向：各终端在自己的 OS 用户上下文运行 `ccusage`，主动 push 结构化 usage payload 到个人 HTTP server。
 - 展示方向：Web dashboard 是主要查看入口；Widget 是可选只读展示面。
-- 工程顺序：HTTP ingest、终端 pusher、canonical store / snapshot、Web dashboard 已形成 baseline；official limits contract、Codex / Claude offline provider parser、limits store、snapshot/API、Web 展示、`collect-limits` fixture runtime、Codex WHAM 显式 auth adapter、Claude OAuth 显式 auth adapter、Codex app-server RPC adapter、Claude CLI `/usage` adapter、limits 本地配置契约、dry-run、config-only check、scheduler 模板和真实 smoke handoff 已形成 baseline。
+- 工程顺序：HTTP ingest、终端 pusher、canonical store / snapshot、Web dashboard 已形成 baseline；official limits contract、Codex / Claude offline provider parser、limits store、snapshot/API、Web 展示、`collect-limits` fixture runtime、Codex WHAM 显式 auth adapter、Claude OAuth 显式 auth adapter、Codex app-server RPC adapter、Claude CLI `/usage` adapter、limits 本地配置契约、dry-run、config-only check、scheduler 模板、真实 smoke handoff 和 V2 索引状态对齐已形成 baseline。
 - 任务入口：`docs/task-packages/README.md` + `docs/task-packages/v2/INDEX.md`。
 - 执行规则：所有开发任务必须 TDD。
 - limits 原则：历史 token / session logs 只做统计，不参与官方 reset time 计算。

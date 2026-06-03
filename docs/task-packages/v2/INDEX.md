@@ -31,21 +31,21 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 
 | ID | 文件 | 状态 | 依赖 | 可并行 |
 | --- | --- | --- | --- | --- |
-| TP-V2-001 | [TP-V2-001-http-ingest-contract.md](TP-V2-001-http-ingest-contract.md) | ready | none | TP-V2-004 |
-| TP-V2-002 | [TP-V2-002-ingest-auth-and-errors.md](TP-V2-002-ingest-auth-and-errors.md) | ready | TP-V2-001 | none |
-| TP-V2-003 | [TP-V2-003-ingest-idempotent-upsert.md](TP-V2-003-ingest-idempotent-upsert.md) | ready | TP-V2-001 | TP-V2-006 |
-| TP-V2-004 | [TP-V2-004-device-config-contract.md](TP-V2-004-device-config-contract.md) | ready | none | TP-V2-001 |
-| TP-V2-005 | [TP-V2-005-device-pusher-fake-http.md](TP-V2-005-device-pusher-fake-http.md) | ready | TP-V2-004 | none |
-| TP-V2-006 | [TP-V2-006-device-normalized-payload.md](TP-V2-006-device-normalized-payload.md) | ready | TP-V2-001, TP-V2-005 | TP-V2-003 |
-| TP-V2-007 | [TP-V2-007-server-sqlite-schema.md](TP-V2-007-server-sqlite-schema.md) | ready | TP-V2-003 | none |
-| TP-V2-008 | [TP-V2-008-server-snapshot-builder.md](TP-V2-008-server-snapshot-builder.md) | ready | TP-V2-007 | none |
-| TP-V2-009 | [TP-V2-009-source-staleness-health.md](TP-V2-009-source-staleness-health.md) | ready | TP-V2-007 | TP-V2-008 |
-| TP-V2-010 | [TP-V2-010-web-api-summary.md](TP-V2-010-web-api-summary.md) | ready | TP-V2-008, TP-V2-009 | none |
-| TP-V2-011 | [TP-V2-011-web-dashboard-baseline.md](TP-V2-011-web-dashboard-baseline.md) | ready | TP-V2-010 | none |
-| TP-V2-012 | [TP-V2-012-web-dashboard-failure-states.md](TP-V2-012-web-dashboard-failure-states.md) | ready | TP-V2-011 | none |
-| TP-V2-013 | [TP-V2-013-server-operations.md](TP-V2-013-server-operations.md) | ready | TP-V2-010 | TP-V2-014 |
-| TP-V2-014 | [TP-V2-014-device-schedulers.md](TP-V2-014-device-schedulers.md) | ready | TP-V2-005 | TP-V2-013 |
-| TP-V2-015 | [TP-V2-015-widget-optional-snapshot.md](TP-V2-015-widget-optional-snapshot.md) | ready | TP-V2-008 | none |
+| TP-V2-001 | [TP-V2-001-http-ingest-contract.md](TP-V2-001-http-ingest-contract.md) | done | none | TP-V2-004 |
+| TP-V2-002 | [TP-V2-002-ingest-auth-and-errors.md](TP-V2-002-ingest-auth-and-errors.md) | done | TP-V2-001 | none |
+| TP-V2-003 | [TP-V2-003-ingest-idempotent-upsert.md](TP-V2-003-ingest-idempotent-upsert.md) | done | TP-V2-001 | TP-V2-006 |
+| TP-V2-004 | [TP-V2-004-device-config-contract.md](TP-V2-004-device-config-contract.md) | done | none | TP-V2-001 |
+| TP-V2-005 | [TP-V2-005-device-pusher-fake-http.md](TP-V2-005-device-pusher-fake-http.md) | done | TP-V2-004 | none |
+| TP-V2-006 | [TP-V2-006-device-normalized-payload.md](TP-V2-006-device-normalized-payload.md) | done | TP-V2-001, TP-V2-005 | TP-V2-003 |
+| TP-V2-007 | [TP-V2-007-server-sqlite-schema.md](TP-V2-007-server-sqlite-schema.md) | done | TP-V2-003 | none |
+| TP-V2-008 | [TP-V2-008-server-snapshot-builder.md](TP-V2-008-server-snapshot-builder.md) | done | TP-V2-007 | none |
+| TP-V2-009 | [TP-V2-009-source-staleness-health.md](TP-V2-009-source-staleness-health.md) | done | TP-V2-007 | TP-V2-008 |
+| TP-V2-010 | [TP-V2-010-web-api-summary.md](TP-V2-010-web-api-summary.md) | done | TP-V2-008, TP-V2-009 | none |
+| TP-V2-011 | [TP-V2-011-web-dashboard-baseline.md](TP-V2-011-web-dashboard-baseline.md) | done | TP-V2-010 | none |
+| TP-V2-012 | [TP-V2-012-web-dashboard-failure-states.md](TP-V2-012-web-dashboard-failure-states.md) | done | TP-V2-011 | none |
+| TP-V2-013 | [TP-V2-013-server-operations.md](TP-V2-013-server-operations.md) | done | TP-V2-010 | TP-V2-014 |
+| TP-V2-014 | [TP-V2-014-device-schedulers.md](TP-V2-014-device-schedulers.md) | done | TP-V2-005 | TP-V2-013 |
+| TP-V2-015 | [TP-V2-015-widget-optional-snapshot.md](TP-V2-015-widget-optional-snapshot.md) | done | TP-V2-008 | none |
 | TP-V2-016 | [TP-V2-016-official-limits-contract.md](TP-V2-016-official-limits-contract.md) | done | TP-V2-010 | none |
 | TP-V2-017 | [TP-V2-017-codex-official-provider.md](TP-V2-017-codex-official-provider.md) | done | TP-V2-016 | none |
 | TP-V2-018 | [TP-V2-018-claude-official-provider.md](TP-V2-018-claude-official-provider.md) | done | TP-V2-016 | none |
@@ -64,12 +64,13 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 | TP-V2-031 | [TP-V2-031-limits-scheduler-templates.md](TP-V2-031-limits-scheduler-templates.md) | done | TP-V2-030 | none |
 | TP-V2-032 | [TP-V2-032-limits-smoke-handoff.md](TP-V2-032-limits-smoke-handoff.md) | done | TP-V2-031 | none |
 | TP-V2-033 | [TP-V2-033-limits-config-check.md](TP-V2-033-limits-config-check.md) | done | TP-V2-029 | none |
+| TP-V2-034 | [TP-V2-034-v2-index-status-reconcile.md](TP-V2-034-v2-index-status-reconcile.md) | done | none | none |
 
 ## subagent 分配建议
 
-- Server agent：TP-V2-001 到 TP-V2-003、TP-V2-007 到 TP-V2-010、TP-V2-013。
-- Device pusher agent：TP-V2-004 到 TP-V2-006、TP-V2-014。
-- Web UI agent：TP-V2-010 到 TP-V2-012。
-- Widget agent：TP-V2-015。
-- Limits provider agent：TP-V2-016 到 TP-V2-020。
+- Server agent：历史范围 TP-V2-001 到 TP-V2-003、TP-V2-007 到 TP-V2-010、TP-V2-013 已完成。
+- Device pusher agent：历史范围 TP-V2-004 到 TP-V2-006、TP-V2-014 已完成。
+- Web UI agent：历史范围 TP-V2-010 到 TP-V2-012 已完成。
+- Widget agent：历史范围 TP-V2-015 已完成。
+- Limits provider agent：历史范围 TP-V2-016 到 TP-V2-033 已完成。
 - Docs / QA agent：检查 V2 链接、验收记录和文档一致性，不改实现。
