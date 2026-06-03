@@ -1,7 +1,7 @@
 # Task Packages V2
 
 Version: V2
-Status: ready
+Status: done
 
 ## 方向
 
@@ -13,19 +13,17 @@ V2 替代 V1 的 SSH pull / Widget-first 路线。
 Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard / snapshot / Widget
 ```
 
-## 当前执行顺序
+## 当前执行状态
 
-先固化 ingest contract，再做终端 pusher，再接 store/snapshot，再做 Web dashboard，最后补 Widget 和官方 limits provider。
+已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check 和索引状态对齐。
 
-推荐顺序：
+当前没有 `ready` 任务包。继续开发前先新增一个 V2 任务包，再按 `docs/task-packages/RULES.md` 执行。
 
-1. TP-V2-001 到 TP-V2-003：HTTP ingest baseline。
-2. TP-V2-004 到 TP-V2-006：Device pusher baseline。
-3. TP-V2-007 到 TP-V2-009：Canonical store and snapshot。
-4. TP-V2-010 到 TP-V2-012：Web dashboard v1。
-5. TP-V2-013 到 TP-V2-015：Operations and optional Widget.
-6. TP-V2-016 到 TP-V2-021：Official limits provider MVP.
-7. TP-V2-022 起：Production hardening.
+下一步候选：
+
+1. 真实命令 smoke：只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
+2. Antigravity spike：围绕本地 Language Server 能力单独开任务包。
+3. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
 
 ## 任务列表
 
@@ -65,6 +63,7 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 | TP-V2-032 | [TP-V2-032-limits-smoke-handoff.md](TP-V2-032-limits-smoke-handoff.md) | done | TP-V2-031 | none |
 | TP-V2-033 | [TP-V2-033-limits-config-check.md](TP-V2-033-limits-config-check.md) | done | TP-V2-029 | none |
 | TP-V2-034 | [TP-V2-034-v2-index-status-reconcile.md](TP-V2-034-v2-index-status-reconcile.md) | done | none | none |
+| TP-V2-035 | [TP-V2-035-v2-backlog-entry-cleanup.md](TP-V2-035-v2-backlog-entry-cleanup.md) | done | TP-V2-034 | none |
 
 ## subagent 分配建议
 
