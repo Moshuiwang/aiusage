@@ -1,0 +1,17 @@
+{
+  "observed_at": "2026-06-03T10:00:00+08:00",
+  "current_session": {
+    "used_percent": 52.0,
+    "remaining_percent": 48.0,
+    "reset_at": "2026-06-03T15:00:00+08:00",
+    "window_duration_minutes": 300,
+    "status": "ok"
+  },
+  "weekly": {
+    "used_percent": 31.5,
+    "remaining_percent": 68.5,
+    "reset_at": "2026-06-09T00:00:00+08:00",
+    "window_duration_minutes": 10080,
+    "status": "ok"
+  }
+}

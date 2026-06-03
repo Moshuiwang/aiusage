@@ -6,8 +6,9 @@ import sqlite3
 import tempfile
 import unittest
 
+from ai_usage_widget.limits import LimitWindow
 from ai_usage_widget.models import UsageBlockItem, UsageHourlyItem, UsageItem
-from ai_usage_widget.storage_sqlite import write_sqlite
+from ai_usage_widget.storage_sqlite import write_limit_windows, write_sqlite
 from ai_usage_widget.snapshot_builder import build_snapshot
 
 
@@ -139,6 +140,113 @@ class TestSnapshotBuilder(unittest.TestCase):
         linux_status = next(s for s in source_status if s["source_id"] == "linux-server")
         self.assertEqual(linux_status["status"], "command_failed")
         self.assertEqual(linux_status["error_message"], "command timed out")
+        self.assertEqual(snapshot["limits"], [])
+
+    def test_build_snapshot_includes_observed_limits(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=self.items,
+        )
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="codex",
+                    window="session",
+                    used_percent=41.2,
+                    remaining_percent=58.8,
+                    reset_at="2026-06-01T14:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:45:00+08:00",
+                    source_type="runtime_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    window="week",
+                    used_percent=31.5,
+                    remaining_percent=68.5,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str=self.date_str,
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-01T10:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(
+            [(row["provider"], row["window"], row["reset_at"]) for row in snapshot["limits"]],
+            [
+                ("claude", "week", "2026-06-09T00:00:00+08:00"),
+                ("codex", "session", "2026-06-01T14:00:00+08:00"),
+            ],
+        )
+        self.assertEqual(snapshot["limits"][0]["source_type"], "oauth_usage_api")
+        self.assertEqual(snapshot["limits"][0]["confidence"], "observed")
+        self.assertTrue(snapshot["limits"][0]["official"])
+
+    def test_failed_limits_do_not_break_usage_summary(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=self.items,
+        )
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    window="session",
+                    used_percent=0,
+                    remaining_percent=0,
+                    reset_at="2026-06-01T10:46:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="missing",
+                    status="provider_failed",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str=self.date_str,
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-01T10:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 4800)
+        self.assertEqual(snapshot["limits"][0]["status"], "provider_failed")
+        self.assertEqual(snapshot["limits"][0]["confidence"], "missing")
+        self.assertFalse(snapshot["limits"][0]["official"])
 
     def test_source_health_staleness_and_never_seen(self) -> None:
         """验证 Source 离线变 Stale、未上报变 Never Seen 以及今日 0 用量但在线的区别"""

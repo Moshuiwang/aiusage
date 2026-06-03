@@ -12,7 +12,9 @@ import urllib.request
 import urllib.error
 import urllib.parse
 
+from ai_usage_widget.limits import LimitWindow
 from ai_usage_widget.server import start_test_server
+from ai_usage_widget.storage_sqlite import write_limit_windows
 
 
 class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -188,6 +190,38 @@ class TestWebServerSummary(unittest.TestCase):
             self.assertEqual(status_list[0]["source_id"], "mac-local")
             self.assertEqual(status_list[0]["status"], "ok")
 
+    def test_summary_returns_limits_from_canonical_store(self) -> None:
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="codex",
+                    window="week",
+                    used_percent=44.0,
+                    remaining_percent=56.0,
+                    reset_at="2026-06-08T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:45:00+08:00",
+                    source_type="runtime_api",
+                    confidence="observed",
+                    status="ok",
+                )
+            ],
+            seen_at="2026-06-01T10:45:00+08:00",
+        )
+
+        url_summary = f"http://127.0.0.1:{self.port}/api/summary?date=2026-06-01"
+        req_summary = urllib.request.Request(url_summary, headers={"Authorization": f"Bearer {self.token}"})
+        with urllib.request.urlopen(req_summary) as response:
+            self.assertEqual(response.status, 200)
+            summary_data = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(summary_data["summary"]["total_tokens"], 0)
+        self.assertEqual(len(summary_data["limits"]), 1)
+        self.assertEqual(summary_data["limits"][0]["provider"], "codex")
+        self.assertEqual(summary_data["limits"][0]["window"], "week")
+        self.assertEqual(summary_data["limits"][0]["reset_at"], "2026-06-08T00:00:00+08:00")
+
     def test_summary_period_query_uses_period_parameter(self) -> None:
         """测试 /api/summary?period=week 返回 period 字段和范围聚合结构"""
         url_ingest = f"http://127.0.0.1:{self.port}/ingest"
@@ -312,6 +346,20 @@ class TestWebServerSummary(unittest.TestCase):
                     self.assertEqual(response.status, 200)
                     self.assertEqual(response.headers.get("Content-Type"), content_type)
                     self.assertIn(marker, response.read().decode("utf-8"))
+
+    def test_dashboard_limits_static_hooks(self) -> None:
+        dashboard_url = f"http://127.0.0.1:{self.port}/dashboard"
+        dashboard_req = urllib.request.Request(dashboard_url, headers={"Authorization": f"Bearer {self.token}"})
+        with urllib.request.urlopen(dashboard_req) as response:
+            html_content = response.read().decode("utf-8")
+
+        js_url = f"http://127.0.0.1:{self.port}/static/dashboard.js"
+        js_req = urllib.request.Request(js_url, headers={"Authorization": f"Bearer {self.token}"})
+        with urllib.request.urlopen(js_req) as response:
+            js_content = response.read().decode("utf-8")
+
+        self.assertIn('id="limitsSection"', html_content)
+        self.assertIn("renderLimits", js_content)
 
     def test_login_sets_cookie_for_dashboard(self) -> None:
         """测试浏览器登录后能用 cookie 访问 Dashboard"""

@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .limits import LimitWindow
+
 try:
     from zoneinfo import ZoneInfo
 except ImportError:  # pragma: no cover - Python < 3.9 fallback
@@ -86,6 +88,7 @@ def build_snapshot(
             source_identities = _fetch_source_identities(conn)
             hourly_rows = _fetch_hourly_rows(conn, hour_axis[0], hour_axis[-1]) if hour_axis else []
             block_rows = _fetch_block_rows(conn, hour_axis[0], hour_axis[-1]) if hour_axis else []
+            limits = _fetch_limit_windows(conn)
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc):
             empty_snapshot = _empty_snapshot(
@@ -396,7 +399,7 @@ def build_snapshot(
         "items": items,
         "trend": trend,
         "source_status": source_status,
-        "limits": [],
+        "limits": limits,
     }
     if machine_filter:
         snapshot["summary"]["machine"] = machine_filter
@@ -557,6 +560,36 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
         (table,),
     ).fetchone()
     return row is not None
+
+
+def _fetch_limit_windows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    if not _table_exists(conn, "limit_windows"):
+        return []
+    rows = conn.execute(
+        """
+        SELECT provider, window, used_percent, remaining_percent, reset_at,
+               window_duration_minutes, observed_at, source_type, confidence, status
+        FROM limit_windows
+        ORDER BY provider ASC, window ASC, source_type ASC
+        """
+    ).fetchall()
+    limits = []
+    for row in rows:
+        limits.append(
+            LimitWindow(
+                provider=row[0],
+                window=row[1],
+                used_percent=float(row[2]),
+                remaining_percent=float(row[3]),
+                reset_at=row[4],
+                window_duration_minutes=int(row[5]),
+                observed_at=row[6],
+                source_type=row[7],
+                confidence=row[8],
+                status=row[9],
+            ).to_snapshot_dict()
+        )
+    return limits
 
 
 def _source_status_entry(

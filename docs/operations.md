@@ -125,7 +125,42 @@ curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/health
 
 ---
 
-## 4. Systemd 服务配置 (Linux 远程部署)
+## 4. Official Limits 采集配置
+
+推荐用本地忽略提交的 `config/limits.local.json` 配置 Codex / Claude official limits provider。仓库只提供 `config/limits.example.json` 作为字段参考；不要把真实 auth 文件路径、socket 路径或内部 URL 提交到 Git。
+
+```bash
+cp config/limits.example.json config/limits.local.json
+$EDITOR config/limits.local.json
+```
+
+采集命令：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json
+```
+
+部署前 dry-run：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
+  --dry-run
+```
+
+`--dry-run` 会执行 provider/config 校验和采集路径，但不会写入 SQLite，也不会生成 `latest.json`。
+
+配置边界：
+
+- `auth_file` 只能是本机 credential 文件路径，不存 token 明文。
+- `usage_url` 只能是 Usage API URL，不存 bearer token。
+- `rpc` / `cli` 是显式开关；不开启时不会触发真实 Codex / Claude provider。
+- `config/limits.local.json` 已加入 `.gitignore`。
+
+---
+
+## 5. Systemd 服务配置 (Linux 远程部署)
 
 对于远程 Linux 服务器（如 `vpn2.chunbai.com`），建议配置 systemd 守护进程来管理服务。当前 `vpn2` 以 `root` 账户部署在 `/home/ubuntu/ai-usage-widget`：
 

@@ -1,0 +1,4 @@
+Claude Code /usage
+
+5h window: 68% used, resets at 2026-06-03T15:30:00+08:00, duration 300 minutes
+Weekly window: 24.5% used, resets at 2026-06-09T00:00:00+08:00, duration 10080 minutes
