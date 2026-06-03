@@ -8,8 +8,8 @@
 - [x] **后端与前端双重脱敏**：实现对设备报错日志（`error_message`）的敏感路径和 Token 脱敏。
 - [x] **CLI 命令增强**：在 [cli.py](file:///Users/wangzhipeng/Documents/ai-usage-widget/src/ai_usage_widget/cli.py) 增加了 `server`、`push`、`backup` 和 `collect-limits` 子命令。
 - [x] **macOS Widget 兼容性改造**：Swift Core 源码已经支持 V2 `error_message` 解码映射，本地编译通过。
-- [x] **Official limits provider MVP**：已完成 Codex WHAM、Codex app-server RPC、Claude OAuth Usage API、Claude CLI `/usage`、SQLite canonical store、snapshot/API、Web dashboard 展示、`config/limits.local.json` 契约、`--dry-run` 和 scheduler 模板。
-- [x] **测试覆盖**：123 个 Python 单元测试和 2 个 Swift 测试全部通过。
+- [x] **Official limits provider MVP**：已完成 Codex WHAM、Codex app-server RPC、Claude OAuth Usage API、Claude CLI `/usage`、SQLite canonical store、snapshot/API、Web dashboard 展示、`config/limits.local.json` 契约、`--doctor`、`--dry-run` 和 scheduler 模板。
+- [x] **测试覆盖**：138 个 Python 单元测试和 2 个 Swift 测试全部通过。
 
 有关开发详情，请参阅 [walkthrough.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/walkthrough.md) (由原 conversation-id 目录拷贝或生成)。
 
@@ -44,7 +44,15 @@ cp config/limits.example.json config/limits.local.json
 $EDITOR config/limits.local.json
 ```
 
-先 dry-run，确认 provider/config 能跑通且不写 SQLite/latest：
+先跑 doctor，确认本机配置、命令和路径具备真实 smoke 前置条件；doctor 不读取 auth 内容、不写 SQLite/latest，输出不包含真实 path 或 URL：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
+  --doctor
+```
+
+再检查 config shape 和脱敏 provider plan：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
@@ -52,7 +60,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --check-config
 ```
 
-再 dry-run，确认 provider 采集路径能跑通且不写 SQLite/latest：
+然后 dry-run，确认 provider 采集路径能跑通且不写 SQLite/latest：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
@@ -70,6 +78,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 验收点：
 
 - CLI 输出 `success: true`。
+- doctor 输出 `doctor: true`，provider readiness 为 true，且没有真实 path / URL。
 - dry-run 输出 `dry_run: true` 且 `windows_written: 0`。
 - 正式采集后 `data/usage.sqlite` 写入 `limit_windows`，`data/latest.json` 包含 `limits`。
 - Web dashboard 能显示 Codex / Claude limits 区块。

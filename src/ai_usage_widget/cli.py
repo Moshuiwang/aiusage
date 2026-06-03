@@ -13,6 +13,7 @@ from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider,
 from .codex_limits_provider import CodexAppServerRPCProvider, CodexWhamProvider, CodexWhamWithRPCFallbackProvider
 from .lock import FileLock, LockAlreadyHeld
 from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
+from .limits_doctor import run_limits_doctor
 from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .pusher import DevicePusher
 from .server import run_server
@@ -69,6 +70,7 @@ def main(argv: list[str] | None = None) -> int:
     limits_parser.add_argument("--no-snapshot", action="store_true", help="Do not rebuild latest snapshot")
     limits_parser.add_argument("--dry-run", action="store_true", help="Collect and validate without writing SQLite or latest snapshot")
     limits_parser.add_argument("--check-config", action="store_true", help="Validate limits config and print a redacted provider plan")
+    limits_parser.add_argument("--doctor", action="store_true", help="Run redacted readiness checks before real provider smoke")
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -127,6 +129,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "collect-limits":
         try:
+            if args.doctor:
+                report = run_limits_doctor(args.limits_config)
+                print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+                return 0 if report["success"] else 1
             limits_config = load_limits_config(args.limits_config) if args.limits_config else None
             if args.check_config:
                 if limits_config is None:

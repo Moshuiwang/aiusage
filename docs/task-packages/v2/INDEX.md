@@ -15,13 +15,13 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 
 ## 当前执行状态
 
-已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、索引状态对齐和 Antigravity limits fixture parser baseline。
+已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐和 Antigravity limits fixture parser baseline。
 
 当前没有 `ready` 任务包。继续开发前先新增一个 V2 任务包，再按 `docs/task-packages/RULES.md` 执行。
 
 下一步候选：
 
-1. 真实命令 smoke：只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
+1. 真实命令 smoke：先跑 `collect-limits --doctor`，再只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
 2. Antigravity real LS reader：围绕本地 Language Server 调用能力单独开任务包。
 3. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
 
@@ -65,6 +65,7 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 | TP-V2-034 | [TP-V2-034-v2-index-status-reconcile.md](TP-V2-034-v2-index-status-reconcile.md) | done | none | none |
 | TP-V2-035 | [TP-V2-035-v2-backlog-entry-cleanup.md](TP-V2-035-v2-backlog-entry-cleanup.md) | done | TP-V2-034 | none |
 | TP-V2-036 | [TP-V2-036-antigravity-limits-fixture-parser.md](TP-V2-036-antigravity-limits-fixture-parser.md) | done | TP-V2-016 | none |
+| TP-V2-037 | [TP-V2-037-limits-doctor-readiness.md](TP-V2-037-limits-doctor-readiness.md) | done | TP-V2-033 | none |
 
 ## subagent 分配建议
 
