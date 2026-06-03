@@ -17,7 +17,7 @@ macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼�
 
 ## 当前执行状态
 
-已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、historical Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐、Antigravity limits fixture parser baseline 和 limits HTTP push。
+已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、historical Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐、Antigravity limits fixture parser baseline、limits HTTP push 和 limits push LaunchAgent installer。
 
 当前没有 `ready` 任务包。继续开发前先新增一个 V2 任务包，再按 `docs/task-packages/RULES.md` 执行。
 
@@ -73,6 +73,7 @@ macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼�
 | TP-V2-039 | [TP-V2-039-limits-multi-account-cli.md](TP-V2-039-limits-multi-account-cli.md) | done | TP-V2-029, TP-V2-030, TP-V2-037 | none |
 | TP-V2-040 | [TP-V2-040-claude-cli-limit-message-parser.md](TP-V2-040-claude-cli-limit-message-parser.md) | done | TP-V2-039 | none |
 | TP-V2-041 | [TP-V2-041-limits-http-push.md](TP-V2-041-limits-http-push.md) | done | TP-V2-039, TP-V2-040 | Mobile app prototype work |
+| TP-V2-042 | [TP-V2-042-limits-push-launchd-installer.md](TP-V2-042-limits-push-launchd-installer.md) | done | TP-V2-041 | Mobile app prototype work |
 
 ## subagent 分配建议
 
@@ -87,3 +88,4 @@ macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼�
 - Limits provider agent：TP-V2-041 已完成本机官方额度到生产的 HTTP push 链路。
 - Antigravity provider agent：TP-V2-036 已完成离线 fixture parser；真实 Language Server reader 另开任务。
 - Docs / QA agent：检查 V2 链接、验收记录和文档一致性，不改实现。
+- Limits provider agent：TP-V2-042 已完成本机 limits push 的 macOS LaunchAgent installer。

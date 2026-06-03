@@ -132,6 +132,50 @@ class TestLimitWindowsStore(unittest.TestCase):
             ("claude-w", "claude", "session", 12.0),
         ])
 
+    def test_success_window_clears_prior_provider_failed_placeholder_for_same_account(self) -> None:
+        failed = LimitWindow(
+            provider="claude",
+            source_id="claude-main",
+            window="unknown",
+            used_percent=0,
+            remaining_percent=0,
+            reset_at="2026-06-03T10:00:00+08:00",
+            window_duration_minutes=0,
+            observed_at="2026-06-03T10:00:00+08:00",
+            source_type="provider_runtime",
+            confidence="missing",
+            status="provider_failed",
+        )
+        recovered = LimitWindow(
+            provider="claude",
+            source_id="claude-main",
+            window="session",
+            used_percent=12,
+            remaining_percent=88,
+            reset_at="2026-06-03T15:00:00+08:00",
+            window_duration_minutes=300,
+            observed_at="2026-06-03T10:05:00+08:00",
+            source_type="active_limits_cache",
+            confidence="observed",
+            status="ok",
+        )
+
+        write_limit_windows(self.db_path, [failed], seen_at="2026-06-03T10:00:00+08:00")
+        write_limit_windows(self.db_path, [recovered], seen_at="2026-06-03T10:05:00+08:00")
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT source_id, provider, window, source_type, status
+                FROM limit_windows
+                ORDER BY source_type
+                """
+            ).fetchall()
+
+        self.assertEqual(rows, [
+            ("claude-main", "claude", "session", "active_limits_cache", "ok"),
+        ])
+
     def test_limit_windows_write_without_usage_rows(self) -> None:
         window = LimitWindow(
             provider="codex",

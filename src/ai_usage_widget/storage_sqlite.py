@@ -457,6 +457,17 @@ def _upsert_block_item(conn: sqlite3.Connection, item: UsageBlockItem, collected
 
 def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at: str) -> None:
     source_id = window.source_id or window.provider
+    if window.status != "provider_failed":
+        conn.execute(
+            """
+            DELETE FROM limit_windows
+            WHERE source_id = ?
+              AND provider = ?
+              AND source_type = 'provider_runtime'
+              AND status = 'provider_failed'
+            """,
+            (source_id, window.provider),
+        )
     conn.execute(
         """
         INSERT INTO limit_windows (

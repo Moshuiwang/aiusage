@@ -6,6 +6,7 @@ import os
 import sqlite3
 import sys
 from datetime import datetime, timezone as dt_timezone
+from pathlib import Path
 
 from .collector import collect
 from .backup import backup_sqlite
@@ -17,6 +18,7 @@ from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfi
 from .limits_doctor import run_limits_doctor
 from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .limits_push import push_limits_payload
+from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
 from .pusher import DevicePusher
 from .server import run_server
 from .widget_sync import sync_latest_to_widget
@@ -83,6 +85,25 @@ def main(argv: list[str] | None = None) -> int:
     push_limits_parser.add_argument("--timeout", type=float, default=10.0)
     push_limits_parser.add_argument("--timezone", default=None)
     push_limits_parser.add_argument("--dry-run", action="store_true", help="Collect and validate without posting")
+    push_limits_parser.add_argument("--lock-file", default=None, help="Optional single-instance lock file")
+
+    install_limits_scheduler_parser = subparsers.add_parser(
+        "install-limits-scheduler",
+        help="Install a macOS LaunchAgent for periodic limits push",
+    )
+    install_limits_scheduler_parser.add_argument("--repo-dir", default=os.getcwd())
+    install_limits_scheduler_parser.add_argument("--limits-config", default=None)
+    install_limits_scheduler_parser.add_argument("--url", required=True)
+    install_limits_scheduler_parser.add_argument("--token-env", default="AI_USAGE_INGEST_TOKEN")
+    install_limits_scheduler_parser.add_argument("--token-env-file", default=None)
+    install_limits_scheduler_parser.add_argument("--runner-path", default=None)
+    install_limits_scheduler_parser.add_argument("--plist-path", default=None)
+    install_limits_scheduler_parser.add_argument("--log-dir", default=None)
+    install_limits_scheduler_parser.add_argument("--lock-file", default=None)
+    install_limits_scheduler_parser.add_argument("--label", default="com.chunbai.aiusage.limits-push")
+    install_limits_scheduler_parser.add_argument("--interval-seconds", type=int, default=1800)
+    install_limits_scheduler_parser.add_argument("--python", default="/usr/bin/python3")
+    install_limits_scheduler_parser.add_argument("--dry-run", action="store_true")
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -226,59 +247,34 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "push-limits":
         try:
-            limits_config = load_limits_config(args.limits_config) if args.limits_config else None
-            providers = load_fixture_providers(args.provider_fixture) if args.provider_fixture else {}
-            if limits_config:
-                providers.update(_providers_from_limits_config(limits_config.enabled_providers))
-            provider_names = args.providers or (
-                [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
-            )
-            runtime = LimitsRuntime(
-                db_path=limits_config.sqlite_path if limits_config else "data/usage.sqlite",
-                latest_path=limits_config.latest_path if limits_config else "data/latest.json",
-                timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
-                providers=providers,
-            )
-            result = runtime.collect(
-                provider_names=provider_names,
-                rebuild_snapshot=False,
-                dry_run=True,
-            )
-            payload = {
-                "schema_version": 1,
-                "observed_at": _limits_payload_observed_at(result.windows),
-                "timezone": args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
-                "windows": [window.to_snapshot_dict() for window in result.windows],
-            }
-            push_response = None
-            if not args.dry_run:
-                token = os.environ.get(args.token_env, "")
-                if not token:
-                    raise ValueError(f"missing push token env: {args.token_env}")
-                push_response = push_limits_payload(args.url, token, payload, timeout=args.timeout)
+            if args.lock_file:
+                with FileLock(args.lock_file):
+                    output, success = _run_push_limits(args)
+            else:
+                output, success = _run_push_limits(args)
+        except LockAlreadyHeld as exc:
+            print(json.dumps({"success": False, "error_type": "lock_already_held", "error_message": str(exc)}), file=sys.stderr)
+            return 1
         except (OSError, ValueError, LimitsConfigError, json.JSONDecodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-
-        output = {
-            "success": result.success,
-            "dry_run": args.dry_run,
-            "windows_collected": len(result.windows),
-            "providers": [
-                {
-                    "provider": item.provider,
-                    "status": item.status,
-                    "windows_collected": _count_windows_for_provider(result.windows, item.provider),
-                    "error_type": item.error_type,
-                }
-                for item in result.provider_results
-            ],
-        }
-        if push_response is not None:
-            output["push"] = push_response
-            output["windows_written"] = push_response.get("windows_written")
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
-        return 0 if result.success else 1
+        return 0 if success else 1
+
+    if args.command == "install-limits-scheduler":
+        try:
+            scheduler_config = _limits_scheduler_config_from_args(args)
+            result = install_limits_scheduler(
+                scheduler_config,
+                env=os.environ,
+                dry_run=args.dry_run,
+            )
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
 
     if args.command == "server":
         token = args.token or os.environ.get("AI_USAGE_INGEST_TOKEN")
@@ -370,6 +366,58 @@ def _tag_provider(provider, *, provider_name: str, source_id: str):
     return provider
 
 
+def _run_push_limits(args):
+    limits_config = load_limits_config(args.limits_config) if args.limits_config else None
+    providers = load_fixture_providers(args.provider_fixture) if args.provider_fixture else {}
+    if limits_config:
+        providers.update(_providers_from_limits_config(limits_config.enabled_providers))
+    provider_names = args.providers or (
+        [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
+    )
+    runtime = LimitsRuntime(
+        db_path=limits_config.sqlite_path if limits_config else "data/usage.sqlite",
+        latest_path=limits_config.latest_path if limits_config else "data/latest.json",
+        timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
+        providers=providers,
+    )
+    result = runtime.collect(
+        provider_names=provider_names,
+        rebuild_snapshot=False,
+        dry_run=True,
+    )
+    payload = {
+        "schema_version": 1,
+        "observed_at": _limits_payload_observed_at(result.windows),
+        "timezone": args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
+        "windows": [window.to_snapshot_dict() for window in result.windows],
+    }
+    push_response = None
+    if not args.dry_run:
+        token = os.environ.get(args.token_env, "")
+        if not token:
+            raise ValueError(f"missing push token env: {args.token_env}")
+        push_response = push_limits_payload(args.url, token, payload, timeout=args.timeout)
+
+    output = {
+        "success": result.success,
+        "dry_run": args.dry_run,
+        "windows_collected": len(result.windows),
+        "providers": [
+            {
+                "provider": item.provider,
+                "status": item.status,
+                "windows_collected": _count_windows_for_provider(result.windows, item.provider),
+                "error_type": item.error_type,
+            }
+            for item in result.provider_results
+        ],
+    }
+    if push_response is not None:
+        output["push"] = push_response
+        output["windows_written"] = push_response.get("windows_written")
+    return output, result.success
+
+
 def _limits_payload_observed_at(windows) -> str:
     observed = sorted({window.observed_at for window in windows if window.observed_at})
     if observed:
@@ -379,6 +427,35 @@ def _limits_payload_observed_at(windows) -> str:
 
 def _count_windows_for_provider(windows, provider: str) -> int:
     return len([window for window in windows if window.source_id == provider or window.provider == provider])
+
+
+def _limits_scheduler_config_from_args(args) -> LimitsSchedulerConfig:
+    home = Path.home()
+    repo_dir = Path(args.repo_dir).expanduser()
+    label = args.label
+    return LimitsSchedulerConfig(
+        repo_dir=repo_dir,
+        limits_config=Path(args.limits_config).expanduser() if args.limits_config else repo_dir / "config/limits.local.json",
+        url=args.url,
+        token_env_file=Path(args.token_env_file).expanduser()
+        if args.token_env_file
+        else home / "Library/Application Support/ai-usage-widget/limits-push.env",
+        runner_path=Path(args.runner_path).expanduser()
+        if args.runner_path
+        else home / "Library/Application Support/ai-usage-widget/limits-push.sh",
+        plist_path=Path(args.plist_path).expanduser()
+        if args.plist_path
+        else home / "Library/LaunchAgents" / f"{label}.plist",
+        log_dir=Path(args.log_dir).expanduser() if args.log_dir else home / "Library/Logs/ai-usage-widget",
+        lock_file=Path(args.lock_file).expanduser()
+        if args.lock_file
+        else home / "Library/Caches/ai-usage-widget/limits-push.lock",
+        label=label,
+        interval_seconds=args.interval_seconds,
+        python_executable=args.python,
+        token_env_name=args.token_env,
+        path_value=os.environ.get("PATH"),
+    )
 
 
 if __name__ == "__main__":

@@ -435,6 +435,25 @@ class TestCliLimits(unittest.TestCase):
         self.assertEqual(payload["windows_collected"], 2)
         push_mock.assert_not_called()
 
+    def test_push_limits_rejects_existing_lock_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            lock_path = os.path.join(tmpdir, "limits-push.lock")
+            with open(lock_path, "w", encoding="utf-8") as handle:
+                handle.write("already-running")
+
+            code = cli.main([
+                "push-limits",
+                "--provider-fixture",
+                str(FIXTURES / "limits_runtime_fixture.json"),
+                "--url",
+                "https://example.test/ingest-limits",
+                "--dry-run",
+                "--lock-file",
+                lock_path,
+            ])
+
+        self.assertEqual(code, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

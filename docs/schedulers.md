@@ -87,16 +87,52 @@ launchctl kickstart -k gui/$(id -u)/com.chunbai.aiusage.pusher
 
 limits provider 必须在拥有对应 Codex / Claude credential 的当前 macOS 用户上下文运行。不要用 `root` 或其他用户代跑，否则 CLI/keychain/app-server socket 可能不可见。
 
-部署前先 dry-run：
+如果只想写入本机 SQLite，可以继续使用 `collect-limits`。如果要持续推送到生产，应使用 TP-V2-042 提供的 `install-limits-scheduler`，它会生成本机 LaunchAgent、runner 脚本、日志目录和 0600 token env 文件。
+
+部署前先 dry-run，确认不会写文件且输出不包含 token：
 
 ```bash
-PYTHONPATH=/Users/<user>/Documents/ai-usage-widget/src \
-python3 -m ai_usage_widget.cli collect-limits \
-  --limits-config /Users/<user>/Documents/ai-usage-widget/config/limits.local.json \
+cd /Users/<user>/Documents/ai-usage-widget
+PYTHONPATH=src AI_USAGE_INGEST_TOKEN=<token-from-production> \
+python3 -m ai_usage_widget.cli install-limits-scheduler \
+  --url https://vpn2.chunbai.com:8443/ingest-limits \
   --dry-run
 ```
 
-launchd 模板：
+正式安装：
+
+```bash
+cd /Users/<user>/Documents/ai-usage-widget
+PYTHONPATH=src AI_USAGE_INGEST_TOKEN=<token-from-production> \
+python3 -m ai_usage_widget.cli install-limits-scheduler \
+  --url https://vpn2.chunbai.com:8443/ingest-limits
+```
+
+默认生成：
+
+- `~/Library/Application Support/ai-usage-widget/limits-push.env`：本机 token env 文件，权限 `0600`。
+- `~/Library/Application Support/ai-usage-widget/limits-push.sh`：runner 脚本，不含 token。
+- `~/Library/LaunchAgents/com.chunbai.aiusage.limits-push.plist`：LaunchAgent，不含 token。
+- `~/Library/Logs/ai-usage-widget/limits-push.stdout.log`
+- `~/Library/Logs/ai-usage-widget/limits-push.stderr.log`
+- `~/Library/Caches/ai-usage-widget/limits-push.lock`
+
+激活并立即运行一次：
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.chunbai.aiusage.limits-push.plist
+launchctl kickstart -k gui/$(id -u)/com.chunbai.aiusage.limits-push
+```
+
+查看状态：
+
+```bash
+launchctl print gui/$(id -u)/com.chunbai.aiusage.limits-push
+tail -n 50 ~/Library/Logs/ai-usage-widget/limits-push.stdout.log
+tail -n 50 ~/Library/Logs/ai-usage-widget/limits-push.stderr.log
+```
+
+如果只需要本机 collector 模板，launchd 示例仍然如下：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
