@@ -10,20 +10,23 @@ V2 替代 V1 的 SSH pull / Widget-first 路线。
 新方向是个人 HTTP push 架构：
 
 ```text
-Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard / snapshot / Widget
+Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard / snapshot -> iPhone App / iOS Widget
 ```
+
+macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼容 baseline，不再作为后续展示目标。
 
 ## 当前执行状态
 
-已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐和 Antigravity limits fixture parser baseline。
+已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、historical Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐和 Antigravity limits fixture parser baseline。
 
 当前没有 `ready` 任务包。继续开发前先新增一个 V2 任务包，再按 `docs/task-packages/RULES.md` 执行。
 
 下一步候选：
 
-1. 真实命令 smoke：先跑 `collect-limits --doctor`，再只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
-2. Antigravity real LS reader：围绕本地 Language Server 调用能力单独开任务包。
-3. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
+1. Mobile app design prototype：基于 `docs/mobile-app-design-brief.md` 建立手机尺寸 Web prototype、fixture 数据和浏览器验证。
+2. 真实命令 smoke：先跑 `collect-limits --doctor`，再只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
+3. Antigravity real LS reader：围绕本地 Language Server 调用能力单独开任务包。
+4. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
 
 ## 任务列表
 
@@ -66,13 +69,15 @@ Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard /
 | TP-V2-035 | [TP-V2-035-v2-backlog-entry-cleanup.md](TP-V2-035-v2-backlog-entry-cleanup.md) | done | TP-V2-034 | none |
 | TP-V2-036 | [TP-V2-036-antigravity-limits-fixture-parser.md](TP-V2-036-antigravity-limits-fixture-parser.md) | done | TP-V2-016 | none |
 | TP-V2-037 | [TP-V2-037-limits-doctor-readiness.md](TP-V2-037-limits-doctor-readiness.md) | done | TP-V2-033 | none |
+| TP-V2-038 | [TP-V2-038-mobile-client-direction-docs.md](TP-V2-038-mobile-client-direction-docs.md) | done | none | none |
 
 ## subagent 分配建议
 
 - Server agent：历史范围 TP-V2-001 到 TP-V2-003、TP-V2-007 到 TP-V2-010、TP-V2-013 已完成。
 - Device pusher agent：历史范围 TP-V2-004 到 TP-V2-006、TP-V2-014 已完成。
 - Web UI agent：历史范围 TP-V2-010 到 TP-V2-012 已完成。
-- Widget agent：历史范围 TP-V2-015 已完成。
+- Widget agent：历史范围 TP-V2-015 已完成；后续不要继续推进 macOS Widget，移动端展示改由 Mobile App / iOS Widget agent 承接。
+- Mobile App / iOS Widget agent：TP-V2-038 已完成方向文档；下一步从 TP-V2-039 prototype 任务包开始。
 - Limits provider agent：历史范围 TP-V2-016 到 TP-V2-033 已完成。
 - Antigravity provider agent：TP-V2-036 已完成离线 fixture parser；真实 Language Server reader 另开任务。
 - Docs / QA agent：检查 V2 链接、验收记录和文档一致性，不改实现。

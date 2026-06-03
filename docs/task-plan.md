@@ -18,8 +18,9 @@ docs/task-packages/
 ## 当前版本
 
 - Active package version: `V2`
-- First executable task: `TP-V2-001`
+- First executable task: none; current V2 published packages are done.
 - Execution rule: TDD first, then implementation.
+- Next planning direction: iPhone App + iOS Widget design, using `docs/mobile-app-design-brief.md` as the design entry.
 
 ## 为什么保留本文件
 
