@@ -163,9 +163,12 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 
 配置边界：
 
+- `source_id` 是账号实例 ID；同一 provider 的多个账号必须使用不同 `source_id`，例如 `claude-main`、`claude-w`。
 - `auth_file` 只能是本机 credential 文件路径，不存 token 明文。
 - `usage_url` 只能是 Usage API URL，不存 bearer token。
+- `env` 只能用于 provider 运行环境变量，例如为第二个 Claude Code 账号设置 `CLAUDE_CONFIG_DIR`；不要放 token、secret、password 或 API key。
 - `rpc` / `cli` 是显式开关；不开启时不会触发真实 Codex / Claude provider。
+- Claude CLI provider 会先解析 `/usage` 文本；当 CLI 只返回订阅说明时，会回退读取同一配置目录下的 `active_limits.json` 当前额度 cache；如果 cache 也不存在，会执行一个极短 probe 来解析 session limit reset 文本，只生成 session window。
 - `config/limits.local.json` 已加入 `.gitignore`。
 
 ---

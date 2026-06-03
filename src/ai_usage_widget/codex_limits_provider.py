@@ -28,16 +28,17 @@ def parse_codex_wham_usage(payload: Dict[str, Any]) -> List[LimitWindow]:
     if not isinstance(payload, dict):
         raise LimitContractError("codex_wham_schema_invalid", "Codex WHAM usage payload must be an object")
 
-    observed_at = _string_field(payload, "observed_at")
+    observed_at = _optional_observed_at(payload)
+    windows_payload = payload.get("rate_limit") if isinstance(payload.get("rate_limit"), dict) else payload
     return [
         _parse_window(
-            window_payload=_object_field(payload, "primary_window"),
+            window_payload=_object_field(windows_payload, "primary_window"),
             window="session",
             observed_at=observed_at,
             source_type="runtime_api",
         ),
         _parse_window(
-            window_payload=_object_field(payload, "secondary_window"),
+            window_payload=_object_field(windows_payload, "secondary_window"),
             window="week",
             observed_at=observed_at,
             source_type="runtime_api",
@@ -242,7 +243,7 @@ def _parse_window(
 ) -> LimitWindow:
     used_percent = _number_field(window_payload, "used_percent", "usedPercent")
     reset_at = _datetime_field(window_payload, "reset_at", "resets_at", "resetsAt")
-    duration = _int_field(window_payload, "window_duration_minutes", "windowDurationMins")
+    duration = _duration_minutes(window_payload)
     remaining_percent = window_payload.get("remaining_percent")
     if remaining_percent is None:
         remaining_percent = 100.0 - used_percent
@@ -297,6 +298,15 @@ def _optional_string_field(payload: Dict[str, Any], name: str, default: str) -> 
     return value.strip()
 
 
+def _optional_observed_at(payload: Dict[str, Any]) -> str:
+    value = payload.get("observed_at")
+    if value is None:
+        return _default_observed_at()
+    if not isinstance(value, str) or not value.strip():
+        raise LimitContractError("limit_schema_invalid", "observed_at must be a non-empty string")
+    return value.strip()
+
+
 def _number_field(payload: Dict[str, Any], *names: str) -> float:
     value = _first_present(payload, *names)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -309,6 +319,13 @@ def _int_field(payload: Dict[str, Any], *names: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise LimitContractError("limit_schema_invalid", f"{'/'.join(names)} must be an integer")
     return value
+
+
+def _duration_minutes(payload: Dict[str, Any]) -> int:
+    if "limit_window_seconds" in payload:
+        seconds = _int_field(payload, "limit_window_seconds")
+        return int(seconds / 60)
+    return _int_field(payload, "window_duration_minutes", "windowDurationMins")
 
 
 def _first_present(payload: Dict[str, Any], *names: str) -> Any:

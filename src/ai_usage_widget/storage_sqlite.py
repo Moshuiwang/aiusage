@@ -170,6 +170,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS limit_windows (
+          source_id TEXT NOT NULL,
           provider TEXT NOT NULL,
           window TEXT NOT NULL,
           used_percent REAL NOT NULL,
@@ -182,12 +183,13 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           observed_at TEXT NOT NULL,
           first_seen_at TEXT NOT NULL,
           last_seen_at TEXT NOT NULL,
-          PRIMARY KEY(provider, source_type, window)
+          PRIMARY KEY(source_id, provider, source_type, window)
         );
         """
     )
     _ensure_column(conn, "usage_daily", "raw_json", "TEXT")
     _ensure_column(conn, "usage_daily_models", "raw_json", "TEXT")
+    _ensure_limit_windows_schema(conn)
 
 
 
@@ -328,6 +330,52 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
+def _ensure_limit_windows_schema(conn: sqlite3.Connection) -> None:
+    columns = [row for row in conn.execute("PRAGMA table_info(limit_windows)")]
+    column_names = [row[1] for row in columns]
+    pk_columns = [row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5]]
+    if column_names and column_names[0] == "source_id" and pk_columns == ["source_id", "provider", "source_type", "window"]:
+        return
+
+    conn.execute("ALTER TABLE limit_windows RENAME TO limit_windows_old")
+    conn.executescript(
+        """
+        CREATE TABLE limit_windows (
+          source_id TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          window TEXT NOT NULL,
+          used_percent REAL NOT NULL,
+          remaining_percent REAL NOT NULL,
+          reset_at TEXT NOT NULL,
+          window_duration_minutes INTEGER NOT NULL,
+          source_type TEXT NOT NULL,
+          confidence TEXT NOT NULL,
+          status TEXT NOT NULL,
+          observed_at TEXT NOT NULL,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          PRIMARY KEY(source_id, provider, source_type, window)
+        );
+        """
+    )
+    old_columns = {row[1] for row in conn.execute("PRAGMA table_info(limit_windows_old)")}
+    source_expr = "source_id" if "source_id" in old_columns else "provider"
+    conn.execute(
+        f"""
+        INSERT OR REPLACE INTO limit_windows (
+          source_id, provider, window, used_percent, remaining_percent, reset_at,
+          window_duration_minutes, source_type, confidence, status, observed_at,
+          first_seen_at, last_seen_at
+        )
+        SELECT COALESCE(NULLIF({source_expr}, ''), provider), provider, window,
+               used_percent, remaining_percent, reset_at, window_duration_minutes,
+               source_type, confidence, status, observed_at, first_seen_at, last_seen_at
+        FROM limit_windows_old
+        """
+    )
+    conn.execute("DROP TABLE limit_windows_old")
+
+
 def _upsert_hourly_item(conn: sqlite3.Connection, item: UsageHourlyItem, collected_at: str) -> None:
     conn.execute(
         """
@@ -408,14 +456,15 @@ def _upsert_block_item(conn: sqlite3.Connection, item: UsageBlockItem, collected
 
 
 def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at: str) -> None:
+    source_id = window.source_id or window.provider
     conn.execute(
         """
         INSERT INTO limit_windows (
-          provider, window, used_percent, remaining_percent, reset_at,
+          source_id, provider, window, used_percent, remaining_percent, reset_at,
           window_duration_minutes, source_type, confidence, status, observed_at,
           first_seen_at, last_seen_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(provider, source_type, window) DO UPDATE SET
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(source_id, provider, source_type, window) DO UPDATE SET
           used_percent=excluded.used_percent,
           remaining_percent=excluded.remaining_percent,
           reset_at=excluded.reset_at,
@@ -426,6 +475,7 @@ def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at:
           last_seen_at=excluded.last_seen_at
         """,
         (
+            source_id,
             window.provider,
             window.window,
             window.used_percent,

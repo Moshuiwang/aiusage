@@ -15,13 +15,13 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class RecordingRunner:
-    def __init__(self, result: ClaudeCommandResult) -> None:
-        self.result = result
+    def __init__(self, result: ClaudeCommandResult | list[ClaudeCommandResult]) -> None:
+        self.results = list(result) if isinstance(result, list) else [result]
         self.calls: list[dict] = []
 
-    def run(self, command: list[str], timeout: float) -> ClaudeCommandResult:
-        self.calls.append({"command": command, "timeout": timeout})
-        return self.result
+    def run(self, command: list[str], timeout: float, env: dict[str, str] | None = None) -> ClaudeCommandResult:
+        self.calls.append({"command": command, "timeout": timeout, "env": env})
+        return self.results.pop(0)
 
 
 class BrokenOAuthProvider:
@@ -45,9 +45,53 @@ class TestClaudeCliAdapter(unittest.TestCase):
 
         self.assertEqual(runner.calls[0]["command"], ["claude", "-p", "/usage", "--output-format", "text", "--no-session-persistence"])
         self.assertEqual(runner.calls[0]["timeout"], 8.0)
+        self.assertIsNone(runner.calls[0]["env"])
         self.assertEqual([window.window for window in windows], ["session", "week"])
         self.assertEqual([window.source_type for window in windows], ["official_cli", "official_cli"])
         self.assertTrue(all(window.is_official for window in windows))
+
+    def test_cli_provider_passes_configured_env(self) -> None:
+        cli_text = (FIXTURES / "claude_usage_cli.txt").read_text(encoding="utf-8")
+        runner = RecordingRunner(ClaudeCommandResult(returncode=0, stdout=cli_text, stderr=""))
+
+        ClaudeCliUsageProvider(
+            runner=runner,
+            env={"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"},
+            observed_at_provider=lambda: "2026-06-03T10:01:00+08:00",
+        ).collect()
+
+        self.assertEqual(runner.calls[0]["env"], {"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"})
+
+    def test_cli_provider_probes_limit_message_when_usage_unavailable(self) -> None:
+        runner = RecordingRunner(
+            [
+                ClaudeCommandResult(
+                    returncode=0,
+                    stdout="You are currently using your subscription to power your Claude Code usage",
+                    stderr="",
+                ),
+                ClaudeCommandResult(
+                    returncode=1,
+                    stdout="You've hit your session limit · resets 11:40am (Asia/Shanghai)",
+                    stderr="",
+                ),
+            ]
+        )
+
+        windows = ClaudeCliUsageProvider(
+            runner=runner,
+            env={"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"},
+            observed_at_provider=lambda: "2026-06-03T11:20:00+08:00",
+        ).collect()
+
+        self.assertEqual([call["command"] for call in runner.calls], [
+            ["claude", "-p", "/usage", "--output-format", "text", "--no-session-persistence"],
+            ["claude", "-p", "Respond with OK only.", "--output-format", "text", "--no-session-persistence"],
+        ])
+        self.assertEqual(runner.calls[1]["env"], {"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"})
+        self.assertEqual([(window.window, window.used_percent, window.source_type) for window in windows], [
+            ("session", 100.0, "official_cli_limit_message")
+        ])
 
     def test_cli_provider_maps_nonzero_exit_to_provider_failed(self) -> None:
         runner = RecordingRunner(ClaudeCommandResult(returncode=1, stdout="", stderr="login required"))

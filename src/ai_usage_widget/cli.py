@@ -179,7 +179,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.providers and "claude" in args.providers and "claude" not in providers:
                 raise ValueError("claude provider requires --claude-auth-file and --claude-usage-url, --claude-cli, or --provider-fixture")
             provider_names = args.providers or (
-                [provider.provider for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
+                [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
             )
             runtime = LimitsRuntime(
                 db_path=args.sqlite or (limits_config.sqlite_path if limits_config else "data/usage.sqlite"),
@@ -237,6 +237,7 @@ def main(argv: list[str] | None = None) -> int:
 def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
     providers = {}
     for provider_config in configs:
+        runtime_key = _provider_runtime_key(provider_config)
         if provider_config.provider == "codex":
             codex_wham_provider = (
                 CodexWhamProvider(auth_file=provider_config.auth_file)
@@ -249,14 +250,18 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
                 else None
             )
             if codex_wham_provider and codex_rpc_provider:
-                providers["codex"] = CodexWhamWithRPCFallbackProvider(
-                    wham_provider=codex_wham_provider,
-                    rpc_provider=codex_rpc_provider,
+                providers[runtime_key] = _tag_provider(
+                    CodexWhamWithRPCFallbackProvider(
+                        wham_provider=codex_wham_provider,
+                        rpc_provider=codex_rpc_provider,
+                    ),
+                    provider_name="codex",
+                    source_id=runtime_key,
                 )
             elif codex_wham_provider:
-                providers["codex"] = codex_wham_provider
+                providers[runtime_key] = _tag_provider(codex_wham_provider, provider_name="codex", source_id=runtime_key)
             elif codex_rpc_provider:
-                providers["codex"] = codex_rpc_provider
+                providers[runtime_key] = _tag_provider(codex_rpc_provider, provider_name="codex", source_id=runtime_key)
         elif provider_config.provider == "claude":
             claude_oauth_provider = (
                 ClaudeOAuthProvider(
@@ -266,17 +271,35 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
                 if provider_config.auth_file and provider_config.usage_url
                 else None
             )
-            claude_cli_provider = ClaudeCliUsageProvider() if provider_config.claude_cli else None
+            claude_cli_provider = (
+                ClaudeCliUsageProvider(env=provider_config.env)
+                if provider_config.claude_cli
+                else None
+            )
             if claude_oauth_provider and claude_cli_provider:
-                providers["claude"] = ClaudeOAuthWithCliFallbackProvider(
-                    oauth_provider=claude_oauth_provider,
-                    cli_provider=claude_cli_provider,
+                providers[runtime_key] = _tag_provider(
+                    ClaudeOAuthWithCliFallbackProvider(
+                        oauth_provider=claude_oauth_provider,
+                        cli_provider=claude_cli_provider,
+                    ),
+                    provider_name="claude",
+                    source_id=runtime_key,
                 )
             elif claude_oauth_provider:
-                providers["claude"] = claude_oauth_provider
+                providers[runtime_key] = _tag_provider(claude_oauth_provider, provider_name="claude", source_id=runtime_key)
             elif claude_cli_provider:
-                providers["claude"] = claude_cli_provider
+                providers[runtime_key] = _tag_provider(claude_cli_provider, provider_name="claude", source_id=runtime_key)
     return providers
+
+
+def _provider_runtime_key(provider_config: LimitsProviderConfig) -> str:
+    return provider_config.source_id or provider_config.provider
+
+
+def _tag_provider(provider, *, provider_name: str, source_id: str):
+    setattr(provider, "provider_name", provider_name)
+    setattr(provider, "source_id", source_id)
+    return provider
 
 
 if __name__ == "__main__":

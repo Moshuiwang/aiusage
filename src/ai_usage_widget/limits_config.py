@@ -17,11 +17,13 @@ SENSITIVE_FIELD_FRAGMENTS = ("token", "secret", "password", "api_key", "apikey")
 class LimitsProviderConfig:
     provider: str
     enabled: bool = True
+    source_id: str | None = None
     auth_file: str | None = None
     usage_url: str | None = None
     codex_rpc: bool = False
     codex_rpc_sock: str | None = None
     claude_cli: bool = False
+    env: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -76,8 +78,11 @@ def summarize_limits_config(config: LimitsConfig) -> Dict[str, Any]:
 def _summarize_provider(provider: LimitsProviderConfig) -> Dict[str, Any]:
     summary: Dict[str, Any] = {
         "provider": provider.provider,
+        "source_id": provider.source_id or provider.provider,
         "enabled": provider.enabled,
         "has_auth_file": bool(provider.auth_file),
+        "has_env": bool(provider.env),
+        "env_keys": sorted((provider.env or {}).keys()),
     }
     if provider.provider == "codex":
         summary.update(
@@ -103,8 +108,10 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
 
     provider = _string(payload, "provider", required=True)
     enabled = _bool(payload, "enabled", default=True)
+    source_id = _string(payload, "source_id", required=False)
     auth_file = _string(payload, "auth_file", required=False)
     usage_url = _string(payload, "usage_url", required=False)
+    env = _env_map(payload, "env")
 
     if provider == "codex":
         codex_rpc = _bool(payload, "rpc", default=False)
@@ -114,9 +121,11 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
         return LimitsProviderConfig(
             provider=provider,
             enabled=enabled,
+            source_id=source_id,
             auth_file=auth_file,
             codex_rpc=codex_rpc,
             codex_rpc_sock=codex_rpc_sock,
+            env=env,
         )
 
     if provider == "claude":
@@ -127,9 +136,11 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
         return LimitsProviderConfig(
             provider=provider,
             enabled=enabled,
+            source_id=source_id,
             auth_file=auth_file,
             usage_url=usage_url,
             claude_cli=claude_cli,
+            env=env,
         )
 
     raise ConfigError(f"unsupported limits provider: {provider}")
@@ -158,3 +169,22 @@ def _bool(payload: Dict[str, Any], key: str, *, default: bool) -> bool:
     if not isinstance(value, bool):
         raise ConfigError(f"limits config {key} must be a boolean")
     return value
+
+
+def _env_map(payload: Dict[str, Any], key: str) -> dict[str, str]:
+    value = payload.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ConfigError(f"limits config {key} must be an object")
+    result: dict[str, str] = {}
+    for env_key, env_value in value.items():
+        if not isinstance(env_key, str) or not env_key.strip():
+            raise ConfigError("limits config env keys must be non-empty strings")
+        normalized = env_key.lower().replace("-", "_")
+        if any(fragment in normalized for fragment in SENSITIVE_FIELD_FRAGMENTS):
+            raise ConfigError("limits config env must not contain inline secrets")
+        if not isinstance(env_value, str) or not env_value.strip():
+            raise ConfigError("limits config env values must be non-empty strings")
+        result[env_key.strip()] = env_value.strip()
+    return result

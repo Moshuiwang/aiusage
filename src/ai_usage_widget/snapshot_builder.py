@@ -565,28 +565,31 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
 def _fetch_limit_windows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
     if not _table_exists(conn, "limit_windows"):
         return []
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(limit_windows)")}
+    source_expr = "source_id" if "source_id" in columns else "provider"
     rows = conn.execute(
-        """
-        SELECT provider, window, used_percent, remaining_percent, reset_at,
+        f"""
+        SELECT {source_expr}, provider, window, used_percent, remaining_percent, reset_at,
                window_duration_minutes, observed_at, source_type, confidence, status
         FROM limit_windows
-        ORDER BY provider ASC, window ASC, source_type ASC
+        ORDER BY {source_expr} ASC, provider ASC, window ASC, source_type ASC
         """
     ).fetchall()
     limits = []
     for row in rows:
         limits.append(
             LimitWindow(
-                provider=row[0],
-                window=row[1],
-                used_percent=float(row[2]),
-                remaining_percent=float(row[3]),
-                reset_at=row[4],
-                window_duration_minutes=int(row[5]),
-                observed_at=row[6],
-                source_type=row[7],
-                confidence=row[8],
-                status=row[9],
+                source_id=row[0],
+                provider=row[1],
+                window=row[2],
+                used_percent=float(row[3]),
+                remaining_percent=float(row[4]),
+                reset_at=row[5],
+                window_duration_minutes=int(row[6]),
+                observed_at=row[7],
+                source_type=row[8],
+                confidence=row[9],
+                status=row[10],
             ).to_snapshot_dict()
         )
     return limits

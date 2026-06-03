@@ -98,12 +98,12 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json
 ```
 
-真实 smoke 前做本机 readiness 诊断，不读取 auth 内容、不写 SQLite / latest：
+部署前 dry-run 验证 limits config，不写 SQLite / latest：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json \
-  --doctor
+  --dry-run
 ```
 
 只检查 limits config 并输出脱敏 provider plan：
@@ -114,13 +114,28 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --check-config
 ```
 
-部署前 dry-run 验证 provider 采集路径，不写 SQLite / latest：
+真实 smoke 前做本机 readiness 诊断，不读取 auth 内容、不写 SQLite / latest：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json \
-  --dry-run
+  --doctor
 ```
+
+`config/limits.local.json` 支持同一 provider 的多个账号实例。为每个实例设置稳定的 `source_id`，SQLite / snapshot 会用它区分账号，避免两个 Claude 账号互相覆盖。Claude CLI provider 会先解析 `/usage` 文本；如果当前 Claude Code 只返回订阅说明，会回退读取同一配置目录下的 `active_limits.json` 当前额度 cache；如果 cache 也不存在，会执行一个极短 probe 来解析 session limit reset 文本，此时只生成 session window，不推断 weekly window。第二个 Claude Code 配置目录可以通过脱敏的 `env` map 表达，例如：
+
+```json
+{
+  "provider": "claude",
+  "source_id": "claude-w",
+  "cli": true,
+  "env": {
+    "CLAUDE_CONFIG_DIR": "/Users/<user>/.claudew"
+  }
+}
+```
+
+`env` 只放运行环境变量，不放 token、secret、password 或 API key；`--check-config` / `--doctor` 只输出 env key，不输出 value。
 
 显式指定 Codex auth 文件采集 WHAM usage：
 

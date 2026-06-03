@@ -275,6 +275,44 @@ class TestCliLimits(unittest.TestCase):
         self.assertNotIn("/Users/me", stdout.getvalue())
         self.assertNotIn("/tmp/codex.sock", stdout.getvalue())
 
+    def test_collect_limits_check_config_redacts_cli_env_values(self) -> None:
+        config_fd, config_path = tempfile.mkstemp(suffix=".json")
+        os.close(config_fd)
+        try:
+            with open(config_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "timezone": "Asia/Shanghai",
+                        "providers": [
+                            {
+                                "provider": "claude",
+                                "source_id": "claude-w",
+                                "cli": True,
+                                "env": {"CLAUDE_CONFIG_DIR": "/Users/me/.claudew"},
+                            }
+                        ],
+                    },
+                    handle,
+                )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main([
+                    "collect-limits",
+                    "--limits-config",
+                    config_path,
+                    "--check-config",
+                ])
+        finally:
+            if os.path.exists(config_path):
+                os.remove(config_path)
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["providers"][0]["source_id"], "claude-w")
+        self.assertEqual(payload["providers"][0]["env_keys"], ["CLAUDE_CONFIG_DIR"])
+        self.assertNotIn("/Users/me", stdout.getvalue())
+
     def test_collect_limits_check_config_requires_limits_config(self) -> None:
         code = cli.main(["collect-limits", "--check-config"])
 

@@ -35,6 +35,31 @@ class TestLimitsConfig(unittest.TestCase):
         self.assertTrue(config.enabled_providers[0].codex_rpc)
         self.assertTrue(config.enabled_providers[1].claude_cli)
 
+    def test_parse_limits_config_allows_multi_account_cli_env(self) -> None:
+        config = parse_limits_config(
+            {
+                "schema_version": 1,
+                "timezone": "Asia/Shanghai",
+                "providers": [
+                    {
+                        "provider": "claude",
+                        "source_id": "claude-main",
+                        "cli": True,
+                    },
+                    {
+                        "provider": "claude",
+                        "source_id": "claude-w",
+                        "cli": True,
+                        "env": {"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"},
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual([provider.source_id for provider in config.enabled_providers], ["claude-main", "claude-w"])
+        self.assertEqual(config.enabled_providers[0].env, {})
+        self.assertEqual(config.enabled_providers[1].env, {"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"})
+
     def test_rejects_inline_secret_fields(self) -> None:
         with self.assertRaises(ConfigError):
             parse_limits_config(
@@ -108,6 +133,28 @@ class TestLimitsConfig(unittest.TestCase):
         self.assertTrue(summary["providers"][1]["has_usage_url"])
         self.assertNotIn("/Users/me", json.dumps(summary))
         self.assertNotIn("example.invalid", json.dumps(summary))
+
+    def test_summarize_limits_config_redacts_env_values(self) -> None:
+        config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [
+                    {
+                        "provider": "claude",
+                        "source_id": "claude-w",
+                        "cli": True,
+                        "env": {"CLAUDE_CONFIG_DIR": "/Users/me/.claudew"},
+                    },
+                ],
+            }
+        )
+
+        summary = summarize_limits_config(config)
+
+        self.assertEqual(summary["providers"][0]["source_id"], "claude-w")
+        self.assertTrue(summary["providers"][0]["has_env"])
+        self.assertEqual(summary["providers"][0]["env_keys"], ["CLAUDE_CONFIG_DIR"])
+        self.assertNotIn("/Users/me", json.dumps(summary))
 
 
 if __name__ == "__main__":

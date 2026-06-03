@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Protocol
@@ -80,10 +81,12 @@ class LimitsRuntime:
             provider = self.providers.get(provider_name)
             if provider is None:
                 raise ValueError(f"unsupported limits provider: {provider_name}")
+            provider_label = str(getattr(provider, "provider_name", provider_name))
+            source_id = str(getattr(provider, "source_id", provider_name))
             try:
-                windows = provider.collect()
+                windows = [_normalize_window_source_id(window, source_id) for window in provider.collect()]
             except Exception:
-                windows = [_failed_window(provider_name, seen_at)]
+                windows = [_failed_window(provider_label, seen_at, source_id=source_id)]
                 all_windows.extend(windows)
                 provider_results.append(
                     ProviderRuntimeResult(
@@ -146,10 +149,17 @@ def load_fixture_providers(path: str) -> Dict[str, LimitsProvider]:
     return providers
 
 
-def _failed_window(provider: str, observed_at: str) -> LimitWindow:
+def _normalize_window_source_id(window: LimitWindow, source_id: str) -> LimitWindow:
+    if window.source_id and window.source_id != window.provider:
+        return window
+    return replace(window, source_id=source_id)
+
+
+def _failed_window(provider: str, observed_at: str, *, source_id: str | None = None) -> LimitWindow:
     return parse_limit_window(
         {
             "provider": provider,
+            "source_id": source_id or provider,
             "window": "unknown",
             "used_percent": 0,
             "remaining_percent": 0,

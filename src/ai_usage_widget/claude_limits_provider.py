@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
@@ -24,6 +25,10 @@ OAUTH_FALLBACK_ERRORS = {"missing_credentials", "unauthorized"}
 _CLI_WINDOW_PATTERNS = (
     ("session", re.compile(r"5h\s+window:\s*([0-9]+(?:\.[0-9]+)?)%\s+used,\s*resets\s+at\s*([^,\s]+),\s*duration\s+([0-9]+)\s+minutes", re.IGNORECASE)),
     ("week", re.compile(r"weekly\s+window:\s*([0-9]+(?:\.[0-9]+)?)%\s+used,\s*resets\s+at\s*([^,\s]+),\s*duration\s+([0-9]+)\s+minutes", re.IGNORECASE)),
+)
+_CLI_LIMIT_MESSAGE_PATTERN = re.compile(
+    r"hit\s+your\s+session\s+limit.*?resets\s+([0-9]{1,2}:[0-9]{2})\s*([ap]m)\s*\(([^)]+)\)",
+    re.IGNORECASE,
 )
 
 
@@ -54,6 +59,10 @@ def parse_claude_cli_usage(text: str, *, observed_at: str) -> List[LimitWindow]:
     if not isinstance(text, str) or not text.strip():
         raise LimitContractError("claude_cli_schema_invalid", "Claude /usage output must be non-empty text")
 
+    limit_message_windows = _parse_cli_limit_message(text, observed_at=observed_at)
+    if limit_message_windows:
+        return limit_message_windows
+
     windows: List[LimitWindow] = []
     for window, pattern in _CLI_WINDOW_PATTERNS:
         match = pattern.search(text)
@@ -77,6 +86,78 @@ def parse_claude_cli_usage(text: str, *, observed_at: str) -> List[LimitWindow]:
             )
         )
     return windows
+
+
+def _parse_cli_limit_message(text: str, *, observed_at: str) -> List[LimitWindow]:
+    match = _CLI_LIMIT_MESSAGE_PATTERN.search(text)
+    if match is None:
+        return []
+    reset_at = _limit_message_reset_at(
+        observed_at=observed_at,
+        time_text=match.group(1),
+        meridiem=match.group(2),
+        timezone_name=match.group(3),
+    )
+    return [
+        parse_limit_window(
+            {
+                "provider": "claude",
+                "window": "session",
+                "used_percent": 100.0,
+                "remaining_percent": 0.0,
+                "reset_at": reset_at,
+                "window_duration_minutes": 300,
+                "observed_at": observed_at,
+                "source_type": "official_cli_limit_message",
+                "confidence": "observed",
+                "status": "ok",
+            }
+        )
+    ]
+
+
+def _limit_message_reset_at(*, observed_at: str, time_text: str, meridiem: str, timezone_name: str) -> str:
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LimitContractError("claude_cli_schema_invalid", "observed_at must be an ISO 8601 datetime") from exc
+    hour_text, minute_text = time_text.split(":", 1)
+    hour = int(hour_text)
+    minute = int(minute_text)
+    marker = meridiem.lower()
+    if marker == "am":
+        hour = 0 if hour == 12 else hour
+    else:
+        hour = 12 if hour == 12 else hour + 12
+
+    candidate = observed.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if candidate < observed:
+        candidate += timedelta(days=1)
+
+    # Claude includes the timezone display name in the message. The offset from observed_at is the stable value.
+    if not timezone_name.strip():
+        raise LimitContractError("claude_cli_schema_invalid", "Claude limit reset timezone is missing")
+    return candidate.isoformat()
+
+
+def parse_claude_active_limits(payload: Dict[str, Any], *, observed_at: str) -> List[LimitWindow]:
+    if not isinstance(payload, dict):
+        raise LimitContractError("claude_active_limits_schema_invalid", "Claude active limits payload must be an object")
+    rate_limits = _object_field(payload, "rate_limits")
+    return [
+        _parse_active_limit_window(
+            window_payload=_object_field(rate_limits, "five_hour"),
+            window="session",
+            duration_minutes=300,
+            observed_at=observed_at,
+        ),
+        _parse_active_limit_window(
+            window_payload=_object_field(rate_limits, "seven_day"),
+            window="week",
+            duration_minutes=10080,
+            observed_at=observed_at,
+        ),
+    ]
 
 
 def parse_claude_local_history_estimate(payload: Dict[str, Any]) -> LimitWindow:
@@ -131,13 +212,17 @@ class ClaudeCommandResult:
 
 
 class ClaudeSubprocessRunner:
-    def run(self, command: list[str], timeout: float) -> ClaudeCommandResult:
+    def run(self, command: list[str], timeout: float, env: dict[str, str] | None = None) -> ClaudeCommandResult:
+        child_env = os.environ.copy()
+        if env:
+            child_env.update(env)
         result = subprocess.run(
             command,
             text=True,
             capture_output=True,
             timeout=timeout,
             check=False,
+            env=child_env,
         )
         return ClaudeCommandResult(returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
 
@@ -147,6 +232,8 @@ class ClaudeCliUsageProvider:
         self,
         *,
         command: list[str] | None = None,
+        limit_probe_command: list[str] | None = None,
+        env: dict[str, str] | None = None,
         runner: ClaudeSubprocessRunner | None = None,
         timeout: float = 20.0,
         observed_at_provider: Callable[[], str] | None = None,
@@ -159,18 +246,44 @@ class ClaudeCliUsageProvider:
             "text",
             "--no-session-persistence",
         ]
+        self.limit_probe_command = list(limit_probe_command) if limit_probe_command is not None else [
+            "claude",
+            "-p",
+            "Respond with OK only.",
+            "--output-format",
+            "text",
+            "--no-session-persistence",
+        ]
+        self.env = dict(env) if env else None
         self.runner = runner or ClaudeSubprocessRunner()
         self.timeout = timeout
         self.observed_at_provider = observed_at_provider or _missing_observed_at
 
     def collect(self) -> List[LimitWindow]:
         try:
-            result = self.runner.run(self.command, self.timeout)
+            result = self.runner.run(self.command, self.timeout, self.env)
         except Exception as exc:
             raise ClaudeProviderError("provider_failed", f"Claude CLI /usage failed: {exc.__class__.__name__}") from exc
         if result.returncode != 0:
             raise ClaudeProviderError("provider_failed", "Claude CLI /usage failed")
-        return parse_claude_cli_usage(result.stdout, observed_at=self.observed_at_provider())
+        observed_at = self.observed_at_provider()
+        try:
+            return parse_claude_cli_usage(result.stdout, observed_at=observed_at)
+        except LimitContractError:
+            try:
+                return parse_claude_active_limits(_load_active_limits_cache(self.env), observed_at=observed_at)
+            except ClaudeProviderError:
+                return self._probe_limit_message(observed_at)
+
+    def _probe_limit_message(self, observed_at: str) -> List[LimitWindow]:
+        try:
+            result = self.runner.run(self.limit_probe_command, self.timeout, self.env)
+        except Exception as exc:
+            raise ClaudeProviderError("provider_failed", f"Claude CLI limit probe failed: {exc.__class__.__name__}") from exc
+        try:
+            return parse_claude_cli_usage(result.stdout, observed_at=observed_at)
+        except LimitContractError as exc:
+            raise ClaudeProviderError("provider_failed", "Claude CLI limit probe did not return limits") from exc
 
 
 class ClaudeOAuthWithCliFallbackProvider:
@@ -287,6 +400,56 @@ def _parse_window(
             "status": _optional_string_field(window_payload, "status", default="ok"),
         }
     )
+
+
+def _parse_active_limit_window(
+    *,
+    window_payload: Dict[str, Any],
+    window: str,
+    duration_minutes: int,
+    observed_at: str,
+) -> LimitWindow:
+    used_percent = _number_field(window_payload, "used_percentage", "used_percent", "usedPercent")
+    reset_at = _datetime_value(window_payload, "resets_at", "reset_at", "resetsAt")
+    return parse_limit_window(
+        {
+            "provider": "claude",
+            "window": window,
+            "used_percent": used_percent,
+            "remaining_percent": 100.0 - used_percent,
+            "reset_at": reset_at,
+            "window_duration_minutes": duration_minutes,
+            "observed_at": observed_at,
+            "source_type": "active_limits_cache",
+            "confidence": "observed",
+            "status": _optional_string_field(window_payload, "status", default="ok"),
+        }
+    )
+
+
+def _load_active_limits_cache(env: dict[str, str] | None) -> Dict[str, Any]:
+    config_dir = Path((env or {}).get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    path = config_dir / "active_limits.json"
+    if not path.exists():
+        raise ClaudeProviderError("missing_credentials", "Claude active limits cache is missing")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ClaudeProviderError("missing_credentials", "Claude active limits cache cannot be read") from exc
+    if not isinstance(payload, dict):
+        raise ClaudeProviderError("missing_credentials", "Claude active limits cache has unsupported shape")
+    return payload
+
+
+def _datetime_value(payload: Dict[str, Any], *names: str) -> str:
+    value = _first_present(payload, *names)
+    if isinstance(value, bool):
+        raise LimitContractError("limit_schema_invalid", f"{'/'.join(names)} must be a datetime")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), dt_timezone.utc).isoformat()
+    raise LimitContractError("limit_schema_invalid", f"{'/'.join(names)} must be a datetime")
 
 
 def _object_field(payload: Dict[str, Any], *names: str) -> Dict[str, Any]:

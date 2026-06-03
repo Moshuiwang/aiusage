@@ -8,6 +8,7 @@ from ai_usage_widget.claude_limits_provider import (
     ClaudeLimitsProvider,
     ClaudeProviderError,
     parse_claude_cli_usage,
+    parse_claude_active_limits,
     parse_claude_local_history_estimate,
     parse_claude_oauth_usage,
 )
@@ -66,6 +67,45 @@ class TestClaudeLimitsProvider(unittest.TestCase):
         self.assertEqual(windows[0].reset_at, "2026-06-03T15:30:00+08:00")
         self.assertEqual(windows[0].source_type, "official_cli")
         self.assertTrue(all(window.is_official for window in windows))
+
+    def test_active_limits_cache_parses_rate_limit_windows(self) -> None:
+        payload = {
+            "rate_limits": {
+                "five_hour": {"used_percentage": 10, "resets_at": 1780480800},
+                "seven_day": {"used_percentage": 20, "resets_at": 1780920000},
+            }
+        }
+
+        windows = parse_claude_active_limits(payload, observed_at="2026-06-03T10:01:00+08:00")
+
+        self.assertEqual([window.window for window in windows], ["session", "week"])
+        self.assertEqual([window.window_duration_minutes for window in windows], [300, 10080])
+        self.assertEqual([window.used_percent for window in windows], [10.0, 20.0])
+        self.assertEqual([window.source_type for window in windows], ["active_limits_cache", "active_limits_cache"])
+        self.assertTrue(all(window.is_official for window in windows))
+
+    def test_cli_limit_message_parses_session_window(self) -> None:
+        windows = parse_claude_cli_usage(
+            "You've hit your session limit · resets 11:40am (Asia/Shanghai)",
+            observed_at="2026-06-03T11:20:00+08:00",
+        )
+
+        self.assertEqual(len(windows), 1)
+        self.assertEqual(windows[0].window, "session")
+        self.assertEqual(windows[0].used_percent, 100.0)
+        self.assertEqual(windows[0].remaining_percent, 0.0)
+        self.assertEqual(windows[0].reset_at, "2026-06-03T11:40:00+08:00")
+        self.assertEqual(windows[0].window_duration_minutes, 300)
+        self.assertEqual(windows[0].source_type, "official_cli_limit_message")
+        self.assertTrue(windows[0].is_official)
+
+    def test_cli_limit_message_next_day_when_reset_time_already_passed(self) -> None:
+        windows = parse_claude_cli_usage(
+            "You've hit your session limit · resets 12:10am (Asia/Shanghai)",
+            observed_at="2026-06-03T23:50:00+08:00",
+        )
+
+        self.assertEqual(windows[0].reset_at, "2026-06-04T00:10:00+08:00")
 
     def test_oauth_success_does_not_trigger_cli_fallback(self) -> None:
         oauth_payload = json.loads((FIXTURES / "claude_oauth_usage.json").read_text(encoding="utf-8"))

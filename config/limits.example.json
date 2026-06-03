@@ -6,6 +6,7 @@
   "providers": [
     {
       "provider": "codex",
+      "source_id": "codex-main",
       "enabled": true,
       "auth_file": "/path/to/codex/auth.json",
       "rpc": true,
@@ -13,10 +14,20 @@
     },
     {
       "provider": "claude",
+      "source_id": "claude-main",
       "enabled": true,
       "auth_file": "/path/to/claude/auth.json",
       "usage_url": "https://example.invalid/claude/usage",
       "cli": true
+    },
+    {
+      "provider": "claude",
+      "source_id": "claude-work",
+      "enabled": true,
+      "cli": true,
+      "env": {
+        "CLAUDE_CONFIG_DIR": "/path/to/alternate/claude-config"
+      }
     }
   ]
 }

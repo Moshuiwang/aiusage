@@ -70,6 +70,8 @@ macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼�
 | TP-V2-036 | [TP-V2-036-antigravity-limits-fixture-parser.md](TP-V2-036-antigravity-limits-fixture-parser.md) | done | TP-V2-016 | none |
 | TP-V2-037 | [TP-V2-037-limits-doctor-readiness.md](TP-V2-037-limits-doctor-readiness.md) | done | TP-V2-033 | none |
 | TP-V2-038 | [TP-V2-038-mobile-client-direction-docs.md](TP-V2-038-mobile-client-direction-docs.md) | done | none | none |
+| TP-V2-039 | [TP-V2-039-limits-multi-account-cli.md](TP-V2-039-limits-multi-account-cli.md) | done | TP-V2-029, TP-V2-030, TP-V2-037 | none |
+| TP-V2-040 | [TP-V2-040-claude-cli-limit-message-parser.md](TP-V2-040-claude-cli-limit-message-parser.md) | done | TP-V2-039 | none |
 
 ## subagent 分配建议
 
@@ -79,5 +81,7 @@ macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼�
 - Widget agent：历史范围 TP-V2-015 已完成；后续不要继续推进 macOS Widget，移动端展示改由 Mobile App / iOS Widget agent 承接。
 - Mobile App / iOS Widget agent：TP-V2-038 已完成方向文档；下一步从 TP-V2-039 prototype 任务包开始。
 - Limits provider agent：历史范围 TP-V2-016 到 TP-V2-033 已完成。
+- Limits provider agent：TP-V2-039 已完成 multi-account CLI runtime。
+- Limits provider agent：TP-V2-040 已完成 Claude CLI limit message parser。
 - Antigravity provider agent：TP-V2-036 已完成离线 fixture parser；真实 Language Server reader 另开任务。
 - Docs / QA agent：检查 V2 链接、验收记录和文档一致性，不改实现。

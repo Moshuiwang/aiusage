@@ -67,6 +67,7 @@ class TestLimitWindowsStore(unittest.TestCase):
     def test_limit_windows_preserve_confidence_and_source_type(self) -> None:
         window = LimitWindow(
             provider="claude",
+            source_id="claude-main",
             window="session",
             used_percent=68.0,
             remaining_percent=32.0,
@@ -82,10 +83,54 @@ class TestLimitWindowsStore(unittest.TestCase):
 
         with sqlite3.connect(self.db_path) as conn:
             row = conn.execute(
-                "SELECT provider, window, source_type, confidence, status FROM limit_windows"
+                "SELECT source_id, provider, window, source_type, confidence, status FROM limit_windows"
             ).fetchone()
 
-        self.assertEqual(row, ("claude", "session", "official_cli", "observed", "ok"))
+        self.assertEqual(row, ("claude-main", "claude", "session", "official_cli", "observed", "ok"))
+
+    def test_limit_windows_keep_multiple_accounts_for_same_provider(self) -> None:
+        first = LimitWindow(
+            provider="claude",
+            source_id="claude-main",
+            window="session",
+            used_percent=68.0,
+            remaining_percent=32.0,
+            reset_at="2026-06-03T15:30:00+08:00",
+            window_duration_minutes=300,
+            observed_at="2026-06-03T10:01:00+08:00",
+            source_type="official_cli",
+            confidence="observed",
+            status="ok",
+        )
+        second = LimitWindow(
+            provider="claude",
+            source_id="claude-w",
+            window="session",
+            used_percent=12.0,
+            remaining_percent=88.0,
+            reset_at="2026-06-03T16:30:00+08:00",
+            window_duration_minutes=300,
+            observed_at="2026-06-03T10:02:00+08:00",
+            source_type="official_cli",
+            confidence="observed",
+            status="ok",
+        )
+
+        write_limit_windows(self.db_path, [first, second], seen_at="2026-06-03T10:02:00+08:00")
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT source_id, provider, window, used_percent
+                FROM limit_windows
+                ORDER BY source_id
+                """
+            ).fetchall()
+
+        self.assertEqual(rows, [
+            ("claude-main", "claude", "session", 68.0),
+            ("claude-w", "claude", "session", 12.0),
+        ])
 
     def test_limit_windows_write_without_usage_rows(self) -> None:
         window = LimitWindow(

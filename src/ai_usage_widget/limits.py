@@ -38,6 +38,7 @@ class LimitWindow:
     source_type: str
     confidence: str
     status: str
+    source_id: str = ""
 
     @property
     def is_official(self) -> bool:
@@ -48,7 +49,9 @@ class LimitWindow:
         )
 
     def to_snapshot_dict(self) -> Dict[str, Any]:
+        source_id = self.source_id or self.provider
         return {
+            "source_id": source_id,
             "provider": self.provider,
             "window": self.window,
             "used_percent": self.used_percent,
@@ -70,6 +73,7 @@ def parse_limit_window(payload: Dict[str, Any]) -> LimitWindow:
     _require_fields(payload, REQUIRED_FIELDS)
 
     provider = _require_non_empty_string(payload, "provider")
+    source_id = _optional_string(payload, "source_id", default=provider)
     window = _require_non_empty_string(payload, "window")
     reset_at = _require_iso_datetime(payload, "reset_at")
     observed_at = _require_iso_datetime(payload, "observed_at")
@@ -83,6 +87,7 @@ def parse_limit_window(payload: Dict[str, Any]) -> LimitWindow:
 
     return LimitWindow(
         provider=provider,
+        source_id=source_id,
         window=window,
         used_percent=used_percent,
         remaining_percent=remaining_percent,

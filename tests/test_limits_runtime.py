@@ -96,6 +96,57 @@ class TestLimitsRuntime(unittest.TestCase):
             ("codex", "session"),
         ])
 
+    def test_runtime_collects_multiple_instances_of_same_provider(self) -> None:
+        main_window = LimitWindow(
+            provider="claude",
+            source_id="claude-main",
+            window="session",
+            used_percent=20.0,
+            remaining_percent=80.0,
+            reset_at="2026-06-03T14:00:00+08:00",
+            window_duration_minutes=300,
+            observed_at="2026-06-03T10:00:00+08:00",
+            source_type="official_cli",
+            confidence="observed",
+            status="ok",
+        )
+        work_window = LimitWindow(
+            provider="claude",
+            source_id="claude-w",
+            window="session",
+            used_percent=50.0,
+            remaining_percent=50.0,
+            reset_at="2026-06-03T15:00:00+08:00",
+            window_duration_minutes=300,
+            observed_at="2026-06-03T10:01:00+08:00",
+            source_type="official_cli",
+            confidence="observed",
+            status="ok",
+        )
+        main = FakeProvider([main_window])
+        work = FakeProvider([work_window])
+
+        result = LimitsRuntime(
+            db_path=self.db_path,
+            latest_path=self.out_path,
+            timezone="Asia/Shanghai",
+            providers={"claude-main": main, "claude-w": work},
+            now_provider=lambda: "2026-06-03T10:02:00+08:00",
+        ).collect(provider_names=["claude-main", "claude-w"], rebuild_snapshot=False)
+
+        self.assertTrue(result.success)
+        self.assertEqual([row.provider for row in result.provider_results], ["claude-main", "claude-w"])
+        self.assertEqual(main.calls, 1)
+        self.assertEqual(work.calls, 1)
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT source_id, provider, window, used_percent FROM limit_windows ORDER BY source_id"
+            ).fetchall()
+        self.assertEqual(rows, [
+            ("claude-main", "claude", "session", 20.0),
+            ("claude-w", "claude", "session", 50.0),
+        ])
+
     def test_runtime_writes_failed_window_without_local_history_fallback(self) -> None:
         result = LimitsRuntime(
             db_path=self.db_path,
