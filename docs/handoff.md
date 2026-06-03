@@ -49,6 +49,14 @@ $EDITOR config/limits.local.json
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json \
+  --check-config
+```
+
+再 dry-run，确认 provider 采集路径能跑通且不写 SQLite/latest：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
   --dry-run
 ```
 

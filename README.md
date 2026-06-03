@@ -105,6 +105,14 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --dry-run
 ```
 
+只检查 limits config 并输出脱敏 provider plan：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
+  --limits-config config/limits.local.json \
+  --check-config
+```
+
 显式指定 Codex auth 文件采集 WHAM usage：
 
 ```bash

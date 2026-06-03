@@ -64,6 +64,38 @@ def parse_limits_config(payload: Dict[str, Any]) -> LimitsConfig:
     )
 
 
+def summarize_limits_config(config: LimitsConfig) -> Dict[str, Any]:
+    return {
+        "timezone": config.timezone,
+        "sqlite": config.sqlite_path,
+        "latest": config.latest_path,
+        "providers": [_summarize_provider(provider) for provider in config.enabled_providers],
+    }
+
+
+def _summarize_provider(provider: LimitsProviderConfig) -> Dict[str, Any]:
+    summary: Dict[str, Any] = {
+        "provider": provider.provider,
+        "enabled": provider.enabled,
+        "has_auth_file": bool(provider.auth_file),
+    }
+    if provider.provider == "codex":
+        summary.update(
+            {
+                "codex_rpc": provider.codex_rpc,
+                "has_codex_rpc_sock": bool(provider.codex_rpc_sock),
+            }
+        )
+    if provider.provider == "claude":
+        summary.update(
+            {
+                "has_usage_url": bool(provider.usage_url),
+                "claude_cli": provider.claude_cli,
+            }
+        )
+    return summary
+
+
 def _parse_provider(payload: Any) -> LimitsProviderConfig:
     if not isinstance(payload, dict):
         raise ConfigError("limits provider config must be an object")
