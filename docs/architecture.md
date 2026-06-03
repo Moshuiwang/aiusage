@@ -159,7 +159,7 @@ UI 只能把 `observed` 展示为强结论；`estimated` 必须弱化；`missing
 
 - Claude Code：OAuth Usage API -> CLI `/usage` PTY -> Web API。
 - Codex：OAuth/WHAM usage -> `codex app-server` RPC `account/rateLimits/read`。
-- Antigravity：Language Server `GetUserStatus` -> `GetCommandModelConfigs`，后续 spike。
+- Antigravity：Language Server `GetUserStatus` -> `GetCommandModelConfigs`；当前已完成离线 fixture parser，真实 reader 后续单独接入。
 
 CodexBar 源码核验结论：
 

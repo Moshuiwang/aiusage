@@ -164,7 +164,7 @@ CodexBar CLI 的 `--source auto` 另有不同默认顺序：
 
 ### Antigravity Provider
 
-后续预留，不进入第一版 MVP。
+离线 fixture parser baseline 已完成；真实本地 Language Server reader 仍需单独任务，不进入第一版 MVP。
 
 候选路径：
 
@@ -242,4 +242,4 @@ CodexBar CLI 的 `--source auto` 另有不同默认顺序：
 4. 写入 canonical store 的 `limit_windows`。
 5. 由 snapshot builder 输出 `limits`。
 6. Web dashboard / Widget 根据 confidence 做展示或降级。
-7. Antigravity provider 另开后续 spike，不阻塞 Claude + Codex MVP。
+7. Antigravity provider 已有 fixture parser baseline；真实 Language Server reader 另开后续任务，不阻塞 Claude + Codex MVP。

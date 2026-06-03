@@ -1,0 +1,17 @@
+{
+  "observed_at": "2026-06-03T10:20:00+08:00",
+  "user_status": {
+    "limits": {
+      "session": {
+        "remainingFraction": 0.72,
+        "resetsAt": "2026-06-03T15:20:00+08:00",
+        "windowDurationMins": 300
+      },
+      "day": {
+        "remainingFraction": 0.38,
+        "resetsAt": "2026-06-04T00:00:00+08:00",
+        "windowDurationMins": 1440
+      }
+    }
+  }
+}
