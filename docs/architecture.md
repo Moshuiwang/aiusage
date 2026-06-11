@@ -8,7 +8,7 @@
 Devices -> Local Collectors -> HTTP Ingest -> Canonical Store -> Snapshot Builder/API -> Presentation
 ```
 
-Web dashboard、iPhone App 和 iOS Widget 都位于 Presentation 层。它们不拥有终端采集逻辑、不执行 SSH、不推断 quota/reset。既有 macOS Widget 仅作为历史兼容展示面，不再作为后续产品交付目标。
+Web dashboard、iPhone App、iOS Widget、Android、macOS 菜单栏、Windows 托盘都位于 Presentation 层。它们不拥有终端采集逻辑、不执行 SSH、不推断 quota/reset。既有 macOS Widget 仅作为历史兼容展示面，不再作为后续产品交付目标。
 
 ## 总体链路
 
@@ -35,8 +35,11 @@ flowchart TD
     sqlite --> snapshot["Snapshot Builder"]
     snapshot --> latest["latest.json"]
     sqlite --> webApi["Web API"]
-    webApi --> dashboard["Web Dashboard"]
-    webApi --> iphoneApp["iPhone App"]
+    webApi --> mobileApi["Mobile Summary API"]
+    webApi --> dashboard["clients/web Web Dashboard"]
+    mobileApi --> iphoneApp["clients/ios iPhone App"]
+    mobileApi --> androidApp["clients/android Android App"]
+    mobileApi --> desktopClients["clients/macos + clients/windows Light Entries"]
     latest --> iosWidget["iOS Widget Snapshot"]
     latest --> legacyWidget["Legacy macOS Widget"]
     latest --> cliReport["CLI Report"]
@@ -220,7 +223,9 @@ CodexBar 源码核验结论：
 - Web API 查询 canonical store 或派生快照。
 - Web dashboard 展示总量、分组、source health、stale source 和错误摘要。
 - iPhone App 通过只读 Web API 或派生快照展示总览、drilldown、source health 和 limits。
+- Android App 复用移动端摘要合同，不重新定义字段含义。
 - iOS Widget 只读 App 或 server 准备好的轻量摘要，不承载完整 dashboard。
+- macOS 菜单栏和 Windows 托盘只展示关键摘要、健康状态和打开 dashboard 的入口。
 - Swift core 解码 snapshot 的能力可复用到 iOS 客户端。
 - 既有 macOS SwiftUI / WidgetKit 只作为历史兼容展示面。
 
@@ -230,8 +235,33 @@ CodexBar 源码核验结论：
 - 不执行 SSH。
 - 不执行 `ccusage`。
 - iPhone App / iOS Widget / macOS Widget 不读取 SQLite。
+- Android / macOS 菜单栏 / Windows 托盘不重新计算 usage、limits 或 source health。
 - 不从 token history 推断官方 quota。
 - reset time 只展示来自 `limits` 中 `confidence: "observed"` 的 provider fact；缺失时降级。
+
+### Client Directory Boundary
+
+目标目录：
+
+```text
+clients/
+  ios/
+  android/
+  macos/
+  windows/
+  web/
+packages/
+  client-contracts/
+  design-tokens/
+```
+
+迁移期保留：
+
+- `mobile/ios` 和 `mobile/ios-xcode`：当前 iOS 实现。
+- `src/ai_usage_widget/static`：当前 Web dashboard。
+- `widget/macos` 和 `widget/macos-xcode`：legacy macOS Widget。
+
+任何迁移都必须单独开任务包。不要在功能任务里顺手移动目录。
 
 ## 目标 `latest.json` v1
 
@@ -303,7 +333,7 @@ CodexBar 源码核验结论：
 兼容要求：
 
 - `items` 和 `source_status` 在迁移期继续存在。
-- `limits` 缺失或为空时，Web dashboard、iPhone App 和 Widget 展示降级为 usage baseline。
+- `limits` 缺失或为空时，Web dashboard、iPhone App、Android、Widget 和轻量桌面入口展示降级为 usage baseline。
 - `source_id` 应进入 `items`，方便 UI 关联 source health。
 - `summary` 和 `groups` 由 snapshot builder 生成，展示客户端不重复实现复杂聚合。
 
@@ -386,9 +416,9 @@ TDD 是落地硬规则。
 
 - launchd / systemd / Windows Task Scheduler 定时触发终端侧 pusher。
 - server 以本机或内网个人服务运行。
-- iPhone App 通过只读 API 或同步快照查看个人 usage 状态。
+- iPhone App / Android App 通过只读 API 或同步快照查看个人 usage 状态。
 - iOS Widget 通过 App Group 或系统推荐机制读取 App 准备好的摘要，不直接访问 server store。
-- 菜单栏 app 如后续保留，只能触发本机 pusher 或打开 dashboard，不承载主要产品体验。
+- macOS 菜单栏和 Windows 托盘只能展示轻量摘要、健康状态或打开 dashboard，不承载完整产品体验。
 
 不做：
 

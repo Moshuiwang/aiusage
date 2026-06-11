@@ -104,16 +104,23 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             / "AIUsageMobileCore"
             / "MobileSummaryAPIClient.swift"
         )
+        runtime_config = (
+            ROOT
+            / "mobile"
+            / "ios"
+            / "Sources"
+            / "AIUsageMobileCore"
+            / "MobileSummaryRuntimeConfig.swift"
+        )
         content = "\n".join(
             path.read_text(encoding="utf-8")
-            for path in [root_view, app_entrypoint, api_client]
+            for path in [root_view, app_entrypoint, api_client, runtime_config]
             if path.exists()
         )
 
         required_components = [
             "MobileSummaryAPIClient",
             "AI_USAGE_API_BASE_URL",
-            "AI_USAGE_API_TOKEN",
             "AI_USAGE_PERIOD",
             "AIUsageAPIBaseURL",
             "AIUsageAPIToken",
@@ -127,6 +134,13 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "onPeriodSelected",
             "loadLiveSummary(period:",
             "MobileSummaryAPIConfig(",
+            "MobileServerSettingsView",
+            "MobileTokenStore",
+            "KeychainTokenStore",
+            "SecureField(\"Token\"",
+            "saveSettings(",
+            "defaults.removeObject(forKey: \"AIUsageAPIToken\")",
+            "Widget runtime config sharing requires explicit App Group + Keychain access group design",
             "MetricTile",
             "MetricGrid",
             "cacheHitText",
@@ -190,12 +204,14 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertNotIn("ForEach(Array(chartPoints.enumerated())", content)
         self.assertNotIn("MobileSummaryFixtureLoader.load()", content)
         self.assertNotIn("loadState = .fixture", content)
+        self.assertNotIn("environment[\"AI_USAGE_API_TOKEN\"]", content)
+        self.assertNotIn("bundle.object(forInfoDictionaryKey: \"AIUsageAPIToken\")", content)
+        self.assertNotIn("defaults.string(forKey: \"AIUsageAPIToken\")", content)
         self.assertNotIn("summary = .empty(periodID: period)\n            loadState = .failed", content)
         self.assertNotIn(
             "withAnimation(.easeInOut(duration: 0.16)) {\n            summary = .empty(periodID: period)",
             content,
         )
-        self.assertNotIn("NavigationStack", content)
         self.assertNotIn("TabView(selection:", content)
         self.assertNotIn("chart.line.uptrend.xyaxis", content)
         self.assertNotIn("linePath(points:", content)

@@ -19,7 +19,7 @@ public struct LimitWindowGroup: Equatable, Sendable, Identifiable {
     }
 
     public var statText: String {
-        let observed = windows.filter { $0.confidence == "observed" }.count
+        let observed = windows.filter(\.isOfficialObserved).count
         return "\(observed)/\(windows.count) 可信"
     }
 }
@@ -111,7 +111,7 @@ public enum MobileViewModel {
         let failedSources = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }
         let okSources = summary.sources.filter { $0.status == "ok" }
         let observedLimit = summary.limits.windows
-            .filter { $0.confidence == "observed" && $0.official }
+            .filter(\.isOfficialObserved)
             .sorted {
                 if $0.remainingPercent == $1.remainingPercent {
                     return $0.id.localizedStandardCompare($1.id) == .orderedAscending

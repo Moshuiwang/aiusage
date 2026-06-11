@@ -1,5 +1,6 @@
 import AIUsageMobileCore
 import Foundation
+import Security
 import SwiftUI
 
 @main
@@ -15,10 +16,13 @@ struct AIUsageMobileApp: App {
 
 struct LiveSummaryContainerView: View {
     let initialTabID: String
+    // Widget runtime config sharing requires explicit App Group + Keychain access group design and is intentionally deferred.
+    private let tokenStore = KeychainTokenStore()
     @State private var summary: MobileSummary
     @State private var loadState: LoadState
     @State private var latestRequestID = UUID()
     @State private var cachedSummaries: [String: MobileSummary] = [:]
+    @State private var isShowingSettings = false
 
     init(initialTabID: String) {
         self.initialTabID = initialTabID
@@ -50,11 +54,34 @@ struct LiveSummaryContainerView: View {
                         .padding(12)
                 }
             }
+            .overlay(alignment: .topLeading) {
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel("服务设置")
+                .padding(10)
+            }
             .overlay(alignment: .top) {
                 if let message = loadState.message {
                     ProductionConnectionStatusView(message: message)
                         .padding(.top, 8)
                         .padding(.horizontal, 14)
+                }
+            }
+            .sheet(isPresented: $isShowingSettings) {
+                MobileServerSettingsView(
+                    tokenStore: tokenStore,
+                    period: summary.period.id
+                ) {
+                    Task {
+                        await refreshLiveSummary(period: summary.period.id)
+                    }
                 }
             }
             .task {
@@ -81,7 +108,7 @@ struct LiveSummaryContainerView: View {
 
         let requestID = UUID()
         latestRequestID = requestID
-        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period) else {
+        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
             loadState = .configurationRequired
             return
         }
@@ -109,7 +136,7 @@ struct LiveSummaryContainerView: View {
     private func refreshLiveSummary(period: String) async {
         let requestID = UUID()
         latestRequestID = requestID
-        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period) else {
+        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
             loadState = .configurationRequired
             return
         }
@@ -153,9 +180,9 @@ enum LoadState: Equatable {
     var message: String? {
         switch self {
         case .configurationRequired:
-            return "需要生产服务配置"
+            return "请在设置里填写服务地址和 token"
         case .failed:
-            return "刷新失败，已保留当前数据"
+            return "连接失败，请检查服务地址或 token"
         case .loading, .live:
             return nil
         }
@@ -180,87 +207,206 @@ struct ProductionConnectionStatusView: View {
     }
 }
 
-enum MobileSummaryRuntimeConfig {
-    private static let productionBaseURL = "https://vpn2.chunbai.com:8443"
+struct MobileServerSettingsView: View {
+    let tokenStore: MobileTokenStore
+    let period: String
+    let onSaved: () -> Void
 
-    static func initialPeriod(
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard
-    ) -> String {
-        environment["AI_USAGE_PERIOD"] ?? defaults.string(forKey: "AIUsagePeriod") ?? "week"
+    @Environment(\.dismiss) private var dismiss
+    @State private var baseURLString: String
+    @State private var token: String
+    @State private var status: SettingsStatus?
+    @State private var isTesting = false
+
+    init(tokenStore: MobileTokenStore, period: String, onSaved: @escaping () -> Void) {
+        self.tokenStore = tokenStore
+        self.period = period
+        self.onSaved = onSaved
+        let form = MobileSummaryRuntimeConfig.settingsForm(tokenStore: tokenStore)
+        self._baseURLString = State(initialValue: form.baseURLString)
+        self._token = State(initialValue: form.token)
     }
 
-    static func makeAPIConfig(
-        period: String,
-        environment: [String: String] = ProcessInfo.processInfo.environment,
-        defaults: UserDefaults = .standard,
-        bundle: Bundle = .main
-    ) -> MobileSummaryAPIConfig? {
-        let rawBaseURL = runtimeValue(
-            environmentKey: "AI_USAGE_API_BASE_URL",
-            defaultsKey: "AIUsageAPIBaseURL",
-            bundleKey: "AIUsageAPIBaseURL",
-            fallback: productionBaseURL,
-            environment: environment,
-            defaults: defaults,
-            bundle: bundle
-        )
-        guard let rawBaseURL, let baseURL = URL(string: rawBaseURL) else {
-            return nil
-        }
-        guard isProductionServer(baseURL) || environment["AI_USAGE_ALLOW_NON_PROD_SERVER"] == "1" else {
-            return nil
-        }
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("服务") {
+                    TextField("Server URL", text: $baseURLString)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Token", text: $token)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
 
-        return MobileSummaryAPIConfig(
-            baseURL: baseURL,
-            bearerToken: runtimeValue(
-                environmentKey: "AI_USAGE_API_TOKEN",
-                defaultsKey: "AIUsageAPIToken",
-                bundleKey: "AIUsageAPIToken",
-                fallback: nil,
-                environment: environment,
-                defaults: defaults,
-                bundle: bundle
-            ),
-            period: period
-        )
-    }
+                Section {
+                    Button {
+                        save()
+                    } label: {
+                        Label("保存", systemImage: "tray.and.arrow.down")
+                    }
 
-    static func isProductionServer(_ url: URL) -> Bool {
-        url.scheme == "https"
-            && url.host?.lowercased() == "vpn2.chunbai.com"
-            && url.port == 8443
-    }
+                    Button {
+                        Task {
+                            await testConnection()
+                        }
+                    } label: {
+                        if isTesting {
+                            Label("测试中", systemImage: "arrow.triangle.2.circlepath")
+                        } else {
+                            Label("测试连接", systemImage: "network")
+                        }
+                    }
+                    .disabled(isTesting)
+                }
 
-    private static func runtimeValue(
-        environmentKey: String,
-        defaultsKey: String,
-        bundleKey: String,
-        fallback: String?,
-        environment: [String: String],
-        defaults: UserDefaults,
-        bundle: Bundle
-    ) -> String? {
-        for candidate in [
-            environment[environmentKey],
-            defaults.string(forKey: defaultsKey),
-            bundle.object(forInfoDictionaryKey: bundleKey) as? String,
-            fallback
-        ] {
-            if let value = normalizedRuntimeValue(candidate) {
-                return value
+                if let status {
+                    Section {
+                        Label(status.message, systemImage: status.systemImage)
+                            .foregroundStyle(status.color)
+                    }
+                }
+            }
+            .navigationTitle("服务设置")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
             }
         }
-        return nil
     }
 
-    private static func normalizedRuntimeValue(_ value: String?) -> String? {
-        guard let value else { return nil }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || trimmed.hasPrefix("$(") {
+    private func save() {
+        do {
+            _ = try saveCurrentSettings()
+            status = .success("已保存，正在刷新数据")
+            onSaved()
+        } catch MobileRuntimeConfigurationError.invalidBaseURL {
+            status = .failure("服务地址格式不正确")
+        } catch MobileRuntimeConfigurationError.missingToken {
+            status = .failure("请填写 token")
+        } catch MobileRuntimeConfigurationError.nonProductionServer {
+            status = .failure("当前服务地址不受信任。请使用 HTTPS 域名；HTTP、localhost、内网 IP 和裸 IP 仅限开发调试。")
+        } catch {
+            status = .failure("保存失败，请重试")
+        }
+    }
+
+    private func testConnection() async {
+        isTesting = true
+        defer { isTesting = false }
+        do {
+            let config = try saveCurrentSettings()
+            _ = try await MobileSummaryAPIClient(config: config).load()
+            status = .success("连接成功")
+            onSaved()
+        } catch MobileRuntimeConfigurationError.invalidBaseURL {
+            status = .failure("服务地址格式不正确")
+        } catch MobileRuntimeConfigurationError.missingToken {
+            status = .failure("请填写 token")
+        } catch MobileRuntimeConfigurationError.nonProductionServer {
+            status = .failure("当前服务地址不受信任。请使用 HTTPS 域名；HTTP、localhost、内网 IP 和裸 IP 仅限开发调试。")
+        } catch {
+            status = .failure("连接失败，请检查服务地址或 token")
+        }
+    }
+
+    private func saveCurrentSettings() throws -> MobileSummaryAPIConfig {
+        try MobileSummaryRuntimeConfig.saveSettings(
+            baseURLString: baseURLString,
+            token: token,
+            period: period.isEmpty ? MobileSummaryRuntimeConfig.initialPeriod() : period,
+            tokenStore: tokenStore
+        )
+    }
+}
+
+private struct SettingsStatus: Equatable {
+    let message: String
+    let isSuccess: Bool
+
+    static func success(_ message: String) -> SettingsStatus {
+        SettingsStatus(message: message, isSuccess: true)
+    }
+
+    static func failure(_ message: String) -> SettingsStatus {
+        SettingsStatus(message: message, isSuccess: false)
+    }
+
+    var systemImage: String {
+        isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    var color: Color {
+        isSuccess ? .green : .orange
+    }
+}
+
+private enum KeychainTokenStoreError: LocalizedError {
+    case unhandledStatus(OSStatus)
+
+    var errorDescription: String? {
+        switch self {
+        case .unhandledStatus(let status):
+            return "Token 保存失败（\(status)）"
+        }
+    }
+}
+
+final class KeychainTokenStore: MobileTokenStore, @unchecked Sendable {
+    private let service = "com.wangzhipeng.aiusage.mobile"
+    private let account = "api-token"
+
+    func readToken() -> String? {
+        var query = baseQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess,
+              let data = item as? Data
+        else {
             return nil
         }
-        return trimmed
+        return String(data: data, encoding: .utf8)
+    }
+
+    func saveToken(_ token: String?) throws {
+        let normalizedToken = token?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalizedToken, !normalizedToken.isEmpty else {
+            SecItemDelete(baseQuery() as CFDictionary)
+            return
+        }
+
+        let data = Data(normalizedToken.utf8)
+        let status = SecItemUpdate(
+            baseQuery() as CFDictionary,
+            [kSecValueData as String: data] as CFDictionary
+        )
+        if status == errSecSuccess {
+            return
+        }
+        if status == errSecItemNotFound {
+            var item = baseQuery()
+            item[kSecValueData as String] = data
+            let addStatus = SecItemAdd(item as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainTokenStoreError.unhandledStatus(addStatus)
+            }
+            return
+        }
+        throw KeychainTokenStoreError.unhandledStatus(status)
+    }
+
+    private func baseQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
     }
 }

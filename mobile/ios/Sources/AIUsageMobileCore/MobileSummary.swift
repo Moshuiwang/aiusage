@@ -331,6 +331,10 @@ public struct MobileLimitWindow: Decodable, Equatable, Sendable, Identifiable {
     public let status: String
     public let official: Bool
 
+    public var isOfficialObserved: Bool {
+        official && confidence == "observed" && status == "ok"
+    }
+
     enum CodingKeys: String, CodingKey {
         case sourceID = "source_id"
         case provider

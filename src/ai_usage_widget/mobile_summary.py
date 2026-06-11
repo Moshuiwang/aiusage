@@ -43,7 +43,13 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "by_date": _date_rows(items),
         },
         "limits": {
-            "observed_count": sum(1 for row in windows if row.get("confidence") == "observed"),
+            "observed_count": sum(
+                1
+                for row in windows
+                if row.get("confidence") == "observed"
+                and row.get("official") is True
+                and row.get("status") == "ok"
+            ),
             "total_count": len(windows),
             "windows": windows,
         },

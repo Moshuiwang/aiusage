@@ -37,6 +37,14 @@ final class MobileSummaryTests: XCTestCase {
         XCTAssertEqual(state.limits.windows.last?.confidence, "missing")
     }
 
+    func testLimitGroupsOnlyCountOfficialObservedWindowsAsTrusted() throws {
+        let summary = try loadFixtureWithOnlyNonOfficialObservedLimit()
+        let state = MobileViewModel.build(from: summary)
+
+        XCTAssertEqual(state.home.primaryLimitText, "No observed quota")
+        XCTAssertEqual(state.home.refreshGroups.first?.statText, "0/1 可信")
+    }
+
     func testTokenFormatting() {
         XCTAssertEqual(TokenFormat.compact(999), "999")
         XCTAssertEqual(TokenFormat.compact(5_000), "5.0K")
@@ -152,6 +160,33 @@ final class MobileSummaryTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
         let data = try Data(contentsOf: url)
         return try JSONDecoder().decode(MobileSummary.self, from: data)
+    }
+
+    private func loadFixtureWithOnlyNonOfficialObservedLimit() throws -> MobileSummary {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
+        let data = try Data(contentsOf: url)
+        var json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+        var limits = json["limits"] as? [String: Any] ?? [:]
+        limits["observed_count"] = 0
+        limits["windows"] = [
+            [
+                "source_id": "local-estimate",
+                "provider": "codex",
+                "window": "week",
+                "used_percent": 50.0,
+                "remaining_percent": 50.0,
+                "reset_at": "2026-06-08T00:00:00+08:00",
+                "window_duration_minutes": 10080,
+                "observed_at": "2026-06-03T09:31:00+08:00",
+                "source_type": "ccusage_daily",
+                "confidence": "observed",
+                "status": "ok",
+                "official": false
+            ]
+        ]
+        json["limits"] = limits
+        let modified = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+        return try JSONDecoder().decode(MobileSummary.self, from: modified)
     }
 
     private func trendPoint(bucket: String, tokens: Int) -> MobileTrendPoint {

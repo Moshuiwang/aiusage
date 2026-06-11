@@ -10,16 +10,16 @@ V2 替代 V1 的 SSH pull / Widget-first 路线。
 新方向是个人 HTTP push 架构：
 
 ```text
-Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard / snapshot -> iPhone App / iOS Widget
+Device pusher -> HTTP ingest server -> SQLite canonical store -> Web dashboard / mobile summary -> clients
 ```
 
-macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼容 baseline，不再作为后续展示目标。
+macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼容 baseline，不再作为后续展示目标。后续客户端按 `clients/` 分层：`clients/ios` 承接 iPhone App / iOS Widget，`clients/android` 承接 Android App / Widget，`clients/macos` 承接菜单栏或轻量桌面入口，`clients/windows` 承接托盘或轻量桌面入口，`clients/web` 承接 Web dashboard 目标落点。
 
 ## 当前执行状态
 
-已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、historical Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐、Antigravity limits fixture parser baseline、limits HTTP push 和 limits push LaunchAgent installer。
+已完成 ingest contract、终端 pusher、store/snapshot、Web dashboard、historical Widget optional snapshot、official limits provider MVP、production hardening baseline、scheduler templates、smoke handoff、config check、limits doctor readiness、索引状态对齐、Antigravity limits fixture parser baseline、limits HTTP push、limits push LaunchAgent installer 和跨端客户端目录边界。
 
-当前移动端落地链路已新增任务包。TP-V2-043 mobile summary API contract、TP-V2-044 SwiftUI shell、TP-V2-045 iOS Widget summary、TP-V2-046 Xcode iOS App / Widget extension integration、TP-V2-047 physical iPhone signing / install、TP-V2-048 iOS App Icon asset、TP-V2-049 SwiftUI prototype surface、TP-V2-050 SwiftUI interactions / appearance、TP-V2-051 iOS live mobile summary client、TP-V2-052 mobile period live data correctness、TP-V2-053 production deploy、TP-V2-054 loading clear / number animation、TP-V2-055 today trend / drag tooltip、TP-V2-056 breakdown drilldown 均已完成。模拟器 App 的 today / week / month / all 切换会重新请求对应 live 数据，并同步高亮、标题、范围和数值；明细页点击机器后会按该机器来源重新聚合二级维度。
+当前移动端落地链路已新增任务包。TP-V2-043 mobile summary API contract、TP-V2-044 SwiftUI shell、TP-V2-045 iOS Widget summary、TP-V2-046 Xcode iOS App / Widget extension integration、TP-V2-047 physical iPhone signing / install、TP-V2-048 iOS App Icon asset、TP-V2-049 SwiftUI prototype surface、TP-V2-050 SwiftUI interactions / appearance、TP-V2-051 iOS live mobile summary client、TP-V2-052 mobile period live data correctness、TP-V2-053 production deploy、TP-V2-054 loading clear / number animation、TP-V2-055 today trend / drag tooltip、TP-V2-056 breakdown drilldown 均已完成。模拟器 App 的 today / week / month / all 切换会重新请求对应 live 数据，并同步高亮、标题、范围和数值；明细页点击机器后会按该机器来源重新聚合二级维度。后续 Android、macOS、Windows 也复用这个 mobile summary 合同，不在平台侧另算口径。
 
 Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增 `MSWusage` Codex raw JSONL parser 和 CLI 合约，从本机 `~/.codex/sessions/**/*.jsonl` 的 `token_count.timestamp + last_token_usage` 生成更可信的 Codex 小时用量，并保证不输出原始日志路径或内容。TP-V2-061 再把该合约接入 device push / ingest / storage / snapshot，明确 Codex 小时换源为 `mswusage_codex_token_count`，不再回退到 `ccusage session.lastActivity`；Claude 小时仍优先使用去重后的 `ccusage blocks`。
 
@@ -30,10 +30,11 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 1. TP-V2-060 MSWusage Codex parser contract：先固定本机 parser / CLI / fixture 合约，保证小时桶、cache 口径和无敏感路径输出。
 2. TP-V2-061 MSWusage Codex hourly integration：TP-V2-060 完成后再做 push / ingest / storage / snapshot 集成，让 Codex 小时换源为 `mswusage_codex_token_count`。
 3. TP-V2-062 iOS high fidelity app redesign：按高保真 handoff 把 SwiftUI App 对齐到当前 App 版玻璃界面。
-4. 移动端生产配置 UX：把 simulator env 配置演进成 App 内只读 server/token 设置、Keychain 保存和连接状态提示。
-5. 真实命令 smoke：先跑 `collect-limits --doctor`，再只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
-6. Antigravity real LS reader：围绕本地 Language Server 调用能力单独开任务包。
-7. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
+4. 跨端客户端任务包：分别为 `clients/android`、`clients/macos`、`clients/windows` 新建任务包；macOS / Windows 先做轻量入口，Android 复用移动端摘要合同。
+5. 移动端生产配置 UX：把 simulator env 配置演进成 App 内只读 server/token 设置、Keychain 保存和连接状态提示。
+6. 真实命令 smoke：先跑 `collect-limits --doctor`，再只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
+7. Antigravity real LS reader：围绕本地 Language Server 调用能力单独开任务包。
+8. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
 
 ## 任务列表
 
@@ -100,12 +101,13 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 | TP-V2-060 | [TP-V2-060-mswusage-codex-hourly.md](TP-V2-060-mswusage-codex-hourly.md) | ready | none | mobile UI polish |
 | TP-V2-061 | [TP-V2-061-mswusage-codex-hourly-integration.md](TP-V2-061-mswusage-codex-hourly-integration.md) | ready | TP-V2-060 | mobile UI polish |
 | TP-V2-062 | [TP-V2-062-ios-high-fidelity-app-redesign.md](TP-V2-062-ios-high-fidelity-app-redesign.md) | ready | TP-V2-059 | TP-V2-060, TP-V2-061 |
+| TP-V2-063 | [TP-V2-063-cross-platform-client-directory-boundary.md](TP-V2-063-cross-platform-client-directory-boundary.md) | done | none | docs / architecture |
 
 ## subagent 分配建议
 
 - Server agent：历史范围 TP-V2-001 到 TP-V2-003、TP-V2-007 到 TP-V2-010、TP-V2-013 已完成。
 - Device pusher agent：历史范围 TP-V2-004 到 TP-V2-006、TP-V2-014 已完成。
-- Web UI agent：历史范围 TP-V2-010 到 TP-V2-012 已完成。
+- Web UI agent：历史范围 TP-V2-010 到 TP-V2-012 已完成；后续 Web 目标落点是 `clients/web`，现有生产资源暂留 `src/ai_usage_widget/static`。
 - Widget agent：历史范围 TP-V2-015 已完成；后续不要继续推进 macOS Widget，移动端展示改由 Mobile App / iOS Widget agent 承接。
 - Limits provider agent：历史范围 TP-V2-016 到 TP-V2-033 已完成。
 - Limits provider agent：TP-V2-039 已完成 multi-account CLI runtime。
@@ -113,9 +115,10 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 - Limits provider agent：TP-V2-041 已完成本机官方额度到生产的 HTTP push 链路。
 - Limits provider agent：TP-V2-042 已完成本机 limits push 的 macOS LaunchAgent installer。
 - Antigravity provider agent：TP-V2-036 已完成离线 fixture parser；真实 Language Server reader 另开任务。
-- Mobile App agent：先执行 TP-V2-043，固定移动端只读 API contract；之后执行 TP-V2-044 SwiftUI shell。
+- Mobile App agent：先执行 TP-V2-043，固定移动端只读 API contract；之后执行 TP-V2-044 SwiftUI shell。后续 Android 也复用该 contract。
 - iOS Widget agent：TP-V2-045 已完成可复用摘要模型和小/中号内容视图；下一步另开 Xcode extension 集成任务，不复用 legacy macOS Widget 作为新产品 UI。
 - iOS Xcode agent：TP-V2-046 已把 Swift Package 接入 iPhone App 和 WidgetKit extension target；TP-V2-047 已完成签名和物理 iPhone 安装；TP-V2-048 已接入真实 AppIcon asset；TP-V2-049 已把 SwiftUI 内部页面改成原型结构，未按本轮安装到手机。
 - Docs / QA agent：检查 V2 链接、验收记录和文档一致性，不改实现。
 - Usage data agent：先执行 TP-V2-060，新增 MSWusage Codex raw JSONL parser 和 CLI 合约；完成后执行 TP-V2-061，把 Codex 小时换源接入 push / ingest / storage / snapshot。全程保持 `ccusage daily` baseline、Claude blocks 和生产凭据边界不变。
 - Mobile App agent：执行 TP-V2-062，把 `docs/prototypes/ios-high-fidelity/HANDOFF.md` 落到 SwiftUI App；不要改移动端 API contract，不要提交生产 token。
+- Cross-platform client agent：后续新增 Android、macOS、Windows 时，先从 `docs/architecture/client-platforms.md` 和 `clients/<platform>/README.md` 开任务包；不得复用 legacy macOS Widget 作为新产品 UI。

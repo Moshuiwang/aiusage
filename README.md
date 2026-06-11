@@ -2,12 +2,12 @@
 
 个人使用的 AI coding usage 观测工具，用来汇总多台设备、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
 
-当前项目已经从 Widget-first 原型重设为个人 HTTP 汇聚数据产品，并开始进入 iPhone App + iOS Widget 的客户端设计阶段：
+当前项目已经从 Widget-first 原型重设为个人 HTTP 汇聚数据产品，并开始进入跨端客户端分层阶段：
 
 - **Device push pipeline**：每台设备在自己的账户上下文运行 `ccusage daily --json`，把结构化用量主动 push 到个人 HTTP server。
 - **Server canonical store**：HTTP server 校验 ingest payload，写入 SQLite canonical store，并生成展示快照。
-- **Web presentation**：Web dashboard 是当前主要查看入口；CLI report 只读派生快照。
-- **Mobile client direction**：后续产品客户端方向是 iPhone App + iOS Widget；macOS Widget 退出产品路线，只保留历史兼容和参考。
+- **Web presentation**：Web dashboard 是当前完整查看入口；CLI report 只读派生快照。
+- **Client direction**：后续客户端按 `clients/` 分层，iPhone/iOS Widget 是已落地方向，macOS 走菜单栏或轻量桌面入口，Windows 走托盘或轻量桌面入口，Android 复用移动端摘要合同。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
 
 ## 当前边界
@@ -15,6 +15,30 @@
 - 先完成产品文档和任务包。
 - 文档收敛前不开发代码。
 - 后续开发遵守 TDD：先写失败测试，再实现最小代码。
+
+## 目录结构
+
+用户可见客户端的目标目录：
+
+```text
+clients/
+  ios/       # iPhone App + iOS Widget 目标落点
+  android/   # Android App + Android Widget 目标落点
+  macos/     # macOS 菜单栏 / 轻量桌面入口目标落点
+  windows/   # Windows 托盘 / 轻量桌面入口目标落点
+  web/       # Web dashboard 目标落点
+packages/
+  client-contracts/ # 跨端展示数据合同
+  design-tokens/    # 跨端视觉 token 和状态语义
+```
+
+迁移期保留现有实现路径：
+
+- iOS Swift Package / Xcode 工程暂时仍在 `mobile/ios` 和 `mobile/ios-xcode`。
+- Web dashboard 静态资源暂时仍在 `src/ai_usage_widget/static`。
+- legacy macOS Widget 暂时仍在 `widget/macos` 和 `widget/macos-xcode`，只作历史兼容。
+
+不要为了“目录好看”直接移动现有 iOS 或 Web 文件；迁移必须单独开任务包，先补构建或路由验证。
 
 ## 数据源
 
@@ -47,7 +71,7 @@ limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-s
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-采集 daily usage：
+Legacy/local compatibility：本地采集 daily usage：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
@@ -56,7 +80,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
   --sqlite data/usage.sqlite
 ```
 
-目标形态下，终端侧命令会演进为本机采集后 push 到 HTTP server；当前 CLI 命令仍是旧 baseline 的本地验证入口，具体以 `docs/task-packages/v2/INDEX.md` 后续任务包为准。
+当前 V2 推荐主线是 `DevicePusher push -> /ingest`。上面的 `collect` 命令只作为 legacy/local compatibility 和本地验证入口，不作为新部署主路径。
 
 HTTP push 终端侧命令：
 
@@ -227,6 +251,8 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [status.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/status.md)：当前阶段、有效决策和下一步。
 - [product-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
 - [architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture.md)：工程架构、数据链路、schema 目标和测试架构。
+- [clients/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/clients/README.md)：跨端客户端目标目录和迁移规则。
+- [client-platforms.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/client-platforms.md)：iOS、Android、macOS、Windows、Web 的展示边界。
 - [mobile-app-design-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/mobile-app-design-brief.md)：iPhone App + iOS Widget 的设计入口、信息架构和原型协作方式。
 - [task-plan.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-plan.md)：旧任务入口兼容层，指向任务包目录。
 - [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。

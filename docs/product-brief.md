@@ -4,7 +4,7 @@
 
 AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI coding usage 观测工具。项目名称暂时保留历史命名，但后续产品形态不再以 macOS Widget 为核心。
 
-它要把多台设备、多个 OS 用户、多个 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态，汇总成一个可信的个人数据产品。Web dashboard 是当前主要查看入口；下一阶段客户端方向是 iPhone App + iOS Widget。macOS Widget 退出后续产品路线，只保留历史兼容和参考价值。
+它要把多台设备、多个 OS 用户、多个 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态，汇总成一个可信的个人数据产品。Web dashboard 是当前完整查看入口；客户端按 `clients/` 分层推进：iPhone App + iOS Widget 是已落地方向，Android 复用移动端摘要合同，macOS 走菜单栏或轻量桌面入口，Windows 走托盘或轻量桌面入口。macOS Widget 退出后续产品路线，只保留历史兼容和参考价值。
 
 ## 核心问题
 
@@ -30,9 +30,10 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 3. **主动上报**：各终端主动 push 结构化 usage payload；汇聚端不通过 SSH 登录远端机器抓取。
 4. **账户隔离**：每个 OS 用户只在自己的账户上下文执行 `ccusage` 或读取明确设计过的结构化导出文件。
 5. **数据产品先于 UI**：先稳定采集、ingest、存储、快照契约和错误模型，再做展示升级。
-6. **展示只读**：Web dashboard、iPhone App、iOS Widget 和预览层只读 canonical store、Web API 或派生快照，不执行终端采集，不执行 SSH。
-7. **TDD 驱动落地**：每个开发任务先写失败测试或契约测试，再实现最小代码。
-8. **移动端优先设计**：后续原生客户端先围绕 iPhone App 的信息架构和交互设计推进，iOS Widget 只承载 glanceable 摘要。
+6. **展示只读**：Web dashboard、iPhone App、iOS Widget、Android、macOS 菜单栏、Windows 托盘和预览层只读 canonical store、Web API 或派生快照，不执行终端采集，不执行 SSH。
+7. **一套事实，多端外壳**：所有客户端共享 server read model 和移动端摘要合同，不在平台侧重新计算 usage / limits / source health。
+8. **TDD 驱动落地**：每个开发任务先写失败测试或契约测试，再实现最小代码。
+9. **移动端优先设计**：后续原生客户端先围绕 iPhone App 的信息架构和交互设计推进，iOS / Android Widget 只承载 glanceable 摘要。
 
 ## 用户范围
 
@@ -168,6 +169,30 @@ iOS Widget 是 iPhone App 的轻量 glanceable 展示面，只读 App 或 server
 
 Widget 不承载完整 dashboard，不做复杂 drilldown，不直接调用采集命令或官方 provider。
 
+### Android App / Widget
+
+Android 复用 iPhone 的移动信息架构：
+
+- App 展示今日、本周期、source health、机器/账号/agent drilldown 和可信 limits 状态。
+- Widget 只展示今日用量、可信额度窗口、采集健康和最近更新时间。
+- Android 不重新计算 usage / limits；字段不够时先扩展 `/api/mobile/summary`。
+
+### macOS Menu Bar / Desktop
+
+macOS 后续只做轻量工作台入口：
+
+- 菜单栏显示今日用量、可信额度状态、采集健康和最近更新时间。
+- 点击进入 Web dashboard 或轻量详情页。
+- 不承载完整 dashboard，不执行采集，不直接读取 SQLite。
+
+### Windows Tray / Desktop
+
+Windows 后续只做轻量工作台入口：
+
+- 托盘显示健康状态和关键摘要。
+- 完整查看打开 Web dashboard。
+- Windows pusher / Task Scheduler 负责采集；展示端只读 API。
+
 ### macOS Widget
 
 macOS Widget 不再作为后续产品交付目标。
@@ -176,7 +201,7 @@ macOS Widget 不再作为后续产品交付目标。
 
 ### 后续展示
 
-菜单栏详情页、历史报表导出、ChatGPT Apps 内嵌查看都是后续扩展，不作为当前工程化基础或 iPhone App 设计的前置条件。
+历史报表导出、ChatGPT Apps 内嵌查看都是后续扩展，不作为当前工程化基础或跨端客户端设计的前置条件。
 
 ## 阶段边界
 
@@ -237,6 +262,15 @@ macOS Widget 不再作为后续产品交付目标。
 - 将认可后的手机原型收敛成 SwiftUI App、WidgetKit、API contract、缓存和状态测试任务包。
 - 补各平台定时 pusher、server 启动、认证、备份、App Group、签名、构建和运行文档。
 
+### Phase 7: Cross-Platform Clients
+
+目标：
+
+- 在 `clients/` 下推进 Android、macOS、Windows 和 Web 目标目录。
+- macOS / Windows 先做轻量入口，不复制完整 dashboard。
+- Android 先复用 `/api/mobile/summary`，不新建独立口径。
+- 共享展示合同进入 `packages/client-contracts/`，共享状态色和视觉语义进入 `packages/design-tokens/`。
+
 ## 关键技术决策
 
 ### 保留
@@ -251,7 +285,7 @@ macOS Widget 不再作为后续产品交付目标。
 ### 调整
 
 - 从 SSH pull 改为 device push：汇聚端提供 HTTP ingest，各终端主动上报。
-- Web dashboard 成为当前主要展示面；后续客户端路线从 macOS Widget 调整为 iPhone App + iOS Widget。
+- Web dashboard 成为当前完整展示面；后续客户端路线从 macOS Widget 调整为 `clients/` 分层：iOS 已落地，Android 复用移动摘要，macOS/Windows 做轻量入口。
 - quota/reset 不再作为当前主线前置项；它是 limits 插件域。
 - `latest.json` 不应只是一组扁平 `items`；需要演进为 versioned display snapshot。
 - 趋势图优先由 server 从 canonical store 聚合；移动端只消费 Web API 或预聚合快照，不重复实现事实聚合。
@@ -285,6 +319,6 @@ macOS Widget 不再作为后续产品交付目标。
 - HTTP ingest payload schema 有 fixture、认证失败测试和幂等 upsert 测试。
 - `latest.json` schema 有版本、fixture 和 Swift/Python 双侧解码测试。
 - Web dashboard 和当前/历史展示消费者的每个展示块都能追溯到 canonical store 或快照字段。
-- iPhone App / iOS Widget 的每个展示块都能追溯到 canonical store、Web API 或快照字段。
+- iPhone App / iOS Widget / Android / macOS / Windows 的每个展示块都能追溯到 canonical store、Web API 或快照字段。
 - limits/quota 缺失时仍有可用产品体验。
 - 每个实现任务都有先红后绿的测试记录。

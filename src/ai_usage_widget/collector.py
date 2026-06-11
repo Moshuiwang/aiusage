@@ -9,6 +9,9 @@ from .storage_sqlite import build_source_report, write_sqlite
 from .timeutil import now_iso
 
 
+# Legacy SSH pull compatibility only.
+# V2 ingestion is push-based: DevicePusher -> /ingest -> SQLite -> summary APIs.
+# Do not build new features on this collector path.
 def collect(config: Dict[str, Any], output_path: str, sqlite_path: Optional[str] = None) -> Dict[str, Any]:
     timezone = config["timezone"]
     collected_at = now_iso(timezone)
@@ -85,4 +88,3 @@ def _run_status(source_status: List[Dict[str, Any]]) -> str:
     if len(failed) == len(enabled):
         return "failed"
     return "partial_failed"
-

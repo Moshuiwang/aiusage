@@ -5,26 +5,21 @@ import hmac
 import html
 import json
 import os
-import tempfile
 import threading
 from datetime import datetime, timezone as dt_timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 from .auth import TokenAuthenticator
-from .config import ConfigError
-from .ingest import IngestValidationError, validate_ingest_payload, IngestResponse
-from .limits import LimitContractError, parse_limit_window
-from .mobile_summary import build_mobile_summary
-from .normalize import (
-    normalize_ingest_block_request,
-    normalize_ingest_hourly_facts,
-    normalize_ingest_hourly_request,
-    normalize_ingest_request,
+from .server_services import (
+    ServiceError,
+    build_health_response,
+    build_mobile_summary_response,
+    build_summary_response,
+    handle_ingest_limits_payload,
+    handle_ingest_payload,
 )
-from .storage_sqlite import write_limit_windows, write_sqlite
-from .snapshot_builder import build_snapshot
 
 
 class IngestAPIHandler(BaseHTTPRequestHandler):
@@ -120,94 +115,24 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             self.send_error_json(400, "http_schema_invalid", f"Malformed JSON: {exc}")
             return
 
-        # 4. 执行契约校验
         try:
-            req = validate_ingest_payload(
+            resp = handle_ingest_payload(
                 payload,
                 token=token,
                 authenticator=self.server.authenticator,
-            )
-        except IngestValidationError as exc:
-            status_code = 401 if exc.error_type == "http_auth_failed" else 400
-            self.send_error_json(status_code, exc.error_type, str(exc))
-            return
-        except Exception as exc:
-            self.send_error_json(500, "internal_error", str(exc))
-            return
-
-        # 5. 校验通过，正常化为 UsageItems 列表
-        items = normalize_ingest_request(req)
-        hourly_items = normalize_ingest_hourly_request(req)
-        hourly_facts = normalize_ingest_hourly_facts(req)
-        block_items = normalize_ingest_block_request(req)
-
-        # 6. 构造元数据并写入 SQLite Store
-        collected_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
-        report = {
-            "source_id": req.source_id,
-            "report_type": "daily",
-            "command": "HTTP Ingest",
-            "status": req.collection_status,
-            "ccusage_version": None,
-            "first_period": None,
-            "last_period": None,
-            "error_type": req.error_type,
-            "error_message": req.error_message,
-        }
-        periods = [item.date for item in items]
-        if periods:
-            report["first_period"] = min(periods)
-            report["last_period"] = max(periods)
-
-        try:
-            write_sqlite(
-                path=self.server.db_path,
-                collected_at=collected_at,
-                timezone=self.server.timezone,
-                run_status="ok",
-                source_reports=[report],
-                items=items,
-                hourly_items=hourly_items,
-                hourly_facts=hourly_facts,
-                block_items=block_items,
-                source_identities=[{
-                    "source_id": req.source_id,
-                    "host": req.host,
-                    "machine": req.machine or req.host,
-                    "os_user": req.os_user,
-                    "platform": req.platform,
-                }],
-            )
-        except Exception as exc:
-            self.send_error_json(500, "write_failed", f"Failed to save data: {exc}")
-            return
-
-        # 7. 写入数据库后，联动触发 build_snapshot 重建最新快照
-        today_str = datetime.now(dt_timezone.utc).astimezone().strftime("%Y-%m-%d")
-        try:
-            build_snapshot(
                 db_path=self.server.db_path,
-                output_path=self.server.latest_path,
-                date_str=today_str,
-                timezone_str=self.server.timezone,
+                latest_path=self.server.latest_path,
+                timezone=self.server.timezone,
             )
-        except Exception as exc:
-            # 记录异常，但不阻塞 200 响应
-            print(f"Failed to build snapshot during ingest: {exc}")
+        except ServiceError as exc:
+            self.send_error_json(exc.status_code, exc.error_type, exc.message)
+            return
 
-        # 8. 返回成功响应
-        resp = IngestResponse(
-            status="accepted",
-            source_id=req.source_id,
-            accepted_at=collected_at,
-            facts_accepted=len(hourly_facts),
-            message="Data accepted successfully",
-        )
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self._send_security_headers()
         self.end_headers()
-        self.wfile.write(json.dumps(resp.to_dict(), ensure_ascii=False).encode("utf-8"))
+        self.wfile.write(json.dumps(resp, ensure_ascii=False).encode("utf-8"))
 
     def handle_ingest_limits(self) -> None:
         auth_header = self.headers.get("Authorization", "")
@@ -230,38 +155,23 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            observed_at, windows = _validate_limits_ingest_payload(payload)
-        except LimitContractError as exc:
-            self.send_error_json(400, exc.error_type, str(exc))
-            return
-
-        try:
-            write_limit_windows(self.server.db_path, windows, seen_at=observed_at)
-        except Exception as exc:
-            self.send_error_json(500, "write_failed", f"Failed to save limits: {exc}")
-            return
-
-        try:
-            build_snapshot(
+            response_payload = handle_ingest_limits_payload(
+                payload,
+                token=token,
+                authenticator=self.server.authenticator,
                 db_path=self.server.db_path,
-                output_path=self.server.latest_path,
-                date_str=observed_at[:10],
-                timezone_str=self.server.timezone,
-                current_time_str=observed_at,
+                latest_path=self.server.latest_path,
+                timezone=self.server.timezone,
             )
-        except Exception as exc:
-            print(f"Failed to build snapshot during limits ingest: {exc}")
+        except ServiceError as exc:
+            self.send_error_json(exc.status_code, exc.error_type, exc.message)
+            return
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self._send_security_headers()
         self.end_headers()
-        self.wfile.write(json.dumps({
-            "success": True,
-            "status": "accepted",
-            "windows_written": len(windows),
-            "accepted_at": observed_at,
-        }, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+        self.wfile.write(json.dumps(response_payload, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
     def handle_get_summary(self, parsed_url: Any) -> None:
         # 1. 提取日期查询参数
@@ -276,7 +186,10 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             date_str = datetime.now(dt_timezone.utc).astimezone().strftime("%Y-%m-%d")
 
         try:
-            snapshot_data = self._build_request_snapshot(
+            snapshot_data = build_summary_response(
+                db_path=self.server.db_path,
+                latest_path=self.server.latest_path,
+                timezone=self.server.timezone,
                 date_str=date_str,
                 period=period,
                 machine_filter=machine,
@@ -303,13 +216,15 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             date_str = datetime.now(dt_timezone.utc).astimezone().strftime("%Y-%m-%d")
 
         try:
-            snapshot_data = self._build_request_snapshot(
+            mobile_summary = build_mobile_summary_response(
+                db_path=self.server.db_path,
+                latest_path=self.server.latest_path,
+                timezone=self.server.timezone,
                 date_str=date_str,
                 period=period,
                 machine_filter=machine,
                 account_filter=account,
             )
-            snapshot = json.loads(snapshot_data)
         except OSError as exc:
             self.send_error_json(500, "read_failed", f"Failed to read snapshot: {exc}")
             return
@@ -320,102 +235,14 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             self.send_error_json(500, "internal_error", f"Failed to compile snapshot: {exc}")
             return
 
-        mobile_summary = build_mobile_summary(snapshot)
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self._send_security_headers()
         self.end_headers()
         self.wfile.write(json.dumps(mobile_summary, ensure_ascii=False, sort_keys=True).encode("utf-8"))
 
-    def _build_request_snapshot(
-        self,
-        *,
-        date_str: str,
-        period: str,
-        machine_filter: Optional[str],
-        account_filter: Optional[str],
-    ) -> str:
-        latest_dir = os.path.dirname(self.server.latest_path) or "."
-        os.makedirs(latest_dir, exist_ok=True)
-        tmp_file = tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            suffix=".json",
-            prefix="request-snapshot-",
-            dir=latest_dir,
-            delete=False,
-        )
-        tmp_path = tmp_file.name
-        tmp_file.close()
-        try:
-            build_snapshot(
-                db_path=self.server.db_path,
-                output_path=tmp_path,
-                date_str=date_str,
-                timezone_str=self.server.timezone,
-                period=period,
-                machine_filter=machine_filter,
-                account_filter=account_filter,
-            )
-            with open(tmp_path, "r", encoding="utf-8") as handle:
-                return handle.read()
-        finally:
-            try:
-                os.remove(tmp_path)
-            except FileNotFoundError:
-                pass
-
     def handle_get_health(self) -> None:
-        latest_data: Dict[str, Any] = {}
-        if os.path.exists(self.server.latest_path):
-            try:
-                with open(self.server.latest_path, "r", encoding="utf-8") as f:
-                    latest_data = json.load(f)
-            except (OSError, json.JSONDecodeError):
-                latest_data = {}
-
-        source_status = latest_data.get("source_status") if isinstance(latest_data, dict) else []
-        if not isinstance(source_status, list):
-            source_status = []
-        counts: Dict[str, int] = {}
-        for source in source_status:
-            if not isinstance(source, dict):
-                continue
-            status = str(source.get("status") or "unknown")
-            counts[status] = counts.get(status, 0) + 1
-
-        db_size = os.path.getsize(self.server.db_path) if os.path.exists(self.server.db_path) else 0
-        latest_mtime = (
-            datetime.fromtimestamp(os.path.getmtime(self.server.latest_path), dt_timezone.utc).astimezone().isoformat()
-            if os.path.exists(self.server.latest_path)
-            else None
-        )
-        payload = {
-            "status": "ok",
-            "generated_at": datetime.now(dt_timezone.utc).astimezone().isoformat(),
-            "database": {
-                "path": self.server.db_path,
-                "size_bytes": db_size,
-                "exists": os.path.exists(self.server.db_path),
-            },
-            "snapshot": {
-                "path": self.server.latest_path,
-                "exists": os.path.exists(self.server.latest_path),
-                "updated_at": latest_mtime,
-            },
-            "source_status": {
-                "total": len(source_status),
-                "counts": counts,
-                "non_ok": [
-                    {
-                        "source_id": str(source.get("source_id") or ""),
-                        "status": str(source.get("status") or "unknown"),
-                    }
-                    for source in source_status
-                    if isinstance(source, dict) and str(source.get("status") or "unknown") != "ok"
-                ],
-            },
-        }
+        payload = build_health_response(db_path=self.server.db_path, latest_path=self.server.latest_path)
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self._send_security_headers()
@@ -557,42 +384,6 @@ class ThreadedHTTPServer(HTTPServer):
         self.token = token
         self.authenticator = TokenAuthenticator.from_values(token, token_specs)
         self.timezone = timezone
-
-
-def _validate_limits_ingest_payload(payload: Any):
-    if not isinstance(payload, dict):
-        raise LimitContractError("limit_schema_invalid", "limits payload must be an object")
-    _reject_sensitive_payload_keys(payload)
-
-    if payload.get("schema_version") != 1:
-        raise LimitContractError("limit_schema_invalid", "schema_version must be 1")
-    observed_at = payload.get("observed_at")
-    if not isinstance(observed_at, str) or not observed_at.strip():
-        raise LimitContractError("limit_schema_invalid", "observed_at must be a non-empty string")
-    observed_at = observed_at.strip()
-    try:
-        datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise LimitContractError("limit_schema_invalid", "observed_at must be an ISO 8601 datetime") from exc
-
-    windows_payload = payload.get("windows")
-    if not isinstance(windows_payload, list):
-        raise LimitContractError("limit_schema_invalid", "windows must be a list")
-    windows = []
-    for item in windows_payload:
-        if not isinstance(item, dict):
-            raise LimitContractError("limit_schema_invalid", "limit window must be an object")
-        _reject_sensitive_payload_keys(item)
-        windows.append(parse_limit_window(item))
-    return observed_at, windows
-
-
-def _reject_sensitive_payload_keys(payload: Dict[str, Any]) -> None:
-    sensitive_keys = {"token", "auth_file", "api_key", "secret", "env", "raw_json", "raw"}
-    present = sorted(key for key in payload if key in sensitive_keys)
-    if present:
-        raise LimitContractError("limit_schema_invalid", "sensitive fields are not accepted: " + ", ".join(present))
-
 
 def start_test_server(
     host: str,
