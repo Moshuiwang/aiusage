@@ -92,6 +92,7 @@ CLI / HTTP handler / iOS App
 - 新增 provider：放 provider module + `limits_runtime.py`，不改 daily usage baseline。
 - 新增 App 设置：放 iOS settings / Keychain 层，不写死到视图。
 - 新增 App server trust policy：只在 iOS runtime config 和对应 Swift tests 中收敛，不影响后端 API 和 SQLite。
+- 新增 Widget 配置共享：先按 [`widget-configuration-sharing.md`](widget-configuration-sharing.md) 建立 App Group + Keychain access group，再让 Widget 读取 live 配置。
 - 新增数据写入：通过 `storage_sqlite.py` 边界，不在 route handler 里直接散写 SQL。
 
 ## 禁止事项
@@ -102,6 +103,7 @@ CLI / HTTP handler / iOS App
 - 禁止把 token、auth path、原始日志、`data/latest.json`、`usage.sqlite`、构建产物提交。
 - 禁止让一个用户读取另一个用户 home。
 - 禁止 Web 和 Mobile 各自定义不同的 usage 口径。
+- 禁止 iOS Widget 把 token 放入 shared UserDefaults 或 App Group 文件。
 
 ## 测试规则
 
@@ -147,4 +149,4 @@ P2：
 
 P3：
 
-- Widget 配置共享必须单独设计 App Group + Keychain access group；不得把 token 放入普通共享 UserDefaults。
+- Widget 配置共享设计已收敛到 `docs/architecture/widget-configuration-sharing.md`；实现前必须先配置 App Group + Keychain access group。

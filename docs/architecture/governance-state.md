@@ -8,10 +8,11 @@
 - Round 2: snapshot read model helper extraction
 - Round 3: iOS runtime configuration
 - Round 4: self-hosted server trust policy
+- Round 5: Widget configuration sharing design
 
 ## Next Round
 
-Round 5: Widget configuration sharing design
+Round 6: Snapshot source health helper
 
 ## Stop Rule
 
@@ -21,28 +22,24 @@ Do not proceed to the next round without explicit user confirmation.
 
 ## Last Known Clean State
 
-- last_checked_commit: 8487169
-- last_round_commit: 1ec513b
+- last_checked_commit: 11a19d8
+- last_round_commit: pending Round 5 commit
 - working_tree_expected_clean: true
 
 ## Last Completed Round
 
-- completed_round: Round 4 self-hosted server trust policy
+- completed_round: Round 5 Widget configuration sharing design
 - files_changed:
-  - `mobile/ios/Sources/AIUsageMobileCore/MobileSummaryRuntimeConfig.swift`
-  - `mobile/ios/Tests/AIUsageMobileCoreTests/MobileRuntimeConfigurationTests.swift`
-  - `mobile/ios-xcode/Sources/AIUsageMobileApp/AIUsageMobileApp.swift`
+  - `docs/architecture/widget-configuration-sharing.md`
   - `docs/architecture/architecture.md`
   - `docs/architecture/governance-roadmap.md`
   - `docs/architecture/governance-state.md`
+  - `tests/test_architecture_governance.py`
 - tests_run:
   - `git diff --check`
-  - `PYTHONPATH=src python3 -m unittest tests.test_ios_xcode_integration -v`
   - `PYTHONPATH=src python3 -m unittest discover -s tests -v`
-  - `cd mobile/ios && swift test`
-  - `cd mobile/ios-xcode && xcodebuild -project AIUsageMobile.xcodeproj -scheme AIUsageMobileApp -configuration Debug -destination 'generic/platform=iOS Simulator' build`
 - commit_recommended: true
-- next_round: Round 5 Widget configuration sharing design
+- next_round: Round 6 Snapshot source health helper
 
 ## Round Completion Template
 

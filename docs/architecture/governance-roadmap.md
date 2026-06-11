@@ -49,8 +49,6 @@
 
 状态：completed
 
-## Upcoming Rounds
-
 ### Round 5: Widget Configuration Sharing Design
 
 目标：
@@ -61,7 +59,9 @@
 - 不允许把 token 放进普通共享 UserDefaults。
 - 如果无法安全实现，先只写设计文档，不写代码。
 
-完成后停止。
+状态：completed
+
+## Upcoming Rounds
 
 ### Round 6: Snapshot Source Health Helper
 

@@ -58,3 +58,28 @@ class TestArchitectureGovernance(unittest.TestCase):
         for forbidden in forbidden_exact_rules:
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, ignored_lines)
+
+    def test_widget_configuration_sharing_design_keeps_token_boundary(self) -> None:
+        text = (
+            ROOT / "docs" / "architecture" / "widget-configuration-sharing.md"
+        ).read_text(encoding="utf-8")
+        normalized = text.casefold()
+
+        for required in [
+            "App Group",
+            "Keychain access group",
+            "WidgetKit",
+            "MobileTokenStore",
+            "AIUsageAPIBaseURL",
+        ]:
+            with self.subTest(required=required):
+                self.assertIn(required, text)
+
+        for required in [
+            "shared userdefaults",
+            "token",
+            "read-only",
+            "reload timeline",
+        ]:
+            with self.subTest(required=required):
+                self.assertIn(required, normalized)
