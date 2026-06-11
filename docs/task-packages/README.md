@@ -17,7 +17,7 @@
 
 - Active version: `V2`
 - Index: [v2/INDEX.md](v2/INDEX.md)
-- First executable package: none; current V2 published packages are done.
+- First executable package: `TP-V2-060-mswusage-codex-hourly` parser-only contract.
 
 ## 目录结构
 

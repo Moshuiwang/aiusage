@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI Usage iOS Current Wireframe</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="home">
+  <main class="phone" aria-label="当前 iOS 线稿">
+    <div class="status-bar" aria-hidden="true">
+      <span>11:05</span>
+      <i></i>
+      <span>5G 100%</span>
+    </div>
+
+    <section class="screen is-active" data-view="home" aria-label="首页">
+      <header class="home-header">
+        <div>
+          <h1>AI Usage</h1>
+        </div>
+        <p class="server-read-time" id="serverReadTime">上次读取 --</p>
+        <button class="icon-button" type="button" id="refreshButton" aria-label="刷新">↻</button>
+      </header>
+
+      <div class="period-control" aria-label="周期选择">
+        <button type="button" data-period="today" aria-pressed="true">今天</button>
+        <button type="button" data-period="week" aria-pressed="false">周</button>
+        <button type="button" data-period="month" aria-pressed="false">月</button>
+      </div>
+
+      <section class="hero wire-card" aria-label="总用量">
+        <div class="hero-main">
+          <p id="heroPeriod">今天</p>
+          <strong id="heroTotal">--</strong>
+          <span id="heroRange">--</span>
+        </div>
+        <div class="hero-metrics" aria-label="Token 组成">
+          <div><span>Input</span><b id="inputTokens">--</b></div>
+          <div><span>Output</span><b id="outputTokens">--</b></div>
+          <div><span>Cache</span><b id="cacheTokens">--</b></div>
+          <div><span>缓存命中</span><b id="cacheHitRate">--</b></div>
+        </div>
+      </section>
+
+      <section class="wire-card trend-card" aria-label="用量趋势">
+        <div class="section-head">
+          <h2>用量趋势</h2>
+          <button type="button" data-shortcut="breakdown">查看明细</button>
+        </div>
+        <p id="trendRange">--</p>
+        <div class="chart-wrap">
+          <canvas id="trendCanvas" width="680" height="264" aria-label="趋势图"></canvas>
+          <output id="trendTip" hidden></output>
+        </div>
+      </section>
+
+      <section class="wire-card" aria-label="刷新时间摘要">
+        <div class="section-head">
+          <h2>刷新时间</h2>
+          <button type="button" data-shortcut="limits">查看明细</button>
+        </div>
+        <div class="home-limit-windows" id="homeLimitWindows"></div>
+      </section>
+    </section>
+
+    <section class="screen" data-view="sources" aria-label="来源">
+      <section class="summary-strip wire-card">
+        <div>
+          <p>采集</p>
+          <h1>采集来源</h1>
+          <span>按机器与系统账户查看上报状态</span>
+        </div>
+        <strong id="sourceScore">--</strong>
+      </section>
+
+      <section class="wire-card">
+        <div class="section-head">
+          <h2>采集列表</h2>
+          <span id="sourceCount">--</span>
+        </div>
+        <div class="source-list" id="sourceList"></div>
+      </section>
+    </section>
+
+    <section class="screen" data-view="breakdown" aria-label="明细">
+      <div id="breakdownIndex">
+        <section class="summary-strip wire-card">
+          <div>
+            <p>明细</p>
+            <h1>用量明细</h1>
+            <span>按不同维度拆解当前周期</span>
+          </div>
+          <strong>5</strong>
+        </section>
+
+        <div class="period-control" aria-label="明细周期选择">
+          <button type="button" data-period="today" aria-pressed="true">今天</button>
+          <button type="button" data-period="week" aria-pressed="false">周</button>
+          <button type="button" data-period="month" aria-pressed="false">月</button>
+        </div>
+
+        <div class="dimension-control" aria-label="明细维度">
+          <button type="button" data-dimension="date" aria-pressed="true">Date</button>
+          <button type="button" data-dimension="machine" aria-pressed="false">Machine</button>
+          <button type="button" data-dimension="user" aria-pressed="false">User</button>
+          <button type="button" data-dimension="model" aria-pressed="false">Model</button>
+          <button type="button" data-dimension="agent" aria-pressed="false">Agent</button>
+        </div>
+
+        <section class="wire-card">
+          <div class="section-head">
+            <h2 id="breakdownTitle">Date</h2>
+            <span>Tokens</span>
+          </div>
+          <div class="bar-list" id="breakdownList"></div>
+        </section>
+      </div>
+
+      <section class="drilldown" id="drilldownView" hidden>
+        <section class="summary-strip wire-card">
+          <div>
+            <p id="drilldownKind">--</p>
+            <h1 id="drilldownTitle">--</h1>
+            <span id="drilldownMeta">--</span>
+          </div>
+          <strong id="drilldownTotal">--</strong>
+        </section>
+        <button class="back-button" type="button" id="backToBreakdown">‹ 返回明细</button>
+        <div id="drilldownSections"></div>
+      </section>
+    </section>
+
+    <section class="screen" data-view="limits" aria-label="额度">
+      <section class="summary-strip wire-card limits-masthead">
+        <div>
+          <h1>额度</h1>
+        </div>
+      </section>
+
+      <section class="wire-card">
+        <div class="limit-variant-panel" id="limitVariantPanel"></div>
+        <label class="switch-row">
+          <span>
+            <strong>重置提醒</strong>
+            <em id="reminderCopy">已开启；窗口 reset 时通知</em>
+          </span>
+          <input type="checkbox" id="limitReminder" checked>
+          <i aria-hidden="true"></i>
+        </label>
+      </section>
+    </section>
+
+    <nav class="tabbar" aria-label="主导航">
+      <button type="button" data-tab="home" aria-current="page"><span>⌂</span>首页</button>
+      <button type="button" data-tab="limits"><span>○</span>额度</button>
+      <button type="button" data-tab="breakdown"><span>▥</span>明细</button>
+      <button type="button" data-tab="sources"><span>◎</span>来源</button>
+    </nav>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

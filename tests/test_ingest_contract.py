@@ -104,3 +104,91 @@ class TestIngestContract(unittest.TestCase):
             validate_ingest_payload(data)
         self.assertEqual(context.exception.error_type, "http_schema_invalid")
         self.assertIn("size", str(context.exception).lower())
+
+    def test_accepts_valid_mswusage_codex_hourly_report(self) -> None:
+        data = self.valid_data.copy()
+        data["mswusage_codex_hourly_report"] = {
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-05T09:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [],
+            "hourly": [],
+            "sessions": [],
+            "drift": {"status": "ok", "threshold_percent": 5},
+        }
+
+        req = validate_ingest_payload(data)
+
+        self.assertEqual(req.mswusage_codex_hourly_report["source"], "mswusage_codex")
+
+    def test_rejects_invalid_mswusage_codex_hourly_report_shape(self) -> None:
+        data = self.valid_data.copy()
+        data["mswusage_codex_hourly_report"] = []
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertIn("mswusage_codex_hourly_report", str(context.exception))
+
+    def test_accepts_usage_hourly_facts(self) -> None:
+        data = self.valid_data.copy()
+        data["usage_hourly_facts"] = [
+            {
+                "fact_id": "codex:codex:mac-local:2026-06-11T13:00:00+08:00:2026-06-11T14:00:00+08:00:account_observed_usage_inferred:openai:acct-main:codex_token_events",
+                "agent": "codex",
+                "client": "codex",
+                "window_start": "2026-06-11T13:00:00+08:00",
+                "window_end": "2026-06-11T14:00:00+08:00",
+                "ai_account": {
+                    "provider": "openai",
+                    "account_id": "acct-main",
+                    "label": "start@example.com",
+                },
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 30,
+                    "reasoning_output_tokens": 5,
+                    "total_tokens": 155,
+                },
+                "event_count": 2,
+                "session_count": 1,
+                "attribution_confidence": "account_observed_usage_inferred",
+                "provenance": "codex_token_events",
+            }
+        ]
+
+        req = validate_ingest_payload(data)
+
+        self.assertEqual(len(req.usage_hourly_facts), 1)
+        self.assertEqual(req.usage_hourly_facts[0]["ai_account"]["label"], "start@example.com")
+
+    def test_rejects_usage_hourly_facts_missing_required_field(self) -> None:
+        data = self.valid_data.copy()
+        data["usage_hourly_facts"] = [{"fact_id": "bad"}]
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertIn("usage_hourly_facts[0].agent", str(context.exception))
+
+    def test_rejects_sensitive_strings_inside_mswusage_report(self) -> None:
+        data = self.valid_data.copy()
+        data["mswusage_codex_hourly_report"] = {
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-05T09:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [],
+            "hourly": [{"debug": "/Users/wang/.codex/sessions/raw.jsonl"}],
+            "sessions": [],
+        }
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertIn("sensitive", str(context.exception).lower())

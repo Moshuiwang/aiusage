@@ -66,6 +66,41 @@ class UsageHourlyItem:
 
 
 @dataclass
+class UsageHourlyFact:
+    fact_id: str
+    source_id: str
+    machine_id: str
+    machine_name: str
+    host: str
+    os_user: str
+    platform: str
+    ai_provider: str
+    ai_account_id: str
+    ai_account_label: str
+    ai_account_display_name: Optional[str]
+    ai_account_subscription: Optional[str]
+    agent: str
+    client: str
+    window_start: str
+    window_end: str
+    timezone: str
+    input_tokens: int
+    output_tokens: int
+    cache_creation_tokens: int
+    cache_read_tokens: int
+    reasoning_output_tokens: int
+    total_tokens: int
+    total_cost: Optional[float] = None
+    event_count: int = 0
+    session_count: int = 0
+    attribution_confidence: str = "account_unknown"
+    provenance: str = "unknown"
+    account_evidence: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    model_breakdowns: List[Dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
 class UsageBlockItem:
     source_id: str
     machine: str

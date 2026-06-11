@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -39,7 +40,7 @@ def build_snapshot(
     else:
         ref_time = datetime.now(dt_timezone.utc).astimezone(tz)
     period_id, start_date, end_date = _period_bounds(date_str, period)
-    hour_axis = _hour_axis(ref_time) if period_id == "today" else []
+    hour_axis = _hour_axis(ref_time, end_date) if period_id == "today" else []
 
     if not os.path.exists(db_path):
         # 数据库不存在时，输出空白结构快照
@@ -89,6 +90,7 @@ def build_snapshot(
             hourly_rows = _fetch_hourly_rows(conn, hour_axis[0], hour_axis[-1]) if hour_axis else []
             block_rows = _fetch_block_rows(conn, hour_axis[0], hour_axis[-1]) if hour_axis else []
             limits = _fetch_limit_windows(conn)
+            account_hourly_rows = _fetch_account_hourly_rows(conn, start_date, end_date, timezone_str)
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc):
             empty_snapshot = _empty_snapshot(
@@ -111,6 +113,12 @@ def build_snapshot(
     model_rows = [row for row in model_rows if (row[0], row[1], row[2]) in allowed_item_keys]
     hourly_rows = [row for row in hourly_rows if _timed_row_matches_filter(row, machine_filter, account_filter)]
     block_rows = [row for row in block_rows if _timed_row_matches_filter(row, machine_filter, account_filter)]
+    account_hourly_rows = [
+        row for row in account_hourly_rows
+        if _account_hourly_row_matches_filter(row, machine_filter, account_filter)
+    ]
+    codex_hourly_context = _codex_hourly_context(rows, hourly_rows)
+    account_hourly = _account_hourly_summary(account_hourly_rows)
 
     # 2. 在内存中将 model_rows 分类归档，以便拼入 daily items
     models_by_item = {}
@@ -281,6 +289,16 @@ def build_snapshot(
     by_agent.sort(key=lambda x: x["total_tokens"], reverse=True)
     if period_id == "today":
         trend = _hourly_trend(hour_axis, hourly_rows, block_rows)
+        _fill_today_hourly_residual(
+            trend,
+            ref_time,
+            total_tokens=total_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_tokens=cache_creation_tokens + cache_read_tokens,
+            excluded_daily=codex_hourly_context["daily"] if codex_hourly_context["skip_residual"] else None,
+            excluded_hourly=codex_hourly_context["hourly"] if codex_hourly_context["skip_residual"] else None,
+        )
     else:
         trend = {
             "period": period_id,
@@ -400,6 +418,12 @@ def build_snapshot(
         "trend": trend,
         "source_status": source_status,
         "limits": limits,
+        "account_hourly": account_hourly,
+        "metadata": {
+            "codex_hourly": {
+                "drift": codex_hourly_context["drift"],
+            },
+        },
     }
     if machine_filter:
         snapshot["summary"]["machine"] = machine_filter
@@ -414,7 +438,7 @@ def _atomic_write(path: str, data: dict) -> None:
     """原子化写入 JSON 到指定路径"""
     out_path = Path(path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = out_path.with_suffix(".tmp")
+    tmp_path = out_path.with_name(f".{out_path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
     with tmp_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, out_path)
@@ -635,9 +659,9 @@ def _date_axis(start_date: Optional[str], end_date: str, rows: list[Any]) -> lis
     return days
 
 
-def _hour_axis(ref_time: datetime) -> list[str]:
-    end_hour = ref_time.replace(minute=0, second=0, microsecond=0)
-    start_hour = end_hour - timedelta(hours=23)
+def _hour_axis(ref_time: datetime, date_str: str) -> list[str]:
+    day = datetime.strptime(date_str, "%Y-%m-%d")
+    start_hour = day.replace(tzinfo=ref_time.tzinfo)
     return [(start_hour + timedelta(hours=i)).isoformat(timespec="seconds") for i in range(24)]
 
 
@@ -677,6 +701,174 @@ def _fetch_block_rows(conn: sqlite3.Connection, start_hour: str, end_hour: str) 
         if "no such table" in str(exc):
             return []
         raise
+
+
+def _fetch_account_hourly_rows(
+    conn: sqlite3.Connection,
+    start_date: Optional[str],
+    end_date: str,
+    timezone_str: str,
+) -> list[Any]:
+    if not _table_exists(conn, "usage_hourly_facts"):
+        return []
+    rows = conn.execute(
+        """
+        SELECT f.fact_id, f.source_id, f.machine_id, COALESCE(m.machine_name, f.machine_id) AS machine_name,
+               f.os_user, f.ai_provider, f.ai_account_id,
+               COALESCE(a.account_label, f.ai_account_id) AS account_label,
+               a.display_name, f.agent, f.client, f.window_start, f.window_end,
+               f.input_tokens, f.output_tokens, f.cache_creation_tokens, f.cache_read_tokens,
+               f.reasoning_output_tokens, f.total_tokens, f.event_count, f.session_count,
+               f.attribution_confidence, f.provenance
+        FROM usage_hourly_facts f
+        LEFT JOIN machines m ON m.machine_id = f.machine_id
+        LEFT JOIN ai_accounts a ON a.provider = f.ai_provider AND a.account_id = f.ai_account_id
+        ORDER BY f.window_start ASC, f.source_id ASC, f.agent ASC
+        """
+    ).fetchall()
+    return [
+        row for row in rows
+        if _account_hourly_row_in_period(row, start_date, end_date, timezone_str)
+    ]
+
+
+def _account_hourly_row_in_period(
+    row: Any,
+    start_date: Optional[str],
+    end_date: str,
+    timezone_str: str,
+) -> bool:
+    window_start = _parse_datetime(str(row[11] or ""))
+    if window_start is None:
+        return False
+    tz = _zoneinfo(timezone_str)
+    local_date = window_start.astimezone(tz).date() if tz and window_start.tzinfo else window_start.date()
+    end = datetime.strptime(end_date, "%Y-%m-%d").date()
+    if local_date > end:
+        return False
+    if start_date is None:
+        return True
+    start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    return local_date >= start
+
+
+def _account_hourly_row_matches_filter(row: Any, machine_filter: Optional[str], account_filter: Optional[str]) -> bool:
+    machine_name = str(row[3] or row[2] or "")
+    machine_id = str(row[2] or "")
+    os_user = str(row[4] or "")
+    if machine_filter and machine_filter not in {machine_id, machine_name}:
+        return False
+    if account_filter and os_user != account_filter:
+        return False
+    return True
+
+
+def _account_hourly_summary(rows: list[Any]) -> dict[str, Any]:
+    if not rows:
+        return _empty_account_hourly_summary()
+    total_tokens = 0
+    by_ai_account: dict[str, dict[str, Any]] = {}
+    by_machine: dict[str, dict[str, Any]] = {}
+    by_os_user: dict[str, dict[str, Any]] = {}
+    by_agent: dict[str, int] = {}
+    by_confidence: dict[str, int] = {}
+
+    for row in rows:
+        (
+            _fact_id, source_id, machine_id, machine_name, os_user, ai_provider,
+            ai_account_id, account_label, display_name, agent, _client,
+            _window_start, _window_end, inp, out, cc, cr, reasoning, tot,
+            _event_count, _session_count, confidence, _provenance,
+        ) = row
+        tokens = int(tot or 0)
+        total_tokens += tokens
+        account_key = f"{ai_provider}:{ai_account_id}"
+        account_entry = by_ai_account.setdefault(account_key, {
+            "provider": ai_provider,
+            "account_id": ai_account_id,
+            "label": account_label,
+            "display_name": display_name,
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "confidence": {},
+            "source_ids": set(),
+        })
+        account_entry["total_tokens"] += tokens
+        account_entry["input_tokens"] += int(inp or 0)
+        account_entry["output_tokens"] += int(out or 0)
+        account_entry["cache_tokens"] += int(cc or 0) + int(cr or 0)
+        account_entry["reasoning_output_tokens"] += int(reasoning or 0)
+        confidence_key = str(confidence)
+        account_entry["confidence"][confidence_key] = account_entry["confidence"].get(confidence_key, 0) + tokens
+        account_entry["source_ids"].add(source_id)
+
+        machine_entry = by_machine.setdefault(machine_id, {
+            "machine_id": machine_id,
+            "machine_name": machine_name,
+            "total_tokens": 0,
+        })
+        machine_entry["total_tokens"] += tokens
+
+        user_key = f"{machine_id}:{os_user}"
+        user_entry = by_os_user.setdefault(user_key, {
+            "machine_id": machine_id,
+            "machine_name": machine_name,
+            "os_user": os_user,
+            "display_name": f"{machine_name} · {os_user}",
+            "total_tokens": 0,
+        })
+        user_entry["total_tokens"] += tokens
+
+        by_agent[str(agent)] = by_agent.get(str(agent), 0) + tokens
+        by_confidence[str(confidence)] = by_confidence.get(str(confidence), 0) + tokens
+
+    accounts = []
+    for entry in by_ai_account.values():
+        normalized = dict(entry)
+        confidence = normalized.pop("confidence")
+        confidence_breakdown = [
+            {"confidence": name, "total_tokens": value}
+            for name, value in sorted(confidence.items(), key=lambda item: item[1], reverse=True)
+        ]
+        normalized["confidence_breakdown"] = confidence_breakdown
+        normalized["attribution_confidence"] = (
+            confidence_breakdown[0]["confidence"]
+            if len(confidence_breakdown) == 1
+            else "mixed"
+        )
+        normalized["source_ids"] = sorted(normalized["source_ids"])
+        accounts.append(normalized)
+
+    return {
+        "total_tokens": total_tokens,
+        "facts": len(rows),
+        "by_ai_account": sorted(accounts, key=lambda item: item["total_tokens"], reverse=True),
+        "by_machine": sorted(by_machine.values(), key=lambda item: item["total_tokens"], reverse=True),
+        "by_os_user": sorted(by_os_user.values(), key=lambda item: item["total_tokens"], reverse=True),
+        "by_agent": [
+            {"name": name, "total_tokens": tokens}
+            for name, tokens in sorted(by_agent.items(), key=lambda item: item[1], reverse=True)
+        ],
+        "confidence_breakdown": [
+            {"confidence": confidence, "total_tokens": tokens}
+            for confidence, tokens in sorted(by_confidence.items(), key=lambda item: item[1], reverse=True)
+        ],
+    }
+
+
+def _empty_account_hourly_summary() -> dict[str, Any]:
+    return {
+        "total_tokens": 0,
+        "facts": 0,
+        "by_ai_account": [],
+        "by_machine": [],
+        "by_os_user": [],
+        "by_agent": [],
+        "confidence_breakdown": [],
+    }
 
 
 def _hourly_trend(axis: list[str], rows: list[Any], block_rows: Optional[list[Any]] = None) -> Dict[str, Any]:
@@ -743,6 +935,107 @@ def _hourly_trend(axis: list[str], rows: list[Any], block_rows: Optional[list[An
             for agent, values in sorted(by_agent.items(), key=lambda item: agent_totals.get(item[0], 0), reverse=True)
         ],
     }
+
+
+def _fill_today_hourly_residual(
+    trend: Dict[str, Any],
+    ref_time: datetime,
+    *,
+    total_tokens: int,
+    input_tokens: int,
+    output_tokens: int,
+    cache_tokens: int,
+    excluded_daily: Optional[dict[str, int]] = None,
+    excluded_hourly: Optional[dict[str, int]] = None,
+) -> None:
+    points = trend.get("points") or []
+    axis = trend.get("axis") or []
+    if not points or not axis:
+        return
+
+    excluded_daily = excluded_daily or _empty_token_totals()
+    excluded_hourly = excluded_hourly or _empty_token_totals()
+    current_total = sum(int(point.get("total_tokens") or 0) for point in points) - excluded_hourly["total"]
+    residual_total = max(int(total_tokens) - excluded_daily["total"] - current_total, 0)
+    token_residuals = {
+        "input": max(int(input_tokens) - excluded_daily["input"] - (_sum_token_type(trend, "input") - excluded_hourly["input"]), 0),
+        "output": max(int(output_tokens) - excluded_daily["output"] - (_sum_token_type(trend, "output") - excluded_hourly["output"]), 0),
+        "cache": max(int(cache_tokens) - excluded_daily["cache"] - (_sum_token_type(trend, "cache") - excluded_hourly["cache"]), 0),
+    }
+    if residual_total <= 0 and all(value <= 0 for value in token_residuals.values()):
+        return
+
+    ref_hour = ref_time.replace(minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
+    target_hour = ref_hour if ref_hour in axis else axis[-1]
+    target_index = axis.index(target_hour)
+
+    point = points[target_index]
+    point["input_tokens"] = int(point.get("input_tokens") or 0) + token_residuals["input"]
+    point["output_tokens"] = int(point.get("output_tokens") or 0) + token_residuals["output"]
+    point["cache_tokens"] = int(point.get("cache_tokens") or 0) + token_residuals["cache"]
+    point["total_tokens"] = int(point.get("total_tokens") or 0) + residual_total
+
+    for row in trend.get("by_token_type") or []:
+        token_type = row.get("type")
+        if token_type not in token_residuals:
+            continue
+        values = row.get("values") or []
+        if target_index < len(values):
+            values[target_index] = values[target_index] + token_residuals[token_type]
+
+
+def _sum_token_type(trend: Dict[str, Any], token_type: str) -> int:
+    for row in trend.get("by_token_type") or []:
+        if row.get("type") == token_type:
+            return int(sum(row.get("values") or []))
+    return 0
+
+
+def _codex_hourly_context(daily_rows: list[Any], hourly_rows: list[Any]) -> dict[str, Any]:
+    drift = {"status": "comparison_unavailable"}
+    daily_totals = _empty_token_totals()
+    all_daily_totals = _empty_token_totals()
+    hourly_totals = _empty_token_totals()
+
+    for row in daily_rows:
+        _, _, agent, inp, out, cc, cr, tot, _, _ = row
+        if _is_codex_agent(agent):
+            target = daily_totals
+        elif str(agent or "").lower() == "all":
+            target = all_daily_totals
+        else:
+            continue
+        target["input"] += int(inp or 0)
+        target["output"] += int(out or 0)
+        target["cache"] += int(cc or 0) + int(cr or 0)
+        target["total"] += int(tot or 0)
+
+    for row in hourly_rows:
+        _, _, agent, inp, out, cc, cr, tot, _, metadata_str = row
+        metadata = _metadata_from_str(metadata_str)
+        if not _is_codex_agent(agent) or metadata.get("provenance") != "mswusage_codex_token_count":
+            continue
+        hourly_totals["input"] += int(inp or 0)
+        hourly_totals["output"] += int(out or 0)
+        hourly_totals["cache"] += int(cc or 0) + int(cr or 0)
+        hourly_totals["total"] += int(tot or 0)
+        if isinstance(metadata.get("drift"), dict):
+            drift = dict(metadata["drift"])
+
+    if daily_totals["total"] == 0 and drift.get("baseline_agent") == "all":
+        daily_totals = all_daily_totals
+
+    status = drift.get("status")
+    return {
+        "drift": drift,
+        "daily": daily_totals,
+        "hourly": hourly_totals,
+        "skip_residual": status in {"drift_detected", "comparison_unavailable"} and hourly_totals["total"] > 0,
+    }
+
+
+def _empty_token_totals() -> dict[str, int]:
+    return {"input": 0, "output": 0, "cache": 0, "total": 0}
 
 
 def _add_block_to_hour_buckets(
@@ -818,7 +1111,7 @@ def _empty_snapshot(
     account_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     granularity = "hour" if period_id == "today" else "day"
-    axis = _hour_axis(ref_time) if granularity == "hour" else _date_axis(start_date, end_date, [])
+    axis = _hour_axis(ref_time, end_date) if granularity == "hour" else _date_axis(start_date, end_date, [])
     snapshot = {
         "schema_version": 1,
         "generated_at": ref_time.isoformat(),
@@ -862,6 +1155,7 @@ def _empty_snapshot(
         },
         "source_status": [],
         "limits": [],
+        "account_hourly": _empty_account_hourly_summary(),
     }
     if machine_filter:
         snapshot["summary"]["machine"] = machine_filter

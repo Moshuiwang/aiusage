@@ -28,6 +28,9 @@ class IngestRequest:
     ccusage_daily_report: Optional[Dict[str, Any]] = None
     ccusage_session_report: Optional[Dict[str, Any]] = None
     ccusage_blocks_report: Optional[Dict[str, Any]] = None
+    mswusage_codex_hourly_report: Optional[Dict[str, Any]] = None
+    codex_hourly_status: Optional[Dict[str, Any]] = None
+    usage_hourly_facts: Optional[List[Dict[str, Any]]] = None
     machine: Optional[str] = None
     collection_status: str = "ok"
     error_type: Optional[str] = None
@@ -40,12 +43,14 @@ class IngestResponse:
     source_id: str
     accepted_at: str
     message: str
+    facts_accepted: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "status": self.status,
             "source_id": self.source_id,
             "accepted_at": self.accepted_at,
+            "facts_accepted": self.facts_accepted,
             "message": self.message,
         }
 
@@ -120,6 +125,38 @@ def validate_ingest_payload(
     ccusage_blocks_report = payload.get("ccusage_blocks_report")
     if ccusage_blocks_report is not None and not isinstance(ccusage_blocks_report, dict):
         raise IngestValidationError("ccusage_blocks_report must be an object", error_type="http_schema_invalid")
+    mswusage_codex_hourly_report = payload.get("mswusage_codex_hourly_report")
+    if mswusage_codex_hourly_report is not None and not isinstance(mswusage_codex_hourly_report, dict):
+        raise IngestValidationError("mswusage_codex_hourly_report must be an object", error_type="http_schema_invalid")
+    codex_hourly_status = payload.get("codex_hourly_status")
+    if codex_hourly_status is not None and not isinstance(codex_hourly_status, dict):
+        raise IngestValidationError("codex_hourly_status must be an object", error_type="http_schema_invalid")
+    usage_hourly_facts = payload.get("usage_hourly_facts")
+    if usage_hourly_facts is not None:
+        if not isinstance(usage_hourly_facts, list):
+            raise IngestValidationError("usage_hourly_facts must be a list", error_type="http_schema_invalid")
+        for index, fact in enumerate(usage_hourly_facts):
+            if not isinstance(fact, dict):
+                raise IngestValidationError(
+                    f"usage_hourly_facts[{index}] must be an object",
+                    error_type="http_schema_invalid",
+                )
+            for key in ["fact_id", "agent", "window_start", "window_end", "usage", "attribution_confidence", "provenance"]:
+                if key not in fact:
+                    raise IngestValidationError(
+                        f"usage_hourly_facts[{index}].{key} is required",
+                        error_type="http_schema_invalid",
+                    )
+            if not isinstance(fact.get("usage"), dict):
+                raise IngestValidationError(
+                    f"usage_hourly_facts[{index}].usage must be an object",
+                    error_type="http_schema_invalid",
+                )
+            if not isinstance(fact.get("ai_account", {}), dict):
+                raise IngestValidationError(
+                    f"usage_hourly_facts[{index}].ai_account must be an object",
+                    error_type="http_schema_invalid",
+                )
 
     # 6. 构建并返回 IngestRequest
     return IngestRequest(
@@ -136,6 +173,9 @@ def validate_ingest_payload(
         ccusage_daily_report=ccusage_daily_report,
         ccusage_session_report=ccusage_session_report,
         ccusage_blocks_report=ccusage_blocks_report,
+        mswusage_codex_hourly_report=mswusage_codex_hourly_report,
+        codex_hourly_status=codex_hourly_status,
+        usage_hourly_facts=usage_hourly_facts,
         collection_status=str(payload.get("collection_status") or "ok"),
         error_type=str(payload["error_type"]) if payload.get("error_type") else None,
         error_message=str(payload["error_message"]) if payload.get("error_message") else None,

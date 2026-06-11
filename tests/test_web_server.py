@@ -352,6 +352,271 @@ class TestWebServerSummary(unittest.TestCase):
             "2026-06-02",
         ])
 
+    def test_mobile_summary_requires_auth_and_returns_app_contract(self) -> None:
+        """测试移动端只读 API 返回 iPhone App 可直接消费的稳定摘要契约"""
+        mobile_url = f"http://127.0.0.1:{self.port}/api/mobile/summary?date=2026-06-02&period=week"
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(mobile_url)
+        self.assertEqual(ctx.exception.code, 401)
+
+        url_ingest = f"http://127.0.0.1:{self.port}/ingest"
+        payloads = [
+            ("mac-local", "macbook-pro", "wang", "claude", "2026-06-01", 2000, 1200, 500, 300),
+            ("linux-dev-wang", "linux-dev", "wang", "codex", "2026-06-02", 3000, 1600, 900, 500),
+        ]
+        for source_id, host, os_user, agent, period, total, input_tokens, output_tokens, cache_tokens in payloads:
+            payload = dict(self.valid_payload)
+            payload["source_id"] = source_id
+            payload["host"] = host
+            payload["os_user"] = os_user
+            payload["platform"] = "linux" if host.startswith("linux") else "darwin"
+            payload["observed_at"] = f"{period}T10:40:00+08:00"
+            payload["usage_daily"] = [{
+                "agent": agent,
+                "period": period,
+                "inputTokens": input_tokens,
+                "outputTokens": output_tokens,
+                "cacheCreationTokens": cache_tokens,
+                "cacheReadTokens": 0,
+                "totalTokens": total,
+                "modelBreakdowns": [{
+                    "modelName": "sonnet" if agent == "claude" else "gpt-5",
+                    "inputTokens": input_tokens,
+                    "outputTokens": output_tokens,
+                    "cacheCreationTokens": cache_tokens,
+                    "cacheReadTokens": 0,
+                    "totalTokens": total,
+                }],
+            }]
+            req = urllib.request.Request(
+                url_ingest,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as response:
+                self.assertEqual(response.status, 200)
+
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="codex",
+                    source_id="codex-main",
+                    window="session",
+                    used_percent=40.0,
+                    remaining_percent=60.0,
+                    reset_at="2026-06-02T15:40:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-02T10:45:00+08:00",
+                    source_type="runtime_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-weekly",
+                    window="week",
+                    used_percent=0.0,
+                    remaining_percent=0.0,
+                    reset_at="2026-06-02T10:45:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-02T10:45:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="missing",
+                    status="provider_failed",
+                ),
+            ],
+            seen_at="2026-06-02T10:45:00+08:00",
+        )
+
+        req = urllib.request.Request(mobile_url, headers={"Authorization": f"Bearer {self.token}"})
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.status, 200)
+            data = json.loads(response.read().decode("utf-8"))
+
+        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["client"], "ios")
+        self.assertEqual(data["period"]["id"], "week")
+        self.assertEqual(data["period"]["start_date"], "2026-05-27")
+        self.assertEqual(data["period"]["end_date"], "2026-06-02")
+        self.assertEqual(data["period"]["total_tokens"], 5000)
+        self.assertEqual(data["period"]["cache_tokens"], 800)
+
+        point = next(row for row in data["trend"]["points"] if row["bucket"] == "2026-06-02")
+        self.assertEqual(point["tokens"], 3000)
+        self.assertEqual(point["input_tokens"], 1600)
+        self.assertEqual(point["output_tokens"], 900)
+        self.assertEqual(point["cache_tokens"], 500)
+        self.assertEqual(point["cache_ratio"], 17)
+
+        sources = {row["source_id"]: row for row in data["sources"]}
+        self.assertEqual(sources["linux-dev-wang"]["machine"], "linux-dev")
+        self.assertEqual(sources["linux-dev-wang"]["os_user"], "wang")
+        self.assertEqual(sources["linux-dev-wang"]["status"], "ok")
+
+        self.assertEqual(data["breakdown"]["by_machine"][0]["label"], "linux-dev")
+        self.assertEqual(data["breakdown"]["by_machine"][0]["source_ids"], ["linux-dev-wang"])
+        self.assertEqual(
+            data["breakdown"]["by_machine"][0]["contributions"],
+            [{"source_id": "linux-dev-wang", "tokens": 3000}],
+        )
+        self.assertEqual(data["breakdown"]["by_os_user"][0]["label"], "wang")
+        self.assertEqual(
+            data["breakdown"]["by_os_user"][0]["contributions"],
+            [
+                {"source_id": "linux-dev-wang", "tokens": 3000},
+                {"source_id": "mac-local", "tokens": 2000},
+            ],
+        )
+        self.assertEqual(data["breakdown"]["by_agent"][0]["label"], "codex")
+        self.assertEqual(data["breakdown"]["by_agent"][0]["source_ids"], ["linux-dev-wang"])
+        self.assertEqual(
+            data["breakdown"]["by_agent"][0]["contributions"],
+            [{"source_id": "linux-dev-wang", "tokens": 3000}],
+        )
+        self.assertEqual(data["breakdown"]["by_date"][-1]["label"], "2026-06-02")
+        self.assertEqual(data["breakdown"]["by_date"][-1]["source_ids"], ["linux-dev-wang"])
+        self.assertEqual(
+            data["breakdown"]["by_date"][-1]["contributions"],
+            [{"source_id": "linux-dev-wang", "tokens": 3000}],
+        )
+        self.assertEqual(data["breakdown"]["by_model"][0]["label"], "gpt-5")
+        self.assertEqual(data["breakdown"]["by_model"][0]["source_ids"], ["linux-dev-wang"])
+        self.assertEqual(
+            data["breakdown"]["by_model"][0]["contributions"],
+            [{"source_id": "linux-dev-wang", "tokens": 3000}],
+        )
+
+        limits = {row["source_id"]: row for row in data["limits"]["windows"]}
+        self.assertEqual(data["limits"]["observed_count"], 1)
+        self.assertEqual(data["limits"]["total_count"], 2)
+        self.assertEqual(limits["codex-main"]["confidence"], "observed")
+        self.assertEqual(limits["claude-weekly"]["confidence"], "missing")
+        self.assertFalse(limits["claude-weekly"]["official"])
+
+    def test_mobile_summary_periods_return_distinct_live_windows(self) -> None:
+        """验证移动端 today/week/month/all 不只是换 label，而是返回真实不同聚合窗口"""
+        url_ingest = f"http://127.0.0.1:{self.port}/ingest"
+        rows = [
+            ("2026-05-01", 100),
+            ("2026-05-04", 200),
+            ("2026-05-05", 300),
+            ("2026-05-28", 400),
+            ("2026-06-02", 500),
+            ("2026-06-03", 600),
+        ]
+        for date, tokens in rows:
+            payload = dict(self.valid_payload)
+            payload["observed_at"] = f"{date}T10:40:00+08:00"
+            payload["usage_daily"] = [{
+                "agent": "claude",
+                "period": date,
+                "inputTokens": tokens,
+                "outputTokens": 0,
+                "cacheCreationTokens": 0,
+                "cacheReadTokens": 0,
+                "totalTokens": tokens,
+            }]
+            req = urllib.request.Request(
+                url_ingest,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as response:
+                self.assertEqual(response.status, 200)
+
+        expected = {
+            "today": {
+                "start_date": "2026-06-03",
+                "end_date": "2026-06-03",
+                "total_tokens": 600,
+                "granularity": "hour",
+            },
+            "week": {
+                "start_date": "2026-05-28",
+                "end_date": "2026-06-03",
+                "total_tokens": 1500,
+                "granularity": "day",
+            },
+            "month": {
+                "start_date": "2026-05-05",
+                "end_date": "2026-06-03",
+                "total_tokens": 1800,
+                "granularity": "day",
+            },
+            "all": {
+                "start_date": None,
+                "end_date": "2026-06-03",
+                "total_tokens": 2100,
+                "granularity": "day",
+            },
+        }
+        for period, expectation in expected.items():
+            with self.subTest(period=period):
+                url = (
+                    f"http://127.0.0.1:{self.port}/api/mobile/summary"
+                    f"?date=2026-06-03&period={period}"
+                )
+                req = urllib.request.Request(url, headers={"Authorization": f"Bearer {self.token}"})
+                with urllib.request.urlopen(req) as response:
+                    self.assertEqual(response.status, 200)
+                    data = json.loads(response.read().decode("utf-8"))
+
+                self.assertEqual(data["period"]["id"], period)
+                self.assertEqual(data["period"]["start_date"], expectation["start_date"])
+                self.assertEqual(data["period"]["end_date"], expectation["end_date"])
+                self.assertEqual(data["period"]["total_tokens"], expectation["total_tokens"])
+                self.assertEqual(data["trend"]["period"], period)
+                self.assertEqual(data["trend"]["granularity"], expectation["granularity"])
+
+        week_req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/mobile/summary?date=2026-06-03&period=week",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        with urllib.request.urlopen(week_req) as response:
+            week = json.loads(response.read().decode("utf-8"))
+        self.assertEqual([row["bucket"] for row in week["trend"]["points"]], [
+            "2026-05-28",
+            "2026-05-29",
+            "2026-05-30",
+            "2026-05-31",
+            "2026-06-01",
+            "2026-06-02",
+            "2026-06-03",
+        ])
+
+        today_req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/mobile/summary?date=2026-06-03&period=today",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        with urllib.request.urlopen(today_req) as response:
+            today = json.loads(response.read().decode("utf-8"))
+        today_buckets = [row["bucket"] for row in today["trend"]["points"]]
+        self.assertEqual(len(today_buckets), 24)
+        self.assertEqual(today_buckets[0], "2026-06-03T00:00:00+08:00")
+        self.assertEqual(today_buckets[-1], "2026-06-03T23:00:00+08:00")
+
+    def test_mobile_summary_does_not_overwrite_canonical_latest_snapshot(self) -> None:
+        sentinel = {
+            "schema_version": 1,
+            "generated_at": "2026-06-01T00:00:00+08:00",
+            "source_status": [{"source_id": "canonical", "status": "ok"}],
+        }
+        with open(self.out_path, "w", encoding="utf-8") as handle:
+            json.dump(sentinel, handle)
+
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/mobile/summary?date=2026-06-03&period=month&account=wang",
+            headers={"Authorization": f"Bearer {self.token}"},
+        )
+        with urllib.request.urlopen(req) as response:
+            self.assertEqual(response.status, 200)
+
+        with open(self.out_path, "r", encoding="utf-8") as handle:
+            latest = json.load(handle)
+
+        self.assertEqual(latest, sentinel)
+
     def test_summary_groups_machine_users_and_filters_user_report(self) -> None:
         """同一台 Linux 机器多 OS 用户上报后，机器下列出用户，用户报表复用 summary schema"""
         url_ingest = f"http://127.0.0.1:{self.port}/ingest"

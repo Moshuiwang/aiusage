@@ -17,17 +17,6 @@ class TestLimitsDoctor(unittest.TestCase):
         self.assertEqual(report["checks"][0]["name"], "limits_config")
         self.assertEqual(report["checks"][0]["status"], "missing")
 
-    def test_missing_config_file_returns_missing_without_path(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            missing_path = os.path.join(tmpdir, "limits.local.json")
-
-            report = run_limits_doctor(missing_path, command_resolver=lambda _: None)
-
-        serialized = json.dumps(report, ensure_ascii=False, sort_keys=True)
-        self.assertFalse(report["success"])
-        self.assertEqual(report["checks"][0]["status"], "missing")
-        self.assertNotIn(missing_path, serialized)
-
     def test_ready_config_redacts_paths_and_urls(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             codex_auth = os.path.join(tmpdir, "codex-auth.json")

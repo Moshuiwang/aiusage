@@ -112,7 +112,8 @@ iPhone App 负责完整查看和 drilldown；iOS Widget 负责 glanceable 摘要
 2. 使用 fixture 或 mock snapshot，不接真实生产数据。
 3. 用浏览器验证 mobile viewport。
 4. 用户在 Codex in-app browser 里对具体区域做标注。
-5. 标注收敛后再写 iOS SwiftUI / WidgetKit 任务包。
+5. 标注收敛后写 iOS SwiftUI / WidgetKit 任务包。
+6. 当前已完成移动端只读 API contract、SwiftUI shell Swift Package 和 Widget summary content views；下一步接 Xcode App / Widget extension target。
 
 ## 非目标
 
@@ -125,6 +126,7 @@ iPhone App 负责完整查看和 drilldown；iOS Widget 负责 glanceable 摘要
 
 ## 下一步任务包候选
 
-- `TP-V2-039-mobile-app-design-prototype`：建立手机尺寸 Web prototype、fixture 数据和浏览器验证。
-- `TP-V2-040-ios-api-contract`：固定 iPhone App / iOS Widget 所需只读 API 或 snapshot contract。
-- `TP-V2-041-ios-swiftui-shell`：在设计确认后创建 SwiftUI shell 和状态测试。
+- `TP-V2-043-mobile-summary-api-contract`：已完成，固定 iPhone App / iOS Widget 所需只读 API contract。
+- `TP-V2-044-ios-swiftui-shell`：已完成，创建 SwiftUI shell、DTO 和状态测试。
+- `TP-V2-045-ios-widget-summary`：已完成，创建小/中号 Widget summary content views 和降级测试。
+- `TP-V2-046-ios-xcode-app-extension-integration`：下一步，把 Swift Package 接入可运行 iPhone App 和 WidgetKit extension target。

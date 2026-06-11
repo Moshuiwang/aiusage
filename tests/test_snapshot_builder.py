@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 from ai_usage_widget.limits import LimitWindow
-from ai_usage_widget.models import UsageBlockItem, UsageHourlyItem, UsageItem
+from ai_usage_widget.models import UsageBlockItem, UsageHourlyFact, UsageHourlyItem, UsageItem
 from ai_usage_widget.storage_sqlite import write_limit_windows, write_sqlite
 from ai_usage_widget.snapshot_builder import build_snapshot
 
@@ -141,6 +141,214 @@ class TestSnapshotBuilder(unittest.TestCase):
         self.assertEqual(linux_status["status"], "command_failed")
         self.assertEqual(linux_status["error_message"], "command timed out")
         self.assertEqual(snapshot["limits"], [])
+        self.assertEqual(snapshot["account_hourly"]["total_tokens"], 0)
+
+    def test_build_snapshot_includes_account_hourly_summary_without_changing_daily_total(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-11T14:30:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[
+                UsageItem(
+                    source_id="mac-local",
+                    machine="MacBook Pro",
+                    account="wangzhipeng",
+                    agent="codex",
+                    date="2026-06-11",
+                    input_tokens=10,
+                    output_tokens=5,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=5,
+                    total_tokens=20,
+                    metadata={"machine": "MacBook Pro", "account": "wangzhipeng"},
+                )
+            ],
+            hourly_facts=[
+                UsageHourlyFact(
+                    fact_id="codex:codex:mac-local:2026-06-11T13:00:00+08:00:2026-06-11T14:00:00+08:00:account_observed_usage_inferred:openai:acct-main:codex_token_events",
+                    source_id="mac-local",
+                    machine_id="macbook-pro-local",
+                    machine_name="MacBook Pro",
+                    host="macbook-pro.local",
+                    os_user="wangzhipeng",
+                    platform="darwin",
+                    ai_provider="openai",
+                    ai_account_id="acct-main",
+                    ai_account_label="start@example.com",
+                    ai_account_display_name="StarTimes",
+                    ai_account_subscription=None,
+                    agent="codex",
+                    client="codex",
+                    window_start="2026-06-11T13:00:00+08:00",
+                    window_end="2026-06-11T14:00:00+08:00",
+                    timezone="Asia/Shanghai",
+                    input_tokens=100,
+                    output_tokens=20,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=30,
+                    reasoning_output_tokens=5,
+                    total_tokens=155,
+                    event_count=2,
+                    session_count=1,
+                    attribution_confidence="account_observed_usage_inferred",
+                    provenance="codex_token_events",
+                )
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-11",
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-11T14:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 20)
+        account_hourly = snapshot["account_hourly"]
+        self.assertEqual(account_hourly["total_tokens"], 155)
+        self.assertEqual(account_hourly["facts"], 1)
+        self.assertEqual(account_hourly["by_ai_account"][0]["label"], "start@example.com")
+        self.assertEqual(account_hourly["by_ai_account"][0]["attribution_confidence"], "account_observed_usage_inferred")
+        self.assertEqual(
+            account_hourly["by_ai_account"][0]["confidence_breakdown"],
+            [{"confidence": "account_observed_usage_inferred", "total_tokens": 155}],
+        )
+        self.assertEqual(account_hourly["by_os_user"][0]["os_user"], "wangzhipeng")
+        self.assertEqual(account_hourly["confidence_breakdown"][0]["confidence"], "account_observed_usage_inferred")
+
+    def test_account_hourly_mixed_confidence_is_visible_per_account(self) -> None:
+        facts = []
+        for fact_id, confidence, total in [
+            ("fact-observed", "observed", 100),
+            ("fact-inferred", "account_observed_usage_inferred", 55),
+        ]:
+            facts.append(
+                UsageHourlyFact(
+                    fact_id=fact_id,
+                    source_id="mac-local",
+                    machine_id="macbook-pro-local",
+                    machine_name="MacBook Pro",
+                    host="macbook-pro.local",
+                    os_user="wangzhipeng",
+                    platform="darwin",
+                    ai_provider="openai",
+                    ai_account_id="acct-main",
+                    ai_account_label="start@example.com",
+                    ai_account_display_name=None,
+                    ai_account_subscription=None,
+                    agent="codex",
+                    client="codex",
+                    window_start=f"2026-06-11T{13 if fact_id == 'fact-observed' else 14}:00:00+08:00",
+                    window_end=f"2026-06-11T{14 if fact_id == 'fact-observed' else 15}:00:00+08:00",
+                    timezone="Asia/Shanghai",
+                    input_tokens=total,
+                    output_tokens=0,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=0,
+                    reasoning_output_tokens=0,
+                    total_tokens=total,
+                    attribution_confidence=confidence,
+                    provenance="codex_token_events",
+                )
+            )
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-11T15:30:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[],
+            hourly_facts=facts,
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-11",
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-11T15:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        account = snapshot["account_hourly"]["by_ai_account"][0]
+        self.assertEqual(account["total_tokens"], 155)
+        self.assertEqual(account["attribution_confidence"], "mixed")
+        self.assertEqual(
+            account["confidence_breakdown"],
+            [
+                {"confidence": "observed", "total_tokens": 100},
+                {"confidence": "account_observed_usage_inferred", "total_tokens": 55},
+            ],
+        )
+
+    def test_account_hourly_period_filter_uses_configured_timezone(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-11T01:30:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[],
+            hourly_facts=[
+                UsageHourlyFact(
+                    fact_id="utc-previous-day-local-current-day",
+                    source_id="linux-dev",
+                    machine_id="linux-dev",
+                    machine_name="linux-dev",
+                    host="linux-dev",
+                    os_user="wang",
+                    platform="linux",
+                    ai_provider="openai",
+                    ai_account_id="acct-main",
+                    ai_account_label="start@example.com",
+                    ai_account_display_name=None,
+                    ai_account_subscription=None,
+                    agent="codex",
+                    client="codex",
+                    window_start="2026-06-10T17:00:00+00:00",
+                    window_end="2026-06-10T18:00:00+00:00",
+                    timezone="UTC",
+                    input_tokens=155,
+                    output_tokens=0,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=0,
+                    reasoning_output_tokens=0,
+                    total_tokens=155,
+                    attribution_confidence="account_observed_usage_inferred",
+                    provenance="codex_token_events",
+                )
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-11",
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-11T01:30:00+08:00",
+        )
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+        self.assertEqual(snapshot["account_hourly"]["total_tokens"], 155)
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-10",
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-10T23:30:00+08:00",
+        )
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            previous_day = json.load(f)
+        self.assertEqual(previous_day["account_hourly"]["total_tokens"], 0)
 
     def test_build_snapshot_includes_observed_limits(self) -> None:
         write_sqlite(
@@ -500,8 +708,8 @@ class TestSnapshotBuilder(unittest.TestCase):
             "total_tokens": 280,
         })
 
-    def test_today_period_uses_recent_24_hourly_trend(self) -> None:
-        """验证 today 周期趋势图使用最近 24 小时的小时级事实"""
+    def test_today_period_uses_calendar_day_hourly_trend(self) -> None:
+        """验证 today 周期趋势图使用所选日期 00:00-23:00 的小时级事实"""
         write_sqlite(
             path=self.db_path,
             collected_at="2026-06-01T11:35:00+08:00",
@@ -553,14 +761,22 @@ class TestSnapshotBuilder(unittest.TestCase):
 
         self.assertEqual(snapshot["trend"]["granularity"], "hour")
         self.assertEqual(len(snapshot["trend"]["axis"]), 24)
-        self.assertEqual(snapshot["trend"]["axis"][0], "2026-05-31T12:00:00+08:00")
-        self.assertEqual(snapshot["trend"]["axis"][-1], "2026-06-01T11:00:00+08:00")
+        self.assertEqual(snapshot["trend"]["axis"][0], "2026-06-01T00:00:00+08:00")
+        self.assertEqual(snapshot["trend"]["axis"][-1], "2026-06-01T23:00:00+08:00")
         token_types = {row["type"]: row["values"] for row in snapshot["trend"]["by_token_type"]}
-        self.assertEqual(token_types["input"][-3:], [100, 80, 0])
-        self.assertEqual(token_types["output"][-3:], [20, 40, 0])
-        self.assertEqual(token_types["cache"][-3:], [30, 20, 0])
-        self.assertEqual(snapshot["trend"]["points"][-3]["hour"], "2026-06-01T09:00:00+08:00")
-        self.assertEqual(snapshot["trend"]["points"][-3]["total_tokens"], 150)
+        self.assertEqual(token_types["input"][9:11], [100, 80])
+        self.assertEqual(token_types["output"][9:11], [20, 40])
+        self.assertEqual(token_types["cache"][9:11], [30, 20])
+        self.assertEqual(snapshot["trend"]["points"][9]["hour"], "2026-06-01T09:00:00+08:00")
+        self.assertEqual(snapshot["trend"]["points"][9]["total_tokens"], 150)
+        self.assertEqual(
+            sum(point["total_tokens"] for point in snapshot["trend"]["points"]),
+            snapshot["summary"]["total_tokens"],
+        )
+        self.assertEqual(
+            snapshot["trend"]["points"][11]["total_tokens"],
+            snapshot["summary"]["total_tokens"] - 150 - 140,
+        )
 
     def test_today_period_spreads_ccusage_blocks_across_overlapping_hours(self) -> None:
         """验证 ccusage blocks 的 5 小时窗口会分摊到覆盖的小时，避免上午用量消失"""
@@ -638,6 +854,128 @@ class TestSnapshotBuilder(unittest.TestCase):
         by_agent = {row["agent"]: row["total_tokens"] for row in snapshot["trend"]["by_agent"]}
         self.assertEqual(by_agent["claude"], 500)
         self.assertEqual(by_agent["codex"], 100)
+
+    def test_codex_drift_does_not_create_current_hour_residual_spike(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-05T11:35:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[
+                UsageItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="codex",
+                    date="2026-06-05",
+                    input_tokens=2000,
+                    output_tokens=500,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=500,
+                    total_tokens=3000,
+                    metadata={"machine": "macbook", "account": "wang"},
+                ),
+            ],
+            hourly_items=[
+                UsageHourlyItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="codex",
+                    hour="2026-06-05T08:00:00+08:00",
+                    input_tokens=700,
+                    output_tokens=200,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=100,
+                    total_tokens=1000,
+                    metadata={
+                        "machine": "macbook",
+                        "account": "wang",
+                        "provenance": "mswusage_codex_token_count",
+                        "drift": {"status": "drift_detected", "threshold_percent": 5},
+                    },
+                ),
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-05",
+            timezone_str=self.timezone_str,
+            period="today",
+            current_time_str="2026-06-05T11:35:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 3000)
+        self.assertEqual(snapshot["trend"]["points"][8]["total_tokens"], 1000)
+        self.assertEqual(snapshot["trend"]["points"][11]["total_tokens"], 0)
+        self.assertEqual(snapshot["metadata"]["codex_hourly"]["drift"]["status"], "drift_detected")
+
+    def test_codex_drift_with_all_daily_baseline_does_not_double_count_trend(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-05T11:35:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[
+                UsageItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="all",
+                    date="2026-06-05",
+                    input_tokens=2000,
+                    output_tokens=500,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=500,
+                    total_tokens=3000,
+                    metadata={"machine": "macbook", "account": "wang"},
+                ),
+            ],
+            hourly_items=[
+                UsageHourlyItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="codex",
+                    hour="2026-06-05T08:00:00+08:00",
+                    input_tokens=700,
+                    output_tokens=200,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=100,
+                    total_tokens=1000,
+                    metadata={
+                        "machine": "macbook",
+                        "account": "wang",
+                        "provenance": "mswusage_codex_token_count",
+                        "drift": {"status": "drift_detected", "baseline_agent": "all", "threshold_percent": 5},
+                    },
+                ),
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-05",
+            timezone_str=self.timezone_str,
+            period="today",
+            current_time_str="2026-06-05T11:35:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 3000)
+        self.assertEqual(sum(point["total_tokens"] for point in snapshot["trend"]["points"]), 1000)
+        self.assertEqual(snapshot["trend"]["points"][8]["total_tokens"], 1000)
+        self.assertEqual(snapshot["trend"]["points"][11]["total_tokens"], 0)
 
     def test_by_machine_groups_os_accounts_under_same_machine(self) -> None:
         """验证同一物理机器的不同 OS 用户在 by Machine 下作为 users 展示"""

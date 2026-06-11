@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from .limits import LimitWindow
-from .models import CommandResult, UsageBlockItem, UsageHourlyItem, UsageItem
+from .models import CommandResult, UsageBlockItem, UsageHourlyFact, UsageHourlyItem, UsageItem
 
 
 def write_sqlite(
@@ -17,6 +17,7 @@ def write_sqlite(
     source_reports: List[Dict[str, Any]],
     items: Iterable[UsageItem],
     hourly_items: Optional[Iterable[UsageHourlyItem]] = None,
+    hourly_facts: Optional[Iterable[UsageHourlyFact]] = None,
     block_items: Optional[Iterable[UsageBlockItem]] = None,
     source_identities: Optional[Iterable[Dict[str, Any]]] = None,
 ) -> None:
@@ -33,8 +34,12 @@ def write_sqlite(
             _upsert_source_identity(conn, identity, collected_at)
         for item in items:
             _upsert_item(conn, item, collected_at)
-        for item in hourly_items or []:
+        hourly_list = list(hourly_items or [])
+        _delete_replaced_codex_hourly_rows(conn, hourly_list)
+        for item in hourly_list:
             _upsert_hourly_item(conn, item, collected_at)
+        for fact in hourly_facts or []:
+            _upsert_hourly_fact(conn, fact, collected_at)
         for item in block_items or []:
             _upsert_block_item(conn, item, collected_at)
 
@@ -169,6 +174,80 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           last_seen_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS machines (
+          machine_id TEXT PRIMARY KEY,
+          machine_name TEXT NOT NULL,
+          host TEXT,
+          platform TEXT NOT NULL,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS os_identities (
+          machine_id TEXT NOT NULL,
+          os_user TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          PRIMARY KEY(machine_id, os_user)
+        );
+
+        CREATE TABLE IF NOT EXISTS ai_accounts (
+          provider TEXT NOT NULL,
+          account_id TEXT NOT NULL,
+          account_label TEXT NOT NULL,
+          display_name TEXT,
+          subscription TEXT,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          PRIMARY KEY(provider, account_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS usage_hourly_facts (
+          fact_id TEXT PRIMARY KEY,
+          source_id TEXT NOT NULL,
+          machine_id TEXT NOT NULL,
+          os_user TEXT NOT NULL,
+          ai_provider TEXT NOT NULL,
+          ai_account_id TEXT NOT NULL,
+          agent TEXT NOT NULL,
+          client TEXT,
+          window_start TEXT NOT NULL,
+          window_end TEXT NOT NULL,
+          timezone TEXT NOT NULL,
+          input_tokens INTEGER NOT NULL DEFAULT 0,
+          output_tokens INTEGER NOT NULL DEFAULT 0,
+          cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+          cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+          reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
+          total_tokens INTEGER NOT NULL DEFAULT 0,
+          total_cost REAL,
+          event_count INTEGER NOT NULL DEFAULT 0,
+          session_count INTEGER NOT NULL DEFAULT 0,
+          attribution_confidence TEXT NOT NULL,
+          provenance TEXT NOT NULL,
+          account_evidence_json TEXT,
+          metadata_json TEXT,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS usage_hourly_models (
+          fact_id TEXT NOT NULL,
+          model TEXT NOT NULL,
+          input_tokens INTEGER NOT NULL DEFAULT 0,
+          output_tokens INTEGER NOT NULL DEFAULT 0,
+          cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+          cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+          reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
+          total_tokens INTEGER NOT NULL DEFAULT 0,
+          total_cost REAL,
+          metadata_json TEXT,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          PRIMARY KEY(fact_id, model)
+        );
+
         CREATE TABLE IF NOT EXISTS limit_windows (
           source_id TEXT NOT NULL,
           provider TEXT NOT NULL,
@@ -190,6 +269,25 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "usage_daily", "raw_json", "TEXT")
     _ensure_column(conn, "usage_daily_models", "raw_json", "TEXT")
     _ensure_limit_windows_schema(conn)
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_window
+          ON usage_hourly_facts(window_start, window_end);
+        CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_account
+          ON usage_hourly_facts(ai_provider, ai_account_id, window_start);
+        CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_machine_user
+          ON usage_hourly_facts(machine_id, os_user, window_start);
+        CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_agent
+          ON usage_hourly_facts(agent, window_start);
+        CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_source
+          ON usage_hourly_facts(source_id, window_start);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_hourly_facts_unique_hour
+          ON usage_hourly_facts(
+            source_id, agent, client, window_start, window_end,
+            ai_provider, ai_account_id, attribution_confidence, provenance
+          );
+        """
+    )
 
 
 
@@ -413,6 +511,205 @@ def _upsert_hourly_item(conn: sqlite3.Connection, item: UsageHourlyItem, collect
             collected_at,
         ),
     )
+
+
+def _upsert_hourly_fact(conn: sqlite3.Connection, fact: UsageHourlyFact, collected_at: str) -> None:
+    existing = conn.execute(
+        """
+        SELECT fact_id
+        FROM usage_hourly_facts
+        WHERE source_id = ?
+          AND agent = ?
+          AND client = ?
+          AND window_start = ?
+          AND window_end = ?
+          AND ai_provider = ?
+          AND ai_account_id = ?
+          AND attribution_confidence = ?
+          AND provenance = ?
+        """,
+        (
+            fact.source_id,
+            fact.agent,
+            fact.client,
+            fact.window_start,
+            fact.window_end,
+            fact.ai_provider,
+            fact.ai_account_id,
+            fact.attribution_confidence,
+            fact.provenance,
+        ),
+    ).fetchone()
+    previous_fact_id = str(existing[0]) if existing else None
+    conn.execute(
+        """
+        INSERT INTO machines (
+          machine_id, machine_name, host, platform, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(machine_id) DO UPDATE SET
+          machine_name=excluded.machine_name,
+          host=excluded.host,
+          platform=excluded.platform,
+          last_seen_at=excluded.last_seen_at
+        """,
+        (fact.machine_id, fact.machine_name, fact.host, fact.platform, collected_at, collected_at),
+    )
+    conn.execute(
+        """
+        INSERT INTO os_identities (
+          machine_id, os_user, display_name, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(machine_id, os_user) DO UPDATE SET
+          display_name=excluded.display_name,
+          last_seen_at=excluded.last_seen_at
+        """,
+        (fact.machine_id, fact.os_user, f"{fact.machine_name} · {fact.os_user}", collected_at, collected_at),
+    )
+    conn.execute(
+        """
+        INSERT INTO ai_accounts (
+          provider, account_id, account_label, display_name, subscription, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider, account_id) DO UPDATE SET
+          account_label=excluded.account_label,
+          display_name=excluded.display_name,
+          subscription=excluded.subscription,
+          last_seen_at=excluded.last_seen_at
+        """,
+        (
+            fact.ai_provider,
+            fact.ai_account_id,
+            fact.ai_account_label,
+            fact.ai_account_display_name,
+            fact.ai_account_subscription,
+            collected_at,
+            collected_at,
+        ),
+    )
+    conn.execute(
+        """
+        INSERT INTO usage_hourly_facts (
+          fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id,
+          agent, client, window_start, window_end, timezone,
+          input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+          reasoning_output_tokens, total_tokens, total_cost, event_count, session_count,
+          attribution_confidence, provenance, account_evidence_json, metadata_json,
+          first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(
+          source_id, agent, client, window_start, window_end,
+          ai_provider, ai_account_id, attribution_confidence, provenance
+        ) DO UPDATE SET
+          fact_id=excluded.fact_id,
+          source_id=excluded.source_id,
+          machine_id=excluded.machine_id,
+          os_user=excluded.os_user,
+          ai_provider=excluded.ai_provider,
+          ai_account_id=excluded.ai_account_id,
+          agent=excluded.agent,
+          client=excluded.client,
+          window_start=excluded.window_start,
+          window_end=excluded.window_end,
+          timezone=excluded.timezone,
+          input_tokens=excluded.input_tokens,
+          output_tokens=excluded.output_tokens,
+          cache_creation_tokens=excluded.cache_creation_tokens,
+          cache_read_tokens=excluded.cache_read_tokens,
+          reasoning_output_tokens=excluded.reasoning_output_tokens,
+          total_tokens=excluded.total_tokens,
+          total_cost=excluded.total_cost,
+          event_count=excluded.event_count,
+          session_count=excluded.session_count,
+          attribution_confidence=excluded.attribution_confidence,
+          provenance=excluded.provenance,
+          account_evidence_json=excluded.account_evidence_json,
+          metadata_json=excluded.metadata_json,
+          last_seen_at=excluded.last_seen_at
+        """,
+        (
+            fact.fact_id,
+            fact.source_id,
+            fact.machine_id,
+            fact.os_user,
+            fact.ai_provider,
+            fact.ai_account_id,
+            fact.agent,
+            fact.client,
+            fact.window_start,
+            fact.window_end,
+            fact.timezone,
+            fact.input_tokens,
+            fact.output_tokens,
+            fact.cache_creation_tokens,
+            fact.cache_read_tokens,
+            fact.reasoning_output_tokens,
+            fact.total_tokens,
+            fact.total_cost,
+            fact.event_count,
+            fact.session_count,
+            fact.attribution_confidence,
+            fact.provenance,
+            json.dumps(fact.account_evidence, ensure_ascii=False, sort_keys=True),
+            json.dumps(fact.metadata, ensure_ascii=False, sort_keys=True),
+            collected_at,
+            collected_at,
+        ),
+    )
+    for fact_id in {previous_fact_id, fact.fact_id}:
+        if fact_id:
+            conn.execute("DELETE FROM usage_hourly_models WHERE fact_id = ?", (fact_id,))
+    for model in fact.model_breakdowns:
+        model_name = str(model.get("model") or model.get("model_name") or "unknown")
+        conn.execute(
+            """
+            INSERT INTO usage_hourly_models (
+              fact_id, model, input_tokens, output_tokens, cache_creation_tokens,
+              cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost,
+              metadata_json, first_seen_at, last_seen_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fact.fact_id,
+                model_name,
+                int(model.get("input_tokens") or 0),
+                int(model.get("output_tokens") or 0),
+                int(model.get("cache_creation_tokens") or 0),
+                int(model.get("cache_read_tokens") or 0),
+                int(model.get("reasoning_output_tokens") or 0),
+                int(model.get("total_tokens") or 0),
+                float(model["total_cost"]) if model.get("total_cost") is not None else None,
+                json.dumps(model, ensure_ascii=False, sort_keys=True),
+                collected_at,
+                collected_at,
+            ),
+        )
+
+
+def _delete_replaced_codex_hourly_rows(conn: sqlite3.Connection, hourly_items: list[UsageHourlyItem]) -> None:
+    affected = {
+        (item.source_id, item.hour[:10])
+        for item in hourly_items
+        if item.metadata.get("provenance") == "mswusage_codex_token_count" and _is_codex_agent(item.agent)
+    }
+    for source_id, day in affected:
+        conn.execute(
+            """
+            DELETE FROM usage_hourly
+            WHERE source_id = ?
+              AND substr(hour, 1, 10) = ?
+              AND (
+                lower(agent) LIKE '%codex%'
+                OR lower(agent) LIKE '%gpt%'
+                OR lower(agent) LIKE '%openai%'
+              )
+            """,
+            (source_id, day),
+        )
+
+
+def _is_codex_agent(agent: Any) -> bool:
+    raw = str(agent or "").lower()
+    return "codex" in raw or "gpt" in raw or "openai" in raw
 
 
 def _upsert_block_item(conn: sqlite3.Connection, item: UsageBlockItem, collected_at: str) -> None:

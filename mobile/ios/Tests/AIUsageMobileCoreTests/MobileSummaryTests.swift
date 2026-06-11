@@ -1,0 +1,168 @@
+import XCTest
+@testable import AIUsageMobileCore
+
+final class MobileSummaryTests: XCTestCase {
+    func testDecodesMobileSummaryContractFixture() throws {
+        let summary = try loadFixture()
+
+        XCTAssertEqual(summary.schemaVersion, 1)
+        XCTAssertEqual(summary.client, "ios")
+        XCTAssertEqual(summary.period.id, "week")
+        XCTAssertEqual(summary.period.startDate, "2026-05-27")
+        XCTAssertEqual(summary.period.endDate, "2026-06-02")
+        XCTAssertEqual(summary.period.totalTokens, 5000)
+        XCTAssertEqual(summary.period.cacheTokens, 800)
+        XCTAssertEqual(summary.trend.points.last?.bucket, "2026-06-02")
+        XCTAssertEqual(summary.trend.points.last?.cacheRatio, 17)
+        XCTAssertEqual(summary.sources.first?.machine, "linux-dev")
+        XCTAssertEqual(summary.breakdown.byMachine.first?.label, "linux-dev")
+        XCTAssertEqual(summary.breakdown.byOSUser.first?.label, "wang")
+        XCTAssertEqual(summary.breakdown.byModel.first?.label, "gpt-5")
+        XCTAssertEqual(summary.limits.observedCount, 1)
+        XCTAssertEqual(summary.limits.totalCount, 2)
+    }
+
+    func testBuildsHomeStateForSwiftUIShell() throws {
+        let summary = try loadFixture()
+        let state = MobileViewModel.build(from: summary)
+
+        XCTAssertEqual(state.home.title, "AI Usage")
+        XCTAssertEqual(state.home.totalText, "5.0K")
+        XCTAssertEqual(state.home.rangeText, "2026-05-27 - 2026-06-02")
+        XCTAssertEqual(state.home.healthText, "2/2 sources")
+        XCTAssertEqual(state.home.primaryLimitText, "codex session · 60% left")
+        XCTAssertEqual(state.home.topSources.map(\.label), ["linux-dev", "macbook-pro"])
+        XCTAssertEqual(state.sources.count, 2)
+        XCTAssertEqual(state.breakdown.byAgent.first?.label, "codex")
+        XCTAssertEqual(state.limits.windows.last?.confidence, "missing")
+    }
+
+    func testTokenFormatting() {
+        XCTAssertEqual(TokenFormat.compact(999), "999")
+        XCTAssertEqual(TokenFormat.compact(5_000), "5.0K")
+        XCTAssertEqual(TokenFormat.compact(1_250_000), "1.2M")
+        XCTAssertEqual(TokenFormat.compact(4_239_515_996), "4.2B")
+    }
+
+    func testBuildsEmptySummaryForSelectedLoadingPeriod() {
+        let summary = MobileSummary.empty(periodID: "month")
+        let state = MobileViewModel.build(from: summary)
+
+        XCTAssertEqual(summary.period.id, "month")
+        XCTAssertEqual(summary.period.totalTokens, 0)
+        XCTAssertEqual(summary.period.inputTokens, 0)
+        XCTAssertEqual(summary.period.outputTokens, 0)
+        XCTAssertEqual(summary.period.cacheTokens, 0)
+        XCTAssertEqual(summary.trend.period, "month")
+        XCTAssertEqual(summary.trend.granularity, "day")
+        XCTAssertTrue(summary.trend.points.isEmpty)
+        XCTAssertTrue(summary.sources.isEmpty)
+        XCTAssertTrue(summary.breakdown.byMachine.isEmpty)
+        XCTAssertEqual(summary.limits.observedCount, 0)
+        XCTAssertEqual(summary.limits.totalCount, 0)
+        XCTAssertTrue(summary.limits.windows.isEmpty)
+        XCTAssertEqual(state.home.periodID, "month")
+        XCTAssertEqual(state.home.totalText, "0")
+        XCTAssertTrue(state.home.trendPoints.isEmpty)
+    }
+
+    func testPeriodSelectionKeepsVisibleSummaryWhenUncachedPeriodLoads() {
+        let visible = MobileSummary.empty(periodID: "week")
+
+        let decision = MobilePeriodSelection.decision(
+            selectedPeriodID: "month",
+            visibleSummary: visible,
+            cachedSummaries: [:],
+            isLoadingSelectedPeriod: false
+        )
+
+        XCTAssertEqual(decision, .keepVisibleSummary)
+    }
+
+    func testPeriodSelectionUsesCachedSummaryImmediately() {
+        let visible = MobileSummary.empty(periodID: "week")
+        let cached = MobileSummary.empty(periodID: "month")
+
+        let decision = MobilePeriodSelection.decision(
+            selectedPeriodID: "month",
+            visibleSummary: visible,
+            cachedSummaries: ["month": cached],
+            isLoadingSelectedPeriod: false
+        )
+
+        XCTAssertEqual(decision, .showCached(cached))
+    }
+
+    func testPeriodSelectionIgnoresCurrentLoadedPeriod() {
+        let visible = MobileSummary.empty(periodID: "week")
+
+        let decision = MobilePeriodSelection.decision(
+            selectedPeriodID: "week",
+            visibleSummary: visible,
+            cachedSummaries: [:],
+            isLoadingSelectedPeriod: false
+        )
+
+        XCTAssertEqual(decision, .ignore)
+    }
+
+    func testTrendPointSelectionDefaultsToLastNonZeroPoint() {
+        let points = [
+            trendPoint(bucket: "09:00", tokens: 100),
+            trendPoint(bucket: "10:00", tokens: 0),
+            trendPoint(bucket: "11:00", tokens: 250),
+            trendPoint(bucket: "12:00", tokens: 0)
+        ]
+
+        XCTAssertEqual(TrendPointSelection.defaultPoint(in: points)?.bucket, "11:00")
+    }
+
+    func testTrendPointSelectionFindsNearestDragLocation() {
+        let points = [
+            trendPoint(bucket: "09:00", tokens: 100),
+            trendPoint(bucket: "10:00", tokens: 200),
+            trendPoint(bucket: "11:00", tokens: 300),
+            trendPoint(bucket: "12:00", tokens: 400)
+        ]
+
+        XCTAssertEqual(
+            TrendPointSelection.nearestPoint(in: points, xLocation: 77, width: 120)?.bucket,
+            "11:00"
+        )
+    }
+
+    func testMachineBreakdownBuildsUsefulDrilldownSections() throws {
+        let summary = try loadFixture()
+        let machine = try XCTUnwrap(summary.breakdown.byMachine.first { $0.label == "linux-dev" })
+        let sections = BreakdownDrilldown.sections(
+            for: machine,
+            dimension: .machine,
+            breakdown: summary.breakdown
+        )
+
+        XCTAssertEqual(sections.map(\.title), ["系统账户", "Agent", "Model", "Date"])
+        XCTAssertEqual(sections[0].rows.map(\.label), ["wang"])
+        XCTAssertEqual(sections[0].rows.map(\.tokens), [3_000])
+        XCTAssertEqual(sections[1].rows.map(\.label), ["codex"])
+        XCTAssertEqual(sections[2].rows.map(\.label), ["gpt-5"])
+        XCTAssertEqual(sections[3].rows.map(\.label), ["2026-06-02"])
+    }
+
+    private func loadFixture() throws -> MobileSummary {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
+        let data = try Data(contentsOf: url)
+        return try JSONDecoder().decode(MobileSummary.self, from: data)
+    }
+
+    private func trendPoint(bucket: String, tokens: Int) -> MobileTrendPoint {
+        MobileTrendPoint(
+            bucket: bucket,
+            label: bucket,
+            tokens: tokens,
+            inputTokens: tokens,
+            outputTokens: 0,
+            cacheTokens: 0,
+            cacheRatio: 0
+        )
+    }
+}

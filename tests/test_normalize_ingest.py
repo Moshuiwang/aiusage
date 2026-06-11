@@ -113,8 +113,8 @@ class TestNormalizeIngestIdempotency(unittest.TestCase):
         self.assertEqual(item.metadata["ccusage_row"]["customDetail"], {"kept": True})
         self.assertEqual(item.model_breakdowns[0]["raw"]["vendorExtra"], "preserve-me")
 
-    def test_full_ccusage_session_report_normalizes_hourly_usage(self) -> None:
-        """测试后端从完整 ccusage session report 生成按小时聚合事实，并保留原始 session row"""
+    def test_full_ccusage_session_report_skips_codex_hourly_usage(self) -> None:
+        """Codex 小时不再用 session.lastActivity 估算，避免用户看到假尖峰"""
         request = IngestRequest(
             schema_version=1,
             source_id="mac-local",
@@ -150,13 +150,20 @@ class TestNormalizeIngestIdempotency(unittest.TestCase):
                         "totalTokens": 10,
                         "metadata": {"lastActivity": "2026-06-01T10:01:00+08:00"},
                     },
+                    {
+                        "agent": "gpt-5",
+                        "inputTokens": 7,
+                        "outputTokens": 3,
+                        "totalTokens": 10,
+                        "metadata": {"lastActivity": "2026-06-01T11:01:00+08:00"},
+                    },
                 ],
             },
         )
 
         hourly = sorted(normalize_ingest_hourly_request(request), key=lambda item: (item.hour, item.agent))
 
-        self.assertEqual(len(hourly), 2)
+        self.assertEqual(len(hourly), 1)
         claude = hourly[0]
         self.assertEqual(claude.source_id, "mac-local")
         self.assertEqual(claude.machine, "macbook-pro")
@@ -172,9 +179,67 @@ class TestNormalizeIngestIdempotency(unittest.TestCase):
         self.assertEqual(claude.metadata["account"], "wangzhipeng")
         self.assertEqual(claude.metadata["ccusage_session_row"]["metadata"]["project"], "alpha")
 
-        codex = hourly[1]
-        self.assertEqual(codex.hour, "2026-06-01T10:00:00+08:00")
-        self.assertEqual(codex.total_tokens, 10)
+    def test_mswusage_codex_report_normalizes_hourly_rows_with_provenance(self) -> None:
+        request = IngestRequest(
+            schema_version=1,
+            source_id="mac-local",
+            host="macbook-pro",
+            machine="macbook-pro",
+            os_user="wangzhipeng",
+            platform="darwin",
+            timezone="Asia/Shanghai",
+            observed_at="2026-06-05T10:40:00+08:00",
+            collection_window="daily",
+            usage_daily=[],
+            ccusage_session_report={
+                "session": [
+                    {
+                        "agent": "codex",
+                        "inputTokens": 999,
+                        "outputTokens": 1,
+                        "totalTokens": 1000,
+                        "metadata": {"lastActivity": "2026-06-05T09:59:00+08:00"},
+                    }
+                ],
+            },
+            mswusage_codex_hourly_report={
+                "schema_version": 1,
+                "source": "mswusage_codex",
+                "timezone": "Asia/Shanghai",
+                "generated_at": "2026-06-05T10:00:00+08:00",
+                "provenance": "mswusage_codex_token_count",
+                "hourly": [
+                    {
+                        "hour": "2026-06-05T08:00:00+08:00",
+                        "agent": "codex",
+                        "input_tokens": 70,
+                        "output_tokens": 20,
+                        "cache_creation_tokens": 0,
+                        "cache_read_tokens": 30,
+                        "reasoning_output_tokens": 5,
+                        "total_tokens": 120,
+                        "event_count": 2,
+                        "session_count": 1,
+                        "provenance": "mswusage_codex_token_count",
+                    }
+                ],
+                "drift": {"status": "ok", "threshold_percent": 5},
+            },
+        )
+
+        hourly = normalize_ingest_hourly_request(request)
+
+        self.assertEqual(len(hourly), 1)
+        item = hourly[0]
+        self.assertEqual(item.agent, "codex")
+        self.assertEqual(item.hour, "2026-06-05T08:00:00+08:00")
+        self.assertEqual(item.total_tokens, 120)
+        self.assertEqual(item.input_tokens + item.output_tokens + item.cache_creation_tokens + item.cache_read_tokens, 120)
+        self.assertEqual(item.metadata["provenance"], "mswusage_codex_token_count")
+        self.assertEqual(item.metadata["reasoning_output_tokens"], 5)
+        self.assertEqual(item.metadata["event_count"], 2)
+        self.assertEqual(item.metadata["session_count"], 1)
+        self.assertEqual(item.metadata["drift"]["status"], "ok")
 
     def test_ingest_machine_name_overrides_network_host_for_display(self) -> None:
         """展示机器名使用 payload.machine，网络 host 仅作为来源元数据保留"""

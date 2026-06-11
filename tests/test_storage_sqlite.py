@@ -6,7 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 
-from ai_usage_widget.models import UsageBlockItem, UsageHourlyItem, UsageItem
+from ai_usage_widget.models import UsageBlockItem, UsageHourlyFact, UsageHourlyItem, UsageItem
 from ai_usage_widget.storage_sqlite import write_sqlite, _safe_error
 
 
@@ -278,3 +278,198 @@ class TestStorageSQLiteWAL(unittest.TestCase):
         self.assertEqual(row[1], "2026-06-01T09:50:00+08:00")
         self.assertEqual(row[2:7], (100, 20, 30, 850, 1000))
         self.assertEqual(json.loads(row[7])["models"], ["claude-opus"])
+
+    def test_mswusage_codex_replaces_old_session_derived_codex_hourly_rows(self) -> None:
+        old_item = UsageHourlyItem(
+            source_id="mac-local",
+            machine="macbook",
+            account="wang",
+            agent="codex",
+            hour="2026-06-05T23:00:00+08:00",
+            input_tokens=999,
+            output_tokens=1,
+            cache_creation_tokens=0,
+            cache_read_tokens=0,
+            total_tokens=1000,
+            metadata={"machine": "macbook", "account": "wang", "ccusage_session_row": {"sessionId": "old"}},
+        )
+        write_sqlite(
+            path=self.db_path,
+            collected_at=self.collected_at,
+            timezone=self.timezone,
+            run_status="ok",
+            source_reports=[],
+            items=[],
+            hourly_items=[old_item],
+        )
+
+        new_item = UsageHourlyItem(
+            source_id="mac-local",
+            machine="macbook",
+            account="wang",
+            agent="codex",
+            hour="2026-06-05T08:00:00+08:00",
+            input_tokens=70,
+            output_tokens=20,
+            cache_creation_tokens=0,
+            cache_read_tokens=30,
+            total_tokens=120,
+            metadata={
+                "machine": "macbook",
+                "account": "wang",
+                "provenance": "mswusage_codex_token_count",
+                "reasoning_output_tokens": 5,
+                "event_count": 2,
+                "session_count": 1,
+            },
+        )
+        write_sqlite(
+            path=self.db_path,
+            collected_at=self.collected_at,
+            timezone=self.timezone,
+            run_status="ok",
+            source_reports=[],
+            items=[],
+            hourly_items=[new_item],
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT hour, total_tokens, metadata_json FROM usage_hourly WHERE source_id='mac-local' AND agent='codex'"
+            ).fetchall()
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0][0], "2026-06-05T08:00:00+08:00")
+        self.assertEqual(rows[0][1], 120)
+        self.assertEqual(json.loads(rows[0][2])["provenance"], "mswusage_codex_token_count")
+
+    def test_sqlite_preserves_account_hourly_fact_dimensions(self) -> None:
+        fact = UsageHourlyFact(
+            fact_id="codex:codex:mac-local:2026-06-11T13:00:00+08:00:2026-06-11T14:00:00+08:00:account_observed_usage_inferred:openai:acct-main:codex_token_events",
+            source_id="mac-local",
+            machine_id="macbook-pro-local",
+            machine_name="MacBook Pro",
+            host="macbook-pro.local",
+            os_user="wangzhipeng",
+            platform="darwin",
+            ai_provider="openai",
+            ai_account_id="acct-main",
+            ai_account_label="start@example.com",
+            ai_account_display_name="StarTimes",
+            ai_account_subscription=None,
+            agent="codex",
+            client="codex",
+            window_start="2026-06-11T13:00:00+08:00",
+            window_end="2026-06-11T14:00:00+08:00",
+            timezone="Asia/Shanghai",
+            input_tokens=100,
+            output_tokens=20,
+            cache_creation_tokens=0,
+            cache_read_tokens=30,
+            reasoning_output_tokens=5,
+            total_tokens=155,
+            event_count=2,
+            session_count=1,
+            attribution_confidence="account_observed_usage_inferred",
+            provenance="codex_token_events",
+            account_evidence={"source": "device_config"},
+            model_breakdowns=[{"model": "gpt-5-codex", "total_tokens": 155}],
+        )
+
+        write_sqlite(
+            path=self.db_path,
+            collected_at=self.collected_at,
+            timezone=self.timezone,
+            run_status="ok",
+            source_reports=[],
+            items=[],
+            hourly_facts=[fact],
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                """
+                SELECT machine_id, os_user, ai_provider, ai_account_id, total_tokens,
+                       attribution_confidence, provenance
+                FROM usage_hourly_facts
+                """
+            ).fetchone()
+            account = conn.execute("SELECT account_label FROM ai_accounts").fetchone()[0]
+            model = conn.execute("SELECT model, total_tokens FROM usage_hourly_models").fetchone()
+
+        self.assertEqual(row, (
+            "macbook-pro-local",
+            "wangzhipeng",
+            "openai",
+            "acct-main",
+            155,
+            "account_observed_usage_inferred",
+            "codex_token_events",
+        ))
+        self.assertEqual(account, "start@example.com")
+        self.assertEqual(model, ("gpt-5-codex", 155))
+
+    def test_account_hourly_fact_upsert_uses_logical_hour_key(self) -> None:
+        base = UsageHourlyFact(
+            fact_id="fact-a",
+            source_id="mac-local",
+            machine_id="macbook-pro-local",
+            machine_name="MacBook Pro",
+            host="macbook-pro.local",
+            os_user="wangzhipeng",
+            platform="darwin",
+            ai_provider="openai",
+            ai_account_id="acct-main",
+            ai_account_label="start@example.com",
+            ai_account_display_name=None,
+            ai_account_subscription=None,
+            agent="codex",
+            client="codex",
+            window_start="2026-06-11T13:00:00+08:00",
+            window_end="2026-06-11T14:00:00+08:00",
+            timezone="Asia/Shanghai",
+            input_tokens=100,
+            output_tokens=20,
+            cache_creation_tokens=0,
+            cache_read_tokens=30,
+            reasoning_output_tokens=5,
+            total_tokens=155,
+            attribution_confidence="account_observed_usage_inferred",
+            provenance="codex_token_events",
+            model_breakdowns=[{"model": "gpt-5-codex", "total_tokens": 155}],
+        )
+        replacement = UsageHourlyFact(
+            **{
+                **base.__dict__,
+                "fact_id": "fact-b",
+                "input_tokens": 200,
+                "total_tokens": 255,
+                "model_breakdowns": [{"model": "gpt-5-codex", "total_tokens": 255}],
+            }
+        )
+
+        write_sqlite(
+            path=self.db_path,
+            collected_at=self.collected_at,
+            timezone=self.timezone,
+            run_status="ok",
+            source_reports=[],
+            items=[],
+            hourly_facts=[base],
+        )
+        write_sqlite(
+            path=self.db_path,
+            collected_at=self.collected_at,
+            timezone=self.timezone,
+            run_status="ok",
+            source_reports=[],
+            items=[],
+            hourly_facts=[replacement],
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            facts = conn.execute("SELECT fact_id, total_tokens FROM usage_hourly_facts").fetchall()
+            models = conn.execute("SELECT fact_id, total_tokens FROM usage_hourly_models").fetchall()
+
+        self.assertEqual(facts, [("fact-b", 255)])
+        self.assertEqual(models, [("fact-b", 255)])
