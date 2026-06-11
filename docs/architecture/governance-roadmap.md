@@ -61,8 +61,6 @@
 
 状态：completed
 
-## Upcoming Rounds
-
 ### Round 6: Snapshot Source Health Helper
 
 目标：
@@ -72,7 +70,9 @@
 - 不改 summary JSON 合约。
 - 补 source health fixture 测试。
 
-完成后停止。
+状态：completed
+
+## Upcoming Rounds
 
 ### Round 7: Limits / Provider Runtime Cleanup
 

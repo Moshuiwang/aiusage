@@ -16,6 +16,7 @@ from .snapshot_filters import (
     timed_row_matches_filter,
 )
 from .snapshot_periods import date_axis, hour_axis, parse_datetime, period_bounds, zoneinfo
+from .snapshot_source_health import build_source_status
 from .snapshot_trends import codex_hourly_context, fill_today_hourly_residual, hourly_trend
 
 
@@ -342,59 +343,14 @@ def build_snapshot(
         }
 
     # 5. 组装并计算 source_status 健康度与离线状态 (TP-V2-009)
-    db_status = {sr[0]: {"status": sr[1], "collected_at": sr[2], "error_message": sr[3]} for sr in status_rows}
-    if machine_filter or account_filter:
-        db_status = {
-            sid: status
-            for sid, status in db_status.items()
-            if identity_matches_filter(source_identities.get(sid), machine_filter, account_filter)
-        }
-    source_status = []
-
-    if sources_config:
-        # 如果提供了配置文件中的 known sources 列表，我们保证遍历它们，捕获 never_seen 状态
-        for src in sources_config:
-            sid = src["source_id"]
-            stale_threshold = int(src.get("stale_after_minutes", 120))
-            if sid not in db_status:
-                source_status.append(_source_status_entry({
-                    "source_id": sid,
-                    "status": "never_seen",
-                    "observed_at": None,
-                    "error_message": None,
-                }, source_identities.get(sid), src))
-            else:
-                last_report = db_status[sid]
-                collected_time = datetime.fromisoformat(last_report["collected_at"])
-                # 计算离线分钟数
-                diff_minutes = (ref_time - collected_time).total_seconds() / 60.0
-                status_val = last_report["status"]
-
-                if diff_minutes > stale_threshold:
-                    status_val = "stale"
-
-                source_status.append(_source_status_entry({
-                    "source_id": sid,
-                    "status": status_val,
-                    "observed_at": last_report["collected_at"],
-                    "error_message": last_report.get("error_message"),
-                }, source_identities.get(sid), src))
-    else:
-        # 如果未提供 sources_config，直接从数据库历史记录做默认 of 120 分钟 staleness 判定
-        for sid, last_report in db_status.items():
-            collected_time = datetime.fromisoformat(last_report["collected_at"])
-            diff_minutes = (ref_time - collected_time).total_seconds() / 60.0
-            status_val = last_report["status"]
-
-            if diff_minutes > 120:
-                status_val = "stale"
-
-            source_status.append(_source_status_entry({
-                "source_id": sid,
-                "status": status_val,
-                "observed_at": last_report["collected_at"],
-                "error_message": last_report.get("error_message"),
-            }, source_identities.get(sid)))
+    source_status = build_source_status(
+        status_rows=status_rows,
+        source_identities=source_identities,
+        sources_config=sources_config,
+        ref_time=ref_time,
+        machine_filter=machine_filter,
+        account_filter=account_filter,
+    )
 
     # 6. 组装完整快照 (v1 schema)
     snapshot = {
@@ -563,33 +519,6 @@ def _fetch_limit_windows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
             ).to_snapshot_dict()
         )
     return limits
-
-
-def _source_status_entry(
-    status: dict[str, Any],
-    identity: Optional[dict[str, Any]] = None,
-    source_config: Optional[dict[str, Any]] = None,
-) -> dict[str, Any]:
-    result = dict(status)
-    identity = identity or {}
-    source_config = source_config or {}
-    host = identity.get("host") or identity.get("machine") or source_config.get("host") or source_config.get("host_label")
-    os_user = identity.get("os_user") or source_config.get("os_user") or source_config.get("account")
-    platform = identity.get("platform") or source_config.get("platform")
-
-    if host:
-        result["host"] = str(host)
-    if os_user:
-        result["os_user"] = str(os_user)
-    if platform:
-        result["platform"] = str(platform)
-    if host and os_user:
-        result["display_name"] = f"{host} · {os_user}"
-    elif host:
-        result["display_name"] = str(host)
-    else:
-        result["display_name"] = str(result.get("source_id") or "unknown-source")
-    return result
 
 
 def _fetch_hourly_rows(conn: sqlite3.Connection, start_hour: str, end_hour: str) -> list[Any]:

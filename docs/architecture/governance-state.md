@@ -9,10 +9,11 @@
 - Round 3: iOS runtime configuration
 - Round 4: self-hosted server trust policy
 - Round 5: Widget configuration sharing design
+- Round 6: Snapshot source health helper
 
 ## Next Round
 
-Round 6: Snapshot source health helper
+Round 7: Limits / Provider Runtime Cleanup
 
 ## Stop Rule
 
@@ -22,24 +23,27 @@ Do not proceed to the next round without explicit user confirmation.
 
 ## Last Known Clean State
 
-- last_checked_commit: 11a19d8
-- last_round_commit: 9b7991f
+- last_checked_commit: b764bb2
+- last_round_commit: pending Round 6 commit
 - working_tree_expected_clean: true
 
 ## Last Completed Round
 
-- completed_round: Round 5 Widget configuration sharing design
+- completed_round: Round 6 Snapshot source health helper
 - files_changed:
-  - `docs/architecture/widget-configuration-sharing.md`
+  - `src/ai_usage_widget/snapshot_source_health.py`
+  - `src/ai_usage_widget/snapshot_builder.py`
+  - `tests/test_snapshot_source_health.py`
   - `docs/architecture/architecture.md`
   - `docs/architecture/governance-roadmap.md`
   - `docs/architecture/governance-state.md`
-  - `tests/test_architecture_governance.py`
 - tests_run:
   - `git diff --check`
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_snapshot_source_health -v`
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_snapshot_builder.TestSnapshotBuilder.test_source_health_staleness_and_never_seen tests.test_snapshot_builder.TestSnapshotBuilder.test_source_status_includes_latest_source_identity -v`
   - `PYTHONPATH=src python3 -m unittest discover -s tests -v`
 - commit_recommended: true
-- next_round: Round 6 Snapshot source health helper
+- next_round: Round 7 Limits / Provider Runtime Cleanup
 
 ## Round Completion Template
 
