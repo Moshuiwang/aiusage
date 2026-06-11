@@ -47,7 +47,7 @@ limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-s
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-采集 daily usage：
+Legacy/local compatibility：本地采集 daily usage：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
@@ -56,7 +56,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
   --sqlite data/usage.sqlite
 ```
 
-目标形态下，终端侧命令会演进为本机采集后 push 到 HTTP server；当前 CLI 命令仍是旧 baseline 的本地验证入口，具体以 `docs/task-packages/v2/INDEX.md` 后续任务包为准。
+当前 V2 推荐主线是 `DevicePusher push -> /ingest`。上面的 `collect` 命令只作为 legacy/local compatibility 和本地验证入口，不作为新部署主路径。
 
 HTTP push 终端侧命令：
 
