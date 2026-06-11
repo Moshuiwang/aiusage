@@ -19,6 +19,7 @@ from .limits_doctor import run_limits_doctor
 from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .limits_push import push_limits_payload
 from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
+from .mswusage_codex import build_report as build_mswusage_codex_report, read_local_codex_jsonl_lines
 from .pusher import DevicePusher
 from .server import run_server
 from .widget_sync import sync_latest_to_widget
@@ -104,6 +105,13 @@ def main(argv: list[str] | None = None) -> int:
     install_limits_scheduler_parser.add_argument("--interval-seconds", type=int, default=1800)
     install_limits_scheduler_parser.add_argument("--python", default="/usr/bin/python3")
     install_limits_scheduler_parser.add_argument("--dry-run", action="store_true")
+
+    mswusage_codex_parser = subparsers.add_parser(
+        "mswusage-codex",
+        help="Build a local Codex hourly usage report from token_count events",
+    )
+    mswusage_codex_parser.add_argument("--json", action="store_true", help="Print the report as JSON")
+    mswusage_codex_parser.add_argument("--timezone", default="Asia/Shanghai")
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -274,6 +282,16 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.command == "mswusage-codex":
+        try:
+            lines = read_local_codex_jsonl_lines()
+            report = build_mswusage_codex_report(lines, timezone=args.timezone)
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return 0
 
     if args.command == "server":

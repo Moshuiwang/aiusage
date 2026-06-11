@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI Usage App</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-view="home" data-material="native-glass">
+  <main class="phone-shell" aria-label="AI Usage App">
+    <div class="device-status" aria-hidden="true">
+      <span>11:05</span>
+      <i></i>
+      <span>5G 100%</span>
+    </div>
+
+    <section class="screen is-active" data-view="home" aria-label="首页">
+      <header class="app-header">
+        <div>
+          <p>Personal Monitor</p>
+          <h1>AI Usage</h1>
+        </div>
+        <div class="read-cluster">
+          <span id="serverReadTime">上次读取 --</span>
+          <button class="icon-action" type="button" id="refreshButton" aria-label="刷新数据">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v6h-6"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="period-tabs" aria-label="周期选择">
+        <button type="button" data-period="today" aria-pressed="true">今天</button>
+        <button type="button" data-period="week" aria-pressed="false">周</button>
+        <button type="button" data-period="month" aria-pressed="false">月</button>
+      </div>
+
+      <section class="hero-panel" aria-label="总用量">
+        <div class="hero-copy">
+          <span id="heroPeriod">今天</span>
+          <strong id="heroTotal">--</strong>
+          <em id="heroRange">--</em>
+        </div>
+        <div class="metric-grid" aria-label="Token 组成">
+          <article><span>Input</span><strong id="inputTokens">--</strong></article>
+          <article><span>Output</span><strong id="outputTokens">--</strong></article>
+          <article><span>Cache</span><strong id="cacheTokens">--</strong></article>
+          <article><span>缓存命中</span><strong id="cacheHitRate">--</strong></article>
+        </div>
+      </section>
+
+      <section class="content-panel trend-panel" aria-label="用量趋势">
+        <div class="section-title">
+          <div>
+            <h2>用量趋势</h2>
+            <p id="trendRange">--</p>
+          </div>
+          <button type="button" data-shortcut="breakdown">查看明细</button>
+        </div>
+        <div class="chart-box">
+          <canvas id="trendCanvas" width="680" height="264" aria-label="趋势图"></canvas>
+          <output id="trendTip" hidden></output>
+        </div>
+      </section>
+
+      <section class="content-panel" aria-label="刷新时间摘要">
+        <div class="section-title">
+          <div>
+            <h2>刷新时间</h2>
+            <p>多账号额度窗口</p>
+          </div>
+          <button type="button" data-shortcut="limits">查看明细</button>
+        </div>
+        <div class="refresh-list" id="homeLimitWindows"></div>
+      </section>
+    </section>
+
+    <section class="screen" data-view="limits" aria-label="额度">
+      <header class="page-head">
+        <p>Quota</p>
+        <h1>额度</h1>
+        <span>可用百分比越高，剩余额度越多</span>
+      </header>
+      <div class="quota-list" id="limitList"></div>
+      <label class="notify-row">
+        <span>
+          <strong>重置提醒</strong>
+          <em id="reminderCopy">已开启；窗口刷新时通知</em>
+        </span>
+        <input type="checkbox" id="limitReminder" checked>
+        <i aria-hidden="true"></i>
+      </label>
+    </section>
+
+    <section class="screen" data-view="breakdown" aria-label="明细">
+      <header class="page-head">
+        <p>Breakdown</p>
+        <h1>用量明细</h1>
+        <span>默认按最近日期倒序查看</span>
+      </header>
+
+      <div class="period-tabs compact" aria-label="明细周期选择">
+        <button type="button" data-period="today" aria-pressed="true">今天</button>
+        <button type="button" data-period="week" aria-pressed="false">周</button>
+        <button type="button" data-period="month" aria-pressed="false">月</button>
+      </div>
+
+      <div class="dimension-tabs" aria-label="明细维度">
+        <button type="button" data-dimension="date" aria-pressed="true">Date</button>
+        <button type="button" data-dimension="machine" aria-pressed="false">Machine</button>
+        <button type="button" data-dimension="user" aria-pressed="false">User</button>
+        <button type="button" data-dimension="model" aria-pressed="false">Model</button>
+        <button type="button" data-dimension="agent" aria-pressed="false">Agent</button>
+      </div>
+
+      <section class="content-panel list-panel">
+        <div class="section-title">
+          <div>
+            <h2 id="breakdownTitle">Date</h2>
+            <p id="breakdownCaption">Tokens</p>
+          </div>
+        </div>
+        <div class="bar-list" id="breakdownList"></div>
+      </section>
+
+      <aside class="detail-sheet" id="drilldownView" hidden>
+        <button class="sheet-close" type="button" id="backToBreakdown" aria-label="关闭明细">×</button>
+        <p id="drilldownKind">--</p>
+        <h2 id="drilldownTitle">--</h2>
+        <strong id="drilldownTotal">--</strong>
+        <span id="drilldownMeta">--</span>
+      </aside>
+    </section>
+
+    <section class="screen" data-view="sources" aria-label="来源">
+      <header class="page-head">
+        <p>Sources</p>
+        <h1>采集来源</h1>
+        <span>按机器与系统账户查看上报状态</span>
+      </header>
+      <section class="content-panel source-panel">
+        <div class="section-title">
+          <div>
+            <h2>采集列表</h2>
+            <p id="sourceCount">--</p>
+          </div>
+          <strong id="sourceScore">--</strong>
+        </div>
+        <div class="source-list" id="sourceList"></div>
+      </section>
+    </section>
+
+    <nav class="tabbar" aria-label="主导航">
+      <button type="button" data-tab="home" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.8 12 3l9 7.8v8.7a1.5 1.5 0 0 1-1.5 1.5H15v-6H9v6H4.5A1.5 1.5 0 0 1 3 19.5Z"/></svg>
+        首页
+      </button>
+      <button type="button" data-tab="limits">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14a8 8 0 1 1 16 0"/><path d="M12 14l4-4"/><path d="M6.5 18h11"/><path d="M8 14h.01"/><path d="M16 14h.01"/></svg>
+        额度
+      </button>
+      <button type="button" data-tab="breakdown">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M8 17V9"/><path d="M12 19V7"/><path d="M16 16v-5"/><path d="M20 19V4"/></svg>
+        明细
+      </button>
+      <button type="button" data-tab="sources">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15Z"/><path d="M12 8.5v7"/><path d="M8.5 12h7"/></svg>
+        来源
+      </button>
+    </nav>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

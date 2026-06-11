@@ -5,6 +5,7 @@ import hmac
 import html
 import json
 import os
+import tempfile
 import threading
 from datetime import datetime, timezone as dt_timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -15,7 +16,13 @@ from .auth import TokenAuthenticator
 from .config import ConfigError
 from .ingest import IngestValidationError, validate_ingest_payload, IngestResponse
 from .limits import LimitContractError, parse_limit_window
-from .normalize import normalize_ingest_block_request, normalize_ingest_hourly_request, normalize_ingest_request
+from .mobile_summary import build_mobile_summary
+from .normalize import (
+    normalize_ingest_block_request,
+    normalize_ingest_hourly_facts,
+    normalize_ingest_hourly_request,
+    normalize_ingest_request,
+)
 from .storage_sqlite import write_limit_windows, write_sqlite
 from .snapshot_builder import build_snapshot
 
@@ -39,6 +46,11 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
                 self.send_error_json(401, "auth_required", "Authentication required")
                 return
             self.handle_get_summary(parsed_url)
+        elif parsed_url.path == "/api/mobile/summary":
+            if not self._is_authenticated():
+                self.send_error_json(401, "auth_required", "Authentication required")
+                return
+            self.handle_get_mobile_summary(parsed_url)
         elif parsed_url.path == "/api/health":
             if not self._is_authenticated():
                 self.send_error_json(401, "auth_required", "Authentication required")
@@ -126,6 +138,7 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
         # 5. 校验通过，正常化为 UsageItems 列表
         items = normalize_ingest_request(req)
         hourly_items = normalize_ingest_hourly_request(req)
+        hourly_facts = normalize_ingest_hourly_facts(req)
         block_items = normalize_ingest_block_request(req)
 
         # 6. 构造元数据并写入 SQLite Store
@@ -155,6 +168,7 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
                 source_reports=[report],
                 items=items,
                 hourly_items=hourly_items,
+                hourly_facts=hourly_facts,
                 block_items=block_items,
                 source_identities=[{
                     "source_id": req.source_id,
@@ -186,6 +200,7 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             status="accepted",
             source_id=req.source_id,
             accepted_at=collected_at,
+            facts_accepted=len(hourly_facts),
             message="Data accepted successfully",
         )
         self.send_response(200)
@@ -260,13 +275,9 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             # 默认取配置时区的当前日期
             date_str = datetime.now(dt_timezone.utc).astimezone().strftime("%Y-%m-%d")
 
-        # 2. 动态触发一次最新快照重构
         try:
-            build_snapshot(
-                db_path=self.server.db_path,
-                output_path=self.server.latest_path,
+            snapshot_data = self._build_request_snapshot(
                 date_str=date_str,
-                timezone_str=self.server.timezone,
                 period=period,
                 machine_filter=machine,
                 account_filter=account,
@@ -275,23 +286,84 @@ class IngestAPIHandler(BaseHTTPRequestHandler):
             self.send_error_json(500, "internal_error", f"Failed to compile snapshot: {exc}")
             return
 
-        # 3. 读取并回传最新快照 JSON 文件
-        if not os.path.exists(self.server.latest_path):
-            self.send_error_json(404, "not_found", "No snapshot available")
-            return
-
-        try:
-            with open(self.server.latest_path, "r", encoding="utf-8") as f:
-                snapshot_data = f.read()
-        except OSError as exc:
-            self.send_error_json(500, "read_failed", f"Failed to read snapshot: {exc}")
-            return
-
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self._send_security_headers()
         self.end_headers()
         self.wfile.write(snapshot_data.encode("utf-8"))
+
+    def handle_get_mobile_summary(self, parsed_url: Any) -> None:
+        query_params = parse_qs(parsed_url.query)
+        date_str = query_params.get("date", [None])[0]
+        period = query_params.get("period", ["today"])[0]
+        machine = query_params.get("machine", [None])[0]
+        account = query_params.get("account", [None])[0]
+
+        if not date_str:
+            date_str = datetime.now(dt_timezone.utc).astimezone().strftime("%Y-%m-%d")
+
+        try:
+            snapshot_data = self._build_request_snapshot(
+                date_str=date_str,
+                period=period,
+                machine_filter=machine,
+                account_filter=account,
+            )
+            snapshot = json.loads(snapshot_data)
+        except OSError as exc:
+            self.send_error_json(500, "read_failed", f"Failed to read snapshot: {exc}")
+            return
+        except json.JSONDecodeError as exc:
+            self.send_error_json(500, "read_failed", f"Failed to parse snapshot: {exc}")
+            return
+        except Exception as exc:
+            self.send_error_json(500, "internal_error", f"Failed to compile snapshot: {exc}")
+            return
+
+        mobile_summary = build_mobile_summary(snapshot)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._send_security_headers()
+        self.end_headers()
+        self.wfile.write(json.dumps(mobile_summary, ensure_ascii=False, sort_keys=True).encode("utf-8"))
+
+    def _build_request_snapshot(
+        self,
+        *,
+        date_str: str,
+        period: str,
+        machine_filter: Optional[str],
+        account_filter: Optional[str],
+    ) -> str:
+        latest_dir = os.path.dirname(self.server.latest_path) or "."
+        os.makedirs(latest_dir, exist_ok=True)
+        tmp_file = tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".json",
+            prefix="request-snapshot-",
+            dir=latest_dir,
+            delete=False,
+        )
+        tmp_path = tmp_file.name
+        tmp_file.close()
+        try:
+            build_snapshot(
+                db_path=self.server.db_path,
+                output_path=tmp_path,
+                date_str=date_str,
+                timezone_str=self.server.timezone,
+                period=period,
+                machine_filter=machine_filter,
+                account_filter=account_filter,
+            )
+            with open(tmp_path, "r", encoding="utf-8") as handle:
+                return handle.read()
+        finally:
+            try:
+                os.remove(tmp_path)
+            except FileNotFoundError:
+                pass
 
     def handle_get_health(self) -> None:
         latest_data: Dict[str, Any] = {}

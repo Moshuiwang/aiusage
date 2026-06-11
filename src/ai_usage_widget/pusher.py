@@ -4,8 +4,9 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import time
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 import urllib.request
 import urllib.error
 from typing import Any, Callable, Dict, Optional, Tuple
@@ -34,6 +35,104 @@ class IngestHTTPClient:
             return e.code, resp_data
         except Exception as e:
             raise e
+
+
+def _is_mswusage_codex_report(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("schema_version") == 1
+        and value.get("source") == "mswusage_codex"
+        and value.get("provenance") == "mswusage_codex_token_count"
+        and isinstance(value.get("hourly"), list)
+        and isinstance(value.get("daily"), list)
+        and isinstance(value.get("sessions"), list)
+    )
+
+
+def _codex_hourly_drift(ccusage_data: dict, mswusage_report: dict, threshold_percent: float = 5.0) -> dict:
+    daily_by_date, baseline_agent = _ccusage_codex_totals_by_date(ccusage_data)
+    mswusage_dates = _mswusage_codex_dates(mswusage_report)
+    latest_date = max(set(daily_by_date) & mswusage_dates) if set(daily_by_date) & mswusage_dates else None
+    comparison_dates = [latest_date] if latest_date else []
+    daily_total = sum(daily_by_date[date] for date in comparison_dates) if comparison_dates else None
+    mswusage_total = _mswusage_codex_total(mswusage_report, comparison_dates) if comparison_dates else None
+    result = {
+        "status": "comparison_unavailable",
+        "threshold_percent": threshold_percent,
+        "daily_codex_total_tokens": daily_total,
+        "mswusage_codex_total_tokens": mswusage_total,
+        "comparison_dates": comparison_dates,
+        "baseline_agent": baseline_agent,
+    }
+    if daily_total is None or mswusage_total is None:
+        return result
+    if daily_total == 0:
+        difference_percent = 0.0 if mswusage_total == 0 else 100.0
+        difference_tokens = abs(mswusage_total)
+    else:
+        difference_tokens = abs(mswusage_total - daily_total)
+        difference_percent = round((difference_tokens / daily_total) * 100, 4)
+    result["difference_tokens"] = difference_tokens
+    result["difference_percent"] = difference_percent
+    result["status"] = "ok" if difference_percent <= threshold_percent else "drift_detected"
+    return result
+
+
+def _ccusage_codex_totals_by_date(ccusage_data: dict) -> tuple[dict[str, int], str | None]:
+    rows = ccusage_data.get("daily") if isinstance(ccusage_data, dict) else None
+    if not isinstance(rows, list):
+        return {}, None
+    totals: dict[str, int] = {}
+    all_totals: dict[str, int] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        date = row.get("period")
+        if not date:
+            continue
+        agent = str(row.get("agent") or "").lower()
+        if _is_codex_agent(agent):
+            totals[str(date)] = totals.get(str(date), 0) + int(row.get("totalTokens") or 0)
+        elif agent == "all":
+            all_totals[str(date)] = all_totals.get(str(date), 0) + int(row.get("totalTokens") or 0)
+    if totals:
+        return totals, "codex"
+    if all_totals:
+        return all_totals, "all"
+    return {}, None
+
+
+def _mswusage_codex_total(report: dict, dates: list[str]) -> int | None:
+    rows = report.get("daily") if isinstance(report, dict) else None
+    if not isinstance(rows, list):
+        return None
+    date_set = set(dates)
+    total = 0
+    found = False
+    for row in rows:
+        if not isinstance(row, dict) or not _is_codex_agent(row.get("agent")):
+            continue
+        if str(row.get("date")) not in date_set:
+            continue
+        found = True
+        total += int(row.get("total_tokens") or 0)
+    return total if found else None
+
+
+def _mswusage_codex_dates(report: dict) -> set[str]:
+    rows = report.get("daily") if isinstance(report, dict) else None
+    if not isinstance(rows, list):
+        return set()
+    dates = set()
+    for row in rows:
+        if isinstance(row, dict) and _is_codex_agent(row.get("agent")) and row.get("date"):
+            dates.add(str(row["date"]))
+    return dates
+
+
+def _is_codex_agent(agent: Any) -> bool:
+    raw = str(agent or "").lower()
+    return "codex" in raw or "gpt" in raw or "openai" in raw
 
 
 def default_executor(argv: list[str], timeout: float) -> CommandResult:
@@ -157,6 +256,37 @@ class DevicePusher:
             except json.JSONDecodeError:
                 ccusage_blocks_report = None
 
+        mswusage_codex_hourly_report = None
+        codex_hourly_status = None
+        mswusage_argv = [
+            sys.executable,
+            "-m",
+            "ai_usage_widget.cli",
+            "mswusage-codex",
+            "--json",
+            "--timezone",
+            self.config.timezone,
+        ]
+        mswusage_res = self.executor(mswusage_argv, float(self.config.timeout_seconds))
+        if mswusage_res.ok and mswusage_res.stdout:
+            try:
+                report = json.loads(mswusage_res.stdout)
+                if _is_mswusage_codex_report(report):
+                    report["drift"] = _codex_hourly_drift(ccusage_data, report)
+                    mswusage_codex_hourly_report = report
+            except json.JSONDecodeError:
+                codex_hourly_status = {
+                    "source": "mswusage_codex",
+                    "status": "unavailable",
+                    "error_type": "invalid_json",
+                }
+        elif not mswusage_res.ok:
+            codex_hourly_status = {
+                "source": "mswusage_codex",
+                "status": "unavailable",
+                "error_type": mswusage_res.error_type or "command_failed",
+            }
+
         # 3. 组织 Ingest Payload
         # ISO 8601 格式的 observed_at 时间戳
         observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
@@ -170,6 +300,7 @@ class DevicePusher:
             "timezone": self.config.timezone,
             "observed_at": observed_at,
             "collection_window": "daily",
+            "collection_status": "ok",
             "ccusage_daily_report": ccusage_data,
             "usage_daily": usage_daily,
         }
@@ -177,6 +308,13 @@ class DevicePusher:
             payload["ccusage_session_report"] = ccusage_session_report
         if ccusage_blocks_report is not None:
             payload["ccusage_blocks_report"] = ccusage_blocks_report
+        if mswusage_codex_hourly_report is not None:
+            payload["mswusage_codex_hourly_report"] = mswusage_codex_hourly_report
+            hourly_facts = _usage_hourly_facts_from_mswusage(self.config, mswusage_codex_hourly_report)
+            if hourly_facts:
+                payload["usage_hourly_facts"] = hourly_facts
+        elif codex_hourly_status is not None:
+            payload["codex_hourly_status"] = codex_hourly_status
 
         # 4. 读取认证 Token 并准备 headers
         headers = {}
@@ -273,3 +411,66 @@ class DevicePusher:
             "source_id": resp_data.get("source_id") or self.config.source_id,
             "collection_status": status,
         }
+
+
+def _usage_hourly_facts_from_mswusage(config: DeviceConfig, report: dict) -> list[dict[str, Any]]:
+    accounts = config.ai_accounts or {}
+    account = accounts.get("codex")
+    if not isinstance(account, dict):
+        return []
+    rows = report.get("hourly")
+    if not isinstance(rows, list):
+        return []
+    provider = str(account.get("provider") or "openai")
+    account_id = str(account.get("account_id") or account.get("label") or "unknown")
+    label = str(account.get("label") or account_id)
+    facts = []
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("hour"):
+            continue
+        hour = str(row["hour"])
+        window_start = hour
+        window_end = str(row.get("window_end") or _next_hour_iso(hour) or hour)
+        confidence = str(account.get("attribution_confidence") or "account_observed_usage_inferred")
+        provenance = str(row.get("provenance") or report.get("provenance") or "mswusage_codex_token_count")
+        facts.append({
+            "fact_id": f"codex:codex:{config.source_id}:{window_start}:{window_end}:{confidence}:{provider}:{account_id}:{provenance}",
+            "agent": "codex",
+            "client": "codex",
+            "window_start": window_start,
+            "window_end": window_end,
+            "ai_account": {
+                "provider": provider,
+                "account_id": account_id,
+                "label": label,
+                "display_name": account.get("display_name"),
+                "subscription": account.get("subscription"),
+            },
+            "usage": {
+                "input_tokens": int(row.get("input_tokens") or 0),
+                "output_tokens": int(row.get("output_tokens") or 0),
+                "cache_creation_tokens": int(row.get("cache_creation_tokens") or 0),
+                "cache_read_tokens": int(row.get("cache_read_tokens") or 0),
+                "reasoning_output_tokens": int(row.get("reasoning_output_tokens") or 0),
+                "total_tokens": int(row.get("total_tokens") or 0),
+            },
+            "event_count": int(row.get("event_count") or 0),
+            "session_count": int(row.get("session_count") or 0),
+            "attribution_confidence": confidence,
+            "provenance": provenance,
+            "account_evidence": {
+                "source": str(account.get("evidence_source") or "device_config"),
+                "observed_at": report.get("generated_at"),
+                "window": "collection_time",
+            },
+            "sensitive_payload": False,
+        })
+    return facts
+
+
+def _next_hour_iso(value: str) -> str | None:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return (parsed.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)).isoformat(timespec="seconds")

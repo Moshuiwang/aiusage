@@ -1,0 +1,7 @@
+{"timestamp":"2026-06-04T15:58:10.000Z","type":"session_meta","payload":{"id":"019e91f1-739a-79b1-99ca-60cc89982c35","cwd":"/Users/example/.codex/sessions/hidden.jsonl"}}
+{"timestamp":"2026-06-04T15:58:12.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1000,"cached_input_tokens":250,"output_tokens":50,"reasoning_output_tokens":10,"total_tokens":1050},"total_token_usage":{"input_tokens":1000,"cached_input_tokens":250,"output_tokens":50,"reasoning_output_tokens":10,"total_tokens":1050}},"message":"secret prompt text","tool_output":"secret shell output"}}
+{"timestamp":"2026-06-04T16:03:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":300,"cached_input_tokens":100,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":325}},"response":"secret response text"}}
+{"timestamp":"2026-06-04T16:10:00.000Z","type":"event_msg","payload":{"type":"message","content":"ignore me"}}
+{"timestamp":"bad timestamp","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":1,"cached_input_tokens":0,"output_tokens":1,"total_tokens":2}}}}
+not json
+{"timestamp":"2026-06-04T17:01:00.000Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":2,"reasoning_output_tokens":1,"total_tokens":12}}}}

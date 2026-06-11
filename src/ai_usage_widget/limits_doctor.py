@@ -27,13 +27,6 @@ def run_limits_doctor(
 
     try:
         config = load_limits_config(config_path)
-    except FileNotFoundError:
-        return {
-            "success": False,
-            "doctor": True,
-            "checks": [_check("limits_config", "missing", ok=False, configured=True)],
-            "providers": [],
-        }
     except (OSError, ConfigError, ValueError) as exc:
         return {
             "success": False,
@@ -97,6 +90,9 @@ def _doctor_codex(provider: LimitsProviderConfig, resolver: CommandResolver) -> 
     rpc_ready = provider.codex_rpc and rpc_command_check["ok"] and rpc_socket_check["ok"]
     return {
         "provider": "codex",
+        "source_id": provider.source_id or "codex",
+        "has_env": bool(provider.env),
+        "env_keys": sorted((provider.env or {}).keys()),
         "ready": bool(auth_ready or rpc_ready),
         "checks": checks,
     }
@@ -125,6 +121,9 @@ def _doctor_claude(provider: LimitsProviderConfig, resolver: CommandResolver) ->
     cli_ready = provider.claude_cli and cli_check["ok"]
     return {
         "provider": "claude",
+        "source_id": provider.source_id or "claude",
+        "has_env": bool(provider.env),
+        "env_keys": sorted((provider.env or {}).keys()),
         "ready": bool(oauth_ready or cli_ready),
         "checks": checks,
     }

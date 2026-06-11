@@ -1,0 +1,397 @@
+{
+  "prototype_only": true,
+  "schema_version": "mobile-prototype-v2",
+  "generated_at": "2026-06-03T11:05:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "glossary": {
+    "account": "OS user",
+    "provider_account": "Claude/Codex login account used by limits providers"
+  },
+  "summary": {
+    "today_total_tokens": 1284600,
+    "last_updated_label": "11:05",
+    "healthy_sources": 3,
+    "total_sources": 5,
+    "stale_sources": 1,
+    "failed_sources": 1
+  },
+  "periods": {
+    "today": {
+      "label": "今天",
+      "range_label": "06-03",
+      "total_tokens": 1284600,
+      "input_tokens": 336200,
+      "output_tokens": 197800,
+      "cache_tokens": 750600,
+      "cost_usd": 18.42,
+      "delta_label": "+9% vs 昨天"
+    },
+    "week": {
+      "label": "周",
+      "range_label": "05-28 至 06-03",
+      "total_tokens": 6424100,
+      "input_tokens": 1681300,
+      "output_tokens": 986400,
+      "cache_tokens": 3756400,
+      "cost_usd": 91.20,
+      "delta_label": "向前 7 天"
+    },
+    "month": {
+      "label": "月",
+      "range_label": "05-05 至 06-03",
+      "total_tokens": 18420600,
+      "input_tokens": 4948800,
+      "output_tokens": 2931700,
+      "cache_tokens": 10540100,
+      "cost_usd": 253.16,
+      "delta_label": "向前 30 天"
+    },
+    "all": {
+      "label": "全部",
+      "range_label": "2026-05-22 起",
+      "total_tokens": 18420600,
+      "input_tokens": 4948800,
+      "output_tokens": 2931700,
+      "cache_tokens": 10540100,
+      "cost_usd": 253.16,
+      "delta_label": "历史累计"
+    }
+  },
+  "trend": {
+    "today": [
+      {"label": "00", "tokens": 12000, "input_tokens": 3400, "output_tokens": 2100, "cache_tokens": 6500, "cache_ratio": 54},
+      {"label": "03", "tokens": 88000, "input_tokens": 22100, "output_tokens": 14800, "cache_tokens": 51100, "cache_ratio": 58},
+      {"label": "06", "tokens": 144000, "input_tokens": 36100, "output_tokens": 22500, "cache_tokens": 85400, "cache_ratio": 59},
+      {"label": "09", "tokens": 601000, "input_tokens": 155200, "output_tokens": 94600, "cache_tokens": 351200, "cache_ratio": 58},
+      {"label": "11", "tokens": 1284600, "input_tokens": 336200, "output_tokens": 197800, "cache_tokens": 750600, "cache_ratio": 58}
+    ],
+    "week": [
+      {"label": "05-28", "tokens": 704200, "input_tokens": 184600, "output_tokens": 107200, "cache_tokens": 412400, "cache_ratio": 59},
+      {"label": "05-29", "tokens": 761800, "input_tokens": 199900, "output_tokens": 119700, "cache_tokens": 442200, "cache_ratio": 58},
+      {"label": "05-30", "tokens": 721000, "input_tokens": 188400, "output_tokens": 111200, "cache_tokens": 421400, "cache_ratio": 58},
+      {"label": "05-31", "tokens": 916400, "input_tokens": 240100, "output_tokens": 139900, "cache_tokens": 536400, "cache_ratio": 59},
+      {"label": "06-01", "tokens": 1038200, "input_tokens": 272400, "output_tokens": 159800, "cache_tokens": 606000, "cache_ratio": 58},
+      {"label": "06-02", "tokens": 1180300, "input_tokens": 309700, "output_tokens": 180200, "cache_tokens": 690400, "cache_ratio": 58},
+      {"label": "06-03", "tokens": 1284600, "input_tokens": 336200, "output_tokens": 197800, "cache_tokens": 750600, "cache_ratio": 58}
+    ],
+    "month": [
+      {"label": "05-05", "tokens": 410000, "input_tokens": 108000, "output_tokens": 65000, "cache_tokens": 237000, "cache_ratio": 58},
+      {"label": "05-12", "tokens": 3920000, "input_tokens": 1034000, "output_tokens": 612000, "cache_tokens": 2274000, "cache_ratio": 58},
+      {"label": "05-19", "tokens": 4870000, "input_tokens": 1285000, "output_tokens": 760000, "cache_tokens": 2825000, "cache_ratio": 58},
+      {"label": "05-26", "tokens": 6127600, "input_tokens": 1615000, "output_tokens": 958000, "cache_tokens": 3554600, "cache_ratio": 58},
+      {"label": "06-03", "tokens": 3503100, "input_tokens": 921300, "output_tokens": 536400, "cache_tokens": 2045400, "cache_ratio": 58}
+    ],
+    "all": [
+      {"label": "W1", "tokens": 3920000, "input_tokens": 1034000, "output_tokens": 612000, "cache_tokens": 2274000, "cache_ratio": 58},
+      {"label": "W2", "tokens": 4870000, "input_tokens": 1285000, "output_tokens": 760000, "cache_tokens": 2825000, "cache_ratio": 58},
+      {"label": "W3", "tokens": 6127600, "input_tokens": 1615000, "output_tokens": 958000, "cache_tokens": 3554600, "cache_ratio": 58},
+      {"label": "W4", "tokens": 3503100, "input_tokens": 921300, "output_tokens": 536400, "cache_tokens": 2045400, "cache_ratio": 58}
+    ]
+  },
+  "top_sources": [
+    {
+      "label": "macbook-pro / wang",
+      "agent": "Codex",
+      "tokens": 488200,
+      "share": 38,
+      "status": "ok"
+    },
+    {
+      "label": "vpn2 / root",
+      "agent": "Claude Code",
+      "tokens": 311900,
+      "share": 24,
+      "status": "ok"
+    },
+    {
+      "label": "windows-desktop / wang",
+      "agent": "Codex",
+      "tokens": 226400,
+      "share": 18,
+      "status": "stale"
+    }
+  ],
+  "sources": [
+    {
+      "source_id": "mac-local",
+      "machine": "macbook-pro",
+      "os_user": "wang",
+      "platform": "macOS",
+      "agents": ["Codex", "Claude Code"],
+      "last_observed": "2026-06-03T10:57:00+08:00",
+      "last_pushed": "2026-06-03T11:02:00+08:00",
+      "status": "ok",
+      "tokens_today": 488200,
+      "message": "fresh"
+    },
+    {
+      "source_id": "vpn2-root",
+      "machine": "vpn2",
+      "os_user": "root",
+      "platform": "Linux",
+      "agents": ["Claude Code"],
+      "last_observed": "2026-06-03T10:51:00+08:00",
+      "last_pushed": "2026-06-03T10:55:00+08:00",
+      "status": "ok",
+      "tokens_today": 311900,
+      "message": "fresh"
+    },
+    {
+      "source_id": "win-desktop",
+      "machine": "windows-desktop",
+      "os_user": "wang",
+      "platform": "Windows",
+      "agents": ["Codex"],
+      "last_observed": "2026-06-03T08:18:00+08:00",
+      "last_pushed": "2026-06-03T08:20:00+08:00",
+      "status": "stale",
+      "tokens_today": 226400,
+      "message": "No push for 165 minutes"
+    },
+    {
+      "source_id": "linux-build",
+      "machine": "buildbox",
+      "os_user": "wang",
+      "platform": "Linux",
+      "agents": ["Claude Code"],
+      "last_observed": "2026-06-03T10:42:00+08:00",
+      "last_pushed": "2026-06-03T10:44:00+08:00",
+      "status": "ok",
+      "tokens_today": 164500,
+      "message": "fresh"
+    },
+    {
+      "source_id": "manual-antigravity",
+      "machine": "macbook-pro",
+      "os_user": "wang",
+      "platform": "manual import",
+      "agents": ["Antigravity"],
+      "last_observed": "2026-06-03T09:04:00+08:00",
+      "last_pushed": "2026-06-03T09:06:00+08:00",
+      "status": "command_failed",
+      "tokens_today": 93600,
+      "message": "Fixture parser succeeded; real reader not configured"
+    }
+  ],
+  "breakdowns": {
+    "today": {
+      "machine": [
+        {"label": "macbook-pro", "tokens": 581800, "share": 45},
+        {"label": "vpn2", "tokens": 311900, "share": 24},
+        {"label": "windows-desktop", "tokens": 226400, "share": 18},
+        {"label": "buildbox", "tokens": 164500, "share": 13}
+      ],
+      "account": [
+        {"label": "wang", "tokens": 972700, "share": 76},
+        {"label": "root", "tokens": 311900, "share": 24}
+      ],
+      "agent": [
+        {"label": "Codex", "tokens": 714600, "share": 56},
+        {"label": "Claude Code", "tokens": 476400, "share": 37},
+        {"label": "Antigravity", "tokens": 93600, "share": 7}
+      ],
+      "model": [
+        {"label": "gpt-5-codex", "tokens": 468300, "share": 36},
+        {"label": "claude-opus-4", "tokens": 322100, "share": 25},
+        {"label": "gpt-5", "tokens": 246300, "share": 19},
+        {"label": "claude-sonnet-4", "tokens": 154300, "share": 12},
+        {"label": "unknown", "tokens": 93600, "share": 8}
+      ],
+      "date": [
+        {"label": "00", "tokens": 12000, "share": 1},
+        {"label": "03", "tokens": 88000, "share": 7},
+        {"label": "06", "tokens": 144000, "share": 11},
+        {"label": "09", "tokens": 601000, "share": 47},
+        {"label": "11", "tokens": 1284600, "share": 100}
+      ]
+    },
+    "week": {
+      "machine": [
+        {"label": "macbook-pro", "tokens": 2863100, "share": 45},
+        {"label": "vpn2", "tokens": 1604200, "share": 25},
+        {"label": "windows-desktop", "tokens": 1111800, "share": 17},
+        {"label": "buildbox", "tokens": 821000, "share": 13}
+      ],
+      "account": [
+        {"label": "wang", "tokens": 4820000, "share": 75},
+        {"label": "root", "tokens": 1604200, "share": 25}
+      ],
+      "agent": [
+        {"label": "Codex", "tokens": 3584300, "share": 56},
+        {"label": "Claude Code", "tokens": 2390100, "share": 37},
+        {"label": "Antigravity", "tokens": 449700, "share": 7}
+      ],
+      "model": [
+        {"label": "gpt-5-codex", "tokens": 2310000, "share": 36},
+        {"label": "claude-opus-4", "tokens": 1610000, "share": 25},
+        {"label": "gpt-5", "tokens": 1284300, "share": 20},
+        {"label": "claude-sonnet-4", "tokens": 770100, "share": 12},
+        {"label": "unknown", "tokens": 449700, "share": 7}
+      ],
+      "date": [
+        {"label": "05-28", "tokens": 704200, "share": 55},
+        {"label": "05-29", "tokens": 761800, "share": 59},
+        {"label": "05-30", "tokens": 721000, "share": 56},
+        {"label": "05-31", "tokens": 916400, "share": 71},
+        {"label": "06-01", "tokens": 1038200, "share": 81},
+        {"label": "06-02", "tokens": 1180300, "share": 92},
+        {"label": "06-03", "tokens": 1284600, "share": 100}
+      ]
+    },
+    "month": {
+      "machine": [
+        {"label": "macbook-pro", "tokens": 8420000, "share": 46},
+        {"label": "vpn2", "tokens": 4600000, "share": 25},
+        {"label": "windows-desktop", "tokens": 3320000, "share": 18},
+        {"label": "buildbox", "tokens": 2080600, "share": 11}
+      ],
+      "account": [
+        {"label": "wang", "tokens": 13820600, "share": 75},
+        {"label": "root", "tokens": 4600000, "share": 25}
+      ],
+      "agent": [
+        {"label": "Codex", "tokens": 10290000, "share": 56},
+        {"label": "Claude Code", "tokens": 6760000, "share": 37},
+        {"label": "Antigravity", "tokens": 1370600, "share": 7}
+      ],
+      "model": [
+        {"label": "gpt-5-codex", "tokens": 6620000, "share": 36},
+        {"label": "claude-opus-4", "tokens": 4600000, "share": 25},
+        {"label": "gpt-5", "tokens": 3680000, "share": 20},
+        {"label": "claude-sonnet-4", "tokens": 2130000, "share": 12},
+        {"label": "unknown", "tokens": 1370600, "share": 7}
+      ],
+      "date": [
+        {"label": "05-05", "tokens": 410000, "share": 7},
+        {"label": "05-12", "tokens": 3920000, "share": 64},
+        {"label": "05-19", "tokens": 4870000, "share": 79},
+        {"label": "05-26", "tokens": 6127600, "share": 100},
+        {"label": "06-03", "tokens": 3503100, "share": 57}
+      ]
+    },
+    "all": {
+      "machine": [
+        {"label": "macbook-pro", "tokens": 8420000, "share": 46},
+        {"label": "vpn2", "tokens": 4600000, "share": 25},
+        {"label": "windows-desktop", "tokens": 3320000, "share": 18},
+        {"label": "buildbox", "tokens": 2080600, "share": 11}
+      ],
+      "account": [
+        {"label": "wang", "tokens": 13820600, "share": 75},
+        {"label": "root", "tokens": 4600000, "share": 25}
+      ],
+      "agent": [
+        {"label": "Codex", "tokens": 10290000, "share": 56},
+        {"label": "Claude Code", "tokens": 6760000, "share": 37},
+        {"label": "Antigravity", "tokens": 1370600, "share": 7}
+      ],
+      "model": [
+        {"label": "gpt-5-codex", "tokens": 6620000, "share": 36},
+        {"label": "claude-opus-4", "tokens": 4600000, "share": 25},
+        {"label": "gpt-5", "tokens": 3680000, "share": 20},
+        {"label": "claude-sonnet-4", "tokens": 2130000, "share": 12},
+        {"label": "unknown", "tokens": 1370600, "share": 7}
+      ],
+      "date": [
+        {"label": "W1", "tokens": 3920000, "share": 64},
+        {"label": "W2", "tokens": 4870000, "share": 79},
+        {"label": "W3", "tokens": 6127600, "share": 100},
+        {"label": "W4", "tokens": 3503100, "share": 57}
+      ]
+    }
+  },
+  "breakdown_detail": {
+    "machine": {
+      "label": "Machine",
+      "summary": "这台机器在当前周期内的用量、OS user、agent、model 和时间分布。",
+      "children": ["account", "agent", "model", "date"]
+    },
+    "account": {
+      "label": "OS User",
+      "summary": "OS User 是机器上的系统账户，不是 Claude Code / Codex 的登录账号；这里优先看它在当前周期里的日期明细。",
+      "children": ["date", "agent", "model"]
+    },
+    "agent": {
+      "label": "Agent",
+      "summary": "这个 agent 在当前周期内的机器、OS user、model 和时间分布。",
+      "children": ["machine", "account", "model", "date"]
+    },
+    "model": {
+      "label": "Model",
+      "summary": "这个 model 在当前周期内由哪些 agent、机器和 OS user 使用。",
+      "children": ["agent", "machine", "account", "date"]
+    },
+    "date": {
+      "label": "Date",
+      "summary": "这个时间桶内的主要机器、OS user、agent 和 model 分布。",
+      "children": ["machine", "account", "agent", "model"]
+    }
+  },
+  "limits": {
+    "status": "partial",
+    "summary": "额度窗口按 provider、账号和窗口展示。只有可信窗口显示百分比；缺失窗口不用历史 token 推断。",
+    "windows": [
+      {
+        "provider": "Codex",
+        "account_label": "OpenAI wang",
+        "window": "5h",
+        "used_percent": 62,
+        "remaining_percent": 38,
+        "reset_label": "13:10",
+        "observed_at": "2026-06-03T10:58:00+08:00",
+        "confidence": "observed",
+        "source_type": "app-server rpc",
+        "status": "ok"
+      },
+      {
+        "provider": "Codex",
+        "account_label": "OpenAI wang",
+        "window": "weekly",
+        "used_percent": 41,
+        "remaining_percent": 59,
+        "reset_label": "Sunday",
+        "observed_at": "2026-06-03T10:58:00+08:00",
+        "confidence": "observed",
+        "source_type": "wham usage",
+        "status": "ok"
+      },
+      {
+        "provider": "Claude Code",
+        "account_label": "Anthropic personal",
+        "window": "5h",
+        "used_percent": 74,
+        "remaining_percent": 26,
+        "reset_label": "12:25",
+        "observed_at": "2026-06-03T10:52:00+08:00",
+        "confidence": "observed",
+        "source_type": "cli usage",
+        "status": "ok"
+      },
+      {
+        "provider": "Claude Code",
+        "account_label": "Anthropic personal",
+        "window": "weekly",
+        "used_percent": null,
+        "remaining_percent": null,
+        "reset_label": null,
+        "observed_at": null,
+        "confidence": "missing",
+        "source_type": "oauth usage",
+        "status": "missing",
+        "reason": "OAuth weekly 用量来源未配置"
+      },
+      {
+        "provider": "Codex",
+        "account_label": "OpenAI work",
+        "window": "5h",
+        "used_percent": 18,
+        "remaining_percent": 82,
+        "reset_label": "14:40",
+        "observed_at": "2026-06-03T10:48:00+08:00",
+        "confidence": "observed",
+        "source_type": "wham usage",
+        "status": "ok"
+      }
+    ]
+  }
+}

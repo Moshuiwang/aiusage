@@ -9,7 +9,7 @@
 - [x] **CLI 命令增强**：在 [cli.py](file:///Users/wangzhipeng/Documents/ai-usage-widget/src/ai_usage_widget/cli.py) 增加了 `server`、`push`、`backup` 和 `collect-limits` 子命令。
 - [x] **macOS Widget 兼容性改造**：Swift Core 源码已经支持 V2 `error_message` 解码映射，本地编译通过。
 - [x] **Official limits provider MVP**：已完成 Codex WHAM、Codex app-server RPC、Claude OAuth Usage API、Claude CLI `/usage`、SQLite canonical store、snapshot/API、Web dashboard 展示、`config/limits.local.json` 契约、`--doctor`、`--dry-run` 和 scheduler 模板。
-- [x] **测试覆盖**：138 个 Python 单元测试和 2 个 Swift 测试全部通过。
+- [x] **测试覆盖**：123 个 Python 单元测试和 2 个 Swift 测试全部通过。
 
 有关开发详情，请参阅 [walkthrough.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/walkthrough.md) (由原 conversation-id 目录拷贝或生成)。
 

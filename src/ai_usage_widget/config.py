@@ -75,6 +75,7 @@ class DeviceConfig:
     server_url: str
     timeout_seconds: int = 30
     token_env: Optional[str] = None
+    ai_accounts: Optional[Dict[str, Dict[str, Any]]] = None
 
 
 def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
@@ -113,5 +114,5 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
         server_url=str(data["server_url"]),
         timeout_seconds=int(data.get("timeout_seconds", 30)),
         token_env=data.get("token_env"),
+        ai_accounts=data.get("ai_accounts") if isinstance(data.get("ai_accounts"), dict) else None,
     )
-

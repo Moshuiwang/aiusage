@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI Usage Mobile Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-visual-version="v10" data-current-view="home">
+  <main class="phone-shell" aria-label="AI usage mobile prototype" data-fixture="fixture.json" data-material="liquid-glass">
+    <div class="system-status" aria-hidden="true">
+      <span>11:05</span>
+      <i class="dynamic-island"></i>
+      <span class="system-cluster">
+        <i></i>
+        <i></i>
+        <i></i>
+      </span>
+    </div>
+    <header class="app-header ios-navigation home-only-header">
+      <div>
+        <p class="eyebrow">Personal Monitor</p>
+        <h1 class="navigation-title">AI Usage</h1>
+        <p class="header-status">Personal usage monitor</p>
+      </div>
+      <button class="icon-button" type="button" aria-label="刷新原型数据" title="刷新原型数据" id="refreshButton">
+        <span aria-hidden="true">↻</span>
+      </button>
+    </header>
+
+    <section class="view is-active" data-view="home" aria-label="Home">
+      <section class="period-selector" aria-label="Usage period">
+        <button type="button" data-period="today" aria-pressed="true">今天</button>
+        <button type="button" data-period="week" aria-pressed="false">周</button>
+        <button type="button" data-period="month" aria-pressed="false">月</button>
+        <button type="button" data-period="all" aria-pressed="false">全部</button>
+      </section>
+
+      <div class="hero-panel" data-provenance="periods.active.total_tokens">
+        <p class="panel-label" id="periodLabel">--</p>
+        <strong id="periodTotal">--</strong>
+        <span id="periodMeta">--</span>
+      </div>
+
+      <section class="metric-row" aria-label="Token type summary" data-provenance="periods.active.token_types">
+        <div>
+          <span>Input</span>
+          <strong id="inputTokens">--</strong>
+        </div>
+        <div>
+          <span>Output</span>
+          <strong id="outputTokens">--</strong>
+        </div>
+        <div>
+          <span>Cache</span>
+          <strong id="cacheTokens">--</strong>
+        </div>
+      </section>
+
+      <section class="section-block trend-block" data-provenance="trend.active">
+        <div class="section-heading">
+          <h2>用量趋势</h2>
+          <button class="action-link" type="button" data-tab-shortcut="breakdown">查看明细</button>
+        </div>
+        <p class="section-subtitle" id="trendRange">--</p>
+        <svg id="usageTrend" class="usage-trend" viewBox="0 0 360 144" preserveAspectRatio="none" role="img" aria-label="当前周期用量折线图"></svg>
+        <div class="trend-tooltip" id="trendTooltip" hidden></div>
+      </section>
+
+      <section class="section-block limits-preview" data-provenance="limits.windows">
+        <div class="section-heading">
+          <h2>额度窗口</h2>
+          <button class="action-link" type="button" data-tab-shortcut="limits">查看明细</button>
+        </div>
+        <p class="section-subtitle" id="limitsState">--</p>
+        <div id="homeLimitCards" class="limit-preview-list"></div>
+      </section>
+
+      <section class="health-compact" data-provenance="sources.status">
+        <span id="healthSummary">--</span>
+        <button class="action-link" type="button" data-tab-shortcut="sources">查看明细</button>
+      </section>
+
+      <section class="section-block" data-provenance="top_sources">
+        <div class="section-heading">
+          <h2>主要来源</h2>
+          <span>Top 3</span>
+        </div>
+        <div class="stack-list" id="topSources"></div>
+      </section>
+    </section>
+
+    <section class="view" data-view="sources" aria-label="Sources">
+      <section class="view-masthead secondary-summary" aria-label="Sources summary">
+        <div>
+          <p class="eyebrow">采集</p>
+          <h1>采集来源</h1>
+          <span>按机器与系统账户查看上报状态</span>
+        </div>
+        <div class="masthead-stat">
+          <strong id="sourceHealthScore">--</strong>
+          <span>正常</span>
+        </div>
+      </section>
+      <section class="section-block" data-provenance="sources">
+        <div class="section-heading">
+          <h2>采集列表</h2>
+          <span id="sourceCount">--</span>
+        </div>
+        <div class="source-list" id="sourceList"></div>
+      </section>
+    </section>
+
+    <section class="view" data-view="breakdown" aria-label="Breakdown">
+      <section class="view-masthead secondary-summary" aria-label="Breakdown summary">
+        <div>
+          <p class="eyebrow">明细</p>
+          <h1>用量明细</h1>
+          <span id="breakdownPeriodMeta">--</span>
+        </div>
+        <div class="masthead-stat">
+          <strong>5</strong>
+          <span>维度</span>
+        </div>
+      </section>
+      <section class="period-selector" aria-label="Breakdown period">
+        <button type="button" data-period="today" aria-pressed="true">今天</button>
+        <button type="button" data-period="week" aria-pressed="false">周</button>
+        <button type="button" data-period="month" aria-pressed="false">月</button>
+        <button type="button" data-period="all" aria-pressed="false">全部</button>
+      </section>
+      <section class="segmented-control" aria-label="Breakdown dimension">
+        <button type="button" data-breakdown="machine" aria-pressed="true">Machine</button>
+        <button type="button" data-breakdown="account" aria-pressed="false">OS User</button>
+        <button type="button" data-breakdown="agent" aria-pressed="false">Agent</button>
+        <button type="button" data-breakdown="model" aria-pressed="false">Model</button>
+        <button type="button" data-breakdown="date" aria-pressed="false">Date</button>
+      </section>
+      <section class="section-block" data-provenance="breakdowns">
+        <div class="section-heading">
+          <h2 id="breakdownTitle">By Machine</h2>
+          <span>Tokens</span>
+        </div>
+        <div class="bar-list" id="breakdownList"></div>
+      </section>
+    </section>
+
+    <div class="detail-backdrop" id="detailBackdrop" hidden></div>
+    <section class="detail-panel" id="breakdownDetailPanel" aria-label="Breakdown detail" hidden>
+      <div class="detail-handle" aria-hidden="true"></div>
+      <header class="detail-header">
+        <div>
+          <p class="eyebrow" id="detailKind">--</p>
+          <h2 id="detailTitle">--</h2>
+        </div>
+        <button class="icon-button" type="button" id="detailClose" aria-label="关闭明细" title="关闭明细">×</button>
+      </header>
+      <p class="quiet-copy" id="detailSummary"></p>
+      <section class="metric-row compact" data-provenance="breakdown_detail.token_types">
+        <div>
+          <span>Input</span>
+          <strong id="detailInput">--</strong>
+        </div>
+        <div>
+          <span>Output</span>
+          <strong id="detailOutput">--</strong>
+        </div>
+        <div>
+          <span>Cache</span>
+          <strong id="detailCache">--</strong>
+        </div>
+      </section>
+      <div class="detail-ratio" id="detailCacheRatio">--</div>
+      <div class="bar-list detail-child-list" id="detailChildList"></div>
+    </section>
+
+    <section class="view" data-view="limits" aria-label="Limits">
+      <section class="view-masthead secondary-summary" aria-label="Limits summary">
+        <div>
+          <p class="eyebrow">额度</p>
+          <h1>额度窗口</h1>
+          <span>provider、账号、窗口和 reset 提醒</span>
+        </div>
+        <div class="masthead-stat">
+          <strong id="limitsObservedScore">--</strong>
+          <span>可信</span>
+        </div>
+      </section>
+      <section class="section-block" data-provenance="limits.windows">
+        <div class="section-heading">
+          <h2>额度列表</h2>
+          <span id="limitCount">--</span>
+        </div>
+        <p class="quiet-copy" id="limitsSummary"></p>
+        <label class="reminder-switch">
+          <span>
+            <strong>重置提醒</strong>
+            <em>窗口 reset 时通知</em>
+          </span>
+          <input type="checkbox" id="limitReminderSwitch">
+          <i aria-hidden="true"></i>
+        </label>
+        <p class="quiet-copy reminder-status" id="limitReminderStatus"></p>
+        <div class="limit-list" id="limitList"></div>
+      </section>
+    </section>
+
+    <nav class="tab-bar" aria-label="Primary">
+      <button type="button" data-tab="home" aria-current="page">
+        <span aria-hidden="true">⌂</span>
+        首页
+      </button>
+      <button type="button" data-tab="sources">
+        <span aria-hidden="true">◉</span>
+        来源
+      </button>
+      <button type="button" data-tab="breakdown">
+        <span aria-hidden="true">▦</span>
+        明细
+      </button>
+      <button type="button" data-tab="limits">
+        <span aria-hidden="true">◌</span>
+        额度
+      </button>
+    </nav>
+    <div class="home-indicator" aria-hidden="true"></div>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
