@@ -28,3 +28,30 @@
 - 项目命令：`README.md`
 
 如果当前任务能用本文件和指定任务包完成，不要额外读取其他文档。
+
+## Architecture Governance Workflow
+
+- 当前项目采用分轮架构治理。
+- 任何架构治理任务必须先读取：
+  - `docs/architecture/architecture.md`
+  - `docs/architecture/governance-roadmap.md`
+  - `docs/architecture/governance-state.md`
+- 每次只执行 `docs/architecture/governance-state.md` 中标记的 `next_round`。
+- 每轮必须经过：
+  1. baseline
+  2. explorer review
+  3. implementation
+  4. reviewer review
+  5. tests
+  6. final report
+  7. stop gate
+- 没有用户确认，不得进入下一轮。
+- 没有用户明确要求，不得 `git add` / `git commit`。
+- 如果发现实际代码和 roadmap 冲突，以实际代码和测试为准，并在报告里说明。
+- 如果发现任务范围会扩大，停止并报告，不要擅自扩大。
+
+当前已完成轮次：
+
+- Round 1: `server.py` / `server_services.py` / architecture boundary / legacy SSH marking
+- Round 2: snapshot period/filter/trend helper extraction
+- Round 3: iOS runtime server settings and Keychain token storage
