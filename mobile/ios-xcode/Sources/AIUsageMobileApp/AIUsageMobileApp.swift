@@ -289,7 +289,7 @@ struct MobileServerSettingsView: View {
         } catch MobileRuntimeConfigurationError.missingToken {
             status = .failure("请填写 token")
         } catch MobileRuntimeConfigurationError.nonProductionServer {
-            status = .failure("当前服务地址不是受信任生产地址。请使用 HTTPS 域名，或在开发环境开启 AI_USAGE_ALLOW_NON_PROD_SERVER=1。")
+            status = .failure("当前服务地址不受信任。请使用 HTTPS 域名；HTTP、localhost、内网 IP 和裸 IP 仅限开发调试。")
         } catch {
             status = .failure("保存失败，请重试")
         }
@@ -308,7 +308,7 @@ struct MobileServerSettingsView: View {
         } catch MobileRuntimeConfigurationError.missingToken {
             status = .failure("请填写 token")
         } catch MobileRuntimeConfigurationError.nonProductionServer {
-            status = .failure("当前服务地址不是受信任生产地址。请使用 HTTPS 域名，或在开发环境开启 AI_USAGE_ALLOW_NON_PROD_SERVER=1。")
+            status = .failure("当前服务地址不受信任。请使用 HTTPS 域名；HTTP、localhost、内网 IP 和裸 IP 仅限开发调试。")
         } catch {
             status = .failure("连接失败，请检查服务地址或 token")
         }

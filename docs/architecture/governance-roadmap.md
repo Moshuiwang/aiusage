@@ -37,8 +37,6 @@
 
 状态：completed
 
-## Upcoming Rounds
-
 ### Round 4: Self-Hosted Server Trust Policy
 
 目标：
@@ -49,22 +47,9 @@
 - 不让生产默认接受任意 HTTP / 裸 IP。
 - 如果需要支持自托管，设计显式 trust policy。
 
-允许修改：
+状态：completed
 
-- iOS runtime config。
-- iOS settings UI 文案。
-- Swift tests。
-- architecture docs。
-
-禁止修改：
-
-- 后端 API。
-- SQLite schema。
-- `snapshot_builder.py`。
-- Widget App Group。
-- Keychain access group。
-
-完成后停止。
+## Upcoming Rounds
 
 ### Round 5: Widget Configuration Sharing Design
 

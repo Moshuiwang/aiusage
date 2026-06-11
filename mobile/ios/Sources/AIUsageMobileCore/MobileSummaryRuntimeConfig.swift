@@ -72,7 +72,7 @@ public enum MobileSummaryRuntimeConfig {
         else {
             return nil
         }
-        guard isProductionServer(baseURL) || environment["AI_USAGE_ALLOW_NON_PROD_SERVER"] == "1" else {
+        guard isTrustedServer(baseURL) || environment["AI_USAGE_ALLOW_NON_PROD_SERVER"] == "1" else {
             return nil
         }
 
@@ -98,7 +98,7 @@ public enum MobileSummaryRuntimeConfig {
         guard let baseURL = normalizedURL(baseURLString) else {
             throw MobileRuntimeConfigurationError.invalidBaseURL
         }
-        guard allowNonProduction || isProductionServer(baseURL) else {
+        guard allowNonProduction || isTrustedServer(baseURL) else {
             throw MobileRuntimeConfigurationError.nonProductionServer
         }
 
@@ -120,6 +120,38 @@ public enum MobileSummaryRuntimeConfig {
         url.scheme == "https"
             && url.host?.lowercased() == "vpn2.chunbai.com"
             && url.port == 8443
+    }
+
+    public static func isTrustedServer(_ url: URL) -> Bool {
+        isProductionServer(url) || isSelfHostedHTTPSDomain(url)
+    }
+
+    private static func isSelfHostedHTTPSDomain(_ url: URL) -> Bool {
+        guard url.scheme == "https",
+              let host = url.host?.lowercased(),
+              host.contains("."),
+              !isLocalhost(host),
+              !isIPAddress(host)
+        else {
+            return false
+        }
+        return true
+    }
+
+    private static func isLocalhost(_ host: String) -> Bool {
+        host == "localhost" || host.hasSuffix(".localhost") || host.hasSuffix(".local")
+    }
+
+    private static func isIPAddress(_ host: String) -> Bool {
+        let parts = host.split(separator: ".")
+        guard parts.count == 4 else {
+            return false
+        }
+        return parts.allSatisfy { part in
+            !part.isEmpty && part.unicodeScalars.allSatisfy { scalar in
+                (48...57).contains(scalar.value)
+            }
+        }
     }
 
     private static func runtimeToken(tokenStore: MobileTokenStore?) -> String? {

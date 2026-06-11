@@ -108,6 +108,82 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         XCTAssertEqual(config.baseURL.absoluteString, "http://127.0.0.1:8765")
     }
 
+    func testAcceptsExplicitSelfHostedHTTPSDomain() throws {
+        let defaults = try makeIsolatedDefaults()
+        let tokenStore = InMemoryTokenStore()
+
+        let saved = try MobileSummaryRuntimeConfig.saveSettings(
+            baseURLString: "https://usage.example.com",
+            token: "self-host-token",
+            period: "week",
+            defaults: defaults,
+            tokenStore: tokenStore
+        )
+
+        XCTAssertEqual(saved.baseURL.absoluteString, "https://usage.example.com")
+        XCTAssertEqual(defaults.string(forKey: "AIUsageAPIBaseURL"), "https://usage.example.com")
+        let loaded = try XCTUnwrap(MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: "week",
+            environment: [:],
+            defaults: defaults,
+            tokenStore: tokenStore
+        ))
+        XCTAssertEqual(loaded.baseURL.absoluteString, "https://usage.example.com")
+    }
+
+    func testRejectsUnsafeSelfHostedServerURLs() throws {
+        let rejectedURLs = [
+            "http://usage.example.com",
+            "http://localhost:8765",
+            "https://localhost:8765",
+            "http://127.0.0.1:8765",
+            "https://127.0.0.1:8765",
+            "https://192.168.1.10:8765",
+            "https://192.168.001.010:8765",
+            "https://10.0.0.2:8765",
+            "https://172.16.0.2:8765",
+            "https://1.2.3.4:8765",
+            "https://01.02.03.04:8765",
+            "https://999.999.999.999:8765"
+        ]
+
+        for url in rejectedURLs {
+            let defaults = try makeIsolatedDefaults()
+            let tokenStore = InMemoryTokenStore()
+            XCTAssertThrowsError(try MobileSummaryRuntimeConfig.saveSettings(
+                baseURLString: url,
+                token: "token",
+                period: "week",
+                defaults: defaults,
+                tokenStore: tokenStore
+            ), url) { error in
+                XCTAssertEqual(error as? MobileRuntimeConfigurationError, .nonProductionServer)
+            }
+            XCTAssertNil(defaults.string(forKey: "AIUsageAPIBaseURL"))
+            XCTAssertNil(tokenStore.savedToken)
+        }
+    }
+
+    func testRejectsUnsafeSavedRuntimeServerURLs() throws {
+        let rejectedURLs = [
+            "https://192.168.001.010:8765",
+            "https://01.02.03.04:8765"
+        ]
+
+        for url in rejectedURLs {
+            let defaults = try makeIsolatedDefaults()
+            defaults.set(url, forKey: "AIUsageAPIBaseURL")
+            let tokenStore = InMemoryTokenStore(savedToken: "token")
+
+            XCTAssertNil(MobileSummaryRuntimeConfig.makeAPIConfig(
+                period: "week",
+                environment: [:],
+                defaults: defaults,
+                tokenStore: tokenStore
+            ), url)
+        }
+    }
+
     private func makeIsolatedDefaults() throws -> UserDefaults {
         let suiteName = "MobileRuntimeConfigurationTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

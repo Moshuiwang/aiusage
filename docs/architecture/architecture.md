@@ -43,6 +43,7 @@ CLI / HTTP handler / iOS App
 - 展示层不得直接调用 provider。
 - 展示层不得直接读 SQLite 私有表来重新计算业务口径。
 - iOS App 不重新聚合业务指标，只消费 `/api/mobile/summary` 的 mobile summary DTO。
+- iOS App 的 server URL trust policy 只接受生产服务或显式自托管 HTTPS 域名；HTTP、localhost、内网 IP、裸 IP 默认拒绝。开发调试可以用显式 override。
 
 ## 模块 Owner
 
@@ -90,6 +91,7 @@ CLI / HTTP handler / iOS App
 - 新增 summary 聚合 helper：保持 `snapshot_builder.py` 为 owner，helper 只承接可复用纯函数或局部计算。
 - 新增 provider：放 provider module + `limits_runtime.py`，不改 daily usage baseline。
 - 新增 App 设置：放 iOS settings / Keychain 层，不写死到视图。
+- 新增 App server trust policy：只在 iOS runtime config 和对应 Swift tests 中收敛，不影响后端 API 和 SQLite。
 - 新增数据写入：通过 `storage_sqlite.py` 边界，不在 route handler 里直接散写 SQL。
 
 ## 禁止事项
@@ -145,4 +147,4 @@ P2：
 
 P3：
 
-- iOS App 内 server/token 设置、Keychain 保存、连接状态提示另开任务包，不在本次架构治理里贸然实现。
+- Widget 配置共享必须单独设计 App Group + Keychain access group；不得把 token 放入普通共享 UserDefaults。
