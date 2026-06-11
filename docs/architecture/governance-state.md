@@ -24,7 +24,7 @@ Do not proceed to the next round without explicit user confirmation.
 ## Last Known Clean State
 
 - last_checked_commit: b764bb2
-- last_round_commit: pending Round 6 commit
+- last_round_commit: ebc9402
 - working_tree_expected_clean: true
 
 ## Last Completed Round
