@@ -10,10 +10,11 @@
 - Round 4: self-hosted server trust policy
 - Round 5: Widget configuration sharing design
 - Round 6: Snapshot source health helper
+- Round 7: Limits / Provider Runtime Cleanup
 
 ## Next Round
 
-Round 7: Limits / Provider Runtime Cleanup
+当前路线图内治理轮次已完成。后续如要继续治理，必须新建 Round 8 任务包。
 
 ## Stop Rule
 
@@ -23,27 +24,31 @@ Do not proceed to the next round without explicit user confirmation.
 
 ## Last Known Clean State
 
-- last_checked_commit: b764bb2
-- last_round_commit: ebc9402
+- last_checked_commit: edc4e7f
+- last_round_commit: edc4e7f
 - working_tree_expected_clean: true
 
 ## Last Completed Round
 
-- completed_round: Round 6 Snapshot source health helper
+- completed_round: Round 7 Limits / Provider Runtime Cleanup
 - files_changed:
-  - `src/ai_usage_widget/snapshot_source_health.py`
-  - `src/ai_usage_widget/snapshot_builder.py`
-  - `tests/test_snapshot_source_health.py`
+  - `src/ai_usage_widget/mobile_summary.py`
+  - `tests/test_mobile_summary.py`
+  - `mobile/ios/Sources/AIUsageMobileCore/MobileSummary.swift`
+  - `mobile/ios/Sources/AIUsageMobileCore/MobileViewModel.swift`
+  - `mobile/ios/Sources/AIUsageMobileCore/WidgetSummary.swift`
+  - `mobile/ios/Sources/AIUsageMobileCore/AIUsageMobileRootView.swift`
+  - `mobile/ios/Tests/AIUsageMobileCoreTests/MobileSummaryTests.swift`
   - `docs/architecture/architecture.md`
   - `docs/architecture/governance-roadmap.md`
   - `docs/architecture/governance-state.md`
 - tests_run:
   - `git diff --check`
-  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_snapshot_source_health -v`
-  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_snapshot_builder.TestSnapshotBuilder.test_source_health_staleness_and_never_seen tests.test_snapshot_builder.TestSnapshotBuilder.test_source_status_includes_latest_source_identity -v`
-  - `PYTHONPATH=src python3 -m unittest discover -s tests -v`
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.test_mobile_summary -v`
+  - `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -v`
+  - `cd mobile/ios && swift test`
 - commit_recommended: true
-- next_round: Round 7 Limits / Provider Runtime Cleanup
+- next_round: none in current roadmap
 
 ## Round Completion Template
 
