@@ -1111,11 +1111,11 @@ struct LimitWindowCard: View {
                     Text("\(window.provider.capitalized) · \(window.window)")
                         .font(.subheadline.weight(.semibold))
                     Spacer()
-                    Text(statusLabel(window.confidence))
+                    Text(statusLabel(window.isOfficialObserved ? "observed" : window.confidence))
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(window.confidence == "observed" ? Color.green : Color.orange)
+                        .foregroundStyle(window.isOfficialObserved ? Color.green : Color.orange)
                 }
-                if window.confidence == "observed" {
+                if window.isOfficialObserved {
                     Gauge(value: window.remainingPercent, in: 0...100) {
                         EmptyView()
                     } currentValueLabel: {

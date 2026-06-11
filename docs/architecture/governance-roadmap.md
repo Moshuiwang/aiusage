@@ -72,8 +72,6 @@
 
 状态：completed
 
-## Upcoming Rounds
-
 ### Round 7: Limits / Provider Runtime Cleanup
 
 目标：
@@ -82,7 +80,11 @@
 - 防止从 `ccusage daily` / `ccusage blocks` 推断官方 quota。
 - provider missing/failure/observed 状态更清楚。
 
-完成后停止。
+状态：completed
+
+## Upcoming Rounds
+
+当前路线图内治理轮次已完成。后续如要继续治理，必须新建 Round 8 任务包，不得混入已完成轮次。
 
 ## Subagent Workflow
 

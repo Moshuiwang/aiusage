@@ -73,8 +73,9 @@ CLI / HTTP handler / iOS App
 - `limits missing`：limits 缺失或 provider 失败时，usage summary 仍合法；UI 只能降级展示，不能用 daily token 推断官方额度。
 - `provider observed`：来自明确 provider / runtime / structured export 的窗口事实，可作为强结论展示。
 - `provider missing`：provider 不可用、配置缺失或运行失败，只能作为缺失/失败状态展示。
+- `official observed quota`：只有 `official == true`、`confidence == "observed"`、`status == "ok"` 同时成立，才可在 Mobile / Widget / dashboard 中当作可信官方额度展示。本地 `ccusage daily` / `ccusage blocks` 即使有 observed 字段，也只能是本地估算，不能计入 observed quota。
 - `hourly residual`：today 趋势里，当小时级事实不足以覆盖 daily total 时，把差额补到当前可见小时，避免用户看到今日总量和趋势总量明显不一致。Codex 使用 `mswusage_codex_token_count` 时会避免把同一 Codex daily baseline 重复补入小时趋势。
-- `mobile summary`：由 `/api/summary` 的 snapshot 派生，只做 DTO 转换和字段裁剪，不重新计算 canonical usage。
+- `mobile summary`：由 `/api/summary` 的 snapshot 派生，只做 DTO 转换和字段裁剪，不重新计算 canonical usage；`limits.observed_count` 只统计 official observed quota。
 
 ## Legacy SSH 策略
 
@@ -91,6 +92,7 @@ CLI / HTTP handler / iOS App
 - 新增 summary 聚合 helper：保持 `snapshot_builder.py` 为 owner，helper 只承接可复用纯函数或局部计算。
 - 新增 source health 规则：放 `snapshot_source_health.py` helper，由 `snapshot_builder.py` 调用并继续输出同一 `source_status` JSON。
 - 新增 provider：放 provider module + `limits_runtime.py`，不改 daily usage baseline。
+- 新增 limits 展示：只把 official observed quota 作为可信额度；本地估算和 provider failed 只能展示为估算/缺失/失败状态。
 - 新增 App 设置：放 iOS settings / Keychain 层，不写死到视图。
 - 新增 App server trust policy：只在 iOS runtime config 和对应 Swift tests 中收敛，不影响后端 API 和 SQLite。
 - 新增 Widget 配置共享：先按 [`widget-configuration-sharing.md`](widget-configuration-sharing.md) 建立 App Group + Keychain access group，再让 Widget 读取 live 配置。

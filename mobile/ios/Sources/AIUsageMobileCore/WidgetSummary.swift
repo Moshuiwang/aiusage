@@ -18,7 +18,7 @@ public enum WidgetStatus: String, Equatable, Sendable {
 public enum WidgetSummaryBuilder {
     public static func build(from summary: MobileSummary) -> WidgetSummaryState {
         let observedLimit = summary.limits.windows
-            .filter { $0.confidence == "observed" && $0.official }
+            .filter(\.isOfficialObserved)
             .sorted {
                 if $0.remainingPercent == $1.remainingPercent {
                     return $0.id.localizedStandardCompare($1.id) == .orderedAscending
