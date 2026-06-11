@@ -9,11 +9,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .limits import LimitWindow
-
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:  # pragma: no cover - Python < 3.9 fallback
-    ZoneInfo = None  # type: ignore
+from .snapshot_filters import (
+    daily_row_matches_filter,
+    identity_matches_filter,
+    metadata_from_str,
+    timed_row_matches_filter,
+)
+from .snapshot_periods import date_axis, hour_axis, parse_datetime, period_bounds, zoneinfo
+from .snapshot_trends import codex_hourly_context, fill_today_hourly_residual, hourly_trend
 
 
 def build_snapshot(
@@ -32,15 +35,15 @@ def build_snapshot(
     支持根据 sources_config 监控离线 (stale) 和从未上报 (never_seen) 设备
     """
     # 1. 确定当前参考时间
-    tz = _zoneinfo(timezone_str)
+    tz = zoneinfo(timezone_str)
     if current_time_str:
         ref_time = datetime.fromisoformat(current_time_str)
         if tz and ref_time.tzinfo is not None:
             ref_time = ref_time.astimezone(tz)
     else:
         ref_time = datetime.now(dt_timezone.utc).astimezone(tz)
-    period_id, start_date, end_date = _period_bounds(date_str, period)
-    hour_axis = _hour_axis(ref_time, end_date) if period_id == "today" else []
+    period_id, start_date, end_date = period_bounds(date_str, period)
+    hour_axis_values = hour_axis(ref_time, end_date) if period_id == "today" else []
 
     if not os.path.exists(db_path):
         # 数据库不存在时，输出空白结构快照
@@ -87,8 +90,8 @@ def build_snapshot(
             )
             status_rows = cursor.fetchall()
             source_identities = _fetch_source_identities(conn)
-            hourly_rows = _fetch_hourly_rows(conn, hour_axis[0], hour_axis[-1]) if hour_axis else []
-            block_rows = _fetch_block_rows(conn, hour_axis[0], hour_axis[-1]) if hour_axis else []
+            hourly_rows = _fetch_hourly_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
+            block_rows = _fetch_block_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
             limits = _fetch_limit_windows(conn)
             account_hourly_rows = _fetch_account_hourly_rows(conn, start_date, end_date, timezone_str)
     except sqlite3.OperationalError as exc:
@@ -108,16 +111,16 @@ def build_snapshot(
         else:
             raise exc
 
-    rows = [row for row in rows if _daily_row_matches_filter(row, machine_filter, account_filter)]
+    rows = [row for row in rows if daily_row_matches_filter(row, machine_filter, account_filter)]
     allowed_item_keys = {(row[0], row[1], row[2]) for row in rows}
     model_rows = [row for row in model_rows if (row[0], row[1], row[2]) in allowed_item_keys]
-    hourly_rows = [row for row in hourly_rows if _timed_row_matches_filter(row, machine_filter, account_filter)]
-    block_rows = [row for row in block_rows if _timed_row_matches_filter(row, machine_filter, account_filter)]
+    hourly_rows = [row for row in hourly_rows if timed_row_matches_filter(row, machine_filter, account_filter)]
+    block_rows = [row for row in block_rows if timed_row_matches_filter(row, machine_filter, account_filter)]
     account_hourly_rows = [
         row for row in account_hourly_rows
         if _account_hourly_row_matches_filter(row, machine_filter, account_filter)
     ]
-    codex_hourly_context = _codex_hourly_context(rows, hourly_rows)
+    codex_hourly_context_data = codex_hourly_context(rows, hourly_rows)
     account_hourly = _account_hourly_summary(account_hourly_rows)
 
     # 2. 在内存中将 model_rows 分类归档，以便拼入 daily items
@@ -146,7 +149,7 @@ def build_snapshot(
     machine_totals: Dict[str, Dict[str, Any]] = {}
     account_totals = {}
     agent_totals = {}
-    trend_dates = _date_axis(start_date, end_date, rows)
+    trend_dates = date_axis(start_date, end_date, rows)
     trend_by_agent = {}
     trend_by_token_type = {
         "input": {day: 0 for day in trend_dates},
@@ -241,7 +244,7 @@ def build_snapshot(
     for source_id, identity in source_identities.items():
         machine = identity.get("machine") or identity.get("host") or source_id
         account = identity.get("os_user") or identity.get("account") or "unknown"
-        if not _identity_matches_filter(identity, machine_filter, account_filter):
+        if not identity_matches_filter(identity, machine_filter, account_filter):
             continue
         machine_entry = machine_totals.setdefault(
             machine,
@@ -288,16 +291,16 @@ def build_snapshot(
     by_account.sort(key=lambda x: x["total_tokens"], reverse=True)
     by_agent.sort(key=lambda x: x["total_tokens"], reverse=True)
     if period_id == "today":
-        trend = _hourly_trend(hour_axis, hourly_rows, block_rows)
-        _fill_today_hourly_residual(
+        trend = hourly_trend(hour_axis_values, hourly_rows, block_rows)
+        fill_today_hourly_residual(
             trend,
             ref_time,
             total_tokens=total_tokens,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_tokens=cache_creation_tokens + cache_read_tokens,
-            excluded_daily=codex_hourly_context["daily"] if codex_hourly_context["skip_residual"] else None,
-            excluded_hourly=codex_hourly_context["hourly"] if codex_hourly_context["skip_residual"] else None,
+            excluded_daily=codex_hourly_context_data["daily"] if codex_hourly_context_data["skip_residual"] else None,
+            excluded_hourly=codex_hourly_context_data["hourly"] if codex_hourly_context_data["skip_residual"] else None,
         )
     else:
         trend = {
@@ -344,7 +347,7 @@ def build_snapshot(
         db_status = {
             sid: status
             for sid, status in db_status.items()
-            if _identity_matches_filter(source_identities.get(sid), machine_filter, account_filter)
+            if identity_matches_filter(source_identities.get(sid), machine_filter, account_filter)
         }
     source_status = []
 
@@ -421,7 +424,7 @@ def build_snapshot(
         "account_hourly": account_hourly,
         "metadata": {
             "codex_hourly": {
-                "drift": codex_hourly_context["drift"],
+                "drift": codex_hourly_context_data["drift"],
             },
         },
     }
@@ -442,20 +445,6 @@ def _atomic_write(path: str, data: dict) -> None:
     with tmp_path.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp_path, out_path)
-
-
-def _period_bounds(date_str: str, period: str) -> tuple[str, Optional[str], str]:
-    period_id = period if period in {"today", "week", "month", "all"} else "today"
-    end = datetime.strptime(date_str, "%Y-%m-%d").date()
-    if period_id == "today":
-        start = end
-    elif period_id == "week":
-        start = end - timedelta(days=6)
-    elif period_id == "month":
-        start = end - timedelta(days=29)
-    else:
-        start = None
-    return period_id, start.isoformat() if start else None, end.isoformat()
 
 
 def _usage_daily_sql(start_date: Optional[str]) -> str:
@@ -484,49 +473,6 @@ def _date_params(start_date: Optional[str], end_date: str) -> tuple[str, ...]:
     if start_date is None:
         return (end_date,)
     return (start_date, end_date)
-
-
-def _daily_row_matches_filter(row: Any, machine_filter: Optional[str], account_filter: Optional[str]) -> bool:
-    metadata = _metadata_from_str(row[9] if len(row) > 9 else None)
-    identity = {
-        "host": metadata.get("machine") or metadata.get("host") or row[0],
-        "os_user": metadata.get("account") or metadata.get("os_user") or "unknown",
-    }
-    return _identity_matches_filter(identity, machine_filter, account_filter)
-
-
-def _timed_row_matches_filter(row: Any, machine_filter: Optional[str], account_filter: Optional[str]) -> bool:
-    metadata = _metadata_from_str(row[-1] if len(row) > 0 else None)
-    identity = {
-        "host": metadata.get("machine") or metadata.get("host") or row[0],
-        "os_user": metadata.get("account") or metadata.get("os_user") or "unknown",
-    }
-    return _identity_matches_filter(identity, machine_filter, account_filter)
-
-
-def _identity_matches_filter(
-    identity: Optional[dict[str, Any]],
-    machine_filter: Optional[str],
-    account_filter: Optional[str],
-) -> bool:
-    identity = identity or {}
-    machine = str(identity.get("machine") or identity.get("host") or "")
-    account = str(identity.get("os_user") or identity.get("account") or "")
-    if machine_filter and machine != machine_filter:
-        return False
-    if account_filter and account != account_filter:
-        return False
-    return True
-
-
-def _metadata_from_str(metadata_str: Any) -> dict[str, Any]:
-    if not metadata_str:
-        return {}
-    try:
-        metadata = json.loads(metadata_str)
-    except (TypeError, json.JSONDecodeError):
-        return {}
-    return metadata if isinstance(metadata, dict) else {}
 
 
 def _fetch_source_identities(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
@@ -646,25 +592,6 @@ def _source_status_entry(
     return result
 
 
-def _date_axis(start_date: Optional[str], end_date: str, rows: list[Any]) -> list[str]:
-    if start_date is None:
-        return sorted({row[1] for row in rows})
-    start = datetime.strptime(start_date, "%Y-%m-%d").date()
-    end = datetime.strptime(end_date, "%Y-%m-%d").date()
-    days = []
-    current = start
-    while current <= end:
-        days.append(current.isoformat())
-        current += timedelta(days=1)
-    return days
-
-
-def _hour_axis(ref_time: datetime, date_str: str) -> list[str]:
-    day = datetime.strptime(date_str, "%Y-%m-%d")
-    start_hour = day.replace(tzinfo=ref_time.tzinfo)
-    return [(start_hour + timedelta(hours=i)).isoformat(timespec="seconds") for i in range(24)]
-
-
 def _fetch_hourly_rows(conn: sqlite3.Connection, start_hour: str, end_hour: str) -> list[Any]:
     try:
         return conn.execute(
@@ -684,7 +611,7 @@ def _fetch_hourly_rows(conn: sqlite3.Connection, start_hour: str, end_hour: str)
 
 
 def _fetch_block_rows(conn: sqlite3.Connection, start_hour: str, end_hour: str) -> list[Any]:
-    end_exclusive_dt = _parse_datetime(end_hour)
+    end_exclusive_dt = parse_datetime(end_hour)
     end_exclusive = (end_exclusive_dt + timedelta(hours=1)).isoformat(timespec="seconds") if end_exclusive_dt else end_hour
     try:
         return conn.execute(
@@ -738,10 +665,10 @@ def _account_hourly_row_in_period(
     end_date: str,
     timezone_str: str,
 ) -> bool:
-    window_start = _parse_datetime(str(row[11] or ""))
+    window_start = parse_datetime(str(row[11] or ""))
     if window_start is None:
         return False
-    tz = _zoneinfo(timezone_str)
+    tz = zoneinfo(timezone_str)
     local_date = window_start.astimezone(tz).date() if tz and window_start.tzinfo else window_start.date()
     end = datetime.strptime(end_date, "%Y-%m-%d").date()
     if local_date > end:
@@ -871,235 +798,6 @@ def _empty_account_hourly_summary() -> dict[str, Any]:
     }
 
 
-def _hourly_trend(axis: list[str], rows: list[Any], block_rows: Optional[list[Any]] = None) -> Dict[str, Any]:
-    by_token_type = {
-        "input": {hour: 0.0 for hour in axis},
-        "output": {hour: 0.0 for hour in axis},
-        "cache": {hour: 0.0 for hour in axis},
-    }
-    points = {
-        hour: {
-            "date": hour,
-            "hour": hour,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_tokens": 0,
-            "total_tokens": 0,
-        }
-        for hour in axis
-    }
-    agent_totals: Dict[str, float] = {}
-    by_agent: Dict[str, Dict[str, float]] = {}
-    block_rows = block_rows or []
-    block_sources = {row[0] for row in block_rows}
-
-    for row in rows:
-        source_id, hour, agent, inp, out, cc, cr, tot, _, _ = row
-        if hour not in points:
-            continue
-        if source_id in block_sources and not _is_codex_agent(agent):
-            continue
-        cache_tokens = cc + cr
-        by_token_type["input"][hour] += inp
-        by_token_type["output"][hour] += out
-        by_token_type["cache"][hour] += cache_tokens
-        points[hour]["input_tokens"] += inp
-        points[hour]["output_tokens"] += out
-        points[hour]["cache_tokens"] += cache_tokens
-        points[hour]["total_tokens"] += tot
-        agent_totals[agent] = agent_totals.get(agent, 0) + tot
-        by_agent.setdefault(agent, {h: 0 for h in axis})
-        by_agent[agent][hour] += tot
-
-    for row in block_rows:
-        _add_block_to_hour_buckets(axis, row, by_token_type, points, agent_totals, by_agent)
-
-    return {
-        "period": "today",
-        "granularity": "hour",
-        "start_date": axis[0][:10] if axis else None,
-        "end_date": axis[-1][:10] if axis else None,
-        "axis": axis,
-        "by_token_type": [
-            {"type": "input", "label": "Input", "values": [round(by_token_type["input"].get(hour, 0)) for hour in axis]},
-            {"type": "output", "label": "Output", "values": [round(by_token_type["output"].get(hour, 0)) for hour in axis]},
-            {"type": "cache", "label": "Cache", "values": [round(by_token_type["cache"].get(hour, 0)) for hour in axis]},
-        ],
-        "points": [points[hour] for hour in axis],
-        "by_agent": [
-            {
-                "agent": agent,
-                "total_tokens": round(agent_totals.get(agent, 0)),
-                "values": [round(values.get(hour, 0)) for hour in axis],
-            }
-            for agent, values in sorted(by_agent.items(), key=lambda item: agent_totals.get(item[0], 0), reverse=True)
-        ],
-    }
-
-
-def _fill_today_hourly_residual(
-    trend: Dict[str, Any],
-    ref_time: datetime,
-    *,
-    total_tokens: int,
-    input_tokens: int,
-    output_tokens: int,
-    cache_tokens: int,
-    excluded_daily: Optional[dict[str, int]] = None,
-    excluded_hourly: Optional[dict[str, int]] = None,
-) -> None:
-    points = trend.get("points") or []
-    axis = trend.get("axis") or []
-    if not points or not axis:
-        return
-
-    excluded_daily = excluded_daily or _empty_token_totals()
-    excluded_hourly = excluded_hourly or _empty_token_totals()
-    current_total = sum(int(point.get("total_tokens") or 0) for point in points) - excluded_hourly["total"]
-    residual_total = max(int(total_tokens) - excluded_daily["total"] - current_total, 0)
-    token_residuals = {
-        "input": max(int(input_tokens) - excluded_daily["input"] - (_sum_token_type(trend, "input") - excluded_hourly["input"]), 0),
-        "output": max(int(output_tokens) - excluded_daily["output"] - (_sum_token_type(trend, "output") - excluded_hourly["output"]), 0),
-        "cache": max(int(cache_tokens) - excluded_daily["cache"] - (_sum_token_type(trend, "cache") - excluded_hourly["cache"]), 0),
-    }
-    if residual_total <= 0 and all(value <= 0 for value in token_residuals.values()):
-        return
-
-    ref_hour = ref_time.replace(minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
-    target_hour = ref_hour if ref_hour in axis else axis[-1]
-    target_index = axis.index(target_hour)
-
-    point = points[target_index]
-    point["input_tokens"] = int(point.get("input_tokens") or 0) + token_residuals["input"]
-    point["output_tokens"] = int(point.get("output_tokens") or 0) + token_residuals["output"]
-    point["cache_tokens"] = int(point.get("cache_tokens") or 0) + token_residuals["cache"]
-    point["total_tokens"] = int(point.get("total_tokens") or 0) + residual_total
-
-    for row in trend.get("by_token_type") or []:
-        token_type = row.get("type")
-        if token_type not in token_residuals:
-            continue
-        values = row.get("values") or []
-        if target_index < len(values):
-            values[target_index] = values[target_index] + token_residuals[token_type]
-
-
-def _sum_token_type(trend: Dict[str, Any], token_type: str) -> int:
-    for row in trend.get("by_token_type") or []:
-        if row.get("type") == token_type:
-            return int(sum(row.get("values") or []))
-    return 0
-
-
-def _codex_hourly_context(daily_rows: list[Any], hourly_rows: list[Any]) -> dict[str, Any]:
-    drift = {"status": "comparison_unavailable"}
-    daily_totals = _empty_token_totals()
-    all_daily_totals = _empty_token_totals()
-    hourly_totals = _empty_token_totals()
-
-    for row in daily_rows:
-        _, _, agent, inp, out, cc, cr, tot, _, _ = row
-        if _is_codex_agent(agent):
-            target = daily_totals
-        elif str(agent or "").lower() == "all":
-            target = all_daily_totals
-        else:
-            continue
-        target["input"] += int(inp or 0)
-        target["output"] += int(out or 0)
-        target["cache"] += int(cc or 0) + int(cr or 0)
-        target["total"] += int(tot or 0)
-
-    for row in hourly_rows:
-        _, _, agent, inp, out, cc, cr, tot, _, metadata_str = row
-        metadata = _metadata_from_str(metadata_str)
-        if not _is_codex_agent(agent) or metadata.get("provenance") != "mswusage_codex_token_count":
-            continue
-        hourly_totals["input"] += int(inp or 0)
-        hourly_totals["output"] += int(out or 0)
-        hourly_totals["cache"] += int(cc or 0) + int(cr or 0)
-        hourly_totals["total"] += int(tot or 0)
-        if isinstance(metadata.get("drift"), dict):
-            drift = dict(metadata["drift"])
-
-    if daily_totals["total"] == 0 and drift.get("baseline_agent") == "all":
-        daily_totals = all_daily_totals
-
-    status = drift.get("status")
-    return {
-        "drift": drift,
-        "daily": daily_totals,
-        "hourly": hourly_totals,
-        "skip_residual": status in {"drift_detected", "comparison_unavailable"} and hourly_totals["total"] > 0,
-    }
-
-
-def _empty_token_totals() -> dict[str, int]:
-    return {"input": 0, "output": 0, "cache": 0, "total": 0}
-
-
-def _add_block_to_hour_buckets(
-    axis: list[str],
-    row: Any,
-    by_token_type: Dict[str, Dict[str, float]],
-    points: Dict[str, Dict[str, Any]],
-    agent_totals: Dict[str, float],
-    by_agent: Dict[str, Dict[str, float]],
-) -> None:
-    _, start_time, end_time, agent, inp, out, cc, cr, tot, _, _ = row
-    start = _parse_datetime(start_time)
-    end = _parse_datetime(end_time)
-    if not start or not end or end <= start:
-        return
-    duration = (end - start).total_seconds()
-    if duration <= 0:
-        return
-    by_agent.setdefault(agent, {h: 0 for h in axis})
-    for hour in axis:
-        hour_start = _parse_datetime(hour)
-        if not hour_start:
-            continue
-        hour_end = hour_start + timedelta(hours=1)
-        overlap = max(0.0, (min(end, hour_end) - max(start, hour_start)).total_seconds())
-        if overlap <= 0:
-            continue
-        ratio = overlap / duration
-        input_part = inp * ratio
-        output_part = out * ratio
-        cache_part = (cc + cr) * ratio
-        total_part = tot * ratio
-        by_token_type["input"][hour] += input_part
-        by_token_type["output"][hour] += output_part
-        by_token_type["cache"][hour] += cache_part
-        points[hour]["input_tokens"] = round(points[hour]["input_tokens"] + input_part)
-        points[hour]["output_tokens"] = round(points[hour]["output_tokens"] + output_part)
-        points[hour]["cache_tokens"] = round(points[hour]["cache_tokens"] + cache_part)
-        points[hour]["total_tokens"] = round(points[hour]["total_tokens"] + total_part)
-        agent_totals[agent] = agent_totals.get(agent, 0) + total_part
-        by_agent[agent][hour] += total_part
-
-
-def _is_codex_agent(agent: str) -> bool:
-    raw = str(agent or "").lower()
-    return "codex" in raw or "gpt" in raw or "openai" in raw
-
-
-def _parse_datetime(value: str) -> Optional[datetime]:
-    try:
-        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-
-
-def _zoneinfo(timezone_str: str):
-    if ZoneInfo is None:
-        return None
-    try:
-        return ZoneInfo(timezone_str)
-    except Exception:
-        return None
-
-
 def _empty_snapshot(
     ref_time: datetime,
     timezone_str: str,
@@ -1111,7 +809,7 @@ def _empty_snapshot(
     account_filter: Optional[str] = None,
 ) -> Dict[str, Any]:
     granularity = "hour" if period_id == "today" else "day"
-    axis = _hour_axis(ref_time, end_date) if granularity == "hour" else _date_axis(start_date, end_date, [])
+    axis = hour_axis(ref_time, end_date) if granularity == "hour" else date_axis(start_date, end_date, [])
     snapshot = {
         "schema_version": 1,
         "generated_at": ref_time.isoformat(),

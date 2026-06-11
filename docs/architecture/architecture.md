@@ -55,6 +55,7 @@ CLI / HTTP handler / iOS App
 | `pusher.py` | 设备本机采集和 HTTP 上报。 | 不读取其他 OS 用户 home，不做 server-side 聚合。 |
 | `storage_sqlite.py` | SQLite schema、写入、upsert、WAL/busy timeout、错误脱敏。 | 不定义 Web/Mobile 展示文案。 |
 | `snapshot_builder.py` | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。 | 不把口径分散到 Web、Mobile 或 server route。 |
+| `snapshot_periods.py` / `snapshot_filters.py` / `snapshot_trends.py` | `snapshot_builder.py` 的内部 helper：period/date axis、machine/account filter、trend/hourly residual。 | 不成为新的 API owner，不直接被 Web/Mobile 调用。 |
 | `mobile_summary.py` | 把 Web summary snapshot 转成 iOS DTO。 | 不重新定义 usage 业务口径。 |
 | `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
 | `collector.py` / SSH source | Legacy compatibility only。 | V2 新功能不得依赖这条路径。 |
@@ -86,6 +87,7 @@ CLI / HTTP handler / iOS App
 
 - 新增 API：先写 service 函数，再由 `server.py` 调用。
 - 新增展示字段：先进入 `snapshot_builder.py` read model 或 `mobile_summary.py` DTO，不在 dashboard/iOS 里重复聚合。
+- 新增 summary 聚合 helper：保持 `snapshot_builder.py` 为 owner，helper 只承接可复用纯函数或局部计算。
 - 新增 provider：放 provider module + `limits_runtime.py`，不改 daily usage baseline。
 - 新增 App 设置：放 iOS settings / Keychain 层，不写死到视图。
 - 新增数据写入：通过 `storage_sqlite.py` 边界，不在 route handler 里直接散写 SQL。
