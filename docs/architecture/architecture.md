@@ -17,18 +17,20 @@ flowchart LR
     storage --> snapshot["snapshot_builder.py<br/>Web summary read model"]
     snapshot --> webApi["GET /api/summary"]
     snapshot --> mobileApi["GET /api/mobile/summary<br/>mobile_summary.py DTO"]
-    webApi --> dashboard["Web dashboard"]
-    mobileApi --> iphone["iPhone App / iOS Widget"]
+    webApi --> dashboard["clients/web<br/>Web dashboard"]
+    mobileApi --> iphone["clients/ios<br/>iPhone App / iOS Widget"]
+    mobileApi --> android["clients/android<br/>Android App / Widget"]
+    mobileApi --> desktop["clients/macos + clients/windows<br/>light desktop entries"]
 ```
 
-用户现在真实看到的是 Web dashboard 和 iPhone App / Widget 的只读结果。它们不执行采集，不执行 SSH，不重新定义 token / limits 口径。
+用户现在真实看到的是 Web dashboard 和 iPhone App / Widget 的只读结果。后续 Android、macOS、Windows 也必须沿用同一套 read model 和 DTO：Web 是完整 dashboard，iOS / Android 是移动查看，macOS / Windows 是轻量入口。它们不执行采集，不执行 SSH，不重新定义 token / limits 口径。
 
 ## 依赖方向
 
 推荐依赖方向：
 
 ```text
-CLI / HTTP handler / iOS App
+CLI / HTTP handler / clients
 -> service 编排层
 -> ingest / normalize / runtime
 -> storage
@@ -42,8 +44,8 @@ CLI / HTTP handler / iOS App
 - 展示层不得执行 SSH。
 - 展示层不得直接调用 provider。
 - 展示层不得直接读 SQLite 私有表来重新计算业务口径。
-- iOS App 不重新聚合业务指标，只消费 `/api/mobile/summary` 的 mobile summary DTO。
-- iOS App 的 server URL trust policy 只接受生产服务或显式自托管 HTTPS 域名；HTTP、localhost、内网 IP、裸 IP 默认拒绝。开发调试可以用显式 override。
+- iOS / Android / macOS / Windows 不重新聚合业务指标，只消费 `/api/mobile/summary` 的 mobile summary DTO 或 App 准备好的摘要。
+- iOS / Android App 的 server URL trust policy 只接受生产服务或显式自托管 HTTPS 域名；HTTP、localhost、内网 IP、裸 IP 默认拒绝。开发调试可以用显式 override。
 
 ## 模块 Owner
 
@@ -57,7 +59,7 @@ CLI / HTTP handler / iOS App
 | `storage_sqlite.py` | SQLite schema、写入、upsert、WAL/busy timeout、错误脱敏。 | 不定义 Web/Mobile 展示文案。 |
 | `snapshot_builder.py` | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。 | 不把口径分散到 Web、Mobile 或 server route。 |
 | `snapshot_periods.py` / `snapshot_filters.py` / `snapshot_trends.py` / `snapshot_source_health.py` | `snapshot_builder.py` 的内部 helper：period/date axis、machine/account filter、trend/hourly residual、source health。 | 不成为新的 API owner，不直接被 Web/Mobile 调用。 |
-| `mobile_summary.py` | 把 Web summary snapshot 转成 iOS DTO。 | 不重新定义 usage 业务口径。 |
+| `mobile_summary.py` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
 | `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
 | `collector.py` / SSH source | Legacy compatibility only。 | V2 新功能不得依赖这条路径。 |
 
@@ -97,6 +99,8 @@ CLI / HTTP handler / iOS App
 - 新增 App server trust policy：只在 iOS runtime config 和对应 Swift tests 中收敛，不影响后端 API 和 SQLite。
 - 新增 Widget 配置共享：先按 [`widget-configuration-sharing.md`](widget-configuration-sharing.md) 建立 App Group + Keychain access group，再让 Widget 读取 live 配置。
 - 新增数据写入：通过 `storage_sqlite.py` 边界，不在 route handler 里直接散写 SQL。
+- 新增客户端平台：放入 `clients/<platform>/`；跨端数据合同放 `packages/client-contracts/`；状态色和视觉语义放 `packages/design-tokens/`。
+- 迁移现有 iOS / Web 路径：必须单独开任务包，先保证 SwiftPM、Xcode 或 Web 路由验证，再移动文件。
 
 ## 禁止事项
 
@@ -107,6 +111,8 @@ CLI / HTTP handler / iOS App
 - 禁止让一个用户读取另一个用户 home。
 - 禁止 Web 和 Mobile 各自定义不同的 usage 口径。
 - 禁止 iOS Widget 把 token 放入 shared UserDefaults 或 App Group 文件。
+- 禁止 Android、macOS、Windows 为了 UI 方便重新计算 usage / limits / source health。
+- 禁止直接把 `mobile/ios`、`mobile/ios-xcode` 或 `src/ai_usage_widget/static` 移到 `clients/` 而没有迁移任务包和验证。
 
 ## 测试规则
 
