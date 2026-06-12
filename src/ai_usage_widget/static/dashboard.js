@@ -407,7 +407,9 @@
     const plotHeight = height - gutterBottom - plotTop;
     const n = layers[0] ? layers[0].values.length : 1;
     const totals = Array.from({ length: n }, (_, i) => layers.reduce((sum, layer) => sum + layer.values[i], 0));
-    const max = Math.max(...totals, 0.001) * 1.08;
+    const rawMax = Math.max(...totals, 0);
+    const yTicks = niceChartTicks(rawMax);
+    const max = yTicks[0].value || 1;
     const xAt = (i) => gutterLeft + (n === 1 ? plotWidth / 2 : (i / (n - 1)) * plotWidth);
     const yAt = (v) => plotTop + plotHeight - (v / max) * plotHeight;
     const cum = Array.from({ length: n }, () => 0);
@@ -415,17 +417,12 @@
     el.streamChart.replaceChildren();
     el.streamChart.setAttribute("viewBox", `0 0 ${width} ${height}`);
     const defs = svg("defs");
-    const yTicks = [
-      { label: fmt(max), value: max },
-      { label: fmt(max / 2), value: max / 2 },
-      { label: "0", value: 0 },
-    ];
     const grid = svg("g", { class: "stream-grid" });
     yTicks.forEach((tick) => {
       const y = yAt(tick.value);
       grid.append(
         svg("line", { x1: gutterLeft, y1: y, x2: width, y2: y, stroke: "rgba(255,255,255,0.055)", "stroke-width": 1 }),
-        svg("text", { x: gutterLeft - 8, y: y + 3, "text-anchor": "end", fill: "rgba(244,244,246,0.34)", "font-size": 9.2, "font-family": "ui-monospace, Menlo, Monaco, Consolas, monospace", "font-stretch": "normal" }, tick.label)
+        svg("text", { x: gutterLeft - 8, y: y + 3, "text-anchor": "end", fill: "rgba(244,244,246,0.34)", "font-size": 9.2, "font-family": "ui-monospace, Menlo, Monaco, Consolas, monospace", "font-stretch": "normal" }, formatAxisTick(tick.value))
       );
     });
     const base = svg("line", { x1: gutterLeft, y1: yAt(0), x2: width, y2: yAt(0), stroke: "rgba(255,255,255,0.05)", "stroke-width": 1 });
@@ -667,7 +664,7 @@
     }
 
     const failed = [];
-    sources.forEach((source) => {
+    sortSourcesForDisplay(sources).forEach((source) => {
       const isOnline = source.status === "ok";
       const row = document.createElement("div");
       row.className = "source-row";
@@ -677,10 +674,10 @@
       const copy = document.createElement("div");
       copy.className = "source-copy";
       const name = document.createElement("strong");
-      name.textContent = source.display_name || source.source_id || "unknown-source";
-      name.title = source.source_id || "";
+      name.textContent = formatSourceIdentity(source);
+      name.title = source.display_name || source.source_id || "";
       const meta = document.createElement("span");
-      meta.textContent = `${sourceKind(source)} · 最后活动 ${formatTime(source.observed_at)}`;
+      meta.textContent = `${sourcePlatformLabel(source)} · 最后活动 ${formatTime(source.observed_at)}`;
       copy.append(name, meta);
 
       if (source.error_message) {
@@ -705,49 +702,141 @@
 
   function renderLimits(limits) {
     if (!el.limitsSection || !el.limitsGrid) return;
-    const rows = (limits || []).filter((limit) => {
-      const provider = String(limit.provider || "").toLowerCase();
-      return provider === "claude" || provider === "codex";
-    });
-    el.limitsSection.hidden = rows.length === 0;
+    const groups = normalizeLimitRows(limits);
+    const rows = groups.flatMap((group) => group.rows);
+    el.limitsSection.hidden = groups.length === 0;
     el.limitsGrid.replaceChildren();
-    if (el.limitsCount) el.limitsCount.textContent = `${rows.length} windows`;
-    if (!rows.length) return;
+    if (el.limitsCount) {
+      const lastUpdated = rows.reduce((latest, row) => maxIso(latest, row.observed_at), "");
+      el.limitsCount.textContent = rows.length
+        ? `最近更新 ${formatDateTime(lastUpdated)} · ${rows.length} windows`
+        : "0 windows";
+    }
+    if (!groups.length) return;
 
+    groups.forEach((group) => {
+      el.limitsGrid.appendChild(renderLimitGroup(group));
+    });
+  }
+
+  function normalizeLimitRows(limits) {
+    const rows = (limits || [])
+      .filter((limit) => {
+        const provider = String(limit.provider || "").toLowerCase();
+        return (provider === "claude" || provider === "codex") && isObservedLimit(limit) && !isExpiredLimit(limit);
+      })
+      .sort((a, b) => {
+        const observedDiff = Date.parse(b.observed_at || 0) - Date.parse(a.observed_at || 0);
+        if (observedDiff) return observedDiff;
+        const providerDiff = String(a.provider || "").localeCompare(String(b.provider || ""));
+        if (providerDiff) return providerDiff;
+        const sourceDiff = String(a.source_id || "").localeCompare(String(b.source_id || ""));
+        if (sourceDiff) return sourceDiff;
+        return windowRank(a.window) - windowRank(b.window);
+      });
+
+    const groups = new Map();
     rows.forEach((limit) => {
       const provider = String(limit.provider || "unknown").toLowerCase();
-      const observed = limit.official === true && limit.confidence === "observed" && limit.status === "ok";
-      const usedPercent = Number(limit.used_percent || 0);
-      const row = document.createElement("div");
-      row.className = `limit-row${observed ? " observed" : " muted"}`;
-      row.style.color = colorForAgent(provider);
-
-      const head = document.createElement("div");
-      head.className = "limit-head";
-      const title = document.createElement("strong");
-      title.textContent = `${displayAgent(provider)} · ${windowLabel(limit.window)}`;
-      const value = document.createElement("em");
-      value.textContent = observed ? `${trimFixed(usedPercent, 1)}%` : limitStatusLabel(limit);
-      head.append(title, value);
-
-      const track = document.createElement("div");
-      track.className = "limit-track";
-      const fill = document.createElement("i");
-      fill.style.width = observed ? `${Math.max(1, Math.min(100, usedPercent))}%` : "0%";
-      fill.style.background = `linear-gradient(90deg, ${withAlpha(colorForAgent(provider), 0.72)}, ${colorForAgent(provider)})`;
-      track.appendChild(fill);
-
-      const meta = document.createElement("div");
-      meta.className = "limit-meta";
-      const reset = document.createElement("span");
-      reset.textContent = observed ? `Reset ${formatDateTime(limit.reset_at)}` : limitStatusLabel(limit);
-      const confidence = document.createElement("span");
-      confidence.textContent = observed ? "observed" : String(limit.confidence || limit.status || "missing");
-      meta.append(reset, confidence);
-
-      row.append(head, track, meta);
-      el.limitsGrid.appendChild(row);
+      const sourceId = String(limit.source_id || provider);
+      const key = `${provider}:${sourceId}`;
+      const group = groups.get(key) || {
+        provider,
+        source_id: sourceId,
+        observed_at: limit.observed_at || "",
+        rows: [],
+      };
+      group.observed_at = maxIso(group.observed_at, limit.observed_at);
+      group.rows.push(limit);
+      groups.set(key, group);
     });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      const observedDiff = Date.parse(b.observed_at || 0) - Date.parse(a.observed_at || 0);
+      if (observedDiff) return observedDiff;
+      return `${a.provider}:${a.source_id}`.localeCompare(`${b.provider}:${b.source_id}`);
+    });
+  }
+
+  function renderLimitGroup(group) {
+    const node = document.createElement("div");
+    node.className = "limit-group";
+    node.style.color = colorForAgent(group.provider);
+
+    const head = document.createElement("div");
+    head.className = "limit-group-head";
+    const title = document.createElement("strong");
+    title.textContent = `${displayAgent(group.provider)} · ${group.source_id}`;
+    const updated = document.createElement("span");
+    updated.textContent = `最近更新 ${formatDateTime(group.observed_at)}`;
+    head.append(title, updated);
+    node.appendChild(head);
+
+    group.rows
+      .slice()
+      .sort((a, b) => windowRank(a.window) - windowRank(b.window))
+      .forEach((limit) => {
+        node.appendChild(renderLimitWindow(limit));
+      });
+
+    return node;
+  }
+
+  function renderLimitWindow(limit) {
+    const provider = String(limit.provider || "unknown").toLowerCase();
+    const usedPercent = Number(limit.used_percent || 0);
+    const row = document.createElement("div");
+    row.className = "limit-row observed";
+    row.style.color = colorForAgent(provider);
+
+    const head = document.createElement("div");
+    head.className = "limit-head";
+    const title = document.createElement("strong");
+    title.textContent = windowLabel(limit.window);
+    const value = document.createElement("em");
+    value.textContent = `${trimFixed(usedPercent, 1)}%`;
+    head.append(title, value);
+
+    const track = document.createElement("div");
+    track.className = "limit-track";
+    const fill = document.createElement("i");
+    fill.style.width = `${Math.max(1, Math.min(100, usedPercent))}%`;
+    fill.style.background = `linear-gradient(90deg, ${withAlpha(colorForAgent(provider), 0.72)}, ${colorForAgent(provider)})`;
+    track.appendChild(fill);
+
+    const meta = document.createElement("div");
+    meta.className = "limit-meta";
+    const reset = document.createElement("span");
+    reset.textContent = `Reset ${formatDateTime(limit.reset_at)}`;
+    const confidence = document.createElement("span");
+    confidence.textContent = String(limit.confidence || "observed");
+    meta.append(reset, confidence);
+
+    row.append(head, track, meta);
+    return row;
+  }
+
+  function isObservedLimit(limit) {
+    return limit.official === true && limit.confidence === "observed" && limit.status === "ok";
+  }
+
+  function isExpiredLimit(limit) {
+    if (!limit.reset_at) return false;
+    const reset = Date.parse(limit.reset_at);
+    return Number.isFinite(reset) && reset <= Date.now();
+  }
+
+  function maxIso(left, right) {
+    if (!left) return right || "";
+    if (!right) return left || "";
+    return Date.parse(right) > Date.parse(left) ? right : left;
+  }
+
+  function windowRank(value) {
+    const raw = String(value || "").toLowerCase();
+    if (raw === "session") return 1;
+    if (raw === "week" || raw === "weekly") return 2;
+    return 9;
   }
 
   function windowLabel(value) {
@@ -772,6 +861,38 @@
     if (status === "command_failed") return "失败";
     if (status === "never_seen") return "未上报";
     return "静默";
+  }
+
+  function sortSourcesForDisplay(sources) {
+    return (sources || []).slice().sort((a, b) => {
+      const rankDiff = statusRank(a.status) - statusRank(b.status);
+      if (rankDiff) return rankDiff;
+      const timeDiff = Date.parse(b.observed_at || 0) - Date.parse(a.observed_at || 0);
+      if (timeDiff) return timeDiff;
+      return formatSourceIdentity(a).localeCompare(formatSourceIdentity(b));
+    });
+  }
+
+  function statusRank(status) {
+    if (status === "ok") return 0;
+    if (status === "stale") return 1;
+    if (status === "command_failed") return 2;
+    if (status === "never_seen") return 3;
+    return 4;
+  }
+
+  function formatSourceIdentity(source) {
+    const host = source.host || source.machine || source.source_id || "unknown-host";
+    const account = source.os_user || source.account || "unknown";
+    return `${account}@${host}`;
+  }
+
+  function sourcePlatformLabel(source) {
+    const platform = String(source.platform || "").toLowerCase();
+    if (platform === "darwin") return "Mac";
+    if (platform === "macos" || platform === "mac") return "Mac";
+    if (platform === "linux") return "Linux";
+    return sourceKind(source);
   }
 
   function sourceKind(source) {
@@ -803,6 +924,31 @@
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleString([], { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function niceChartTicks(maxValue) {
+    const top = niceCeil(maxValue);
+    return [
+      { value: top },
+      { value: Math.ceil(top / 2) },
+      { value: 0 },
+    ];
+  }
+
+  function niceCeil(value) {
+    const raw = Math.max(1, Number(value || 0));
+    const exponent = Math.floor(Math.log10(raw));
+    const base = Math.pow(10, exponent);
+    const scaled = raw / base;
+    const step = scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+    return Math.ceil(step * base);
+  }
+
+  function formatAxisTick(value) {
+    const rounded = Math.ceil(Number(value || 0));
+    if (rounded >= 1000000) return `${Math.round(rounded / 1000000)}M`;
+    if (rounded >= 1000) return `${Math.round(rounded / 1000)}k`;
+    return String(rounded);
   }
 
   function formatPointLabel(value) {
