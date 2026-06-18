@@ -7,7 +7,7 @@ settings:
   base:
     SWIFT_VERSION: 6.0
     IPHONEOS_DEPLOYMENT_TARGET: 17.0
-    DEVELOPMENT_TEAM: FR6A4PZ6DS
+    DEVELOPMENT_TEAM: HL4BQ6T4HU
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 0.1.0
@@ -42,6 +42,8 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         AIUsageAPIBaseURL: "$(AI_USAGE_API_BASE_URL)"
         AIUsageAPIToken: "$(AI_USAGE_API_TOKEN)"
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         UILaunchScreen:
           UIColorName: ""
         UIApplicationSceneManifest:

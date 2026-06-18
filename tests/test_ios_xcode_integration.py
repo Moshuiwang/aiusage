@@ -19,6 +19,21 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("AIUsageMobileCore", content)
         self.assertIn("com.wangzhipeng.aiusage.mobile", content)
 
+    def test_ios_xcode_project_uses_company_development_team(self) -> None:
+        project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
+        project_pbxproj = (
+            ROOT / "mobile" / "ios-xcode" / "AIUsageMobile.xcodeproj" / "project.pbxproj"
+        )
+
+        self.assertIn(
+            "DEVELOPMENT_TEAM: HL4BQ6T4HU",
+            project_yml.read_text(encoding="utf-8"),
+        )
+        self.assertIn(
+            "DEVELOPMENT_TEAM = HL4BQ6T4HU;",
+            project_pbxproj.read_text(encoding="utf-8"),
+        )
+
     def test_app_and_widget_entrypoints_exist(self) -> None:
         expected = [
             ROOT / "mobile" / "ios-xcode" / "Sources" / "AIUsageMobileApp" / "AIUsageMobileApp.swift",
@@ -140,6 +155,7 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "SecureField(\"Token\"",
             "saveSettings(",
             "defaults.removeObject(forKey: \"AIUsageAPIToken\")",
+            "bundle.object(forInfoDictionaryKey: \"AIUsageAPIToken\")",
             "Widget runtime config sharing requires explicit App Group + Keychain access group design",
             "MetricTile",
             "MetricGrid",
@@ -205,7 +221,6 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertNotIn("MobileSummaryFixtureLoader.load()", content)
         self.assertNotIn("loadState = .fixture", content)
         self.assertNotIn("environment[\"AI_USAGE_API_TOKEN\"]", content)
-        self.assertNotIn("bundle.object(forInfoDictionaryKey: \"AIUsageAPIToken\")", content)
         self.assertNotIn("defaults.string(forKey: \"AIUsageAPIToken\")", content)
         self.assertNotIn("summary = .empty(periodID: period)\n            loadState = .failed", content)
         self.assertNotIn(

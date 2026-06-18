@@ -33,6 +33,8 @@ widget/macos/.build/
 widget/macos/.swiftpm/
 mobile/ios/.build/
 mobile/ios/.swiftpm/
+clients/macos/.build/
+clients/macos/.swiftpm/
 mobile/ios-xcode/**/xcuserdata/
 mobile/ios-xcode/**/*.xcuserstate
 reviews/*-request.md

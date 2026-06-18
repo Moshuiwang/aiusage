@@ -977,6 +977,71 @@ class TestSnapshotBuilder(unittest.TestCase):
         self.assertEqual(snapshot["trend"]["points"][8]["total_tokens"], 1000)
         self.assertEqual(snapshot["trend"]["points"][11]["total_tokens"], 0)
 
+    def test_today_hourly_trend_is_capped_to_period_total_when_hourly_exceeds_daily(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-05T11:35:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[
+                UsageItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="codex",
+                    date="2026-06-05",
+                    input_tokens=2000,
+                    output_tokens=500,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=500,
+                    total_tokens=3000,
+                    metadata={"machine": "macbook", "account": "wang"},
+                ),
+            ],
+            hourly_items=[
+                UsageHourlyItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="codex",
+                    hour="2026-06-05T08:00:00+08:00",
+                    input_tokens=2800,
+                    output_tokens=700,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=700,
+                    total_tokens=4200,
+                    metadata={
+                        "machine": "macbook",
+                        "account": "wang",
+                        "provenance": "mswusage_codex_token_count",
+                        "drift": {"status": "drift_detected", "threshold_percent": 5},
+                    },
+                ),
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-05",
+            timezone_str=self.timezone_str,
+            period="today",
+            current_time_str="2026-06-05T11:35:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 3000)
+        self.assertEqual(sum(point["total_tokens"] for point in snapshot["trend"]["points"]), 3000)
+        token_types = {row["type"]: row["values"] for row in snapshot["trend"]["by_token_type"]}
+        self.assertEqual(sum(token_types["input"]), 2000)
+        self.assertEqual(sum(token_types["output"]), 500)
+        self.assertEqual(sum(token_types["cache"]), 500)
+        by_agent = {row["agent"]: row["total_tokens"] for row in snapshot["trend"]["by_agent"]}
+        self.assertEqual(by_agent["codex"], 3000)
+
     def test_by_machine_groups_os_accounts_under_same_machine(self) -> None:
         """验证同一物理机器的不同 OS 用户在 by Machine 下作为 users 展示"""
         write_sqlite(

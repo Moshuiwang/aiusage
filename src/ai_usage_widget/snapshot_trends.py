@@ -120,6 +120,76 @@ def fill_today_hourly_residual(
             values[target_index] = values[target_index] + token_residuals[token_type]
 
 
+def cap_today_hourly_to_period_totals(
+    trend: Dict[str, Any],
+    *,
+    total_tokens: int,
+    input_tokens: int,
+    output_tokens: int,
+    cache_tokens: int,
+) -> None:
+    points = trend.get("points") or []
+    if not points:
+        return
+
+    point_totals = [int(point.get("total_tokens") or 0) for point in points]
+    capped_totals = scale_down_ints(point_totals, int(total_tokens))
+    if capped_totals != point_totals:
+        for point, value in zip(points, capped_totals):
+            point["total_tokens"] = value
+        _scale_agent_rows(trend, int(total_tokens))
+
+    targets = {
+        "input": int(input_tokens),
+        "output": int(output_tokens),
+        "cache": int(cache_tokens),
+    }
+    point_fields = {
+        "input": "input_tokens",
+        "output": "output_tokens",
+        "cache": "cache_tokens",
+    }
+    for token_type, target in targets.items():
+        row = next((item for item in trend.get("by_token_type") or [] if item.get("type") == token_type), None)
+        if row is None:
+            continue
+        values = [int(value or 0) for value in row.get("values") or []]
+        capped_values = scale_down_ints(values, target)
+        if capped_values == values:
+            continue
+        row["values"] = capped_values
+        field = point_fields[token_type]
+        for point, value in zip(points, capped_values):
+            point[field] = value
+
+
+def scale_down_ints(values: list[int], target: int) -> list[int]:
+    current = sum(values)
+    if current <= target or current <= 0:
+        return values
+    if target <= 0:
+        return [0 for _ in values]
+
+    scaled = [value * target / current for value in values]
+    floors = [int(value) for value in scaled]
+    remainder = target - sum(floors)
+    fractions = sorted(
+        ((scaled_value - floor_value, index) for index, (scaled_value, floor_value) in enumerate(zip(scaled, floors))),
+        reverse=True,
+    )
+    for _, index in fractions[:remainder]:
+        floors[index] += 1
+    return floors
+
+
+def _scale_agent_rows(trend: Dict[str, Any], total_tokens: int) -> None:
+    for row in trend.get("by_agent") or []:
+        values = [int(value or 0) for value in row.get("values") or []]
+        capped_values = scale_down_ints(values, total_tokens)
+        row["values"] = capped_values
+        row["total_tokens"] = sum(capped_values)
+
+
 def codex_hourly_context(daily_rows: list[Any], hourly_rows: list[Any]) -> dict[str, Any]:
     drift = {"status": "comparison_unavailable"}
     daily_totals = empty_token_totals()

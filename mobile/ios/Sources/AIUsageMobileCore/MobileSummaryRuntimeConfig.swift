@@ -76,7 +76,11 @@ public enum MobileSummaryRuntimeConfig {
             return nil
         }
 
-        guard let token = runtimeToken(tokenStore: tokenStore) else {
+        guard let token = runtimeToken(
+            tokenStore: tokenStore,
+            bundle: bundle,
+            allowsBundleToken: isProductionServer(baseURL)
+        ) else {
             return nil
         }
 
@@ -154,8 +158,18 @@ public enum MobileSummaryRuntimeConfig {
         }
     }
 
-    private static func runtimeToken(tokenStore: MobileTokenStore?) -> String? {
-        normalizedRuntimeValue(tokenStore?.readToken())
+    private static func runtimeToken(
+        tokenStore: MobileTokenStore?,
+        bundle: Bundle,
+        allowsBundleToken: Bool
+    ) -> String? {
+        if let token = normalizedRuntimeValue(tokenStore?.readToken()) {
+            return token
+        }
+        guard allowsBundleToken else {
+            return nil
+        }
+        return normalizedRuntimeValue(bundle.object(forInfoDictionaryKey: "AIUsageAPIToken") as? String)
     }
 
     private static func runtimeValue(

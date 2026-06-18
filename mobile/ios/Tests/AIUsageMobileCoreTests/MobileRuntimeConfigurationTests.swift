@@ -52,6 +52,44 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         ))
     }
 
+    func testUsesProductionBundleTokenWhenKeychainIsEmpty() throws {
+        let defaults = try makeIsolatedDefaults()
+        let bundle = RuntimeConfigurationFixtureBundle(values: [
+            "AIUsageAPIBaseURL": "https://vpn2.chunbai.com:8443",
+            "AIUsageAPIToken": "bundle-production-token"
+        ])
+
+        let config = try XCTUnwrap(MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: "week",
+            environment: [:],
+            defaults: defaults,
+            bundle: bundle,
+            tokenStore: InMemoryTokenStore()
+        ))
+
+        XCTAssertEqual(config.baseURL.absoluteString, "https://vpn2.chunbai.com:8443")
+        XCTAssertEqual(config.bearerToken, "bundle-production-token")
+        XCTAssertNil(defaults.string(forKey: "AIUsageAPIToken"))
+    }
+
+    func testSavedKeychainTokenWinsOverProductionBundleToken() throws {
+        let defaults = try makeIsolatedDefaults()
+        let bundle = RuntimeConfigurationFixtureBundle(values: [
+            "AIUsageAPIBaseURL": "https://vpn2.chunbai.com:8443",
+            "AIUsageAPIToken": "bundle-production-token"
+        ])
+
+        let config = try XCTUnwrap(MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: "week",
+            environment: [:],
+            defaults: defaults,
+            bundle: bundle,
+            tokenStore: InMemoryTokenStore(savedToken: "keychain-token")
+        ))
+
+        XCTAssertEqual(config.bearerToken, "keychain-token")
+    }
+
     func testRejectsSaveWithoutToken() throws {
         let defaults = try makeIsolatedDefaults()
         let tokenStore = InMemoryTokenStore()
@@ -215,5 +253,18 @@ private final class FailingTokenStore: MobileTokenStore {
 
     func saveToken(_ token: String?) throws {
         throw NSError(domain: "FailingTokenStore", code: 1)
+    }
+}
+
+private final class RuntimeConfigurationFixtureBundle: Bundle, @unchecked Sendable {
+    private let values: [String: Any]
+
+    init(values: [String: Any]) {
+        self.values = values
+        super.init()
+    }
+
+    override func object(forInfoDictionaryKey key: String) -> Any? {
+        values[key]
     }
 }

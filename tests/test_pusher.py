@@ -43,6 +43,21 @@ class FakeHTTPClient(IngestHTTPClient):
         return self.status_code, self.response_data
 
 
+class FlakyHTTPClient(IngestHTTPClient):
+    def __init__(self, results: list[Exception | tuple[int, dict]]) -> None:
+        self.results = results
+        self.calls = 0
+        self.last_json = None
+
+    def post(self, url: str, data: dict, headers: dict, timeout: float) -> tuple[int, dict]:
+        self.calls += 1
+        self.last_json = data
+        result = self.results[min(self.calls - 1, len(self.results) - 1)]
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
 class TestDevicePusherFakeHTTP(unittest.TestCase):
     def setUp(self) -> None:
         self.config = DeviceConfig(
@@ -338,6 +353,26 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error_type"], "http_request_failed")
         self.assertIn("timed out", result["error_message"].lower())
+
+    def test_pusher_retries_transient_http_failure(self) -> None:
+        """HTTP 临时失败后会重试，避免一次网络抖动导致菜单栏数据长时间停住"""
+        ccusage_stdout = '{"daily": []}'
+        executor = FakeExecutor(CommandResult(stdout=ccusage_stdout, exit_code=0))
+        http_client = FlakyHTTPClient([
+            TimeoutError("SSL handshake timed out"),
+            (200, {"status": "accepted", "source_id": "mac-local"}),
+        ])
+
+        pusher = DevicePusher(
+            self.config,
+            executor=executor,
+            http_client=http_client,
+            retry_sleep=lambda _: None,
+        )
+        result = pusher.push()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(http_client.calls, 2)
 
     def test_pusher_agent_fallback(self) -> None:
         """测试当 ccusage 缺失 agent 字段时，客户端 Pusher 自动 fallback 为 'unknown'"""

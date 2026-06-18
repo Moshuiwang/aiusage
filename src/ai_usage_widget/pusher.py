@@ -187,10 +187,14 @@ class DevicePusher:
         config: DeviceConfig,
         executor: Callable[[list[str], float], CommandResult] = default_executor,
         http_client: IngestHTTPClient = IngestHTTPClient(),
+        retry_attempts: int = 3,
+        retry_sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.config = config
         self.executor = executor
         self.http_client = http_client
+        self.retry_attempts = max(1, int(retry_attempts))
+        self.retry_sleep = retry_sleep
 
     def push(self) -> Dict[str, Any]:
         """
@@ -325,7 +329,7 @@ class DevicePusher:
 
         # 5. 上报 HTTP
         try:
-            status_code, resp_data = self.http_client.post(
+            status_code, resp_data = self._post_with_retries(
                 url=self.config.server_url,
                 data=payload,
                 headers=headers,
@@ -381,7 +385,7 @@ class DevicePusher:
             if token:
                 headers["Authorization"] = f"Bearer {token}"
         try:
-            status_code, resp_data = self.http_client.post(
+            status_code, resp_data = self._post_with_retries(
                 url=self.config.server_url,
                 data=payload,
                 headers=headers,
@@ -411,6 +415,19 @@ class DevicePusher:
             "source_id": resp_data.get("source_id") or self.config.source_id,
             "collection_status": status,
         }
+
+    def _post_with_retries(self, url: str, data: dict, headers: dict, timeout: float) -> tuple[int, dict]:
+        last_exc: Exception | None = None
+        for attempt in range(self.retry_attempts):
+            try:
+                return self.http_client.post(url=url, data=data, headers=headers, timeout=timeout)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < self.retry_attempts - 1:
+                    self.retry_sleep(0.5)
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("HTTP request failed without an exception")
 
 
 def _usage_hourly_facts_from_mswusage(config: DeviceConfig, report: dict) -> list[dict[str, Any]]:

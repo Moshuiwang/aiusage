@@ -102,6 +102,7 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 | TP-V2-061 | [TP-V2-061-mswusage-codex-hourly-integration.md](TP-V2-061-mswusage-codex-hourly-integration.md) | ready | TP-V2-060 | mobile UI polish |
 | TP-V2-062 | [TP-V2-062-ios-high-fidelity-app-redesign.md](TP-V2-062-ios-high-fidelity-app-redesign.md) | ready | TP-V2-059 | TP-V2-060, TP-V2-061 |
 | TP-V2-063 | [TP-V2-063-cross-platform-client-directory-boundary.md](TP-V2-063-cross-platform-client-directory-boundary.md) | done | none | docs / architecture |
+| TP-V2-064 | [TP-V2-064-macos-menu-bar-client.md](TP-V2-064-macos-menu-bar-client.md) | done | TP-V2-043 | TP-V2-060, TP-V2-061 |
 
 ## subagent 分配建议
 
@@ -122,3 +123,4 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 - Usage data agent：先执行 TP-V2-060，新增 MSWusage Codex raw JSONL parser 和 CLI 合约；完成后执行 TP-V2-061，把 Codex 小时换源接入 push / ingest / storage / snapshot。全程保持 `ccusage daily` baseline、Claude blocks 和生产凭据边界不变。
 - Mobile App agent：执行 TP-V2-062，把 `docs/prototypes/ios-high-fidelity/HANDOFF.md` 落到 SwiftUI App；不要改移动端 API contract，不要提交生产 token。
 - Cross-platform client agent：后续新增 Android、macOS、Windows 时，先从 `docs/architecture/client-platforms.md` 和 `clients/<platform>/README.md` 开任务包；不得复用 legacy macOS Widget 作为新产品 UI。
+- macOS Client agent：TP-V2-064 新增菜单栏轻入口，只读 `/api/mobile/summary`，不执行采集，不读取 SQLite，不复用 legacy macOS Widget。

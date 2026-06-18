@@ -17,7 +17,7 @@ from .snapshot_filters import (
 )
 from .snapshot_periods import date_axis, hour_axis, parse_datetime, period_bounds, zoneinfo
 from .snapshot_source_health import build_source_status
-from .snapshot_trends import codex_hourly_context, fill_today_hourly_residual, hourly_trend
+from .snapshot_trends import cap_today_hourly_to_period_totals, codex_hourly_context, fill_today_hourly_residual, hourly_trend
 
 
 def build_snapshot(
@@ -302,6 +302,13 @@ def build_snapshot(
             cache_tokens=cache_creation_tokens + cache_read_tokens,
             excluded_daily=codex_hourly_context_data["daily"] if codex_hourly_context_data["skip_residual"] else None,
             excluded_hourly=codex_hourly_context_data["hourly"] if codex_hourly_context_data["skip_residual"] else None,
+        )
+        cap_today_hourly_to_period_totals(
+            trend,
+            total_tokens=total_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_tokens=cache_creation_tokens + cache_read_tokens,
         )
     else:
         trend = {
