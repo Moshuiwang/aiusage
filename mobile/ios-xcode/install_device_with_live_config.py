@@ -153,7 +153,6 @@ def build_app(project: Path, device_id: str, xcconfig: Path) -> Path:
         "Debug",
         "-xcconfig",
         str(xcconfig),
-        "EXCLUDED_SOURCE_FILE_NAMES=*.xcassets",
         "clean",
         "build",
     ]
