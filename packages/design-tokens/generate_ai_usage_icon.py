@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import math
+import ctypes
+import ctypes.util
+import subprocess
 from pathlib import Path
-from shutil import copyfile
-
-from PIL import Image, ImageDraw
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -46,79 +45,53 @@ MAC_SIZES = {
     "icon_512x512@2x.png": 1024,
 }
 
-
-def _lerp(a: int, b: int, t: float) -> int:
-    return round(a + (b - a) * t)
-
-
-def _draw_arc(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int], start: int, end: int, width: int, fill: tuple[int, int, int, int]) -> None:
-    draw.arc(box, start=start, end=end, fill=fill, width=width)
-    radius = (box[2] - box[0]) / 2
-    center = ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
-    cap = width / 2
-    for angle in (start, end):
-        point = (
-            center[0] + radius * math.cos(math.radians(angle)),
-            center[1] + radius * math.sin(math.radians(angle)),
-        )
-        draw.ellipse(
-            (point[0] - cap, point[1] - cap, point[0] + cap, point[1] + cap),
-            fill=fill,
-        )
+# On macOS with Homebrew, cairocffi cannot auto-detect libcairo.
+# Pre-load it so dlopen succeeds.
+_HOMEBREW_CAIRO = "/opt/homebrew/lib/libcairo.2.dylib"
+_orig_find_library = ctypes.util.find_library
 
 
-def make_icon(size: int) -> Image.Image:
-    scale = size / 100
-    image = Image.new("RGBA", (size, size), (12, 13, 24, 255))
-    pixels = image.load()
-    for y in range(size):
-        for x in range(size):
-            dx = (x / size - 0.35) / 0.88
-            dy = (y / size - 0.30) / 0.75
-            t = min((dx * dx + dy * dy) ** 0.5, 1.0)
-            rgb = (
-                _lerp(30, 12, t),
-                _lerp(32, 13, t),
-                _lerp(53, 24, t),
-            )
-            pixels[x, y] = (*rgb, 255)
+def _patched_find_library(name: str) -> str | None:
+    if name in ("cairo", "cairo-2", "libcairo-2"):
+        import os
+        if os.path.exists(_HOMEBREW_CAIRO):
+            return _HOMEBREW_CAIRO
+    return _orig_find_library(name)
 
-    draw = ImageDraw.Draw(image, "RGBA")
-    outer_width = max(2, round(11 * scale))
-    inner_width = max(2, round(9 * scale))
-    outer_r = 38 * scale
-    inner_r = 20 * scale
-    cx = cy = size / 2
-    outer_box = tuple(round(v) for v in (cx - outer_r, cy - outer_r, cx + outer_r, cy + outer_r))
-    inner_box = tuple(round(v) for v in (cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r))
 
-    draw.ellipse(outer_box, outline=(218, 119, 86, 46), width=outer_width)
-    _draw_arc(draw, outer_box, -90, 162, outer_width, (218, 119, 86, 255))
-    draw.ellipse(inner_box, outline=(10, 132, 255, 46), width=inner_width)
-    _draw_arc(draw, inner_box, -90, 72, inner_width, (10, 132, 255, 255))
+ctypes.util.find_library = _patched_find_library
 
-    dot = 3.5 * scale
-    draw.ellipse((cx - dot, cy - dot, cx + dot, cy + dot), fill=(255, 255, 255, 166))
-    return image
+import cairosvg  # noqa: E402  (must come after the patch)
+
+
+def render_png(size: int) -> bytes:
+    svg_data = SOURCE.read_bytes()
+    return cairosvg.svg2png(
+        bytestring=svg_data,
+        output_width=size,
+        output_height=size,
+    )
 
 
 def main() -> None:
     ICON_DIR.mkdir(parents=True, exist_ok=True)
-    copyfile(SOURCE, ICON_DIR / "AIUsageIconSource.svg")
     for name, size in SIZES.items():
-        make_icon(size).save(ICON_DIR / name)
+        (ICON_DIR / name).write_bytes(render_png(size))
+        print(f"  {name} ({size}px)")
+
     MAC_ICONSET_DIR.mkdir(parents=True, exist_ok=True)
     for name, size in MAC_SIZES.items():
-        make_icon(size).save(MAC_ICONSET_DIR / name)
-    try:
-        import subprocess
+        (MAC_ICONSET_DIR / name).write_bytes(render_png(size))
+        print(f"  {name} ({size}px)")
 
+    try:
         subprocess.run(
             ["iconutil", "-c", "icns", str(MAC_ICONSET_DIR), "-o", str(MAC_ICNS)],
             check=True,
         )
-    except Exception:
-        make_icon(1024).save(MAC_ICNS, format="PNG")
+        print(f"  AIUsageMenuBar.icns")
+    except Exception as exc:
+        print(f"  iconutil failed ({exc}), skipping .icns")
 
 
 if __name__ == "__main__":

@@ -9,9 +9,27 @@ public struct MenuBarState: Equatable, Sendable {
     public let primaryLimitText: String
     public let lastUpdatedText: String
     public let trendBars: [MenuTrendBar]
+    public let trendRefCeilingText: String
+    public let trendCeilingFraction: Double
+    public let trendMidFraction: Double
+    public let trendMidText: String
     public let sources: [MenuDisplayRow]
     public let limitRows: [MenuDisplayRow]
     public let breakdownSections: [MenuDisplaySection]
+    public let quotaRings: [QuotaRingData]
+}
+
+public struct QuotaRingData: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let displayName: String
+    public let outerRed: Double; public let outerGreen: Double; public let outerBlue: Double
+    public let innerRed: Double; public let innerGreen: Double; public let innerBlue: Double
+    public let outerFraction: Double
+    public let innerFraction: Double
+    public let outerPctText: String
+    public let innerPctText: String
+    public let outerTimeText: String
+    public let innerTimeText: String
 }
 
 public struct MenuTrendBar: Equatable, Sendable, Identifiable {
@@ -51,8 +69,12 @@ public enum MenuBarViewModel {
             }
             .first
 
+        let maxTokens = summary.trend.points.map(\.tokens).max() ?? 0
+        let ceiling = maxTokens > 0 ? ceilingValue(maxTokens) : 1
+        let midVal = midlineValue(ceiling: ceiling)
+
         return MenuBarState(
-            statusTitle: "AI \(tokenText)",
+            statusTitle: tokenText,
             periodLabel: periodLabel(selectedPeriodID),
             heroTotalText: tokenText,
             tokenBreakdownText: [
@@ -62,11 +84,16 @@ public enum MenuBarViewModel {
             ].joined(separator: " · "),
             healthText: healthText(okCount: okCount, total: summary.sources.count, problemCount: problemCount),
             primaryLimitText: primaryLimitText(primaryLimit),
-            lastUpdatedText: timeText(summary.generatedAt, timezone: summary.timezone),
+            lastUpdatedText: latestDataText(summary.sources, fallback: summary.generatedAt, timezone: summary.timezone),
             trendBars: trendBars(summary.trend),
-            sources: summary.sources.map { sourceRow($0, generatedAt: summary.generatedAt) },
+            trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
+            trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
+            trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
+            trendMidText: maxTokens > 0 && midVal > 0 ? ceilingText(midVal) : "",
+            sources: sourceRows(summary.sources, byMachine: summary.breakdown.byMachine, generatedAt: summary.generatedAt),
             limitRows: sortedLimits(summary.limits.windows).map { limitRow($0, generatedAt: summary.generatedAt) },
-            breakdownSections: breakdownSections(summary.breakdown)
+            breakdownSections: breakdownSections(summary.breakdown),
+            quotaRings: quotaRings(from: summary.limits.windows)
         )
     }
 
@@ -103,18 +130,25 @@ public enum MenuBarViewModel {
     }
 
     private static func timeText(_ generatedAt: String?, timezone: String?) -> String {
-        let time: String
-        if let generatedAt, generatedAt.count >= 16 {
-            let start = generatedAt.index(generatedAt.startIndex, offsetBy: 11)
-            let end = generatedAt.index(generatedAt.startIndex, offsetBy: 16)
-            time = String(generatedAt[start..<end])
-        } else {
-            time = "--:--"
+        guard let generatedAt else { return "--" }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = formatter.date(from: generatedAt)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: generatedAt)
         }
-        if let timezone, !timezone.isEmpty {
-            return "\(time) · \(timezone)"
-        }
-        return time
+        guard let d = date else { return "--" }
+        let elapsed = Int(-d.timeIntervalSinceNow)
+        if elapsed < 60 { return "刚刚" }
+        if elapsed < 3600 { return "\(elapsed / 60) 分钟前" }
+        if elapsed < 86400 { return "\(elapsed / 3600) 小时前" }
+        return "\(elapsed / 86400) 天前"
+    }
+
+    private static func latestDataText(_ sources: [MobileSource], fallback: String?, timezone: String?) -> String {
+        let latest = sources.compactMap { $0.lastObservedAt }.max()
+        return timeText(latest ?? fallback, timezone: timezone)
     }
 
     private static func trendBars(_ trend: MobileTrend) -> [MenuTrendBar] {
@@ -166,28 +200,135 @@ public enum MenuBarViewModel {
         return bucket
     }
 
-    private static func sourceRow(_ source: MobileSource, generatedAt: String?) -> MenuDisplayRow {
-        let title = source.displayName ?? [source.machine, source.osUser].compactMap { $0 }.joined(separator: " · ")
-        return MenuDisplayRow(
-            id: source.sourceID,
-            title: title.isEmpty ? source.sourceID : title,
-            subtitle: sourceSubtitle(source, generatedAt: generatedAt),
-            value: source.status == "ok" ? "正常" : "异常",
-            status: source.status
-        )
+    private static func sourceRows(_ sources: [MobileSource], byMachine: [MobileBreakdownRow], generatedAt: String?) -> [MenuDisplayRow] {
+        var machineTokens: [String: Int] = [:]
+        for row in byMachine where row.tokens > 0 {
+            machineTokens[row.label] = row.tokens
+        }
+        return sources
+            .compactMap { source -> (MenuDisplayRow, Int)? in
+                let tokens = source.machine.flatMap { machineTokens[$0] } ?? 0
+                if source.status != "ok" && tokens == 0 { return nil }
+                let title = source.osUser ?? source.machine ?? source.sourceID
+                let timeStr = compactDateTime(source.lastObservedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
+                let machineStr = source.machine ?? ""
+                let platformStr = source.platform ?? ""
+                let subtitleParts = [machineStr, platformStr, timeStr].filter { !$0.isEmpty }
+                let row = MenuDisplayRow(
+                    id: source.sourceID,
+                    title: title.isEmpty ? source.sourceID : title,
+                    subtitle: subtitleParts.joined(separator: " · "),
+                    value: tokens > 0 ? TokenFormat.compact(tokens) : "正常",
+                    status: source.status
+                )
+                return (row, tokens)
+            }
+            .sorted { $0.1 > $1.1 }
+            .map { $0.0 }
     }
 
-    private static func sourceSubtitle(_ source: MobileSource, generatedAt: String?) -> String {
-        var parts: [String] = []
-        if let lastObserved = compactDateTime(source.lastObservedAt, reference: generatedAt, suffix: "更新") {
-            parts.append(lastObserved)
-        } else {
-            parts.append("未上报")
+    private static func sourceQuality(_ sourceType: String?) -> Int {
+        switch sourceType {
+        case "oauth_usage_api": return 4
+        case "official_cli": return 3
+        case "official_cli_limit_message", "official_cli_subscription": return 2
+        case "active_limits_cache": return 1
+        default: return 0
         }
-        if let platform = source.platform, !platform.isEmpty {
-            parts.append(platform)
+    }
+
+    private static func bestWindowPerType(_ windows: [MobileLimitWindow]) -> [MobileLimitWindow] {
+        var best: [String: MobileLimitWindow] = [:]
+        for w in windows {
+            if let existing = best[w.window] {
+                if sourceQuality(w.sourceType) > sourceQuality(existing.sourceType) {
+                    best[w.window] = w
+                }
+            } else {
+                best[w.window] = w
+            }
         }
-        return parts.joined(separator: " · ")
+        return Array(best.values)
+    }
+
+    private static func quotaRings(from windows: [MobileLimitWindow]) -> [QuotaRingData] {
+        let observed = windows.filter(\.isOfficialObserved)
+        guard !observed.isEmpty else { return [] }
+        let grouped = Dictionary(grouping: observed, by: \.provider)
+        let order = ["anthropic", "claude", "openai", "codex", "gpt"]
+        let ordered = order.filter { grouped[$0] != nil } +
+                      grouped.keys.filter { !Set(order).contains($0) }.sorted()
+        return ordered.prefix(2).compactMap { provider in
+            guard let wins = grouped[provider] else { return nil }
+            let sorted = bestWindowPerType(wins).sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
+            let outer = sorted[0]
+            let inner = sorted.count > 1 ? sorted[1] : nil
+            let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
+            switch provider {
+            case "anthropic", "claude":
+                name = "Claude"; oR = 0.855; oG = 0.467; oB = 0.337; iR = 0.918; iG = 0.659; iB = 0.510
+            case "openai", "codex", "gpt":
+                name = provider == "codex" ? "Codex" : "OpenAI"
+                oR = 0.039; oG = 0.518; oB = 1.0; iR = 0.353; iG = 0.784; iB = 0.980
+            default:
+                name = provider.prefix(1).uppercased() + provider.dropFirst()
+                oR = 0.200; oG = 0.600; oB = 0.800; iR = 0.400; iG = 0.750; iB = 0.900
+            }
+            return QuotaRingData(
+                id: provider, displayName: name,
+                outerRed: oR, outerGreen: oG, outerBlue: oB,
+                innerRed: iR, innerGreen: iG, innerBlue: iB,
+                outerFraction: outer.usedPercent / 100.0,
+                innerFraction: (inner?.usedPercent ?? 0) / 100.0,
+                outerPctText: "\(Int(outer.usedPercent.rounded()))%",
+                innerPctText: inner.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
+                outerTimeText: timeRemainingText(outer.resetAt) ?? "--",
+                innerTimeText: inner.flatMap { timeRemainingText($0.resetAt) } ?? "--"
+            )
+        }
+    }
+
+    private static func timeRemainingText(_ resetAt: String?) -> String? {
+        guard let resetAt, resetAt.count >= 19 else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        var date = formatter.date(from: resetAt)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: resetAt)
+        }
+        guard let d = date else { return nil }
+        let secs = Int(d.timeIntervalSinceNow)
+        guard secs > 0 else { return "即将重置" }
+        let hours = secs / 3600
+        let mins = (secs % 3600) / 60
+        if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }
+        if hours > 0 { return "\(hours)h \(mins)min" }
+        return "\(mins)min"
+    }
+
+    private static func ceilingValue(_ maxTokens: Int) -> Int {
+        let tiers = [1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000,
+                     1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000,
+                     100_000_000, 200_000_000, 500_000_000,
+                     1_000_000_000, 2_000_000_000, 5_000_000_000]
+        return tiers.first { $0 > maxTokens } ?? (maxTokens * 2)
+    }
+
+    private static func midlineValue(ceiling: Int) -> Int {
+        let tiers = [1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000,
+                     1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000,
+                     100_000_000, 200_000_000, 500_000_000,
+                     1_000_000_000, 2_000_000_000, 5_000_000_000]
+        let half = ceiling / 2
+        return tiers.last { $0 <= half } ?? 0
+    }
+
+    private static func ceilingText(_ ceiling: Int) -> String {
+        if ceiling >= 1_000_000_000 { return "\(ceiling / 1_000_000_000)B" }
+        if ceiling >= 1_000_000 { return "\(ceiling / 1_000_000)M" }
+        if ceiling >= 1_000 { return "\(ceiling / 1_000)K" }
+        return "\(ceiling)"
     }
 
     private static func limitRow(_ window: MobileLimitWindow, generatedAt: String?) -> MenuDisplayRow {

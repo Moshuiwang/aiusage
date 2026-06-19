@@ -99,6 +99,24 @@ class TestClaudeLimitsProvider(unittest.TestCase):
         self.assertEqual(windows[0].source_type, "official_cli_limit_message")
         self.assertTrue(windows[0].is_official)
 
+    def test_cli_new_format_parses_subscription_usage_text(self) -> None:
+        text = (
+            "You are currently using your subscription to power your Claude Code usage\n\n"
+            "Current session: 35% used · resets Jun 19 at 6:09pm (Asia/Shanghai)\n"
+            "Current week (all models): 40% used · resets Jun 21 at 1:59am (Asia/Shanghai)\n"
+        )
+
+        windows = parse_claude_cli_usage(text, observed_at="2026-06-19T14:00:00+08:00")
+
+        self.assertEqual([w.window for w in windows], ["session", "week"])
+        self.assertEqual([w.used_percent for w in windows], [35.0, 40.0])
+        self.assertEqual([w.remaining_percent for w in windows], [65.0, 60.0])
+        self.assertEqual(windows[0].reset_at, "2026-06-19T18:09:00+08:00")
+        self.assertEqual(windows[1].reset_at, "2026-06-21T01:59:00+08:00")
+        self.assertEqual([w.window_duration_minutes for w in windows], [300, 10080])
+        self.assertEqual([w.source_type for w in windows], ["official_cli", "official_cli"])
+        self.assertTrue(all(w.is_official for w in windows))
+
     def test_cli_limit_message_next_day_when_reset_time_already_passed(self) -> None:
         windows = parse_claude_cli_usage(
             "You've hit your session limit · resets 12:10am (Asia/Shanghai)",

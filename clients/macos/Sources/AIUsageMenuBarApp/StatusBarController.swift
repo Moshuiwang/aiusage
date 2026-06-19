@@ -45,8 +45,10 @@ final class StatusBarController: NSObject {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 320, height: 520)
         popover.contentViewController = NSHostingController(
-            rootView: MenuBarPopoverView(model: model)
-                .frame(width: 320, height: 520)
+            rootView: MenuBarPopoverView(model: model, onClose: { [weak self] in
+                self?.popover.performClose(nil)
+            })
+            .frame(width: 320, height: 520)
         )
     }
 
