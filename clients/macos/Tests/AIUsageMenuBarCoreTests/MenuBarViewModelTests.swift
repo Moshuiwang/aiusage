@@ -12,12 +12,12 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.heroTotalText, "5.0K")
         XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · Cache 800")
         XCTAssertEqual(state.healthText, "2/2 正常")
-        XCTAssertEqual(state.primaryLimitText, "Codex session · 60% 可用")
+        XCTAssertEqual(state.primaryLimitText, "Codex session · 40% 已用")
         XCTAssertTrue(state.lastUpdatedText.hasSuffix("前"), "Expected relative time, got: \(state.lastUpdatedText)")
         XCTAssertEqual(state.sources.map(\.title), ["wang", "wang"])
         XCTAssertEqual(state.sources.first?.subtitle, "linux-dev · linux · 10:40 更新")
         XCTAssertEqual(state.limitRows.first?.title, "Codex session")
-        XCTAssertEqual(state.limitRows.first?.subtitle, "60% 可用 · 40% 已用 · observed")
+        XCTAssertEqual(state.limitRows.first?.subtitle, "40% 已用 · 60% 可用 · observed")
         XCTAssertEqual(state.limitRows.first?.value, "15:40 重置")
         XCTAssertEqual(state.breakdownSections.map(\.title), ["机器", "账户", "Agent", "模型", "日期"])
         XCTAssertEqual(state.breakdownSections.first?.rows.map(\.title), ["linux-dev", "macbook-pro"])
@@ -98,7 +98,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(weekState.trendBars.map(\.label), ["05-28", "", "", "05-31", "", "", "06-03"])
     }
 
-    func testQuotaRingsUseLatestObservedAvailabilityPerProviderWindow() throws {
+    func testQuotaRingsUseLatestObservedUsagePerProviderWindow() throws {
         let summary = try loadFixture()
         let duplicateLimits = MobileLimits(
             observedCount: 4,
@@ -178,13 +178,13 @@ final class MenuBarViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.outerPctText, "4%")
-        XCTAssertEqual(claude.innerPctText, "53%")
-        XCTAssertEqual(claude.outerFraction, 0.04, accuracy: 0.001)
+        XCTAssertEqual(claude.outerPctText, "96%")
+        XCTAssertEqual(claude.innerPctText, "47%")
+        XCTAssertEqual(claude.outerFraction, 0.96, accuracy: 0.001)
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
-        XCTAssertEqual(codex.outerPctText, "41%")
-        XCTAssertEqual(codex.outerFraction, 0.41, accuracy: 0.001)
+        XCTAssertEqual(codex.outerPctText, "59%")
+        XCTAssertEqual(codex.outerFraction, 0.59, accuracy: 0.001)
     }
 
     func testTrendSelectionFollowsMouseLocation() throws {

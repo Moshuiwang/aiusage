@@ -169,7 +169,7 @@ struct MenuBarPopoverView: View {
 
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("额度")
+            sectionTitle("已使用额度")
             HStack(alignment: .top, spacing: 0) {
                 ForEach(Array(model.state.quotaRings.enumerated()), id: \.element.id) { index, ring in
                     if index > 0 { Divider().padding(.vertical, 4) }
