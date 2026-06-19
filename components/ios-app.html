@@ -1,0 +1,406 @@
+<!-- @dsCard group="iOS" -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iOS App — AI Usage</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", sans-serif;
+  background: #d1d5db;
+  padding: 40px 48px;
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  min-height: 100vh;
+}
+
+/* ── iPhone shell ── */
+.phone {
+  width: 393px;
+  border-radius: 52px;
+  overflow: hidden;
+  background: #f2f2f7;
+  box-shadow:
+    0 0 0 1.5px rgba(255,255,255,0.55),
+    0 0 0 10px #1a1a1a,
+    0 0 0 11px rgba(255,255,255,0.12),
+    0 28px 72px rgba(0,0,0,0.38);
+  flex: 0 0 auto;
+  position: relative;
+}
+.phone-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .6px; color: rgba(60,60,67,.42);
+  text-align: center; margin-top: 12px;
+}
+
+/* Dynamic Island */
+.island {
+  position: absolute;
+  top: 12px; left: 50%; transform: translateX(-50%);
+  width: 120px; height: 34px;
+  background: #000; border-radius: 20px; z-index: 20;
+}
+
+/* Status bar */
+.status {
+  height: 54px;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 24px 8px; position: relative; z-index: 10;
+}
+.status-time { font-size: 15px; font-weight: 600; }
+.status-icons { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
+
+/* Screen + scroll */
+.screen { background: #f2f2f7; display: flex; flex-direction: column; height: 790px; }
+.scroll { flex: 1; overflow-y: auto; padding: 4px 0 8px; -webkit-overflow-scrolling: touch; }
+
+/* ── HEADER ── */
+.hdr {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px;
+}
+.hdr-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: radial-gradient(ellipse at 35% 30%, #1e2035, #0c0d18);
+  overflow: hidden; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,.26);
+}
+.hdr-icon svg { display: block; }
+.hdr-copy { flex: 1; }
+.hdr-title { font-size: 17px; font-weight: 700; }
+.hdr-sub { font-size: 12px; color: rgba(60,60,67,.55); margin-top: 1px; }
+.hdr-btn {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(118,118,128,.14);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; color: rgba(60,60,67,.7); flex-shrink: 0;
+}
+
+/* ── CARDS ── */
+.card {
+  margin: 0 16px 10px;
+  padding: 14px;
+  background: rgba(255,255,255,.78);
+  border-radius: 16px;
+  border: .5px solid rgba(255,255,255,.7);
+  box-shadow: 0 2px 12px rgba(0,0,0,.06);
+}
+.card-title {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .4px;
+  color: rgba(60,60,67,.45); margin-bottom: 11px;
+}
+
+/* ── HERO ── */
+.hero-num {
+  font-size: 44px; font-weight: 700; letter-spacing: -1.5px;
+  font-variant-numeric: tabular-nums; line-height: 1;
+  margin-bottom: 4px;
+}
+.hero-break {
+  font-size: 12px; font-weight: 500;
+  color: rgba(60,60,67,.55); margin-bottom: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Chart */
+.chart-wrap { position: relative; height: 64px; margin-bottom: 5px; }
+.c-ref { position: absolute; left: 0; right: 0; top: 0; border-top: 1px dashed rgba(60,60,67,.2); z-index:1; }
+.c-ref-lbl { position: absolute; right: 0; top: -7px; font-size: 9px; font-weight: 600; color: rgba(60,60,67,.42); }
+.bars { display: flex; align-items: flex-end; gap: 3px; height: 100%; position: relative; z-index: 0; }
+.bar { flex: 1; border-radius: 3px; background: linear-gradient(180deg,#4a9eff,#007aff); min-height: 3px; opacity: .85; }
+.c-axis { display: flex; justify-content: space-between; font-size: 9px; color: rgba(60,60,67,.45); font-weight: 500; margin-top: 5px; }
+
+/* ── QUOTA RINGS ── */
+.qgrid { display: flex; }
+.qi { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.qdiv { width: .5px; background: rgba(0,0,0,.07); margin: 4px 6px; }
+.rtrk { fill: none; stroke: rgba(0,0,0,.08); }
+.rnm { fill: #1c1c1e; font-family: -apple-system,sans-serif; font-weight: 700; font-size: 10px; }
+.rrows { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 0 2px; }
+.rrow { display: flex; align-items: center; gap: 4px; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.rk { font-size: 9px; font-weight: 600; width: 14px; flex: 0 0 auto; }
+.rp { font-size: 11.5px; font-weight: 700; min-width: 28px; }
+.rr { font-size: 9.5px; color: rgba(60,60,67,.5); flex: 1; text-align: right; white-space: nowrap; }
+
+/* ── SOURCES ── */
+.src-row {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 36px;
+  border-top: .5px solid rgba(0,0,0,.05);
+  padding-top: 8px; margin-top: 8px;
+}
+.src-row:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+.src-dot { width: 7px; height: 7px; border-radius: 50%; background: #34c759; flex-shrink: 0; }
+.src-copy { flex: 1; min-width: 0; }
+.src-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-sub { font-size: 11px; color: rgba(60,60,67,.5); }
+.src-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: rgba(28,28,30,.72); white-space: nowrap; }
+
+/* ── MODEL USAGE ── */
+.model-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0;
+  border-top: .5px solid rgba(0,0,0,.05);
+}
+.model-row:first-of-type { border-top: none; padding-top: 0; }
+.model-ic {
+  width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+}
+.model-copy { flex: 1; min-width: 0; }
+.model-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-sub { font-size: 11px; color: rgba(60,60,67,.48); }
+.model-right { text-align: right; flex-shrink: 0; }
+.model-val { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.model-pct { font-size: 10px; color: rgba(60,60,67,.42); }
+
+/* ── APPLE TAB BAR ── */
+.tabbar {
+  display: flex;
+  background: rgba(249,249,249,.92);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: .5px solid rgba(0,0,0,.14);
+  padding: 8px 0 30px;
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 4px 0; cursor: pointer;
+}
+.tab-ic { display: block; width: 26px; height: 26px; }
+.tab-lbl { font-size: 10px; font-weight: 500; letter-spacing: -.1px; }
+.tab.on .tab-ic, .tab.on .tab-lbl { color: #007aff; }
+.tab:not(.on) .tab-ic, .tab:not(.on) .tab-lbl { color: rgba(60,60,67,.5); }
+</style>
+</head>
+<body>
+
+<!-- ══ 今天 ══ -->
+<div>
+<div class="phone">
+  <div class="island"></div>
+  <div class="screen">
+    <div class="status">
+      <span class="status-time">9:41</span>
+      <div class="status-icons"><span>●●●</span><span>WiFi</span><span>🔋</span></div>
+    </div>
+
+    <div class="scroll">
+
+      <!-- Header -->
+      <div class="hdr">
+        <div class="hdr-icon">
+          <svg width="36" height="36" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#DA7756" stroke-opacity=".18" stroke-width="11"/>
+            <circle cx="50" cy="50" r="20" fill="none" stroke="#0a84ff" stroke-opacity=".18" stroke-width="9"/>
+            <circle cx="50" cy="50" r="38" fill="none" stroke="#DA7756" stroke-width="11" stroke-dasharray="167.1 238.8" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="20" fill="none" stroke="#0a84ff" stroke-width="9" stroke-dasharray="56.5 125.7" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="3.5" fill="rgba(255,255,255,.65)"/>
+          </svg>
+        </div>
+        <div class="hdr-copy">
+          <div class="hdr-title">AI Usage</div>
+          <div class="hdr-sub">2 分钟前</div>
+        </div>
+        <div class="hdr-btn">↺</div>
+      </div>
+
+      <!-- Hero -->
+      <div class="card">
+        <div class="hero-num">1.67B</div>
+        <div class="hero-break">Input 8.1M · Output 78.3M · Cache 1.58B</div>
+        <div class="chart-wrap">
+          <div class="c-ref"></div>
+          <span class="c-ref-lbl">2B</span>
+          <div class="bars" id="bars1"></div>
+        </div>
+        <div class="c-axis">
+          <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
+        </div>
+      </div>
+
+      <!-- Quota -->
+      <div class="card">
+        <div class="card-title">额度</div>
+        <div class="qgrid">
+          <div class="qi">
+            <svg width="110" height="110" viewBox="0 0 100 100">
+              <circle class="rtrk" cx="50" cy="50" r="40" stroke-width="10"/>
+              <circle class="rtrk" cx="50" cy="50" r="26" stroke-width="9"/>
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#DA7756" stroke-width="10" stroke-dasharray="170.9 251.3" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+              <circle cx="50" cy="50" r="26" fill="none" stroke="#EAA882" stroke-width="9" stroke-dasharray="73.5 163.4" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+              <text class="rnm" x="50" y="53" text-anchor="middle">Claude</text>
+            </svg>
+            <div class="rrows">
+              <div class="rrow"><span class="rk" style="color:#DA7756">5h</span><span class="rp" style="color:#DA7756">68%</span><span class="rr">2h 31min</span></div>
+              <div class="rrow"><span class="rk" style="color:#EAA882">7d</span><span class="rp" style="color:#EAA882">45%</span><span class="rr">1d 11h</span></div>
+            </div>
+          </div>
+          <div class="qdiv"></div>
+          <div class="qi">
+            <svg width="110" height="110" viewBox="0 0 100 100">
+              <circle class="rtrk" cx="50" cy="50" r="40" stroke-width="10"/>
+              <circle class="rtrk" cx="50" cy="50" r="26" stroke-width="9"/>
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#0a84ff" stroke-width="10" stroke-dasharray="113.1 251.3" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+              <circle cx="50" cy="50" r="26" fill="none" stroke="#5ac8fa" stroke-width="9" stroke-dasharray="37.6 163.4" stroke-linecap="round" transform="rotate(-90 50 50)"/>
+              <text class="rnm" x="50" y="53" text-anchor="middle">OpenAI</text>
+            </svg>
+            <div class="rrows">
+              <div class="rrow"><span class="rk" style="color:#0a84ff">5h</span><span class="rp" style="color:#0a84ff">45%</span><span class="rr">2h 31min</span></div>
+              <div class="rrow"><span class="rk" style="color:#5ac8fa">7d</span><span class="rp" style="color:#5ac8fa">23%</span><span class="rr">4d 11h</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sources -->
+      <div class="card">
+        <div class="card-title">来源</div>
+        <div class="src-row">
+          <div class="src-dot"></div>
+          <div class="src-copy">
+            <div class="src-name">wight</div>
+            <div class="src-sub">wight-mba · macOS · 2 分钟前</div>
+          </div>
+          <div class="src-val">1.17B</div>
+        </div>
+        <div class="src-row">
+          <div class="src-dot"></div>
+          <div class="src-copy">
+            <div class="src-name">wight</div>
+            <div class="src-sub">wight-mini · macOS · 5 分钟前</div>
+          </div>
+          <div class="src-val">501M</div>
+        </div>
+      </div>
+
+      <!-- Model usage (moved from 明细) -->
+      <div class="card">
+        <div class="card-title">模型用量</div>
+        <div class="model-row">
+          <div class="model-ic" style="padding:0;overflow:hidden;background:none">
+            <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=128" width="30" height="30" style="border-radius:8px;display:block">
+          </div>
+          <div class="model-copy">
+            <div class="model-name">claude-sonnet-4-5</div>
+            <div class="model-sub">Anthropic</div>
+          </div>
+          <div class="model-right">
+            <div class="model-val">1.21B</div>
+            <div class="model-pct">72%</div>
+          </div>
+        </div>
+        <div class="model-row">
+          <div class="model-ic" style="padding:0;overflow:hidden;background:none">
+            <img src="https://www.google.com/s2/favicons?domain=chatgpt.com&sz=128" width="30" height="30" style="border-radius:8px;display:block">
+          </div>
+          <div class="model-copy">
+            <div class="model-name">gpt-4o</div>
+            <div class="model-sub">OpenAI</div>
+          </div>
+          <div class="model-right">
+            <div class="model-val">364M</div>
+            <div class="model-pct">22%</div>
+          </div>
+        </div>
+        <div class="model-row">
+          <div class="model-ic" style="padding:0;overflow:hidden;background:none">
+            <img src="https://www.google.com/s2/favicons?domain=claude.ai&sz=128" width="30" height="30" style="border-radius:8px;display:block">
+          </div>
+          <div class="model-copy">
+            <div class="model-name">claude-haiku-3-5</div>
+            <div class="model-sub">Anthropic</div>
+          </div>
+          <div class="model-right">
+            <div class="model-val">95M</div>
+            <div class="model-pct">6%</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /scroll -->
+
+    <!-- Apple tab bar — period switcher -->
+    <div class="tabbar">
+      <!-- 今天: calendar with today highlighted -->
+      <div class="tab on">
+        <svg class="tab-ic" width="26" height="26" viewBox="0 0 28 28" fill="none">
+          <rect x="2" y="5" width="24" height="21" rx="4" stroke="currentColor" stroke-width="1.8"/>
+          <rect x="2" y="5" width="24" height="8" rx="4" fill="currentColor"/>
+          <rect x="2" y="10" width="24" height="3" fill="currentColor"/>
+          <line x1="9" y1="3" x2="9" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="19" y1="3" x2="19" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <text x="14" y="23" text-anchor="middle" font-size="9" font-weight="800" fill="currentColor" font-family="-apple-system,sans-serif">19</text>
+        </svg>
+        <span class="tab-lbl">今天</span>
+      </div>
+      <!-- 周: calendar with 7-col week strip -->
+      <div class="tab">
+        <svg class="tab-ic" width="26" height="26" viewBox="0 0 28 28" fill="none">
+          <rect x="2" y="5" width="24" height="21" rx="4" stroke="currentColor" stroke-width="1.8"/>
+          <rect x="2" y="5" width="24" height="8" rx="4" fill="currentColor"/>
+          <rect x="2" y="10" width="24" height="3" fill="currentColor"/>
+          <line x1="9" y1="3" x2="9" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="19" y1="3" x2="19" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="5.5" y1="16" x2="5.5" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".9"/>
+          <line x1="8.8" y1="16" x2="8.8" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".9"/>
+          <line x1="12.1" y1="16" x2="12.1" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".9"/>
+          <line x1="15.8" y1="16" x2="15.8" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".9"/>
+          <line x1="19.1" y1="16" x2="19.1" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".4"/>
+          <line x1="22.4" y1="16" x2="22.4" y2="22" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity=".4"/>
+        </svg>
+        <span class="tab-lbl">周</span>
+      </div>
+      <!-- 月: calendar with dot grid -->
+      <div class="tab">
+        <svg class="tab-ic" width="26" height="26" viewBox="0 0 28 28" fill="none">
+          <rect x="2" y="5" width="24" height="21" rx="4" stroke="currentColor" stroke-width="1.8"/>
+          <rect x="2" y="5" width="24" height="8" rx="4" fill="currentColor"/>
+          <rect x="2" y="10" width="24" height="3" fill="currentColor"/>
+          <line x1="9" y1="3" x2="9" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="19" y1="3" x2="19" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="6.5" cy="17" r="1.4" fill="currentColor"/>
+          <circle cx="11" cy="17" r="1.4" fill="currentColor"/>
+          <circle cx="15.5" cy="17" r="1.4" fill="currentColor"/>
+          <circle cx="20" cy="17" r="1.4" fill="currentColor"/>
+          <circle cx="6.5" cy="22" r="1.4" fill="currentColor" opacity=".45"/>
+          <circle cx="11" cy="22" r="1.4" fill="currentColor" opacity=".45"/>
+          <circle cx="15.5" cy="22" r="1.4" fill="currentColor" opacity=".45"/>
+          <circle cx="20" cy="22" r="1.4" fill="currentColor" opacity=".2"/>
+        </svg>
+        <span class="tab-lbl">月</span>
+      </div>
+      <!-- 全部: list / all records -->
+      <div class="tab">
+        <svg class="tab-ic" width="26" height="26" viewBox="0 0 28 28" fill="none">
+          <line x1="4" y1="8" x2="24" y2="8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="4" y1="14" x2="24" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <line x1="4" y1="20" x2="24" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="4" cy="8" r="2" fill="currentColor"/>
+          <circle cx="4" cy="14" r="2" fill="currentColor"/>
+          <circle cx="4" cy="20" r="2" fill="currentColor"/>
+        </svg>
+        <span class="tab-lbl">全部</span>
+      </div>
+    </div>
+
+  </div><!-- /screen -->
+</div>
+<div class="phone-label">今天</div>
+</div>
+
+<script>
+const h=[8,5,4,4,6,10,18,35,52,68,75,84,69,78,65,55,43,38,34,29,25,20,15,12];
+document.getElementById('bars1').innerHTML =
+  h.map(v=>`<div class="bar" style="height:${v}%"></div>`).join('');
+</script>
+</body>
+</html>

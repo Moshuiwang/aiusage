@@ -53,6 +53,18 @@
       "idiom": "ios-marketing",
       "scale": "1x",
       "size": "1024x1024"
+    },
+    {
+      "appearances": [
+        {
+          "appearance": "luminosity",
+          "value": "dark"
+        }
+      ],
+      "filename": "AppIcon-1024-dark.png",
+      "idiom": "ios-marketing",
+      "scale": "1x",
+      "size": "1024x1024"
     }
   ],
   "info": {
