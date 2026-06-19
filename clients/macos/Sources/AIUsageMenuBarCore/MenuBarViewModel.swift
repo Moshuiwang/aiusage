@@ -241,7 +241,7 @@ public enum MenuBarViewModel {
         var best: [String: MobileLimitWindow] = [:]
         for w in windows {
             if let existing = best[w.window] {
-                if sourceQuality(w.sourceType) > sourceQuality(existing.sourceType) {
+                if isBetterLimitWindow(w, than: existing) {
                     best[w.window] = w
                 }
             } else {
@@ -249,6 +249,15 @@ public enum MenuBarViewModel {
             }
         }
         return Array(best.values)
+    }
+
+    private static func isBetterLimitWindow(_ candidate: MobileLimitWindow, than existing: MobileLimitWindow) -> Bool {
+        let candidateQuality = sourceQuality(candidate.sourceType)
+        let existingQuality = sourceQuality(existing.sourceType)
+        if candidateQuality != existingQuality {
+            return candidateQuality > existingQuality
+        }
+        return (candidate.observedAt ?? "") > (existing.observedAt ?? "")
     }
 
     private static func quotaRings(from windows: [MobileLimitWindow]) -> [QuotaRingData] {
@@ -278,10 +287,10 @@ public enum MenuBarViewModel {
                 id: provider, displayName: name,
                 outerRed: oR, outerGreen: oG, outerBlue: oB,
                 innerRed: iR, innerGreen: iG, innerBlue: iB,
-                outerFraction: outer.usedPercent / 100.0,
-                innerFraction: (inner?.usedPercent ?? 0) / 100.0,
-                outerPctText: "\(Int(outer.usedPercent.rounded()))%",
-                innerPctText: inner.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
+                outerFraction: outer.remainingPercent / 100.0,
+                innerFraction: (inner?.remainingPercent ?? 0) / 100.0,
+                outerPctText: "\(Int(outer.remainingPercent.rounded()))%",
+                innerPctText: inner.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "--",
                 outerTimeText: timeRemainingText(outer.resetAt) ?? "--",
                 innerTimeText: inner.flatMap { timeRemainingText($0.resetAt) } ?? "--"
             )

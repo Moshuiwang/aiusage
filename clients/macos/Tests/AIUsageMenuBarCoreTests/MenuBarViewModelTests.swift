@@ -98,6 +98,95 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(weekState.trendBars.map(\.label), ["05-28", "", "", "05-31", "", "", "06-03"])
     }
 
+    func testQuotaRingsUseLatestObservedAvailabilityPerProviderWindow() throws {
+        let summary = try loadFixture()
+        let duplicateLimits = MobileLimits(
+            observedCount: 4,
+            totalCount: 4,
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "claude-main",
+                    provider: "claude",
+                    window: "session",
+                    usedPercent: 92,
+                    remainingPercent: 8,
+                    resetAt: "2026-05-24T14:40:00+00:00",
+                    windowDurationMinutes: 300,
+                    observedAt: "2026-06-18T10:00:00+08:00",
+                    sourceType: "active_limits_cache",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "claude-main",
+                    provider: "claude",
+                    window: "session",
+                    usedPercent: 96,
+                    remainingPercent: 4,
+                    resetAt: "2026-06-19T18:09:00+08:00",
+                    windowDurationMinutes: 300,
+                    observedAt: "2026-06-19T20:26:45+08:00",
+                    sourceType: "official_cli_limit_message",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "claude-main",
+                    provider: "claude",
+                    window: "week",
+                    usedPercent: 47,
+                    remainingPercent: 53,
+                    resetAt: "2026-06-21T01:59:00+08:00",
+                    windowDurationMinutes: 10080,
+                    observedAt: "2026-06-19T20:26:45+08:00",
+                    sourceType: "official_cli_limit_message",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "codex-main",
+                    provider: "codex",
+                    window: "session",
+                    usedPercent: 59,
+                    remainingPercent: 41,
+                    resetAt: "2026-06-19T14:42:15+00:00",
+                    windowDurationMinutes: 300,
+                    observedAt: "2026-06-19T20:26:45+08:00",
+                    sourceType: "runtime_api",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion,
+                client: summary.client,
+                generatedAt: summary.generatedAt,
+                timezone: summary.timezone,
+                period: summary.period,
+                trend: summary.trend,
+                sources: summary.sources,
+                breakdown: summary.breakdown,
+                limits: duplicateLimits
+            ),
+            selectedPeriodID: "today"
+        )
+
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "4%")
+        XCTAssertEqual(claude.innerPctText, "53%")
+        XCTAssertEqual(claude.outerFraction, 0.04, accuracy: 0.001)
+
+        let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
+        XCTAssertEqual(codex.outerPctText, "41%")
+        XCTAssertEqual(codex.outerFraction, 0.41, accuracy: 0.001)
+    }
+
     func testTrendSelectionFollowsMouseLocation() throws {
         let summary = try loadFixture()
         let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")

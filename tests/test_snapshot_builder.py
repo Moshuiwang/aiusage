@@ -473,6 +473,138 @@ class TestSnapshotBuilder(unittest.TestCase):
             ],
         )
 
+    def test_build_snapshot_keeps_best_limit_window_per_source_provider_and_window(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=self.items,
+        )
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="session",
+                    used_percent=92.0,
+                    remaining_percent=8.0,
+                    reset_at="2026-05-24T14:40:00+00:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:45:00+08:00",
+                    source_type="active_limits_cache",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="session",
+                    used_percent=96.0,
+                    remaining_percent=4.0,
+                    reset_at="2026-06-01T18:09:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="official_cli",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=47.0,
+                    remaining_percent=53.0,
+                    reset_at="2026-06-08T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="official_cli",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str=self.date_str,
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-01T10:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(
+            [(row["source_id"], row["provider"], row["window"], row["source_type"], row["remaining_percent"]) for row in snapshot["limits"]],
+            [
+                ("claude-main", "claude", "session", "official_cli", 4.0),
+                ("claude-main", "claude", "week", "official_cli", 53.0),
+            ],
+        )
+
+    def test_build_snapshot_excludes_expired_limit_windows(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=self.items,
+        )
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="session",
+                    used_percent=96.0,
+                    remaining_percent=4.0,
+                    reset_at="2026-06-01T10:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T09:45:00+08:00",
+                    source_type="official_cli",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=47.0,
+                    remaining_percent=53.0,
+                    reset_at="2026-06-08T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="official_cli",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str=self.date_str,
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-01T10:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(
+            [(row["provider"], row["window"], row["remaining_percent"]) for row in snapshot["limits"]],
+            [("claude", "week", 53.0)],
+        )
+
     def test_failed_limits_do_not_break_usage_summary(self) -> None:
         write_sqlite(
             path=self.db_path,
@@ -513,9 +645,7 @@ class TestSnapshotBuilder(unittest.TestCase):
             snapshot = json.load(f)
 
         self.assertEqual(snapshot["summary"]["total_tokens"], 4800)
-        self.assertEqual(snapshot["limits"][0]["status"], "provider_failed")
-        self.assertEqual(snapshot["limits"][0]["confidence"], "missing")
-        self.assertFalse(snapshot["limits"][0]["official"])
+        self.assertEqual(snapshot["limits"], [])
 
     def test_source_health_staleness_and_never_seen(self) -> None:
         """验证 Source 离线变 Stale、未上报变 Never Seen 以及今日 0 用量但在线的区别"""

@@ -93,7 +93,10 @@ def build_snapshot(
             source_identities = _fetch_source_identities(conn)
             hourly_rows = _fetch_hourly_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
             block_rows = _fetch_block_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
-            limits = _fetch_limit_windows(conn)
+            limits = _fetch_limit_windows(
+                conn,
+                ref_time if period_id == "today" and end_date == ref_time.date().isoformat() else None,
+            )
             account_hourly_rows = _fetch_account_hourly_rows(conn, start_date, end_date, timezone_str)
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc):
@@ -495,7 +498,7 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return row is not None
 
 
-def _fetch_limit_windows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+def _fetch_limit_windows(conn: sqlite3.Connection, ref_time: datetime | None = None) -> list[dict[str, Any]]:
     if not _table_exists(conn, "limit_windows"):
         return []
     columns = {row[1] for row in conn.execute("PRAGMA table_info(limit_windows)")}
@@ -525,7 +528,67 @@ def _fetch_limit_windows(conn: sqlite3.Connection) -> list[dict[str, Any]]:
                 status=row[10],
             ).to_snapshot_dict()
         )
-    return limits
+    if ref_time is not None:
+        limits = [
+            limit for limit in limits
+            if not _limit_window_expired(limit, ref_time)
+        ]
+    return _best_limit_windows(limits)
+
+
+def _best_limit_windows(limits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for limit in limits:
+        key = (
+            str(limit.get("source_id") or limit.get("provider") or ""),
+            str(limit.get("provider") or ""),
+            str(limit.get("window") or ""),
+        )
+        existing = best.get(key)
+        if existing is None or _limit_rank(limit) > _limit_rank(existing):
+            best[key] = limit
+    return sorted(
+        best.values(),
+        key=lambda item: (
+            str(item.get("source_id") or ""),
+            str(item.get("provider") or ""),
+            str(item.get("window") or ""),
+        ),
+    )
+
+
+def _limit_rank(limit: dict[str, Any]) -> tuple[int, int, str]:
+    official_ok = int(
+        bool(limit.get("official"))
+        and limit.get("confidence") == "observed"
+        and limit.get("status") == "ok"
+    )
+    return (
+        official_ok,
+        _limit_source_quality(str(limit.get("source_type") or "")),
+        str(limit.get("observed_at") or ""),
+    )
+
+
+def _limit_source_quality(source_type: str) -> int:
+    quality = {
+        "oauth_usage_api": 5,
+        "runtime_api": 5,
+        "official_cli": 4,
+        "official_cli_limit_message": 3,
+        "official_cli_subscription": 2,
+        "active_limits_cache": 1,
+    }
+    return quality.get(source_type, 0)
+
+
+def _limit_window_expired(limit: dict[str, Any], ref_time: datetime) -> bool:
+    reset_at = parse_datetime(str(limit.get("reset_at") or ""))
+    if reset_at is None:
+        return False
+    if reset_at.tzinfo is not None and ref_time.tzinfo is not None:
+        reset_at = reset_at.astimezone(ref_time.tzinfo)
+    return reset_at <= ref_time
 
 
 def _fetch_hourly_rows(conn: sqlite3.Connection, start_hour: str, end_hour: str) -> list[Any]:
