@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="AI Usage dual ring icon">
+  <defs>
+    <radialGradient id="bg-glow" cx="34%" cy="27%" r="82%">
+      <stop offset="0%" stop-color="#2D3148"/>
+      <stop offset="46%" stop-color="#141827"/>
+      <stop offset="100%" stop-color="#070910"/>
+    </radialGradient>
+    <linearGradient id="outer-gradient" x1="202" y1="196" x2="806" y2="832" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F0A06F"/>
+      <stop offset="100%" stop-color="#DA7756"/>
+    </linearGradient>
+    <linearGradient id="inner-gradient" x1="344" y1="296" x2="714" y2="710" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#6EC6FF"/>
+      <stop offset="100%" stop-color="#0A84FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#bg-glow)"/>
+  <circle cx="512" cy="512" r="350" fill="none" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="92"/>
+  <circle id="outer-ring" cx="512" cy="512" r="350" fill="none" stroke="url(#outer-gradient)" stroke-width="92" stroke-linecap="round" stroke-dasharray="1540 660" transform="rotate(-96 512 512)"/>
+  <circle cx="512" cy="512" r="184" fill="none" stroke="#FFFFFF" stroke-opacity="0.11" stroke-width="78"/>
+  <circle id="inner-ring" cx="512" cy="512" r="184" fill="none" stroke="url(#inner-gradient)" stroke-width="78" stroke-linecap="round" stroke-dasharray="690 470" transform="rotate(-90 512 512)"/>
+  <circle id="center-pulse" cx="512" cy="512" r="56" fill="#FFFFFF" fill-opacity="0.84"/>
+  <circle cx="512" cy="512" r="18" fill="#0A84FF"/>
+</svg>

@@ -1,24 +1,17 @@
 (function () {
   const SVG_NS = "http://www.w3.org/2000/svg";
   const PERIODS = [
-    { id: "today", label: "今天", axis: ["00:00", "08:00", "16:00", "now"], buckets: 24 },
+    { id: "today", label: "今天", axis: ["00:00", "04:00", "08:00", "12:00", "16:00", "20:00", "23:59"], buckets: 24 },
     { id: "week", label: "本周", axis: ["Mon", "Wed", "Fri", "Sun"], buckets: 7 },
     { id: "month", label: "本月", axis: ["06-01", "06-10", "06-20", "now"], buckets: 30 },
     { id: "all", label: "全部", axis: ["Jan", "Apr", "Jul", "Oct"], buckets: 12 },
   ];
-  const AGENT_COLORS = {
-    claude: "#E08855",
-    codex: "#2A6FDB",
-    gemini: "#18B59E",
-    deepseek: "#9558D9",
-    unknown: "#5FA8F5",
+  const PROVIDER_COLORS = {
+    claude: { outer: "#DA7756", inner: "#EAA882", label: "Claude" },
+    codex: { outer: "#0a84ff", inner: "#5ac8fa", label: "OpenAI" },
+    openai: { outer: "#0a84ff", inner: "#5ac8fa", label: "OpenAI" },
   };
-  const TOKEN_TYPE_COLORS = {
-    input: "#7FB0FF",
-    output: "#B89BFF",
-    cache: "#5FE0D0",
-  };
-  const HOST_COLORS = ["#E08855", "#2A6FDB", "#18B59E", "#9558D9", "#5FA8F5", "#5FE0B5"];
+  const HOST_COLORS = ["#34c759", "#0a84ff", "#DA7756", "#5ac8fa", "#EAA882"];
 
   let periodId = "today";
   let latestSnapshot = null;
@@ -27,12 +20,14 @@
   let countRaf = 0;
 
   const el = {
-    scopeLabel: document.getElementById("scopeLabel"),
-    clearUserFilter: document.getElementById("clearUserFilter"),
     periodSelector: document.getElementById("periodSelector"),
+    themeToggle: document.getElementById("themeToggle"),
+    clearUserFilter: document.getElementById("clearUserFilter"),
     syncChip: document.getElementById("syncChip"),
     periodEyebrow: document.getElementById("periodEyebrow"),
+    scopeLabel: document.getElementById("scopeLabel"),
     totalTokens: document.getElementById("totalTokens"),
+    heroDelta: document.getElementById("heroDelta"),
     inputTokens: document.getElementById("inputTokens"),
     outputTokens: document.getElementById("outputTokens"),
     cacheTokensCompact: document.getElementById("cacheTokensCompact"),
@@ -41,14 +36,13 @@
     streamTooltip: document.getElementById("streamTooltip"),
     axisRow: document.getElementById("axisRow"),
     emptyState: document.getElementById("emptyState"),
+    dashboardContent: document.getElementById("dashboardContent"),
     limitsSection: document.getElementById("limitsSection"),
     limitsGrid: document.getElementById("limitsGrid"),
     limitsCount: document.getElementById("limitsCount"),
-    dashboardContent: document.getElementById("dashboardContent"),
+    sourceCards: document.getElementById("sourceCards"),
     byAgentList: document.getElementById("byAgentList"),
     modelList: document.getElementById("modelList"),
-    cacheReadTokensVal: document.getElementById("cacheReadTokensVal"),
-    cacheReadProgress: document.getElementById("cacheReadProgress"),
     machineCount: document.getElementById("machineCount"),
     hostDonut: document.getElementById("hostDonut"),
     hostTooltip: document.getElementById("hostTooltip"),
@@ -58,23 +52,13 @@
     errorCard: document.getElementById("errorCard"),
     errorMsg: document.getElementById("errorMsg"),
   };
-  if (el.streamTooltip && el.streamTooltip.parentElement !== document.body) {
-    document.body.appendChild(el.streamTooltip);
-  }
-  if (el.hostTooltip && el.hostTooltip.parentElement !== document.body) {
-    document.body.appendChild(el.hostTooltip);
-  }
 
   function fmt(n) {
     const value = Number(n || 0);
-    if (value >= 1e9) return `${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `${(value / 1e6).toFixed(value >= 1e7 ? 1 : 2)}M`;
-    if (value >= 1e3) return `${(value / 1e3).toFixed(value >= 1e5 ? 0 : 1)}k`;
+    if (value >= 1e9) return `${trimFixed(value / 1e9, 2)}B`;
+    if (value >= 1e6) return `${trimFixed(value / 1e6, value >= 1e7 ? 1 : 2)}M`;
+    if (value >= 1e3) return `${trimFixed(value / 1e3, value >= 1e5 ? 0 : 1)}k`;
     return String(Math.round(value));
-  }
-
-  function fmtFull(n) {
-    return Math.round(Number(n || 0)).toLocaleString("en-US");
   }
 
   function fmtHero(n) {
@@ -87,27 +71,6 @@
 
   function trimFixed(value, digits) {
     return value.toFixed(digits).replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
-  }
-
-  function agentKey(name) {
-    const raw = String(name || "").toLowerCase();
-    if (raw.includes("claude")) return "claude";
-    if (raw.includes("codex") || raw.includes("openai") || raw.includes("gpt")) return "codex";
-    if (raw.includes("gemini")) return "gemini";
-    if (raw.includes("deepseek")) return "deepseek";
-    return "unknown";
-  }
-
-  function colorForAgent(name) {
-    return AGENT_COLORS[agentKey(name)] || AGENT_COLORS.unknown;
-  }
-
-  function withAlpha(hex, alpha) {
-    const h = hex.replace("#", "");
-    const r = parseInt(h.slice(0, 2), 16);
-    const g = parseInt(h.slice(2, 4), 16);
-    const b = parseInt(h.slice(4, 6), 16);
-    return `rgba(${r},${g},${b},${alpha})`;
   }
 
   function todayString() {
@@ -134,160 +97,31 @@
     const output = Number(summary.output_tokens || 0);
     const cache = Number(summary.cache_read_tokens || 0);
     const cachePct = total > 0 ? cache / total : 0;
-
-    const agents = normalizeGroups(snapshot.groups && snapshot.groups.by_agent, total, "agent");
     const hosts = normalizeGroups(snapshot.groups && snapshot.groups.by_machine, total, "host");
-    const models = collectModels(snapshot.items || [], total);
+    const agents = normalizeGroups(snapshot.groups && snapshot.groups.by_agent, total, "agent");
     const trend = normalizeTrend(snapshot.trend, period);
-    const layers = trend.layers;
-
-    return { period: { ...period, axis: trend.axis }, total, input, output, cache, cachePct, agents, hosts, models, layers, trendPoints: trend.points };
+    return { period: { ...period, axis: trend.axis }, total, input, output, cache, cachePct, hosts, agents, trend };
   }
 
   function normalizeGroups(groups, total, type) {
-    return (groups || []).map((item, index) => {
-      const name = item.name || item.source_id || "unknown";
-      const account = item.account || "";
-      const displayName = item.display_name || (account ? `${name} · ${account}` : name);
-      const users = normalizeMachineUsers(item.users || [], name, total);
-      const tokens = Number(item.total_tokens || 0);
-      return {
-        name,
-        account,
-        displayName,
-        users,
-        short: type === "agent" ? displayAgent(name) : displayName,
-        kind: type === "host" ? hostKind(name, account) : "",
-        tokens,
-        share: total > 0 ? tokens / total : 0,
-        color: type === "agent" ? colorForAgent(name) : HOST_COLORS[index % HOST_COLORS.length],
-      };
-    }).filter((item) => item.tokens > 0);
-  }
-
-  function displayAgent(name) {
-    const key = agentKey(name);
-    if (key === "claude") return "Claude";
-    if (key === "codex") return "Codex";
-    if (key === "gemini") return "Gemini";
-    if (key === "deepseek") return "DeepSeek";
-    return name;
-  }
-
-  function hostKind(name, account) {
-    const raw = String(name || "").toLowerCase();
-    const suffix = account ? ` · ${account}` : "";
-    if (raw.includes("mac")) return "Mac · 本地";
-    if (raw.includes("ubuntu")) return `Linux · CI${suffix}`;
-    if (raw.includes("wang")) return `Linux · Dev${suffix}`;
-    if (raw.includes("gpu")) return `Linux · GPU${suffix}`;
-    return account ? `Source · ${account}` : "Source";
-  }
-
-  function collectModels(items, total) {
-    const map = new Map();
-    items.forEach((item) => {
-      (item.model_breakdowns || []).forEach((model) => {
-        const name = model.model_name || "unknown-model";
-        const key = `${name}::${item.agent || "unknown"}`;
-        const prev = map.get(key) || {
+    return (groups || [])
+      .map((item, index) => {
+        const name = item.name || item.source_id || "unknown";
+        const account = item.account || "";
+        const tokens = Number(item.total_tokens || 0);
+        const displayName = item.display_name || (account ? `${name} · ${account}` : name);
+        return {
           name,
-          agent: item.agent || "unknown",
-          tokens: 0,
-          cacheRead: 0,
-          color: colorForAgent(item.agent),
+          account,
+          displayName,
+          users: normalizeMachineUsers(item.users || [], name, total),
+          kind: type === "host" ? hostKind(name, account) : displayAgent(name),
+          tokens,
+          share: total > 0 ? tokens / total : 0,
+          color: type === "host" ? HOST_COLORS[index % HOST_COLORS.length] : colorForAgent(name),
         };
-        prev.tokens += Number(model.total_tokens || 0);
-        prev.cacheRead += Number(model.cache_read_tokens || 0);
-        map.set(key, prev);
-      });
-    });
-    return Array.from(map.values())
-      .sort((a, b) => b.tokens - a.tokens)
-      .map((item) => ({
-        ...item,
-        share: total > 0 ? item.tokens / total : 0,
-        cachePctText: item.tokens > 0 ? `${Math.round((item.cacheRead / item.tokens) * 100)}%` : "0%",
-      }));
-  }
-
-  function normalizeTrend(trend, period) {
-    if (trend && Array.isArray(trend.axis) && Array.isArray(trend.by_token_type)) {
-      const axis = trend.axis.map((value) => shortDateLabel(value, trend.granularity));
-      const layers = trend.by_token_type.map((row) => ({
-        key: row.type,
-        label: row.label || row.type,
-        color: TOKEN_TYPE_COLORS[row.type] || "#5FA8F5",
-        values: (row.values || []).map((value) => Math.max(0.0001, Number(value || 0))),
-      }));
-      return {
-        axis,
-        points: Array.isArray(trend.points) ? trend.points : [],
-        layers: layers.length ? layers : emptyLayers(axis.length || 1),
-      };
-    }
-    return { axis: period.axis, points: [], layers: emptyLayers(period.buckets) };
-  }
-
-  function emptyLayers(buckets) {
-    return [{ key: "empty", color: "#5FA8F5", values: Array.from({ length: buckets }, () => 0.0001) }];
-  }
-
-  function shortDateLabel(value, granularity) {
-    const text = String(value || "");
-    if (granularity === "hour" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) return text.slice(11, 16);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.slice(5);
-    return text;
-  }
-
-  function render() {
-    if (!latestSnapshot) return;
-    const data = buildData(latestSnapshot);
-    const hasUsage = data.total > 0;
-    renderScope(latestSnapshot.summary || {});
-
-    el.periodEyebrow.textContent = `${data.period.label}总消耗 · TOKENS`;
-    animateTotal(data.total);
-    el.inputTokens.textContent = fmt(data.input);
-    el.outputTokens.textContent = fmt(data.output);
-    el.cacheTokensCompact.textContent = fmt(data.cache);
-    el.cacheHitLabel.textContent = `Cache Hit ${Math.round(data.cachePct * 100)}%`;
-    if (el.cacheReadTokensVal) el.cacheReadTokensVal.textContent = `${fmt(data.cache)} · ${Math.round(data.cachePct * 100)}%`;
-    if (el.cacheReadProgress) el.cacheReadProgress.style.width = `${Math.max(0, Math.min(100, data.cachePct * 100))}%`;
-    updateSyncChip(latestSnapshot.generated_at);
-
-    el.emptyState.hidden = hasUsage;
-    el.dashboardContent.hidden = false;
-
-    renderBreakdown(el.byAgentList, data.agents, data.total);
-    renderBreakdown(el.modelList, normalizeModelShares(data.models), data.total, true);
-    renderStream(data.layers, data.period.axis, data.trendPoints);
-    renderLimits(latestSnapshot.limits || []);
-    renderDonut(data.hosts);
-    renderSources(latestSnapshot.source_status || []);
-  }
-
-  function animateTotal(target) {
-    const from = countFrom;
-    const start = performance.now();
-    cancelAnimationFrame(countRaf);
-    function tick(now) {
-      const t = Math.min(1, (now - start) / 650);
-      const eased = 1 - Math.pow(1 - t, 3);
-      const current = from + (target - from) * eased;
-      el.totalTokens.textContent = fmtHero(current);
-      if (t < 1) {
-        countRaf = requestAnimationFrame(tick);
-      } else {
-        countFrom = target;
-      }
-    }
-    countRaf = requestAnimationFrame(tick);
-  }
-
-  function normalizeModelShares(models) {
-    const maxShare = Math.max(...models.map((m) => m.share), 0);
-    return models.map((model) => ({ ...model, share: maxShare > 0 ? model.share / maxShare : 0 }));
+      })
+      .filter((item) => item.tokens > 0);
   }
 
   function normalizeMachineUsers(users, machine, total) {
@@ -303,433 +137,252 @@
     }).sort((a, b) => b.tokens - a.tokens);
   }
 
-  function renderScope(summary) {
-    const machine = summary.machine || activeFilter.machine;
-    const account = summary.account || activeFilter.account;
-    const isFiltered = Boolean(machine || account);
-    if (el.scopeLabel) {
-      el.scopeLabel.textContent = isFiltered
-        ? `${machine || "全部机器"} · ${account || "全部用户"} 的 AI coding 用量与健康状态`
-        : "多设备 · 多 OS · AI coding 用量与健康状态统一观测";
-    }
-    if (el.clearUserFilter) el.clearUserFilter.hidden = !isFiltered;
+  function agentKey(name) {
+    const raw = String(name || "").toLowerCase();
+    if (raw.includes("claude")) return "claude";
+    if (raw.includes("codex") || raw.includes("openai") || raw.includes("gpt")) return "codex";
+    if (raw.includes("gemini")) return "gemini";
+    if (raw.includes("deepseek")) return "deepseek";
+    return "unknown";
   }
 
-  function renderBreakdown(target, rows, total, compactModels) {
-    target.replaceChildren();
-    if (!rows.length) {
-      target.appendChild(emptyLine(compactModels ? "暂无模型明细" : "暂无用量明细"));
+  function displayAgent(name) {
+    const key = agentKey(name);
+    if (key === "claude") return "Claude";
+    if (key === "codex") return "OpenAI";
+    if (key === "gemini") return "Gemini";
+    if (key === "deepseek") return "DeepSeek";
+    return String(name || "Unknown");
+  }
+
+  function colorForAgent(name) {
+    const key = agentKey(name);
+    if (key === "claude") return "#DA7756";
+    if (key === "codex") return "#0a84ff";
+    if (key === "gemini") return "#34c759";
+    if (key === "deepseek") return "#5ac8fa";
+    return "#8e8e93";
+  }
+
+  function hostKind(name, account) {
+    const raw = String(name || "").toLowerCase();
+    if (raw.includes("mac")) return "macOS · live";
+    if (raw.includes("ubuntu")) return account ? `Linux · ${account}` : "Linux";
+    if (raw.includes("gpu")) return account ? `Linux GPU · ${account}` : "Linux GPU";
+    return account ? `Source · ${account}` : "Source";
+  }
+
+  function normalizeTrend(trend, period) {
+    if (trend && Array.isArray(trend.points) && trend.points.length) {
+      const points = trend.points.map((point) => ({
+        label: shortDateLabel(point.date || point.hour || point.bucket || point.label, trend.granularity),
+        tokens: Number(point.total_tokens ?? point.tokens ?? 0),
+        inputTokens: Number(point.input_tokens || 0),
+        outputTokens: Number(point.output_tokens || 0),
+        cacheTokens: Number(point.cache_tokens || point.cache_read_tokens || 0),
+      }));
+      return { points, axis: axisForPoints(points, period.axis) };
+    }
+    if (trend && Array.isArray(trend.axis) && Array.isArray(trend.by_token_type)) {
+      const totals = [];
+      trend.by_token_type.forEach((row) => {
+        (row.values || []).forEach((value, index) => {
+          totals[index] = (totals[index] || 0) + Number(value || 0);
+        });
+      });
+      const points = totals.map((tokens, index) => ({
+        label: shortDateLabel(trend.axis[index], trend.granularity),
+        tokens,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheTokens: 0,
+      }));
+      return { points, axis: axisForPoints(points, period.axis) };
+    }
+    return {
+      axis: period.axis,
+      points: Array.from({ length: period.buckets }, (_, index) => ({ label: "", tokens: 0, inputTokens: 0, outputTokens: 0, cacheTokens: 0 })),
+    };
+  }
+
+  function axisForPoints(points, fallback) {
+    if (!points.length) return fallback;
+    if (points.length <= 4) return points.map((point) => point.label || "");
+    const indexes = [0, Math.floor(points.length / 4), Math.floor(points.length / 2), Math.floor((points.length * 3) / 4), points.length - 1];
+    return indexes.map((index) => points[Math.min(points.length - 1, index)].label || "");
+  }
+
+  function shortDateLabel(value, granularity) {
+    const text = String(value || "");
+    if (granularity === "hour" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) return text.slice(11, 16);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text.slice(5);
+    if (/^\d{2}:\d{2}/.test(text)) return text.slice(0, 5);
+    return text;
+  }
+
+  function render() {
+    if (!latestSnapshot) return;
+    const data = buildData(latestSnapshot);
+    const hasUsage = data.total > 0;
+    const periodLabel = data.period.label;
+
+    el.periodEyebrow.textContent = periodLabel;
+    animateTotal(data.total);
+    el.scopeLabel.textContent = `Input ${fmt(data.input)} · Output ${fmt(data.output)} · Cache ${fmt(data.cache)}`;
+    el.inputTokens.textContent = fmt(data.input);
+    el.outputTokens.textContent = fmt(data.output);
+    el.cacheTokensCompact.textContent = fmt(data.cache);
+    el.cacheHitLabel.textContent = `Cache Hit ${Math.round(data.cachePct * 100)}%`;
+    renderDelta(latestSnapshot.generated_at);
+    updateSyncChip(latestSnapshot.generated_at);
+    renderScope(latestSnapshot.summary || {});
+
+    el.emptyState.hidden = hasUsage;
+    el.dashboardContent.hidden = false;
+
+    renderBarTrend(data.trend.points, data.period.axis);
+    renderLimits(latestSnapshot.limits || []);
+    renderSourceCards(data.hosts, latestSnapshot.source_status || []);
+    renderBreakdown(el.byAgentList, data.agents, data.total);
+    renderSources(latestSnapshot.source_status || []);
+  }
+
+  function renderDelta(generatedAt) {
+    if (generatedAt) {
+      el.heroDelta.textContent = "Live";
+      el.heroDelta.classList.add("neutral");
+      el.heroDelta.classList.remove("up", "down");
       return;
     }
-    rows.forEach((row) => {
-      const item = document.createElement("div");
-      item.className = "breakdown-row";
-      item.style.color = row.color;
+    el.heroDelta.textContent = "No sync";
+    el.heroDelta.classList.add("neutral");
+    el.heroDelta.classList.remove("up", "down");
+  }
 
-      const name = document.createElement("div");
-      name.className = "breakdown-name";
-      const dot = document.createElement("span");
-      dot.className = "dot";
-      const strong = document.createElement("strong");
-      strong.textContent = row.short || row.name;
-      name.append(dot, strong);
-
-      const track = document.createElement("div");
-      track.className = "bar-track";
-      const fill = document.createElement("i");
-      fill.style.background = `linear-gradient(90deg, ${withAlpha(row.color, 0.9)}, ${row.color})`;
-      fill.style.width = `${Math.max(2, Math.min(100, row.share * 100))}%`;
-      track.appendChild(fill);
-
-      const value = document.createElement("span");
-      value.className = "breakdown-value";
-      if (row.cachePctText) {
-        const main = document.createElement("span");
-        main.textContent = fmt(row.tokens);
-        const cachePct = document.createElement("span");
-        cachePct.className = "cache-pct";
-        cachePct.textContent = row.cachePctText;
-        cachePct.title = `Cache Read ${row.cachePctText}`;
-        value.append(main, cachePct);
+  function animateTotal(target) {
+    const from = countFrom;
+    const start = performance.now();
+    cancelAnimationFrame(countRaf);
+    function tick(now) {
+      const t = Math.min(1, (now - start) / 500);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.totalTokens.textContent = fmtHero(from + (target - from) * eased);
+      if (t < 1) {
+        countRaf = requestAnimationFrame(tick);
       } else {
-        value.classList.add("single-value");
-        value.textContent = fmt(row.tokens);
+        countFrom = target;
       }
-      value.title = total ? `${Math.round((row.tokens / total) * 100)}%` : "0%";
-
-      item.append(name, track, value);
-      target.appendChild(item);
-    });
-  }
-
-  function emptyLine(text) {
-    const node = document.createElement("div");
-    node.className = "source-row";
-    const copy = document.createElement("div");
-    copy.className = "source-copy";
-    const span = document.createElement("span");
-    span.textContent = text;
-    copy.appendChild(span);
-    node.appendChild(copy);
-    return node;
-  }
-
-  function smoothLine(points, tension) {
-    if (points.length < 2) return "";
-    let d = `M ${points[0][0]},${points[0][1]}`;
-    for (let i = 0; i < points.length - 1; i += 1) {
-      const p0 = points[i - 1] || points[i];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = points[i + 2] || p2;
-      const c1x = p1[0] + ((p2[0] - p0[0]) / 6) * tension * 2;
-      const c1y = p1[1] + ((p2[1] - p0[1]) / 6) * tension * 2;
-      const c2x = p2[0] - ((p3[0] - p1[0]) / 6) * tension * 2;
-      const c2y = p2[1] - ((p3[1] - p1[1]) / 6) * tension * 2;
-      d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`;
     }
-    return d;
+    countRaf = requestAnimationFrame(tick);
   }
 
-  function straightLine(points) {
-    if (!points.length) return "";
-    return `M ${points.map((p) => `${p[0]},${p[1]}`).join(" L ")}`;
-  }
-
-  function renderStream(layers, axis, points) {
-    const rect = el.streamChart.getBoundingClientRect();
-    const width = Math.max(420, Math.round(rect.width || 420));
-    const height = 112;
-    const gutterLeft = 44;
-    const gutterBottom = 18;
-    const plotTop = 4;
-    const plotWidth = width - gutterLeft;
-    const plotHeight = height - gutterBottom - plotTop;
-    const n = layers[0] ? layers[0].values.length : 1;
-    const totals = Array.from({ length: n }, (_, i) => layers.reduce((sum, layer) => sum + layer.values[i], 0));
-    const rawMax = Math.max(...totals, 0);
+  function renderBarTrend(points, axis) {
+    const width = 720;
+    const height = 134;
+    const plotTop = 10;
+    const plotBottom = 24;
+    const plotHeight = height - plotTop - plotBottom;
+    const values = (points || []).map((point) => Math.max(0, Number(point.tokens || 0)));
+    const rawMax = Math.max(...values, 0);
     const yTicks = niceChartTicks(rawMax);
     const max = yTicks[0].value || 1;
-    const xAt = (i) => gutterLeft + (n === 1 ? plotWidth / 2 : (i / (n - 1)) * plotWidth);
-    const yAt = (v) => plotTop + plotHeight - (v / max) * plotHeight;
-    const cum = Array.from({ length: n }, () => 0);
+    const barGap = 4;
+    const barWidth = Math.max(4, (width - barGap * Math.max(0, values.length - 1)) / Math.max(1, values.length));
 
     el.streamChart.replaceChildren();
     el.streamChart.setAttribute("viewBox", `0 0 ${width} ${height}`);
     const defs = svg("defs");
-    const grid = svg("g", { class: "stream-grid" });
-    yTicks.forEach((tick) => {
-      const y = yAt(tick.value);
-      grid.append(
-        svg("line", { x1: gutterLeft, y1: y, x2: width, y2: y, stroke: "rgba(255,255,255,0.055)", "stroke-width": 1 }),
-        svg("text", { x: gutterLeft - 8, y: y + 3, "text-anchor": "end", fill: "rgba(244,244,246,0.34)", "font-size": 9.2, "font-family": "ui-monospace, Menlo, Monaco, Consolas, monospace", "font-stretch": "normal" }, formatAxisTick(tick.value))
-      );
+    const gradient = svg("linearGradient", { id: "barGradient", x1: "0", y1: "0", x2: "0", y2: "1" });
+    gradient.append(
+      svg("stop", { offset: "0%", "stop-color": "#4a9eff" }),
+      svg("stop", { offset: "100%", "stop-color": "#007aff" })
+    );
+    defs.appendChild(gradient);
+    el.streamChart.appendChild(defs);
+
+    const refY = plotTop;
+    el.streamChart.append(
+      svg("line", { x1: 0, y1: refY, x2: width, y2: refY, stroke: "var(--ref-line)", "stroke-dasharray": "4 4", "stroke-width": 1 }),
+      svg("text", { x: width, y: refY - 3, "text-anchor": "end", fill: "currentColor", "font-size": 10, "font-weight": 600, opacity: 0.45 }, formatAxisTick(max))
+    );
+
+    values.forEach((value, index) => {
+      const barHeight = Math.max(3, (value / max) * plotHeight);
+      const x = index * (barWidth + barGap);
+      const y = plotTop + plotHeight - barHeight;
+      const rect = svg("rect", {
+        x,
+        y,
+        width: Math.max(2, barWidth),
+        height: barHeight,
+        rx: 3,
+        fill: "url(#barGradient)",
+        opacity: 0.86,
+      });
+      rect.addEventListener("mousemove", (event) => showStreamTooltip(index, event, points));
+      rect.addEventListener("mouseleave", () => {
+        el.streamTooltip.hidden = true;
+      });
+      el.streamChart.appendChild(rect);
     });
-    const base = svg("line", { x1: gutterLeft, y1: yAt(0), x2: width, y2: yAt(0), stroke: "rgba(255,255,255,0.05)", "stroke-width": 1 });
-    el.streamChart.append(defs, grid, base);
-
-    layers.forEach((layer, index) => {
-      const gradientId = `stream-${index}-${periodId}`;
-      const gradient = svg("linearGradient", { id: gradientId, x1: "0", y1: "0", x2: "0", y2: "1" });
-      gradient.append(
-        svg("stop", { offset: "0%", "stop-color": withAlpha(layer.color, 0.62) }),
-        svg("stop", { offset: "100%", "stop-color": withAlpha(layer.color, 0.14) })
-      );
-      defs.appendChild(gradient);
-
-      const lower = cum.map((c) => c);
-      const upper = cum.map((c, i) => c + layer.values[i]);
-      for (let i = 0; i < n; i += 1) cum[i] = upper[i];
-
-      const topPoints = upper.map((v, i) => [xAt(i), yAt(v)]);
-      const bottomPoints = lower.map((v, i) => [xAt(i), yAt(v)]).reverse();
-      const fillPath = `${straightLine(topPoints)} L ${bottomPoints.map((p) => `${p[0]},${p[1]}`).join(" L ")} Z`;
-      const linePath = straightLine(topPoints);
-
-      const group = svg("g", { class: "stream-band" });
-      group.style.animationDelay = `${index * 0.06}s`;
-      group.append(
-        svg("path", { d: fillPath, fill: `url(#${gradientId})` }),
-        svg("path", { d: linePath, fill: "none", stroke: withAlpha(layer.color, 0.95), "stroke-width": 1.6, "stroke-linejoin": "round", "stroke-linecap": "round" })
-      );
-      el.streamChart.appendChild(group);
-    });
-
-    const hover = svg("g", { class: "stream-hover" });
-    const hoverLine = svg("line", { x1: gutterLeft, y1: plotTop, x2: gutterLeft, y2: plotTop + plotHeight, stroke: "rgba(255,255,255,0.36)", "stroke-width": 1, visibility: "hidden" });
-    const hoverDot = svg("circle", { cx: gutterLeft, cy: yAt(0), r: 3.2, fill: "#F4F4F6", stroke: "rgba(0,0,0,0.45)", "stroke-width": 1, visibility: "hidden" });
-    hover.append(hoverLine, hoverDot);
-    el.streamChart.appendChild(hover);
-
-    el.streamChart.onmousemove = (event) => {
-      if (!n) return;
-      const rect = el.streamChart.getBoundingClientRect();
-      const svgX = ((event.clientX - rect.left) / rect.width) * width;
-      const clamped = Math.max(gutterLeft, Math.min(width, svgX));
-      const ratio = plotWidth <= 0 ? 0 : (clamped - gutterLeft) / plotWidth;
-      const index = Math.max(0, Math.min(n - 1, Math.round(ratio * (n - 1))));
-      const x = xAt(index);
-      const total = totals[index] || 0;
-      hoverLine.setAttribute("x1", String(clamped));
-      hoverLine.setAttribute("x2", String(clamped));
-      hoverLine.setAttribute("visibility", "visible");
-      hoverDot.setAttribute("cx", String(x));
-      hoverDot.setAttribute("cy", String(yAt(total)));
-      hoverDot.setAttribute("visibility", "visible");
-      showStreamTooltip(index, event, points, layers, totals);
-    };
-    el.streamChart.onmouseleave = () => {
-      hoverLine.setAttribute("visibility", "hidden");
-      hoverDot.setAttribute("visibility", "hidden");
-      el.streamTooltip.hidden = true;
-    };
 
     el.axisRow.replaceChildren();
-    el.axisRow.style.paddingLeft = `${(gutterLeft / width) * 100}%`;
-    const visibleLabels = visibleAxisLabels(axis, plotWidth);
-    axis.forEach((label, index) => {
+    (axis || []).forEach((label) => {
       const node = document.createElement("span");
       node.textContent = label;
-      node.style.visibility = visibleLabels.has(index) ? "visible" : "hidden";
       el.axisRow.appendChild(node);
     });
   }
 
-  function visibleAxisLabels(axis, plotWidth) {
-    const length = axis.length;
-    const visible = new Set();
-    if (!length) return visible;
-    if (length === 1) return visible.add(0);
-    const minGap = Math.max(52, Math.min(86, longestAxisLabel(axis) * 7 + 18));
-    const xAt = (index) => (index / (length - 1)) * plotWidth;
-    const lastIndex = length - 1;
-    visible.add(lastIndex);
-
-    let lastVisibleX = -Infinity;
-    for (let index = 0; index < lastIndex; index += 1) {
-      const x = xAt(index);
-      const enoughFromPrevious = x - lastVisibleX >= minGap;
-      const enoughFromLast = xAt(lastIndex) - x >= minGap;
-      if (enoughFromPrevious && enoughFromLast) {
-        visible.add(index);
-        lastVisibleX = x;
-      }
-    }
-    return visible;
-  }
-
-  function longestAxisLabel(axis) {
-    return axis.reduce((max, label) => Math.max(max, String(label || "").length), 0);
-  }
-
-  function showStreamTooltip(index, event, points, layers, totals) {
+  function showStreamTooltip(index, event, points) {
     const point = points[index] || {};
-    const layerValues = Object.fromEntries(layers.map((layer) => [layer.key, layer.values[index] || 0]));
     el.streamTooltip.innerHTML = `
-      <strong>${escapeHtml(formatPointLabel(point.date || point.hour || "当前点"))}</strong>
-      <span>Total <b>${fmt(totals[index] || point.total_tokens || 0)}</b></span>
-      <span>Input <b>${fmt(point.input_tokens ?? layerValues.input ?? 0)}</b></span>
-      <span>Output <b>${fmt(point.output_tokens ?? layerValues.output ?? 0)}</b></span>
-      <span>Cache <b>${fmt(point.cache_tokens ?? layerValues.cache ?? 0)}</b></span>
+      <strong>${escapeHtml(point.label || "当前点")}</strong>
+      <div>Total <b>${fmt(point.tokens || 0)}</b></div>
+      <div>Input <b>${fmt(point.inputTokens || 0)}</b></div>
+      <div>Output <b>${fmt(point.outputTokens || 0)}</b></div>
+      <div>Cache <b>${fmt(point.cacheTokens || 0)}</b></div>
     `;
     el.streamTooltip.hidden = false;
     const tipRect = el.streamTooltip.getBoundingClientRect();
-    const rightX = event.clientX + 14;
-    const leftX = event.clientX - tipRect.width - 14;
-    const belowY = event.clientY + 14;
-    const aboveY = event.clientY - tipRect.height - 14;
-    const x = rightX + tipRect.width <= window.innerWidth ? rightX : leftX;
-    const y = belowY + tipRect.height <= window.innerHeight ? belowY : aboveY;
-    el.streamTooltip.style.left = `${Math.max(10, Math.min(window.innerWidth - tipRect.width - 10, x))}px`;
-    el.streamTooltip.style.top = `${Math.max(10, Math.min(window.innerHeight - tipRect.height - 10, y))}px`;
-  }
-
-  function renderDonut(hosts) {
-    el.hostDonut.replaceChildren();
-    el.hostLegend.replaceChildren();
-    el.machineCount.textContent = `${hosts.length} machines`;
-
-    const size = 150;
-    const thickness = 30;
-    const r = (size - thickness) / 2;
-    const c = 2 * Math.PI * r;
-    const cx = size / 2;
-    const cy = size / 2;
-    let acc = 0;
-    const total = hosts.reduce((sum, h) => sum + h.tokens, 0) || 1;
-
-    el.hostDonut.appendChild(svg("circle", { cx, cy, r, fill: "none", stroke: "rgba(255,255,255,0.07)", "stroke-width": thickness }));
-    const group = svg("g", { transform: `rotate(-90 ${cx} ${cy})` });
-    hosts.forEach((host, index) => {
-      const frac = host.tokens / total;
-      const overlap = hosts.length > 1 ? 1.2 : 0;
-      const dash = Math.min(c, frac * c + overlap);
-      const offset = -acc * c - overlap / 2;
-      acc += frac;
-      const circle = svg("circle", {
-        class: "donut-segment",
-        cx,
-        cy,
-        r,
-        fill: "none",
-        stroke: host.color,
-        "stroke-width": thickness,
-        "stroke-dasharray": `${dash} ${c - dash}`,
-        "stroke-dashoffset": offset,
-      });
-      circle.addEventListener("mousemove", (event) => showHostTooltip(event, host, total));
-      circle.addEventListener("mouseleave", () => {
-        if (el.hostTooltip) el.hostTooltip.hidden = true;
-      });
-      circle.style.setProperty("--dash-full", `${dash} ${c - dash}`);
-      circle.style.animationDelay = `${index * 0.08}s`;
-      group.appendChild(circle);
-    });
-    el.hostDonut.appendChild(group);
-    el.hostDonut.append(
-      svg("text", { x: cx, y: cy - 2, "text-anchor": "middle", fill: "#F4F4F6", "font-size": 28, "font-family": "SF Mono, ui-monospace, Menlo, monospace", "font-weight": 700 }, String(hosts.length)),
-      svg("text", { x: cx, y: cy + 21, "text-anchor": "middle", fill: "rgba(244,244,246,0.34)", "font-size": 12, "font-family": "SF Mono, ui-monospace, Menlo, monospace" }, "SOURCES")
-    );
-
-    if (!hosts.length) {
-      el.hostLegend.appendChild(emptyLine("暂无设备用量"));
-      return;
-    }
-    hosts.forEach((host) => {
-      const row = document.createElement("div");
-      row.className = "host-row";
-      const dot = document.createElement("span");
-      dot.className = "host-dot";
-      dot.style.background = host.color;
-      const name = document.createElement("strong");
-      name.textContent = host.displayName || host.name;
-      const kind = document.createElement("small");
-      kind.textContent = host.kind;
-      const pct = document.createElement("em");
-      pct.textContent = `${Math.round(host.share * 100)}%`;
-      row.title = `${host.displayName || host.name}: ${fmt(host.tokens)} · ${Math.round(host.share * 100)}%`;
-      row.append(dot, name, kind, pct);
-      el.hostLegend.appendChild(row);
-      if (host.users && host.users.length) {
-        const users = document.createElement("div");
-        users.className = "machine-users";
-        host.users.forEach((user) => {
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "machine-user-button";
-          button.dataset.machine = user.machine;
-          button.dataset.account = user.account;
-          button.title = `${user.displayName}: ${fmt(user.tokens)}`;
-          const label = document.createElement("span");
-          label.textContent = user.account;
-          const value = document.createElement("em");
-          value.textContent = fmt(user.tokens);
-          button.append(label, value);
-          button.addEventListener("click", () => selectUser(user.machine, user.account));
-          users.appendChild(button);
-        });
-        el.hostLegend.appendChild(users);
-      }
-    });
-  }
-
-  function showHostTooltip(event, host, total) {
-    if (!el.hostTooltip) return;
-    const pct = total > 0 ? Math.round((host.tokens / total) * 100) : 0;
-    el.hostTooltip.innerHTML = `
-      <strong>${escapeHtml(host.displayName || host.name)}</strong>
-      <span>Usage <b>${fmt(host.tokens)}</b></span>
-      <span>Share <b>${pct}%</b></span>
-      <span>Account <b>${escapeHtml(host.account || "-")}</b></span>
-    `;
-    el.hostTooltip.hidden = false;
-    const width = 190;
-    const height = 106;
-    const left = Math.max(10, Math.min(window.innerWidth - width - 10, event.clientX + 14));
-    const top = Math.max(10, Math.min(window.innerHeight - height - 10, event.clientY - height / 2));
-    el.hostTooltip.style.left = `${left}px`;
-    el.hostTooltip.style.top = `${top}px`;
-    el.hostTooltip.hidden = false;
-  }
-
-  function renderSources(sources) {
-    el.healthGrid.replaceChildren();
-    const online = sources.filter((s) => s.status === "ok").length;
-    el.onlineCount.textContent = `${online}/${sources.length} 在线`;
-
-    if (!sources.length) {
-      el.healthGrid.appendChild(emptyLine("未连接任何数据源"));
-      el.errorCard.hidden = true;
-      return;
-    }
-
-    const failed = [];
-    sortSourcesForDisplay(sources).forEach((source) => {
-      const isOnline = source.status === "ok";
-      const row = document.createElement("div");
-      row.className = "source-row";
-      const dot = document.createElement("span");
-      dot.className = `status-dot${isOnline ? " online" : ""}`;
-
-      const copy = document.createElement("div");
-      copy.className = "source-copy";
-      const name = document.createElement("strong");
-      name.textContent = formatSourceIdentity(source);
-      name.title = source.display_name || source.source_id || "";
-      const meta = document.createElement("span");
-      meta.textContent = `${sourcePlatformLabel(source)} · 最后活动 ${formatTime(source.observed_at)}`;
-      copy.append(name, meta);
-
-      if (source.error_message) {
-        const message = document.createElement("small");
-        message.textContent = truncate(sanitizeErrorMessage(source.error_message), 80);
-        copy.appendChild(message);
-        failed.push(source);
-      }
-
-      const pill = document.createElement("span");
-      pill.className = `status-pill${isOnline ? " online" : ""}`;
-      pill.textContent = isOnline ? "在线" : statusLabel(source.status);
-      row.append(dot, copy, pill);
-      el.healthGrid.appendChild(row);
-    });
-
-    el.errorCard.hidden = failed.length === 0;
-    el.errorMsg.textContent = failed
-      .map((source) => `${source.source_id}: ${truncate(sanitizeErrorMessage(source.error_message), 150)}`)
-      .join("\n");
+    const x = event.clientX + 14 + tipRect.width <= window.innerWidth
+      ? event.clientX + 14
+      : event.clientX - tipRect.width - 14;
+    const y = event.clientY + 14 + tipRect.height <= window.innerHeight
+      ? event.clientY + 14
+      : event.clientY - tipRect.height - 14;
+    el.streamTooltip.style.left = `${Math.max(10, x)}px`;
+    el.streamTooltip.style.top = `${Math.max(10, y)}px`;
   }
 
   function renderLimits(limits) {
-    if (!el.limitsSection || !el.limitsGrid) return;
     const groups = normalizeLimitRows(limits);
-    const rows = groups.flatMap((group) => group.rows);
-    el.limitsSection.hidden = groups.length === 0;
-    el.limitsGrid.replaceChildren();
-    if (el.limitsCount) {
-      const lastUpdated = rows.reduce((latest, row) => maxIso(latest, row.observed_at), "");
-      el.limitsCount.textContent = rows.length
-        ? `最近更新 ${formatDateTime(lastUpdated)} · ${rows.length} windows`
-        : "0 windows";
-    }
-    if (!groups.length) return;
+    renderQuotaCards(groups);
+  }
 
-    groups.forEach((group) => {
-      el.limitsGrid.appendChild(renderLimitGroup(group));
-    });
+  function renderQuotaCards(groups) {
+    el.limitsSection.hidden = false;
+    el.limitsGrid.replaceChildren();
+    const rows = groups.flatMap((group) => group.rows);
+    const lastUpdated = rows.reduce((latest, row) => maxIso(latest, row.observed_at), "");
+    el.limitsCount.textContent = rows.length
+      ? `最近更新 ${formatDateTime(lastUpdated)} · ${rows.length} windows`
+      : "暂无可信额度";
+
+    const claude = groups.find((group) => group.provider === "claude") || emptyLimitGroup("claude");
+    const openai = groups.find((group) => group.provider === "codex" || group.provider === "openai") || emptyLimitGroup("codex");
+    el.limitsGrid.append(renderLimitGroup(claude), renderLimitGroup(openai));
   }
 
   function normalizeLimitRows(limits) {
     const rows = (limits || [])
       .filter((limit) => {
-        const provider = String(limit.provider || "").toLowerCase();
-        return (provider === "claude" || provider === "codex") && isObservedLimit(limit) && !isExpiredLimit(limit);
+        const provider = normalizedProvider(limit.provider);
+        return (provider === "claude" || provider === "codex" || provider === "openai") && isObservedLimit(limit) && !isExpiredLimit(limit);
       })
       .sort((a, b) => {
         const observedDiff = Date.parse(b.observed_at || 0) - Date.parse(a.observed_at || 0);
         if (observedDiff) return observedDiff;
-        const providerDiff = String(a.provider || "").localeCompare(String(b.provider || ""));
-        if (providerDiff) return providerDiff;
         const sourceDiff = String(a.source_id || "").localeCompare(String(b.source_id || ""));
         if (sourceDiff) return sourceDiff;
         return windowRank(a.window) - windowRank(b.window);
@@ -737,83 +390,90 @@
 
     const groups = new Map();
     rows.forEach((limit) => {
-      const provider = String(limit.provider || "unknown").toLowerCase();
-      const sourceId = String(limit.source_id || provider);
-      const key = `${provider}:${sourceId}`;
-      const group = groups.get(key) || {
-        provider,
-        source_id: sourceId,
-        observed_at: limit.observed_at || "",
-        rows: [],
-      };
+      const provider = normalizedProvider(limit.provider);
+      const group = groups.get(provider) || { provider, source_id: limit.source_id || provider, observed_at: "", rows: [] };
+      group.source_id = group.source_id || limit.source_id || provider;
       group.observed_at = maxIso(group.observed_at, limit.observed_at);
       group.rows.push(limit);
-      groups.set(key, group);
+      groups.set(provider, group);
     });
 
-    return Array.from(groups.values()).sort((a, b) => {
-      const observedDiff = Date.parse(b.observed_at || 0) - Date.parse(a.observed_at || 0);
-      if (observedDiff) return observedDiff;
-      return `${a.provider}:${a.source_id}`.localeCompare(`${b.provider}:${b.source_id}`);
-    });
+    return Array.from(groups.values()).sort((a, b) => providerRank(a.provider) - providerRank(b.provider));
   }
 
   function renderLimitGroup(group) {
+    const colors = PROVIDER_COLORS[group.provider] || PROVIDER_COLORS.codex;
+    const session = bestLimit(group.rows, "session");
+    const week = bestLimit(group.rows, "week");
     const node = document.createElement("div");
-    node.className = "limit-group";
-    node.style.color = colorForAgent(group.provider);
+    node.className = "quota-item limit-group";
+    node.appendChild(quotaRing(colors, session, week));
 
-    const head = document.createElement("div");
-    head.className = "limit-group-head";
-    const title = document.createElement("strong");
-    title.textContent = `${displayAgent(group.provider)} · ${group.source_id}`;
-    const updated = document.createElement("span");
-    updated.textContent = `最近更新 ${formatDateTime(group.observed_at)}`;
-    head.append(title, updated);
-    node.appendChild(head);
-
-    group.rows
-      .slice()
-      .sort((a, b) => windowRank(a.window) - windowRank(b.window))
-      .forEach((limit) => {
-        node.appendChild(renderLimitWindow(limit));
-      });
-
+    const meta = document.createElement("div");
+    meta.className = "quota-meta";
+    meta.append(
+      quotaMetaRow("5h", session, colors.outer),
+      quotaMetaRow("7d", week, colors.inner)
+    );
+    node.appendChild(meta);
     return node;
   }
 
-  function renderLimitWindow(limit) {
-    const provider = String(limit.provider || "unknown").toLowerCase();
-    const usedPercent = Number(limit.used_percent || 0);
+  function quotaRing(colors, session, week) {
+    const outerUsed = Number(session?.used_percent ?? 0);
+    const innerUsed = Number(week?.used_percent ?? 0);
+    const outerDash = `${(outerUsed / 100) * 251.3} 251.3`;
+    const innerDash = `${(innerUsed / 100) * 163.4} 163.4`;
+    const ring = svg("svg", { class: "quota-ring", viewBox: "0 0 100 100" });
+    ring.append(
+      svg("circle", { cx: 50, cy: 50, r: 40, fill: "none", stroke: "var(--ring-track)", "stroke-width": 10 }),
+      svg("circle", { cx: 50, cy: 50, r: 26, fill: "none", stroke: "var(--ring-track)", "stroke-width": 9 }),
+      svg("circle", { cx: 50, cy: 50, r: 40, fill: "none", stroke: colors.outer, "stroke-width": 10, "stroke-dasharray": outerDash, "stroke-linecap": "round", transform: "rotate(-90 50 50)" }),
+      svg("circle", { cx: 50, cy: 50, r: 26, fill: "none", stroke: colors.inner, "stroke-width": 9, "stroke-dasharray": innerDash, "stroke-linecap": "round", transform: "rotate(-90 50 50)" }),
+      svg("text", { x: 50, y: 53, "text-anchor": "middle" }, colors.label)
+    );
+    return ring;
+  }
+
+  function quotaMetaRow(label, limit, color) {
     const row = document.createElement("div");
-    row.className = "limit-row observed";
-    row.style.color = colorForAgent(provider);
-
-    const head = document.createElement("div");
-    head.className = "limit-head";
-    const title = document.createElement("strong");
-    title.textContent = windowLabel(limit.window);
-    const value = document.createElement("em");
-    value.textContent = `${trimFixed(usedPercent, 1)}%`;
-    head.append(title, value);
-
-    const track = document.createElement("div");
-    track.className = "limit-track";
-    const fill = document.createElement("i");
-    fill.style.width = `${Math.max(1, Math.min(100, usedPercent))}%`;
-    fill.style.background = `linear-gradient(90deg, ${withAlpha(colorForAgent(provider), 0.72)}, ${colorForAgent(provider)})`;
-    track.appendChild(fill);
-
-    const meta = document.createElement("div");
-    meta.className = "limit-meta";
-    const reset = document.createElement("span");
-    reset.textContent = `Reset ${formatDateTime(limit.reset_at)}`;
-    const confidence = document.createElement("span");
-    confidence.textContent = String(limit.confidence || "observed");
-    meta.append(reset, confidence);
-
-    row.append(head, track, meta);
+    row.className = "quota-row";
+    const key = document.createElement("span");
+    key.textContent = label;
+    key.style.color = color;
+    const pct = document.createElement("strong");
+    pct.textContent = limit ? `${Math.round(Number(limit.used_percent || 0))}%` : "--";
+    pct.style.color = color;
+    const rem = document.createElement("span");
+    rem.textContent = limit ? remainingText(limit) : "无可信数据";
+    row.append(key, pct, rem);
     return row;
+  }
+
+  function bestLimit(rows, windowKind) {
+    const candidates = (rows || []).filter((row) => {
+      const rank = windowRank(row.window);
+      return windowKind === "session" ? rank === 1 : rank === 2;
+    });
+    return candidates[0] || null;
+  }
+
+  function emptyLimitGroup(provider) {
+    return { provider, source_id: provider, observed_at: "", rows: [] };
+  }
+
+  function normalizedProvider(provider) {
+    const raw = String(provider || "").toLowerCase();
+    if (raw.includes("claude")) return "claude";
+    if (raw.includes("openai")) return "openai";
+    if (raw.includes("codex")) return "codex";
+    return raw;
+  }
+
+  function providerRank(provider) {
+    if (provider === "claude") return 0;
+    if (provider === "codex" || provider === "openai") return 1;
+    return 9;
   }
 
   function isObservedLimit(limit) {
@@ -826,48 +486,127 @@
     return Number.isFinite(reset) && reset <= Date.now();
   }
 
-  function maxIso(left, right) {
-    if (!left) return right || "";
-    if (!right) return left || "";
-    return Date.parse(right) > Date.parse(left) ? right : left;
-  }
-
   function windowRank(value) {
     const raw = String(value || "").toLowerCase();
-    if (raw === "session") return 1;
-    if (raw === "week" || raw === "weekly") return 2;
+    if (raw === "session" || raw === "5h") return 1;
+    if (raw === "week" || raw === "weekly" || raw === "7d") return 2;
     return 9;
   }
 
-  function windowLabel(value) {
-    const raw = String(value || "").toLowerCase();
-    if (raw === "session") return "5h";
-    if (raw === "week" || raw === "weekly") return "Week";
-    return raw || "Window";
+  function remainingText(limit) {
+    if (!limit.reset_at) return "等待刷新";
+    const reset = Date.parse(limit.reset_at);
+    if (!Number.isFinite(reset)) return formatDateTime(limit.reset_at);
+    const minutes = Math.max(0, Math.round((reset - Date.now()) / 60000));
+    if (minutes >= 1440) return `${Math.floor(minutes / 1440)}d ${Math.floor((minutes % 1440) / 60)}h`;
+    if (minutes >= 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}min`;
+    return `${minutes}min`;
   }
 
-  function limitStatusLabel(limit) {
-    const status = String(limit.status || "").toLowerCase();
-    const confidence = String(limit.confidence || "").toLowerCase();
-    if (status === "stale") return "stale";
-    if (status === "provider_failed") return "failed";
-    if (status === "missing" || confidence === "missing") return "missing";
-    if (confidence === "estimated") return "estimated";
-    return status || confidence || "unavailable";
+  function renderSourceCards(hosts, sources) {
+    el.sourceCards.replaceChildren();
+    const cards = mergeSourceCards(hosts, sources);
+    if (!cards.length) {
+      const empty = document.createElement("div");
+      empty.className = "source-card";
+      empty.textContent = "暂无来源数据";
+      el.sourceCards.appendChild(empty);
+      return;
+    }
+    cards.forEach((host) => {
+      const hasUserTarget = host.users && host.users[0];
+      const card = document.createElement(hasUserTarget ? "button" : "div");
+      if (hasUserTarget) card.type = "button";
+      card.className = `source-card${host.statusOnly ? " source-card--status" : ""}`;
+      card.title = `${host.displayName}: ${fmt(host.tokens)}`;
+      if (hasUserTarget) {
+        card.addEventListener("click", () => {
+          const user = host.users && host.users[0];
+          if (user) selectUser(user.machine, user.account);
+        });
+      }
+      const dot = document.createElement("span");
+      dot.className = "source-dot";
+      dot.style.background = host.color;
+      const copy = document.createElement("div");
+      copy.className = "source-copy";
+      const name = document.createElement("strong");
+      name.textContent = host.displayName || host.name;
+      const meta = document.createElement("span");
+      meta.textContent = host.kind;
+      copy.append(name, meta);
+      const value = document.createElement("span");
+      value.className = "source-value";
+      value.textContent = host.statusOnly ? statusLabel(host.status) : fmt(host.tokens);
+      card.append(dot, copy, value);
+      el.sourceCards.appendChild(card);
+    });
   }
 
-  function statusLabel(status) {
-    if (status === "stale") return "静默";
-    if (status === "command_failed") return "失败";
-    if (status === "never_seen") return "未上报";
-    return "静默";
+  function mergeSourceCards(hosts, sources) {
+    const usageCards = (hosts || []).map((host) => ({
+      ...host,
+      status: "ok",
+      statusOnly: false,
+      key: sourceKey(host.name, host.account),
+    }));
+    const seen = new Set(usageCards.map((host) => host.key));
+    const statusCards = sortSourcesForDisplay(sources)
+      .filter((source) => source.status !== "ok")
+      .filter((source) => !seen.has(sourceKey(source.machine || source.host || source.source_id, source.os_user || source.account)))
+      .map((source) => ({
+        name: source.source_id || source.machine || source.host || "unknown",
+        account: source.os_user || source.account || "",
+        displayName: formatSourceIdentity(source),
+        users: [],
+        kind: [
+          statusLabel(source.status),
+          formatDateTime(source.observed_at || source.last_observed_at || source.last_pushed_at),
+        ].filter(Boolean).join(" · "),
+        tokens: 0,
+        share: 0,
+        color: statusColor(source.status),
+        status: source.status,
+        statusOnly: true,
+        key: sourceKey(source.machine || source.host || source.source_id, source.os_user || source.account),
+      }));
+    const maxCards = 4;
+    const statusBudget = Math.min(2, statusCards.length, maxCards);
+    return statusCards.slice(0, statusBudget).concat(usageCards).slice(0, maxCards);
+  }
+
+  function sourceKey(machine, account) {
+    return `${String(machine || "").toLowerCase()}|${String(account || "").toLowerCase()}`;
+  }
+
+  function renderBreakdown(target, rows, total) {
+    if (!target) return;
+    target.replaceChildren();
+    rows.forEach((row) => {
+      const node = document.createElement("div");
+      node.textContent = `${row.displayName || row.name} ${fmt(row.tokens)} ${total ? Math.round(row.share * 100) : 0}%`;
+      target.appendChild(node);
+    });
+  }
+
+  function renderSources(sources) {
+    if (!el.healthGrid) return;
+    el.healthGrid.replaceChildren();
+    const sorted = sortSourcesForDisplay(sources);
+    const online = sorted.filter((source) => source.status === "ok").length;
+    if (el.onlineCount) el.onlineCount.textContent = `${online}/${sorted.length} 在线`;
+    sorted.forEach((source) => {
+      const row = document.createElement("div");
+      row.textContent = `${formatSourceIdentity(source)} · ${statusLabel(source.status)}`;
+      el.healthGrid.appendChild(row);
+    });
   }
 
   function sortSourcesForDisplay(sources) {
     return (sources || []).slice().sort((a, b) => {
       const rankDiff = statusRank(a.status) - statusRank(b.status);
       if (rankDiff) return rankDiff;
-      const timeDiff = Date.parse(b.observed_at || 0) - Date.parse(a.observed_at || 0);
+      const timeDiff = Date.parse(b.observed_at || b.last_observed_at || 0) - Date.parse(a.observed_at || a.last_observed_at || 0);
       if (timeDiff) return timeDiff;
       return formatSourceIdentity(a).localeCompare(formatSourceIdentity(b));
     });
@@ -887,33 +626,41 @@
     return `${account}@${host}`;
   }
 
-  function sourcePlatformLabel(source) {
-    const platform = String(source.platform || "").toLowerCase();
-    if (platform === "darwin") return "Mac";
-    if (platform === "macos" || platform === "mac") return "Mac";
-    if (platform === "linux") return "Linux";
-    return sourceKind(source);
+  function statusLabel(status) {
+    if (status === "ok") return "在线";
+    if (status === "stale") return "静默";
+    if (status === "command_failed") return "失败";
+    if (status === "never_seen") return "未上报";
+    return "静默";
   }
 
-  function sourceKind(source) {
-    const host = source.host || source.source_id;
-    const account = source.os_user || source.account || "";
-    const platform = String(source.platform || "").toLowerCase();
-    if (platform === "macos" || platform === "mac") return account ? `Mac · ${account}` : "Mac";
-    if (platform === "linux") return account ? `Linux · ${account}` : "Linux";
-    return hostKind(host, account);
+  function statusColor(status) {
+    if (status === "ok") return "#34c759";
+    if (status === "stale") return "#ff9f0a";
+    if (status === "command_failed") return "#ff3b30";
+    if (status === "never_seen") return "#8e8e93";
+    return "#ff9f0a";
+  }
+
+  function renderScope(summary) {
+    const machine = summary.machine || activeFilter.machine;
+    const account = summary.account || activeFilter.account;
+    const isFiltered = Boolean(machine || account);
+    if (el.clearUserFilter) el.clearUserFilter.hidden = !isFiltered;
   }
 
   function updateSyncChip(value) {
-    if (!value) {
-      el.syncChip.lastChild.textContent = " --";
-      return;
-    }
-    el.syncChip.lastChild.textContent = ` ${formatTime(value)}`;
+    el.syncChip.textContent = value ? formatTime(value) : "--";
+  }
+
+  function maxIso(left, right) {
+    if (!left) return right || "";
+    if (!right) return left || "";
+    return Date.parse(right) > Date.parse(left) ? right : left;
   }
 
   function formatTime(value) {
-    if (!value) return "从未上报";
+    if (!value) return "--";
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return String(value);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -946,36 +693,10 @@
 
   function formatAxisTick(value) {
     const rounded = Math.ceil(Number(value || 0));
-    if (rounded >= 1000000) return `${Math.round(rounded / 1000000)}M`;
-    if (rounded >= 1000) return `${Math.round(rounded / 1000)}k`;
+    if (rounded >= 1e9) return `${trimFixed(rounded / 1e9, 1)}B`;
+    if (rounded >= 1e6) return `${Math.round(rounded / 1e6)}M`;
+    if (rounded >= 1e3) return `${Math.round(rounded / 1e3)}k`;
     return String(rounded);
-  }
-
-  function formatPointLabel(value) {
-    const text = String(value || "");
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text)) return `${text.slice(5, 10)} ${text.slice(11, 16)}`;
-    return text;
-  }
-
-  function sanitizeErrorMessage(message) {
-    return String(message || "")
-      .replace(/\/Users\/[a-zA-Z0-9_.-]+\//g, "/Users/<user>/")
-      .replace(/\/home\/[a-zA-Z0-9_.-]+\//g, "/home/<user>/")
-      .replace(/token[a-zA-Z0-9_.\s-]*?[:=\s]\s*[a-zA-Z0-9_.-]+/gi, "token=***")
-      .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, "bearer ***");
-  }
-
-  function truncate(value, limit) {
-    const text = String(value || "");
-    return text.length > limit ? `${text.slice(0, limit)}...` : text;
-  }
-
-  function escapeHtml(value) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 
   function readFilterFromLocation() {
@@ -987,6 +708,7 @@
   }
 
   function selectUser(machine, account) {
+    if (!machine && !account) return;
     activeFilter = { machine: machine || "", account: account || "" };
     countFrom = 0;
     writeFilterToLocation();
@@ -1011,8 +733,24 @@
   }
 
   function showLoadError(error) {
-    el.errorCard.hidden = false;
-    el.errorMsg.textContent = error.message;
+    if (el.errorCard) el.errorCard.hidden = false;
+    if (el.errorMsg) el.errorMsg.textContent = sanitizeErrorMessage(error.message);
+  }
+
+  function sanitizeErrorMessage(message) {
+    return String(message || "")
+      .replace(/\/Users\/[a-zA-Z0-9_.-]+\//g, "/Users/<user>/")
+      .replace(/\/home\/[a-zA-Z0-9_.-]+\//g, "/home/<user>/")
+      .replace(/token[a-zA-Z0-9_.\s-]*?[:=\s]\s*[a-zA-Z0-9_.-]+/gi, "token=***")
+      .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, "bearer ***");
+  }
+
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function svg(name, attrs, text) {
@@ -1031,9 +769,13 @@
     el.periodSelector.querySelectorAll("button").forEach((node) => {
       node.setAttribute("aria-selected", String(node === button));
     });
-    loadSummary().catch((error) => {
-      showLoadError(error);
-    });
+    loadSummary().catch(showLoadError);
+  });
+
+  el.themeToggle.addEventListener("click", () => {
+    document.body.toggleAttribute("data-dark");
+    document.body.toggleAttribute("data-force-light", !document.body.hasAttribute("data-dark"));
+    el.themeToggle.textContent = document.body.hasAttribute("data-dark") ? "☀" : "☾";
   });
 
   if (el.clearUserFilter) el.clearUserFilter.addEventListener("click", clearUserFilter);

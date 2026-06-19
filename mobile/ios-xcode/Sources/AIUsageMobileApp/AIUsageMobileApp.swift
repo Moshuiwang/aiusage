@@ -2,10 +2,15 @@ import AIUsageMobileCore
 import Foundation
 import Security
 import SwiftUI
+import WatchConnectivity
 
 @main
 struct AIUsageMobileApp: App {
     private let initialTabID = ProcessInfo.processInfo.environment["AI_USAGE_INITIAL_TAB"] ?? "home"
+
+    init() {
+        WatchSummaryBridge.shared.activate()
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -120,6 +125,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            shareWithCompanionIfNeeded(loadedSummary)
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
                 summary = loadedSummary
@@ -148,6 +154,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            shareWithCompanionIfNeeded(loadedSummary)
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
                 summary = loadedSummary
@@ -159,6 +166,14 @@ struct LiveSummaryContainerView: View {
             }
             loadState = .failed
         }
+    }
+
+    private func shareWithCompanionIfNeeded(_ loadedSummary: MobileSummary) {
+        guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
+            return
+        }
+        try? MobileSummaryCache.writeToAppGroup(loadedSummary)
+        WatchSummaryBridge.shared.push(loadedSummary)
     }
 }
 
@@ -186,6 +201,43 @@ enum LoadState: Equatable {
         case .loading, .live:
             return nil
         }
+    }
+}
+
+final class WatchSummaryBridge: NSObject, WCSessionDelegate, @unchecked Sendable {
+    static let shared = WatchSummaryBridge()
+    private var session: WCSession?
+
+    func activate() {
+        guard WCSession.isSupported() else {
+            return
+        }
+        let session = WCSession.default
+        self.session = session
+        session.delegate = self
+        session.activate()
+    }
+
+    func push(_ summary: MobileSummary) {
+        guard let session, session.activationState == .activated else {
+            return
+        }
+        guard let data = try? JSONEncoder().encode(summary) else {
+            return
+        }
+        try? session.updateApplicationContext(["mobileSummary": data])
+    }
+
+    func session(
+        _ session: WCSession,
+        activationDidCompleteWith activationState: WCSessionActivationState,
+        error: Error?
+    ) {}
+
+    func sessionDidBecomeInactive(_ session: WCSession) {}
+
+    func sessionDidDeactivate(_ session: WCSession) {
+        session.activate()
     }
 }
 

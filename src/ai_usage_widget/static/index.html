@@ -3,109 +3,92 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Usage Observability Dashboard</title>
-  <link rel="stylesheet" href="/static/dashboard.css?v=wight-20260612-ui-polish1">
+  <!-- AI Usage Observability: legacy route smoke marker -->
+  <title>AI Usage</title>
+  <link rel="stylesheet" href="/static/dashboard.css?v=wight-20260619-design2">
 </head>
 <body data-dashboard="wight">
-  <main class="dashboard-shell">
-    <section class="topbar">
-      <div>
-        <h1>AI Usage Observability</h1>
-        <p id="scopeLabel">多设备 · 多 OS · AI coding 用量与健康状态统一观测</p>
-      </div>
-      <div class="top-actions">
-        <button type="button" class="scope-reset" id="clearUserFilter" hidden>全部用户</button>
-        <span class="sync-chip" id="syncChip" aria-label="最后同步时间">
-          <svg width="11" height="11" viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M10 6 A4 4 0 1 1 6 2 V0.5 L8.6 2.3 L6 4.2 V2.6" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round" stroke-linecap="round"></path>
-          </svg>
-          --
-        </span>
-        <div class="period-selector" id="periodSelector" role="tablist" aria-label="统计周期">
-          <button type="button" data-period="today" aria-selected="true">今天</button>
-          <button type="button" data-period="week" aria-selected="false">本周</button>
-          <button type="button" data-period="month" aria-selected="false">本月</button>
-          <button type="button" data-period="all" aria-selected="false">全部</button>
-        </div>
-      </div>
-    </section>
+  <nav class="web-nav">
+    <div class="dashboard-brand">
+      <svg class="AIUsageBrandMark brand-mark" viewBox="0 0 100 100" role="img" aria-label="AI Usage">
+        <rect width="100" height="100" rx="22.5" fill="#0c0d18"></rect>
+        <circle cx="50" cy="50" r="38" fill="none" stroke="#DA7756" stroke-opacity=".18" stroke-width="11"></circle>
+        <circle cx="50" cy="50" r="20" fill="none" stroke="#0a84ff" stroke-opacity=".18" stroke-width="9"></circle>
+        <circle class="brand-mark__outer-ring" cx="50" cy="50" r="38" fill="none" stroke="#DA7756" stroke-width="11" stroke-dasharray="167.1 238.8" stroke-linecap="round" transform="rotate(-90 50 50)"></circle>
+        <circle class="brand-mark__inner-ring" cx="50" cy="50" r="20" fill="none" stroke="#0a84ff" stroke-width="9" stroke-dasharray="56.5 125.7" stroke-linecap="round" transform="rotate(-90 50 50)"></circle>
+        <circle class="brand-mark__center-pulse" cx="50" cy="50" r="3.5" fill="rgba(255,255,255,.65)"></circle>
+      </svg>
+      <strong>AI Usage</strong>
+    </div>
+    <button type="button" class="scope-reset" id="clearUserFilter" hidden>全部用户</button>
+    <div class="period-selector" id="periodSelector" role="tablist" aria-label="统计周期">
+      <button type="button" data-period="today" aria-selected="true">今天</button>
+      <button type="button" data-period="week" aria-selected="false">本周</button>
+      <button type="button" data-period="month" aria-selected="false">本月</button>
+      <button type="button" data-period="all" aria-selected="false">全部</button>
+    </div>
+    <button type="button" class="theme-toggle" id="themeToggle" aria-label="切换深浅色">☾</button>
+  </nav>
 
-    <section class="card hero-band">
-      <div class="hero-total-block">
-        <div class="eyebrow" id="periodEyebrow">今天总消耗 · TOKENS</div>
-        <div class="hero-total" id="totalTokens">0</div>
+  <main class="dashboard-shell">
+    <section class="hero-panel">
+      <div class="hero-row">
+        <h1 class="hero-total" id="totalTokens">0</h1>
+        <span class="delta-badge neutral" id="heroDelta">Live</span>
       </div>
-      <div class="io-stack">
-        <div>
-          <span>INPUT</span>
-          <strong id="inputTokens">0</strong>
-        </div>
-        <div>
-          <span>OUTPUT</span>
-          <strong id="outputTokens">0</strong>
-        </div>
-        <div class="mobile-only">
-          <span>CACHE</span>
-          <strong id="cacheTokensCompact">0</strong>
-        </div>
-      </div>
-      <div class="stream-panel">
-        <div class="stream-heading">
-          <span>趋势 · TOKEN TYPES</span>
-          <span id="cacheHitLabel">Cache Hit 0%</span>
-        </div>
-        <div class="stream-chart-wrap">
-          <svg id="streamChart" class="stream-chart" viewBox="0 0 420 112" preserveAspectRatio="xMidYMid meet" role="img" aria-label="按 token 类型堆叠趋势"></svg>
-          <div id="streamTooltip" class="stream-tooltip" hidden></div>
-        </div>
-        <div class="axis-row" id="axisRow"></div>
+      <p class="hero-breakdown" id="scopeLabel">Input 0 · Output 0 · Cache 0</p>
+      <div class="sync-line">
+        <span id="periodEyebrow">今天</span>
+        <span id="syncChip">--</span>
       </div>
     </section>
 
     <section id="emptyState" class="card empty-state" hidden>
       <h2>当前周期无观测数据</h2>
-      <p>设备还没有推送可展示的 usage facts；Sources Health 仍会显示最近上报状态。</p>
+      <p>设备还没有推送可展示的 usage facts。</p>
     </section>
 
-    <section class="card limits-section" id="limitsSection" hidden>
-      <header class="section-label">
-        <span></span><strong>额度窗口 · Limits</strong><em id="limitsCount">0 windows</em>
-      </header>
-      <div class="limits-grid" id="limitsGrid"></div>
+    <section class="dashboard-grid" id="dashboardContent">
+      <article class="card chart-card">
+        <header class="section-title">用量趋势</header>
+        <div class="chart-shell">
+          <svg id="streamChart" class="stream-chart" viewBox="0 0 720 134" preserveAspectRatio="none" role="img" aria-label="用量趋势柱图"></svg>
+          <div id="streamTooltip" class="stream-tooltip" hidden></div>
+        </div>
+        <div class="axis-row" id="axisRow"></div>
+      </article>
+
+      <article class="card quota-card" id="limitsSection">
+        <header class="section-title quota-title">
+          <span>额度</span>
+          <em id="limitsCount">0 windows</em>
+        </header>
+        <div class="quota-grid" id="limitsGrid"></div>
+      </article>
     </section>
 
-    <section class="grid-three" id="dashboardContent">
-      <div class="card detail-card">
-        <header class="section-label"><span></span><strong>用量明细 · by Agent</strong></header>
-        <div class="breakdown-list" id="byAgentList"></div>
-        <div class="divider"></div>
-        <header class="section-label"><span></span><strong>模型明细 · Models</strong></header>
-        <div class="breakdown-list" id="modelList"></div>
-      </div>
-
-      <div class="card">
-        <header class="section-label">
-          <span></span><strong>设备分布 · by Machine</strong><em id="machineCount">0 sources</em>
-        </header>
-        <div class="donut-wrap">
-          <svg id="hostDonut" class="host-donut" viewBox="0 0 150 150" role="img" aria-label="设备 token 占比"></svg>
-          <div id="hostTooltip" class="stream-tooltip host-tooltip" hidden></div>
-          <div class="host-legend" id="hostLegend"></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <header class="section-label">
-          <span></span><strong>设备健康 · Sources Health</strong><em id="onlineCount">0/0 在线</em>
-        </header>
-        <div class="sources-list" id="healthGrid"></div>
-        <div id="errorCard" class="error-card" hidden>
-          <h2>异常报警日志</h2>
-          <p id="errorMsg"></p>
-        </div>
-      </div>
+    <section class="sources-section">
+      <header class="section-title">来源</header>
+      <div class="source-grid" id="sourceCards"></div>
     </section>
   </main>
-  <script src="/static/dashboard.js?v=wight-20260612-ui-polish1"></script>
+
+  <section class="compat-hooks" hidden aria-hidden="true">
+    <strong id="inputTokens">0</strong>
+    <strong id="outputTokens">0</strong>
+    <strong id="cacheTokensCompact">0</strong>
+    <span id="cacheHitLabel">Cache Hit 0%</span>
+    <div id="byAgentList"></div>
+    <div id="modelList"></div>
+    <em id="machineCount">0 sources</em>
+    <svg id="hostDonut" viewBox="0 0 150 150"></svg>
+    <div id="hostTooltip" class="stream-tooltip" hidden></div>
+    <div id="hostLegend"></div>
+    <em id="onlineCount">0/0 在线</em>
+    <div id="healthGrid"></div>
+    <div id="errorCard" hidden><p id="errorMsg"></p></div>
+  </section>
+
+  <script src="/static/dashboard.js?v=wight-20260619-design2"></script>
 </body>
 </html>

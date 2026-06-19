@@ -1,6 +1,6 @@
 import Foundation
 
-public struct MobileSummary: Decodable, Equatable, Sendable {
+public struct MobileSummary: Codable, Equatable, Sendable {
     public let schemaVersion: Int
     public let client: String
     public let generatedAt: String?
@@ -95,7 +95,7 @@ public extension MobileSummary {
     }
 }
 
-public struct MobilePeriod: Decodable, Equatable, Sendable {
+public struct MobilePeriod: Codable, Equatable, Sendable {
     public let id: String
     public let date: String?
     public let startDate: String?
@@ -149,7 +149,7 @@ public struct MobilePeriod: Decodable, Equatable, Sendable {
     }
 }
 
-public struct MobileTrend: Decodable, Equatable, Sendable {
+public struct MobileTrend: Codable, Equatable, Sendable {
     public let period: String?
     public let granularity: String?
     public let startDate: String?
@@ -179,7 +179,7 @@ public struct MobileTrend: Decodable, Equatable, Sendable {
     }
 }
 
-public struct MobileTrendPoint: Decodable, Equatable, Sendable, Identifiable {
+public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
     public var id: String { bucket }
 
     public let bucket: String
@@ -201,7 +201,7 @@ public struct MobileTrendPoint: Decodable, Equatable, Sendable, Identifiable {
     }
 }
 
-public struct MobileSource: Decodable, Equatable, Sendable, Identifiable {
+public struct MobileSource: Codable, Equatable, Sendable, Identifiable {
     public var id: String { sourceID }
 
     public let sourceID: String
@@ -227,7 +227,7 @@ public struct MobileSource: Decodable, Equatable, Sendable, Identifiable {
     }
 }
 
-public struct MobileBreakdown: Decodable, Equatable, Sendable {
+public struct MobileBreakdown: Codable, Equatable, Sendable {
     public let byMachine: [MobileBreakdownRow]
     public let byOSUser: [MobileBreakdownRow]
     public let byAgent: [MobileBreakdownRow]
@@ -257,7 +257,7 @@ public struct MobileBreakdown: Decodable, Equatable, Sendable {
     }
 }
 
-public struct MobileBreakdownRow: Decodable, Equatable, Sendable, Identifiable {
+public struct MobileBreakdownRow: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let label: String
     public let tokens: Int
@@ -287,7 +287,7 @@ public struct MobileBreakdownRow: Decodable, Equatable, Sendable, Identifiable {
     }
 }
 
-public struct MobileBreakdownContribution: Decodable, Equatable, Sendable {
+public struct MobileBreakdownContribution: Codable, Equatable, Sendable {
     public let sourceID: String
     public let tokens: Int
 
@@ -297,7 +297,7 @@ public struct MobileBreakdownContribution: Decodable, Equatable, Sendable {
     }
 }
 
-public struct MobileLimits: Decodable, Equatable, Sendable {
+public struct MobileLimits: Codable, Equatable, Sendable {
     public let observedCount: Int
     public let totalCount: Int
     public let windows: [MobileLimitWindow]
@@ -315,7 +315,7 @@ public struct MobileLimits: Decodable, Equatable, Sendable {
     }
 }
 
-public struct MobileLimitWindow: Decodable, Equatable, Sendable, Identifiable {
+public struct MobileLimitWindow: Codable, Equatable, Sendable, Identifiable {
     public var id: String { [sourceID, provider, window].joined(separator: "|") }
 
     public let sourceID: String

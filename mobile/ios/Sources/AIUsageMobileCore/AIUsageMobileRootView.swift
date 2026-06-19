@@ -436,29 +436,32 @@ struct HomeHeader: View {
     let onRefresh: () -> Void
 
     var body: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Personal Monitor")
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                Text("AI Usage")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .kerning(0)
-                Text("Personal usage monitor")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .center, spacing: 12) {
+            AIUsageBrandMark(size: 48)
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Personal Monitor")
+                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .textCase(.uppercase)
+                        .foregroundStyle(.secondary)
+                    Text("AI Usage")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .kerning(0)
+                    Text("Personal usage monitor")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                HStack(spacing: 8) {
+                    Text(lastServerReadText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
+                    RefreshActionButton(isRefreshing: isRefreshing, action: onRefresh)
+                }
+                .frame(maxWidth: 156, alignment: .trailing)
             }
-            Spacer()
-            HStack(spacing: 8) {
-                Text(lastServerReadText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
-                RefreshActionButton(isRefreshing: isRefreshing, action: onRefresh)
-            }
-            .frame(maxWidth: 156, alignment: .trailing)
         }
         .padding(14)
         .glassSurface()
@@ -578,9 +581,8 @@ struct HeroPanel: View {
                 )
         }
         .overlay(alignment: .topTrailing) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 36, weight: .semibold))
-                .foregroundStyle(Color.blue.opacity(0.26))
+            AIUsageBrandMark(size: 68)
+                .opacity(0.38)
                 .padding(16)
         }
     }

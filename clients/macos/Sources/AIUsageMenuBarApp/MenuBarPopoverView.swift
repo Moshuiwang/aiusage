@@ -4,9 +4,6 @@ import SwiftUI
 
 struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarAppModel
-    @State private var selectedTab: MenuTab = .overview
-    @State private var hoveredTrend: MenuTrendBar?
-    @State private var trendHoverLocation: CGPoint?
 
     private let periods: [(String, String)] = [
         ("today", "今天"),
@@ -17,14 +14,7 @@ struct MenuBarPopoverView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(nsColor: .windowBackgroundColor),
-                    Color(nsColor: .controlBackgroundColor).opacity(0.86),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            VisualEffectView(material: .popover, blendingMode: .behindWindow)
             VStack(spacing: 0) {
                 header
                 if !model.hasConfig {
@@ -34,21 +24,17 @@ struct MenuBarPopoverView: View {
                 }
             }
         }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(Color.blue)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
+            AIUsageBrandMark(size: 32)
+            VStack(alignment: .leading, spacing: 2) {
                 Text("AI Usage")
                     .font(.system(size: 15, weight: .semibold))
-                Text("生产摘要 · \(model.state.lastUpdatedText)")
-                    .font(.caption)
+                Text(model.state.lastUpdatedText)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
             }
             Spacer()
@@ -56,49 +42,41 @@ struct MenuBarPopoverView: View {
                 ProgressView()
                     .controlSize(.small)
             }
-            Button {
+            iconButton("arrow.clockwise", help: "刷新") {
                 model.refresh()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.borderless)
-            .help("刷新")
-            Button {
+            iconButton("safari", help: "打开 Dashboard") {
                 if let url = model.dashboardURL {
                     NSWorkspace.shared.open(url)
                 }
-            } label: {
-                Image(systemName: "safari")
-                    .frame(width: 24, height: 24)
             }
-            .buttonStyle(.borderless)
-            .help("打开 Dashboard")
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Image(systemName: "xmark.circle")
-                    .frame(width: 24, height: 24)
-            }
-            .buttonStyle(.borderless)
-            .help("退出")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
+    }
+
+    private func iconButton(_ name: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: name)
+                .font(.system(size: 13, weight: .semibold))
+                .frame(width: 26, height: 26)
+                .background(Color.primary.opacity(0.001))
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.borderless)
+        .help(help)
     }
 
     private var setupState: some View {
         VStack(alignment: .leading, spacing: 14) {
             Label("需要配置服务地址和访问 token", systemImage: "lock.shield")
                 .font(.headline)
-            Text("配置文件位置")
-                .font(.caption)
-                .foregroundStyle(.secondary)
             Text(model.paths.configURL.path)
                 .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
                 .textSelection(.enabled)
-                .lineLimit(3)
-            Text("安装脚本可以写入这个配置；运行时不会读取 Documents。")
+                .lineLimit(4)
+            Text("配置后会只读生产摘要，不执行采集。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Spacer()
@@ -108,14 +86,13 @@ struct MenuBarPopoverView: View {
     }
 
     private var content: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             if let error = model.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
-                    .padding(.top, 8)
+                    .padding(.horizontal, 16)
             }
 
             Picker("周期", selection: $model.selectedPeriodID) {
@@ -130,331 +107,349 @@ struct MenuBarPopoverView: View {
             }
 
             overviewHero
-
-            Picker("视图", selection: $selectedTab) {
-                ForEach(MenuTab.allCases) { tab in
-                    Label(tab.title, systemImage: tab.symbol).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-
-            ScrollView {
-                VStack(spacing: 12) {
-                    switch selectedTab {
-                    case .overview:
-                        overviewTab
-                    case .limits:
-                        rowsSection(title: "额度窗口", rows: model.state.limitRows)
-                    case .sources:
-                        rowsSection(title: "采集来源", rows: model.state.sources)
-                    case .breakdown:
-                        breakdownTab
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
-            }
-        }
-        .onChange(of: model.state.trendBars) { _, _ in
-            hoveredTrend = nil
-            trendHoverLocation = nil
+            quotaSection
+            sourcesSection
+            Spacer(minLength: 0)
         }
     }
 
     private var overviewHero: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Text(model.state.periodLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.blue)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.blue.opacity(0.10))
-                    .clipShape(Capsule())
-                Spacer()
-                Label(model.state.healthText, systemImage: model.state.healthText.contains("异常") ? "exclamationmark.triangle.fill" : "checkmark.seal.fill")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(model.state.healthText.contains("异常") ? .orange : .green)
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
+                Text(model.state.heroTotalText)
+                    .font(.system(size: 38, weight: .semibold))
+                    .monospacedDigit()
                     .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(model.state.healthText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(model.state.healthText.contains("异常") ? .red : .green)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2)
+                    .background((model.state.healthText.contains("异常") ? Color.red : Color.green).opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
             }
-            Text(model.state.heroTotalText)
-                .font(.system(size: 38, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, alignment: .leading)
             Text(model.state.tokenBreakdownText)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-            HStack(spacing: 6) {
-                Image(systemName: "gauge.with.dots.needle.33percent")
-                    .font(.caption.weight(.semibold))
-                Text(model.state.primaryLimitText)
-                    .font(.caption.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 6)
-            .background(Color(nsColor: .windowBackgroundColor).opacity(0.78))
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-            trend
+            DashboardHandoffBarChart(bars: model.state.trendBars)
+                .frame(height: 74)
         }
-        .padding(16)
-        .background(heroBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(14)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         )
         .padding(.horizontal, 16)
     }
 
-    private var trend: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text("趋势")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            GeometryReader { proxy in
-                ZStack(alignment: .topLeading) {
-                    VStack(spacing: 0) {
-                        HStack(alignment: .bottom, spacing: 4) {
-                            ForEach(model.state.trendBars) { bar in
-                                RoundedRectangle(cornerRadius: 3)
-                                    .fill(Color.blue.gradient)
-                                    .frame(maxWidth: 16)
-                                    .frame(height: max(6, 48 * bar.ratio))
-                                    .frame(maxWidth: .infinity, alignment: .bottom)
-                                    .help("\(bar.tooltipTitle) · \(bar.valueText)")
-                            }
-                        }
-                        .frame(height: 52, alignment: .bottom)
-
-                        axisLabelLayer(width: proxy.size.width)
-                            .frame(height: 14)
-                    }
-
-                    if let hoveredTrend, let trendHoverLocation {
-                        Rectangle()
-                            .fill(Color.blue.opacity(0.22))
-                            .frame(width: 1, height: 52)
-                            .position(x: trendHoverLocation.x, y: 26)
-                        trendTooltip(hoveredTrend)
-                            .position(x: tooltipX(trendHoverLocation.x, width: proxy.size.width), y: 18)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active(let location):
-                        updateTrendHover(location: location, width: proxy.size.width)
-                    case .ended:
-                        hoveredTrend = nil
-                        trendHoverLocation = nil
-                    }
-                }
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            updateTrendHover(location: value.location, width: proxy.size.width)
-                        }
-                        .onEnded { _ in
-                            hoveredTrend = nil
-                            trendHoverLocation = nil
-                        }
-                )
-            }
-            .frame(height: 66)
-        }
-        .frame(height: 80)
-    }
-
-    private func updateTrendHover(location: CGPoint, width: CGFloat) {
-        trendHoverLocation = location
-        hoveredTrend = MenuTrendSelection.nearestBar(
-            in: model.state.trendBars,
-            xLocation: Double(location.x),
-            width: Double(width)
-        )
-    }
-
-    private func axisLabelLayer(width: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            ForEach(Array(model.state.trendBars.enumerated()), id: \.element.id) { index, bar in
-                if !bar.label.isEmpty {
-                    Text(bar.label)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .frame(width: 46, height: 12)
-                        .position(x: labelX(index: index, count: model.state.trendBars.count, width: width), y: 7)
-                }
-            }
-        }
-    }
-
-    private func trendTooltip(_ bar: MenuTrendBar) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(bar.tooltipTitle)
-                .font(.system(size: 10, weight: .semibold))
-            Text(bar.valueText)
-                .font(.system(size: 11, weight: .semibold, design: .rounded).monospacedDigit())
-        }
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color(nsColor: .windowBackgroundColor).opacity(0.94))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .stroke(Color.primary.opacity(0.10), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 3)
-    }
-
-    private func labelX(index: Int, count: Int, width: CGFloat) -> CGFloat {
-        guard count > 1 else {
-            return width / 2
-        }
-        let raw = CGFloat(index) / CGFloat(count - 1) * width
-        return min(max(raw, 23), max(width - 23, 23))
-    }
-
-    private func tooltipX(_ x: CGFloat, width: CGFloat) -> CGFloat {
-        min(max(x, 48), max(width - 48, 48))
-    }
-
-    private var overviewTab: some View {
-        VStack(spacing: 12) {
-            rowsSection(title: "主要来源", rows: Array(model.state.sources.prefix(4)))
-            rowsSection(title: "额度", rows: Array(model.state.limitRows.prefix(4)))
-        }
-    }
-
-    private var breakdownTab: some View {
-        VStack(spacing: 12) {
-            ForEach(model.state.breakdownSections) { section in
-                rowsSection(title: section.title, rows: section.rows)
-            }
-        }
-    }
-
-    private func rowsSection(title: String, rows: [MenuDisplayRow]) -> some View {
+    private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-            if rows.isEmpty {
-                Text("暂无数据")
+            Text("额度")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            QuotaRingPair(windows: model.summary.limits.windows)
+        }
+        .padding(12)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
+        )
+        .padding(.horizontal, 16)
+    }
+
+    private var sourcesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("来源")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            if model.summary.breakdown.byMachine.isEmpty {
+                Text("暂无来源数据")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
             } else {
-                ForEach(rows) { row in
-                    rowView(row)
+                ForEach(model.summary.breakdown.byMachine.prefix(3)) { row in
+                    HStack(spacing: 10) {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 7, height: 7)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(row.label)
+                                .font(.system(size: 13, weight: .medium))
+                                .lineLimit(1)
+                            Text(sourceSubtitle(for: row))
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        Text(TokenFormat.compact(row.tokens))
+                            .font(.system(size: 12, weight: .bold))
+                            .monospacedDigit()
+                    }
+                    .padding(.vertical, 2)
                 }
             }
         }
         .padding(12)
-        .background(sectionBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 0.5)
         )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
     }
 
-    private func rowView(_ row: MenuDisplayRow) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: row.status == "ok" ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(statusColor(row.status))
-                .frame(width: 16)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.title)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                if !row.subtitle.isEmpty {
-                    Text(row.subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            Spacer()
-            Text(row.value)
-                .font(.system(size: 12, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(.primary.opacity(0.72))
-                .lineLimit(1)
+    private func sourceSubtitle(for row: MobileBreakdownRow) -> String {
+        guard let count = row.sourceIDs?.count ?? row.contributions?.count, count > 0 else {
+            return model.state.lastUpdatedText
         }
-        .frame(minHeight: 34)
+        return "\(count) 个来源 · \(model.state.lastUpdatedText)"
     }
 
-    private var heroBackground: some ShapeStyle {
-        LinearGradient(
-            colors: [
-                Color(nsColor: .windowBackgroundColor).opacity(0.94),
-                Color.blue.opacity(0.08),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-
-    private var sectionBackground: some ShapeStyle {
+    private var cardBackground: some ShapeStyle {
         Color(nsColor: .windowBackgroundColor).opacity(0.82)
-    }
-
-    private func statusColor(_ status: String) -> Color {
-        switch status {
-        case "ok":
-            return .green
-        case "missing", "disabled":
-            return .secondary
-        default:
-            return .orange
-        }
     }
 }
 
-private enum MenuTab: String, CaseIterable, Identifiable {
-    case overview
-    case limits
-    case sources
-    case breakdown
+private struct DashboardHandoffBarChart: View {
+    let bars: [MenuTrendBar]
 
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .overview:
-            return "概览"
-        case .limits:
-            return "额度"
-        case .sources:
-            return "来源"
-        case .breakdown:
-            return "明细"
+    var body: some View {
+        VStack(spacing: 5) {
+            ZStack(alignment: .topTrailing) {
+                Rectangle()
+                    .stroke(style: StrokeStyle(lineWidth: 0.6, dash: [3, 3]))
+                    .foregroundStyle(Color.secondary.opacity(0.18))
+                    .frame(height: 1)
+                Text(maxLabel)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .offset(y: -8)
+                if bars.isEmpty {
+                    HStack(alignment: .bottom, spacing: 4) {
+                        ForEach(0..<12, id: \.self) { _ in
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Color.blue.opacity(0.18))
+                                .frame(height: 4)
+                                .frame(maxWidth: .infinity, alignment: .bottom)
+                        }
+                    }
+                    .frame(height: 52, alignment: .bottom)
+                } else {
+                    HStack(alignment: .bottom, spacing: 4) {
+                        ForEach(bars) { bar in
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(Color.blue.gradient)
+                                .frame(height: max(4, 52 * bar.ratio))
+                                .frame(maxWidth: .infinity, alignment: .bottom)
+                                .help("\(bar.tooltipTitle) · \(bar.valueText)")
+                        }
+                    }
+                    .frame(height: 52, alignment: .bottom)
+                }
+            }
+            HStack {
+                ForEach(axisLabels, id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    if label != axisLabels.last {
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
         }
     }
 
-    var symbol: String {
-        switch self {
-        case .overview:
-            return "square.grid.2x2"
-        case .limits:
-            return "gauge.with.dots.needle.33percent"
-        case .sources:
-            return "antenna.radiowaves.left.and.right"
-        case .breakdown:
-            return "chart.bar"
+    private var axisLabels: [String] {
+        let labels = bars.map(\.label).filter { !$0.isEmpty }
+        if labels.count >= 3 {
+            return [labels.first ?? "", labels[labels.count / 2], labels.last ?? ""]
         }
+        return labels.isEmpty ? ["00:00", "12:00", "23:59"] : labels
+    }
+
+    private var maxLabel: String {
+        bars.map(\.valueText).first(where: { $0 != "0" }) ?? "0"
+    }
+}
+
+private struct QuotaRingPair: View {
+    let windows: [MobileLimitWindow]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            QuotaRingItem(
+                title: "Claude",
+                outer: best(provider: "claude", window: "session"),
+                inner: best(provider: "claude", window: "week"),
+                outerColor: Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255),
+                innerColor: Color(red: 234 / 255, green: 168 / 255, blue: 130 / 255)
+            )
+            Divider()
+                .frame(height: 118)
+                .padding(.horizontal, 6)
+            QuotaRingItem(
+                title: "OpenAI",
+                outer: best(provider: "codex", window: "session"),
+                inner: best(provider: "codex", window: "week"),
+                outerColor: Color(red: 10 / 255, green: 132 / 255, blue: 1),
+                innerColor: Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)
+            )
+        }
+    }
+
+    private func best(provider: String, window: String) -> MobileLimitWindow? {
+        windows
+            .filter { $0.provider.lowercased().contains(provider) || (provider == "codex" && $0.provider.lowercased().contains("openai")) }
+            .filter { window == "session" ? $0.window == "session" : $0.window == "week" || $0.window == "weekly" }
+            .filter(\.isOfficialObserved)
+            .sorted { $0.remainingPercent < $1.remainingPercent }
+            .first
+    }
+}
+
+private struct QuotaRingItem: View {
+    let title: String
+    let outer: MobileLimitWindow?
+    let inner: MobileLimitWindow?
+    let outerColor: Color
+    let innerColor: Color
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                Circle()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 10)
+                    .frame(width: 92, height: 92)
+                Circle()
+                    .trim(from: 0, to: CGFloat((outer?.usedPercent ?? 0) / 100))
+                    .stroke(outerColor, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .frame(width: 92, height: 92)
+                    .rotationEffect(.degrees(-90))
+                Circle()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 9)
+                    .frame(width: 60, height: 60)
+                Circle()
+                    .trim(from: 0, to: CGFloat((inner?.usedPercent ?? 0) / 100))
+                    .stroke(innerColor, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .frame(width: 60, height: 60)
+                    .rotationEffect(.degrees(-90))
+                Text(title)
+                    .font(.system(size: 10, weight: .bold))
+            }
+            VStack(spacing: 3) {
+                quotaRow("5h", outer, color: outerColor)
+                quotaRow("7d", inner, color: innerColor)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func quotaRow(_ label: String, _ window: MobileLimitWindow?, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 16, alignment: .leading)
+            Text(window.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .frame(width: 32, alignment: .leading)
+            Text(window.flatMap(resetText) ?? "无可信数据")
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+    }
+
+    private func resetText(_ window: MobileLimitWindow) -> String? {
+        guard let resetAt = window.resetAt, resetAt.count >= 16 else {
+            return nil
+        }
+        let timeStart = resetAt.index(resetAt.startIndex, offsetBy: 11)
+        let timeEnd = resetAt.index(resetAt.startIndex, offsetBy: 16)
+        return String(resetAt[timeStart..<timeEnd])
+    }
+}
+
+private struct VisualEffectView: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
+
+private struct AIUsageBrandMark: View {
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.12, green: 0.13, blue: 0.21),
+                            Color(red: 0.05, green: 0.05, blue: 0.09),
+                        ],
+                        center: UnitPoint(x: 0.35, y: 0.30),
+                        startRadius: 2,
+                        endRadius: size * 0.85
+                    )
+                )
+            AIUsageRingArc(startAngle: -90, endAngle: 162)
+                .stroke(Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255), style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round))
+                .frame(width: size * 0.76, height: size * 0.76)
+                .accessibilityIdentifier("outer-ring")
+            AIUsageRingArc(startAngle: -90, endAngle: 72)
+                .stroke(Color(red: 10 / 255, green: 132 / 255, blue: 1), style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round))
+                .frame(width: size * 0.40, height: size * 0.40)
+                .accessibilityIdentifier("inner-ring")
+            Circle()
+                .fill(Color.white.opacity(0.65))
+                .frame(width: size * 0.07, height: size * 0.07)
+        }
+        .frame(width: size, height: size)
+        .accessibilityLabel("AI Usage")
+    }
+}
+
+private struct AIUsageRingArc: Shape {
+    let startAngle: Double
+    let endAngle: Double
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.addArc(
+            center: CGPoint(x: rect.midX, y: rect.midY),
+            radius: min(rect.width, rect.height) / 2,
+            startAngle: .degrees(startAngle),
+            endAngle: .degrees(endAngle),
+            clockwise: false
+        )
+        return path
     }
 }
