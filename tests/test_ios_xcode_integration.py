@@ -70,13 +70,24 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         svg = token_svg.read_text(encoding="utf-8")
         for token in [
             "#DA7756",
-            "#0A84FF",
+            "#0a84ff",
+            "#1e2035",
+            "#0c0d18",
+            'r="38"',
+            'stroke-width="11"',
+            'stroke-dasharray="167.1 238.8"',
+            'r="20"',
+            'stroke-width="9"',
+            'stroke-dasharray="56.5 125.7"',
+            'r="3.5"',
             'id="outer-ring"',
             'id="inner-ring"',
-            'id="center-pulse"',
+            'id="center-dot"',
         ]:
             with self.subTest(token=token):
                 self.assertIn(token, svg)
+        self.assertNotIn("linearGradient", svg)
+        self.assertNotIn("center-pulse", svg)
 
         app_icon_dir = (
             ROOT
@@ -103,6 +114,10 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 self.assertIn(filename, contents)
                 self.assertEqual(self._png_size(app_icon_dir / filename), size)
+
+        mac_icon = ROOT / "clients" / "macos" / "Resources" / "AIUsageMenuBar.icns"
+        self.assertTrue(mac_icon.exists())
+        self.assertGreater(mac_icon.stat().st_size, 10_000)
 
     def test_brand_surfaces_do_not_use_placeholder_chart_icon(self) -> None:
         surfaces = {
@@ -131,6 +146,19 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
                 self.assertIn("AIUsageBrandMark", content)
                 self.assertNotIn('Image(systemName: "chart.bar.xaxis")', content)
                 self.assertNotIn("brand-placeholder", content)
+
+    def test_ios_home_uses_multi_platform_design_dashboard_components(self) -> None:
+        root_view = ROOT / "mobile" / "ios" / "Sources" / "AIUsageMobileCore" / "AIUsageMobileRootView.swift"
+        content = root_view.read_text(encoding="utf-8")
+        for component in [
+            "CrossPlatformHomeHeader",
+            "CrossPlatformHeroPanel",
+            "CrossPlatformQuotaSection",
+            "CrossPlatformSourcesSection",
+        ]:
+            with self.subTest(component=component):
+                self.assertIn(component, content)
+        self.assertNotIn("Color.blue.opacity(0.20)", content)
 
     def test_mobile_app_widget_and_watch_share_brand_mark(self) -> None:
         surfaces = {
@@ -350,24 +378,20 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "defaults.removeObject(forKey: \"AIUsageAPIToken\")",
             "bundle.object(forInfoDictionaryKey: \"AIUsageAPIToken\")",
             "Widget runtime config sharing requires explicit App Group + Keychain access group design",
-            "MetricTile",
-            "MetricGrid",
-            "cacheHitText",
+            "CrossPlatformHomeHeader",
+            "CrossPlatformHeroPanel",
+            "CompactHandoffBarChart",
+            "CrossPlatformQuotaSection",
+            "CrossPlatformSourcesSection",
             "lastServerReadText",
-            "HomeHeader(",
+            "AIUsageBrandMark(size: 30)",
             "onRefresh",
             "RefreshActionButton",
-            "UsageTrendChart",
             "CustomGlassTabBar",
             "GlassSurface",
             "BrandIcon",
             "BrandIcon.kind(for:",
             "LiquidGlassTabButton",
-            "BarTrendChart",
-            "TrendPointSelection",
-            "selectedPointIndicator",
-            "DragGesture(minimumDistance: 0)",
-            "nearestPoint(",
             "LimitReminderRow",
             "RefreshSummaryCard",
             "LimitAccountGroupCard",
@@ -387,14 +411,9 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "MobilePeriodSelection.decision",
             "keepVisibleSummary",
             ".onChange(of: selectedPeriodID)",
-            "@State private var selectedPoint",
-            "TrendTooltipBubble",
-            "tooltipX(",
-            ".onChange(of: points)",
-            "Input \\(TokenFormat.compact(point.inputTokens))",
-            "Output \\(TokenFormat.compact(point.outputTokens))",
-            "Cache \\(TokenFormat.compact(point.cacheTokens))",
-            "缓存 \\(point.cacheRatio)%",
+            "state.tokenBreakdownText",
+            ".frame(height: 52, alignment: .bottom)",
+            "state.topSources",
             "@State private var selectedRow",
             "selectedRow = row",
             "BreakdownDrilldownView",

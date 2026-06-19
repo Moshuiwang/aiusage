@@ -2,66 +2,58 @@ import SwiftUI
 
 public struct AIUsageBrandMark: View {
     private let size: CGFloat
+    private let cornerRatio: CGFloat
 
-    public init(size: CGFloat = 44) {
+    public init(size: CGFloat = 44, cornerRatio: CGFloat = 0.225) {
         self.size = size
+        self.cornerRatio = cornerRatio
     }
 
     public var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+            RoundedRectangle(cornerRadius: size * cornerRatio, style: .continuous)
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color(red: 45 / 255, green: 49 / 255, blue: 72 / 255),
-                            Color(red: 20 / 255, green: 24 / 255, blue: 39 / 255),
-                            Color(red: 7 / 255, green: 9 / 255, blue: 16 / 255)
+                            Color(red: 30 / 255, green: 32 / 255, blue: 53 / 255),
+                            Color(red: 12 / 255, green: 13 / 255, blue: 24 / 255)
                         ],
-                        center: UnitPoint(x: 0.34, y: 0.27),
+                        center: UnitPoint(x: 0.35, y: 0.30),
                         startRadius: 0,
-                        endRadius: size * 0.88
+                        endRadius: size * 0.74
                     )
                 )
 
-            AIUsageRingArc(startAngle: -96, endAngle: 157)
-                .stroke(Color.white.opacity(0.10), style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round))
-                .frame(width: size * 0.70, height: size * 0.70)
-            AIUsageRingArc(startAngle: -96, endAngle: 157)
-                .stroke(Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255), style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round))
-                .frame(width: size * 0.70, height: size * 0.70)
-
-            AIUsageRingArc(startAngle: -90, endAngle: 124)
-                .stroke(Color.white.opacity(0.11), style: StrokeStyle(lineWidth: size * 0.076, lineCap: .round))
-                .frame(width: size * 0.38, height: size * 0.38)
-            AIUsageRingArc(startAngle: -90, endAngle: 124)
-                .stroke(Color(red: 10 / 255, green: 132 / 255, blue: 1), style: StrokeStyle(lineWidth: size * 0.076, lineCap: .round))
-                .frame(width: size * 0.38, height: size * 0.38)
+            Circle()
+                .stroke(BrandColor.claudeOrange.opacity(0.18), lineWidth: size * 0.11)
+                .frame(width: size * 0.76, height: size * 0.76)
+            Circle()
+                .trim(from: 0, to: 0.70)
+                .stroke(BrandColor.claudeOrange, style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round))
+                .frame(width: size * 0.76, height: size * 0.76)
+                .rotationEffect(.degrees(-90))
 
             Circle()
-                .fill(Color.white.opacity(0.84))
-                .frame(width: size * 0.11, height: size * 0.11)
+                .stroke(BrandColor.openaiBlue.opacity(0.18), lineWidth: size * 0.09)
+                .frame(width: size * 0.40, height: size * 0.40)
             Circle()
-                .fill(Color(red: 10 / 255, green: 132 / 255, blue: 1))
-                .frame(width: size * 0.035, height: size * 0.035)
+                .trim(from: 0, to: 0.45)
+                .stroke(BrandColor.openaiBlue, style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round))
+                .frame(width: size * 0.40, height: size * 0.40)
+                .rotationEffect(.degrees(-90))
+
+            Circle()
+                .fill(Color.white.opacity(0.65))
+                .frame(width: size * 0.07, height: size * 0.07)
         }
         .frame(width: size, height: size)
         .accessibilityLabel("AI Usage")
     }
 }
 
-private struct AIUsageRingArc: Shape {
-    let startAngle: Double
-    let endAngle: Double
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addArc(
-            center: CGPoint(x: rect.midX, y: rect.midY),
-            radius: min(rect.width, rect.height) / 2,
-            startAngle: .degrees(startAngle),
-            endAngle: .degrees(endAngle),
-            clockwise: false
-        )
-        return path
-    }
+public enum BrandColor {
+    public static let claudeOrange = Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255)
+    public static let claudePeach = Color(red: 234 / 255, green: 168 / 255, blue: 130 / 255)
+    public static let openaiBlue = Color(red: 10 / 255, green: 132 / 255, blue: 1)
+    public static let openaiCyan = Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)
 }

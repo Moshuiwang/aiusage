@@ -29,6 +29,8 @@ class InstallPlan:
     build_binary: Path
     app_path: Path
     executable_path: Path
+    source_icon_path: Path
+    bundle_icon_path: Path
     runtime_dir: Path
     config_path: Path
     bundle_id: str = DEFAULT_BUNDLE_ID
@@ -46,6 +48,7 @@ class InstallPlan:
         build_binary = package_dir / ".build" / "release" / EXECUTABLE_NAME
         resolved_install_dir = install_dir or DEFAULT_INSTALL_DIR
         app_path = resolved_install_dir / f"{APP_NAME}.app"
+        source_icon_path = package_dir / "Resources" / "AIUsageMenuBar.icns"
         resolved_runtime_dir = runtime_dir or home / "Library" / "Application Support" / "ai-usage-widget" / "macos-menu-bar"
         return InstallPlan(
             repo_dir=repo_dir,
@@ -53,6 +56,8 @@ class InstallPlan:
             build_binary=build_binary,
             app_path=app_path,
             executable_path=app_path / "Contents" / "MacOS" / EXECUTABLE_NAME,
+            source_icon_path=source_icon_path,
+            bundle_icon_path=app_path / "Contents" / "Resources" / "AIUsageMenuBar.icns",
             runtime_dir=resolved_runtime_dir,
             config_path=resolved_runtime_dir / "config.json",
             bundle_id=bundle_id,
@@ -72,6 +77,8 @@ def render_info_plist(plan: InstallPlan) -> str:
   <string>{APP_NAME}</string>
   <key>CFBundleDisplayName</key>
   <string>{APP_NAME}</string>
+  <key>CFBundleIconFile</key>
+  <string>AIUsageMenuBar</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
@@ -111,6 +118,8 @@ def install(plan: InstallPlan, *, server_url: str | None, token: str | None, das
     (plan.app_path / "Contents" / "Resources").mkdir(parents=True, exist_ok=True)
     shutil.copy2(plan.build_binary, plan.executable_path)
     plan.executable_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    if plan.source_icon_path.exists():
+        shutil.copy2(plan.source_icon_path, plan.bundle_icon_path)
     (plan.app_path / "Contents" / "Info.plist").write_text(render_info_plist(plan), encoding="utf-8")
 
     plan.runtime_dir.mkdir(parents=True, exist_ok=True)

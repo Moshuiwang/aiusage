@@ -33,6 +33,27 @@ class InstallMenuBarAppTests(unittest.TestCase):
         self.assertNotIn("Documents", str(plan.config_path))
         self.assertIn("<key>LSUIElement</key>", installer.render_info_plist(plan))
         self.assertIn("<true/>", installer.render_info_plist(plan))
+        self.assertIn("<key>CFBundleIconFile</key>", installer.render_info_plist(plan))
+        self.assertIn("AIUsageMenuBar", installer.render_info_plist(plan))
+
+    def test_install_plan_includes_bundle_icon(self):
+        installer = load_installer_module()
+
+        plan = installer.InstallPlan.default(
+            repo_dir=Path("/Users/product/Documents/ai-usage-widget"),
+            home=Path("/Users/product"),
+            install_dir=None,
+            runtime_dir=None,
+        )
+
+        self.assertEqual(
+            plan.source_icon_path,
+            Path("/Users/product/Documents/ai-usage-widget/clients/macos/Resources/AIUsageMenuBar.icns"),
+        )
+        self.assertEqual(
+            plan.bundle_icon_path,
+            Path("/Applications/AI Usage Menu Bar.app/Contents/Resources/AIUsageMenuBar.icns"),
+        )
 
     def test_script_default_repo_dir_is_workspace_root(self):
         installer = load_installer_module()

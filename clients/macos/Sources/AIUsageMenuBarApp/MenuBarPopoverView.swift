@@ -29,7 +29,7 @@ struct MenuBarPopoverView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
-            AIUsageBrandMark(size: 32)
+            AIUsageBrandMark(size: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text("AI Usage")
                     .font(.system(size: 15, weight: .semibold))
@@ -408,48 +408,42 @@ private struct AIUsageBrandMark: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+            RoundedRectangle(cornerRadius: size * 0.225, style: .continuous)
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color(red: 0.12, green: 0.13, blue: 0.21),
-                            Color(red: 0.05, green: 0.05, blue: 0.09),
+                            Color(red: 30 / 255, green: 32 / 255, blue: 53 / 255),
+                            Color(red: 12 / 255, green: 13 / 255, blue: 24 / 255),
                         ],
                         center: UnitPoint(x: 0.35, y: 0.30),
-                        startRadius: 2,
-                        endRadius: size * 0.85
+                        startRadius: 0,
+                        endRadius: size * 0.74
                     )
                 )
-            AIUsageRingArc(startAngle: -90, endAngle: 162)
+
+            Circle()
+                .stroke(Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255).opacity(0.18), lineWidth: size * 0.11)
+                .frame(width: size * 0.76, height: size * 0.76)
+            Circle()
+                .trim(from: 0, to: 0.70)
                 .stroke(Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255), style: StrokeStyle(lineWidth: size * 0.11, lineCap: .round))
                 .frame(width: size * 0.76, height: size * 0.76)
-                .accessibilityIdentifier("outer-ring")
-            AIUsageRingArc(startAngle: -90, endAngle: 72)
+                .rotationEffect(.degrees(-90))
+
+            Circle()
+                .stroke(Color(red: 10 / 255, green: 132 / 255, blue: 1).opacity(0.18), lineWidth: size * 0.09)
+                .frame(width: size * 0.40, height: size * 0.40)
+            Circle()
+                .trim(from: 0, to: 0.45)
                 .stroke(Color(red: 10 / 255, green: 132 / 255, blue: 1), style: StrokeStyle(lineWidth: size * 0.09, lineCap: .round))
                 .frame(width: size * 0.40, height: size * 0.40)
-                .accessibilityIdentifier("inner-ring")
+                .rotationEffect(.degrees(-90))
+
             Circle()
                 .fill(Color.white.opacity(0.65))
                 .frame(width: size * 0.07, height: size * 0.07)
         }
         .frame(width: size, height: size)
         .accessibilityLabel("AI Usage")
-    }
-}
-
-private struct AIUsageRingArc: Shape {
-    let startAngle: Double
-    let endAngle: Double
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.addArc(
-            center: CGPoint(x: rect.midX, y: rect.midY),
-            radius: min(rect.width, rect.height) / 2,
-            startAngle: .degrees(startAngle),
-            endAngle: .degrees(endAngle),
-            clockwise: false
-        )
-        return path
     }
 }
