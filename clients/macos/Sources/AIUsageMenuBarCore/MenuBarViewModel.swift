@@ -62,10 +62,10 @@ public enum MenuBarViewModel {
         let primaryLimit = summary.limits.windows
             .filter(\.isOfficialObserved)
             .sorted { lhs, rhs in
-                if lhs.remainingPercent == rhs.remainingPercent {
+                if lhs.usedPercent == rhs.usedPercent {
                     return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
                 }
-                return lhs.remainingPercent < rhs.remainingPercent
+                return lhs.usedPercent > rhs.usedPercent
             }
             .first
 
@@ -126,7 +126,7 @@ public enum MenuBarViewModel {
         guard let window else {
             return "暂无可信额度"
         }
-        return "\(providerName(window.provider)) \(window.window) · \(Int(window.remainingPercent.rounded()))% 可用"
+        return "\(providerName(window.provider)) \(window.window) · \(Int(window.usedPercent.rounded()))% 已用"
     }
 
     private static func timeText(_ generatedAt: String?, timezone: String?) -> String {
@@ -287,10 +287,10 @@ public enum MenuBarViewModel {
                 id: provider, displayName: name,
                 outerRed: oR, outerGreen: oG, outerBlue: oB,
                 innerRed: iR, innerGreen: iG, innerBlue: iB,
-                outerFraction: outer.remainingPercent / 100.0,
-                innerFraction: (inner?.remainingPercent ?? 0) / 100.0,
-                outerPctText: "\(Int(outer.remainingPercent.rounded()))%",
-                innerPctText: inner.map { "\(Int($0.remainingPercent.rounded()))%" } ?? "--",
+                outerFraction: outer.usedPercent / 100.0,
+                innerFraction: (inner?.usedPercent ?? 0) / 100.0,
+                outerPctText: "\(Int(outer.usedPercent.rounded()))%",
+                innerPctText: inner.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
                 outerTimeText: timeRemainingText(outer.resetAt) ?? "--",
                 innerTimeText: inner.flatMap { timeRemainingText($0.resetAt) } ?? "--"
             )
@@ -346,7 +346,7 @@ public enum MenuBarViewModel {
         return MenuDisplayRow(
             id: window.id,
             title: "\(providerName(window.provider)) \(window.window)",
-            subtitle: "\(availability) · \(used) · \(window.confidence)",
+            subtitle: "\(used) · \(availability) · \(window.confidence)",
             value: compactResetTime(window.resetAt, generatedAt: generatedAt) ?? "--",
             status: window.status
         )
@@ -357,8 +357,8 @@ public enum MenuBarViewModel {
             if lhs.isOfficialObserved != rhs.isOfficialObserved {
                 return lhs.isOfficialObserved
             }
-            if lhs.remainingPercent != rhs.remainingPercent {
-                return lhs.remainingPercent < rhs.remainingPercent
+            if lhs.usedPercent != rhs.usedPercent {
+                return lhs.usedPercent > rhs.usedPercent
             }
             return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
         }

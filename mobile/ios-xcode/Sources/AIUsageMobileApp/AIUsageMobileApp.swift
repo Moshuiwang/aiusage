@@ -42,36 +42,20 @@ struct LiveSummaryContainerView: View {
             initialTabID: initialTabID,
             refreshingPeriodID: loadState.refreshingPeriodID,
             onPeriodSelected: { period in
-                Task {
-                    await loadLiveSummary(period: period)
-                }
+                Task { await loadLiveSummary(period: period) }
             },
             onRefresh: { period in
-                Task {
-                    await refreshLiveSummary(period: period)
-                }
+                Task { await refreshLiveSummary(period: period) }
+            },
+            onRefreshAsync: { period in
+                await refreshLiveSummary(period: period)
+                // Pull-to-refresh failures are silent — don't leave the error banner on screen
+                if case .failed = loadState { loadState = .live }
+            },
+            onSettingsTapped: {
+                isShowingSettings = true
             }
         )
-            .overlay(alignment: .topTrailing) {
-                if case .loading = loadState {
-                    ProgressView()
-                        .controlSize(.small)
-                        .padding(12)
-                }
-            }
-            .overlay(alignment: .topLeading) {
-                Button {
-                    isShowingSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .accessibilityLabel("服务设置")
-                .padding(10)
-            }
             .overlay(alignment: .top) {
                 if let message = loadState.message {
                     ProductionConnectionStatusView(message: message)
@@ -84,9 +68,7 @@ struct LiveSummaryContainerView: View {
                     tokenStore: tokenStore,
                     period: summary.period.id
                 ) {
-                    Task {
-                        await refreshLiveSummary(period: summary.period.id)
-                    }
+                    Task { await refreshLiveSummary(period: summary.period.id) }
                 }
             }
             .task {

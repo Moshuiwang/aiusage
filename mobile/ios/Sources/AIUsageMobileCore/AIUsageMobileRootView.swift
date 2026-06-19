@@ -5,171 +5,166 @@ import UIKit
 import AppKit
 #endif
 
+// MARK: - Public Root View
+
 public struct AIUsageMobileRootView: View {
+    private let summary: MobileSummary
     private let state: MobileViewState
     private let onPeriodSelected: (String) -> Void
     private let onRefresh: (String) -> Void
+    private let onRefreshAsync: (String) async -> Void
+    private let onSettingsTapped: () -> Void
     private let refreshingPeriodID: String?
-    @State private var selectedTab: AppTab
-    @State private var selectedPeriodID: String
+    @State private var selectedPeriod: PeriodTab
 
     public init(
         summary: MobileSummary,
-        initialTabID: String = "home",
+        initialTabID: String = "today",
         refreshingPeriodID: String? = nil,
         onPeriodSelected: @escaping (String) -> Void = { _ in },
-        onRefresh: @escaping (String) -> Void = { _ in }
+        onRefresh: @escaping (String) -> Void = { _ in },
+        onRefreshAsync: @escaping (String) async -> Void = { _ in },
+        onSettingsTapped: @escaping () -> Void = {}
     ) {
+        self.summary = summary
         self.state = MobileViewModel.build(from: summary)
         self.onPeriodSelected = onPeriodSelected
         self.onRefresh = onRefresh
+        self.onRefreshAsync = onRefreshAsync
+        self.onSettingsTapped = onSettingsTapped
         self.refreshingPeriodID = refreshingPeriodID
-        self._selectedTab = State(initialValue: AppTab(id: initialTabID))
-        self._selectedPeriodID = State(initialValue: summary.period.id)
+        let pid = (initialTabID == "home" || initialTabID.isEmpty) ? summary.period.id : initialTabID
+        self._selectedPeriod = State(initialValue: PeriodTab(id: pid.isEmpty ? "today" : pid))
     }
 
     public var body: some View {
         ZStack(alignment: .bottom) {
-            Group {
-                switch selectedTab {
-                case .home:
-                    HomeView(
-                        state: state.home,
-                        selectedTab: $selectedTab,
-                        selectedPeriodID: $selectedPeriodID,
-                        refreshingPeriodID: refreshingPeriodID,
-                        onPeriodSelected: onPeriodSelected,
-                        onRefresh: onRefresh
-                    )
-                case .limits:
-                    LimitsView(limits: state.limits)
-                case .breakdown:
-                    BreakdownView(
-                        breakdown: state.breakdown,
-                        selectedPeriodID: $selectedPeriodID,
-                        refreshingPeriodID: refreshingPeriodID,
-                        onPeriodSelected: onPeriodSelected
-                    )
-                case .sources:
-                    SourcesView(sources: state.sources)
-                }
-            }
-            .transition(.opacity)
-            .animation(.snappy(duration: 0.22), value: selectedTab)
+            PeriodScrollView(
+                summary: summary,
+                state: state,
+                selectedPeriod: selectedPeriod,
+                refreshingPeriodID: refreshingPeriodID,
+                onRefreshAsync: { await onRefreshAsync(selectedPeriod.periodID) },
+                onSettingsTapped: onSettingsTapped
+            )
 
-            CustomGlassTabBar(selection: $selectedTab)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 10)
+            PeriodTabBar(selection: $selectedPeriod) { newPeriod in
+                onPeriodSelected(newPeriod.periodID)
+            }
         }
+        .background(Color.appGroupedBackground.ignoresSafeArea())
         .dynamicTypeSize(.xSmall ... .large)
-        .onChange(of: state.home.periodID) { _, newPeriodID in
-            selectedPeriodID = newPeriodID
+        .onChange(of: summary.period.id) { _, newID in
+            if let tab = PeriodTab(rawValue: newID) {
+                selectedPeriod = tab
+            }
         }
     }
 }
 
-enum AppTab: Hashable {
-    case home
-    case limits
-    case breakdown
-    case sources
+// MARK: - Period Tab
 
-    static let allCases: [AppTab] = [.home, .limits, .breakdown, .sources]
+enum PeriodTab: String, Hashable {
+    case today = "today"
+    case week  = "week"
+    case month = "month"
+    case all   = "all"
 
-    init(id: String) {
-        switch id {
-        case "limits":
-            self = .limits
-        case "breakdown":
-            self = .breakdown
-        case "sources":
-            self = .sources
-        default:
-            self = .home
-        }
-    }
+    static let allCases: [PeriodTab] = [.today, .week, .month, .all]
+
+    init(id: String) { self = PeriodTab(rawValue: id) ?? .today }
+
+    var periodID: String { rawValue }
 
     var title: String {
         switch self {
-        case .home:
-            return "首页"
-        case .limits:
-            return "额度"
-        case .breakdown:
-            return "明细"
-        case .sources:
-            return "来源"
+        case .today: return "今天"
+        case .week:  return "周"
+        case .month: return "月"
+        case .all:   return "全部"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .home:
-            return "house"
-        case .limits:
-            return "gauge.with.dots.needle.33percent"
-        case .breakdown:
-            return "chart.bar.xaxis"
-        case .sources:
-            return "antenna.radiowaves.left.and.right"
+        case .today: return "sun.max"
+        case .week:  return "calendar"
+        case .month: return "calendar.circle"
+        case .all:   return "list.bullet"
         }
     }
 }
 
-struct HomeView: View {
-    let state: MobileHomeState
-    @Binding var selectedTab: AppTab
-    @Binding var selectedPeriodID: String
+// MARK: - Period Scroll View
+
+struct PeriodScrollView: View {
+    let summary: MobileSummary
+    let state: MobileViewState
+    let selectedPeriod: PeriodTab
     let refreshingPeriodID: String?
-    let onPeriodSelected: (String) -> Void
-    let onRefresh: (String) -> Void
+    let onRefreshAsync: () async -> Void
+    let onSettingsTapped: () -> Void
+
+    private var isLoadingThisPeriod: Bool {
+        refreshingPeriodID == selectedPeriod.periodID
+    }
 
     var body: some View {
-        AppScrollView(bottomPadding: 128) {
-            CrossPlatformHomeHeader(
-                lastServerReadText: state.lastServerReadText,
-                isRefreshing: refreshingPeriodID == selectedPeriodID,
-                onRefresh: {
-                    onRefresh(selectedPeriodID)
+        ScrollView {
+            VStack(spacing: 10) {
+                PeriodHeaderView(
+                    lastServerReadText: state.home.lastServerReadText,
+                    isRefreshing: isLoadingThisPeriod,
+                    onSettingsTapped: onSettingsTapped,
+                    onRefresh: { Task { await onRefreshAsync() } }
+                )
+
+                PeriodHeroCard(state: state.home)
+
+                if !summary.limits.windows.isEmpty {
+                    QuotaRingsCard(limits: summary.limits)
                 }
-            )
-            PeriodSelector(
-                selectedPeriodID: $selectedPeriodID,
-                refreshingPeriodID: refreshingPeriodID,
-                onPeriodSelected: onPeriodSelected
-            )
-            CrossPlatformHeroPanel(state: state) {
-                selectedTab = .breakdown
+
+                PeriodSourcesCard(
+                    sources: state.sources,
+                    byMachine: state.breakdown.byMachine
+                )
+
+                if !state.breakdown.byModel.isEmpty {
+                    ModelUsageCard(rows: state.breakdown.byModel)
+                }
             }
-            CrossPlatformQuotaSection(groups: state.refreshGroups) {
-                selectedTab = .limits
-            }
-            CrossPlatformSourcesSection(
-                rows: state.topSources,
-                healthText: state.healthText
-            ) {
-                selectedTab = .sources
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
+        .refreshable {
+            await onRefreshAsync()
+        }
+        .overlay {
+            if isLoadingThisPeriod {
+                Color.clear
+                    .allowsHitTesting(false)
             }
         }
     }
-
-    private var topSourceMax: Int {
-        max(state.topSources.map(\.tokens).max() ?? 1, 1)
-    }
 }
 
-struct CrossPlatformHomeHeader: View {
+// MARK: - Header
+
+struct PeriodHeaderView: View {
     let lastServerReadText: String
     let isRefreshing: Bool
+    let onSettingsTapped: () -> Void
     let onRefresh: () -> Void
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            AIUsageBrandMark(size: 30)
+            AIUsageBrandMark(size: 36)
+                .onLongPressGesture { onSettingsTapped() }
+
             VStack(alignment: .leading, spacing: 2) {
                 Text("AI Usage")
                     .font(.system(size: 18, weight: .semibold))
-                    .kerning(0)
                 Text(lastServerReadText)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -177,954 +172,621 @@ struct CrossPlatformHomeHeader: View {
                     .minimumScaleFactor(0.72)
             }
             Spacer()
-            RefreshActionButton(isRefreshing: isRefreshing, action: onRefresh)
+            Button(action: onRefresh) {
+                Group {
+                    if isRefreshing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                }
+                .frame(width: 34, height: 34)
+                .background(Color.cardBackground, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isRefreshing)
+            .accessibilityLabel("刷新数据")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .glassSurface(cornerRadius: 10)
+        .padding(.horizontal, 4)
+        .padding(.vertical, 10)
     }
 }
 
-struct CrossPlatformHeroPanel: View {
+// MARK: - Hero Card
+
+struct PeriodHeroCard: View {
     let state: MobileHomeState
-    let onDetails: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
-                Text(state.totalText)
-                    .font(.system(size: 42, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.68)
-                    .contentTransition(.numericText(value: Double(state.totalTokens)))
-                    .animation(.snappy(duration: 0.42), value: state.totalTokens)
-                Text(state.healthText)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(healthColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(healthColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                Spacer(minLength: 0)
-            }
+            Text(state.totalText)
+                .font(.system(size: 44, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .kerning(-1.5)
+                .lineLimit(1)
+                .minimumScaleFactor(0.68)
+                .contentTransition(.numericText(value: Double(state.totalTokens)))
+                .animation(.snappy(duration: 0.42), value: state.totalTokens)
 
             Text(state.tokenBreakdownText)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
 
-            CompactHandoffBarChart(points: state.trendPoints)
+            InteractiveBarChart(points: state.trendPoints)
                 .frame(height: 76)
-
-            HStack {
-                Text(state.rangeText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
-                Spacer()
-                UnifiedDetailLink(action: onDetails)
-            }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(cornerRadius: 10)
-    }
-
-    private var healthColor: Color {
-        state.healthText.lowercased().contains("issue") || state.healthText.contains("异常") ? .orange : .green
+        .cardSurface()
     }
 }
 
-struct CompactHandoffBarChart: View {
+// MARK: - Interactive Bar Chart with Tooltip
+
+struct InteractiveBarChart: View {
     let points: [MobileTrendPoint]
+    @State private var selectedIndex: Int? = nil
+    @State private var dismissTask: Task<Void, Never>? = nil
+
+    private var chartPoints: [MobileTrendPoint] { Array(points.suffix(24)) }
+    private var maxTokens: Int { max(chartPoints.map(\.tokens).max() ?? 1, 1) }
+    private var maxLabel: String { TokenFormat.compact(maxTokens) }
+
+    private var axisLabels: [String] {
+        let labels = chartPoints.map(\.label).filter { !$0.isEmpty }
+        guard labels.count >= 3 else { return labels.isEmpty ? ["00:00", "12:00", "23:59"] : labels }
+        return [labels.first!, labels[labels.count / 2], labels.last!]
+    }
+
+    private func barHeight(for point: MobileTrendPoint) -> CGFloat {
+        max(point.tokens == 0 ? 3 : 5, CGFloat(point.tokens) / CGFloat(maxTokens) * 52)
+    }
+
+    private var normalGrad: LinearGradient {
+        LinearGradient(
+            colors: [Color(red: 0.039, green: 0.518, blue: 1), Color(red: 0.353, green: 0.784, blue: 0.980)],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+
+    private var selectedGrad: LinearGradient {
+        LinearGradient(
+            colors: [Color(red: 0.218, green: 0.118, blue: 0.337).opacity(0), BrandColor.claudeOrange],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
 
     var body: some View {
         VStack(spacing: 6) {
-            ZStack(alignment: .topTrailing) {
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.18))
-                    .frame(height: 1)
-                    .offset(y: 8)
-                Text(maxLabel)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary.opacity(0.78))
-                HStack(alignment: .bottom, spacing: 4) {
-                    ForEach(chartPoints) { point in
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(red: 10 / 255, green: 132 / 255, blue: 1), Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .frame(height: barHeight(for: point))
-                            .frame(maxWidth: .infinity, alignment: .bottom)
-                            .opacity(point.tokens == 0 ? 0.28 : 1)
+            GeometryReader { proxy in
+                ZStack(alignment: .top) {
+                    // Reference line
+                    HStack {
+                        Spacer()
+                        Text(maxLabel)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.secondary.opacity(0.78))
+                    }
+
+                    // Bars
+                    HStack(alignment: .bottom, spacing: 3) {
+                        ForEach(Array(chartPoints.enumerated()), id: \.element.id) { idx, point in
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(selectedIndex == idx ? selectedGrad : normalGrad)
+                                .frame(height: barHeight(for: point))
+                                .frame(maxWidth: .infinity, alignment: .bottom)
+                                .opacity(point.tokens == 0 ? 0.28 : 1)
+                                .scaleEffect(y: selectedIndex == idx ? 1.06 : 1, anchor: .bottom)
+                        }
+                    }
+                    .frame(height: 52, alignment: .bottom)
+                    .padding(.top, 12)
+
+                    // Tooltip
+                    if let idx = selectedIndex, idx < chartPoints.count {
+                        let pt = chartPoints[idx]
+                        ChartTooltip(label: pt.label, value: TokenFormat.compact(pt.tokens))
+                            .offset(x: tooltipX(idx: idx, width: proxy.size.width))
+                            .offset(y: -2)
+                            .zIndex(10)
+                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
                     }
                 }
-                .frame(height: 52, alignment: .bottom)
-                .padding(.top, 10)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { val in
+                            let n = chartPoints.count
+                            guard n > 0 else { return }
+                            dismissTask?.cancel()
+                            let step = proxy.size.width / CGFloat(n)
+                            let idx = min(max(Int(val.location.x / step), 0), n - 1)
+                            if selectedIndex != idx {
+                                withAnimation(.easeOut(duration: 0.08)) { selectedIndex = idx }
+                            }
+                        }
+                        .onEnded { _ in
+                            // Keep tooltip visible; auto-dismiss after 4 s
+                            dismissTask?.cancel()
+                            dismissTask = Task {
+                                try? await Task.sleep(for: .seconds(4))
+                                await MainActor.run {
+                                    withAnimation(.easeOut(duration: 0.22)) { selectedIndex = nil }
+                                }
+                            }
+                        }
+                )
             }
+            .frame(height: 64)
+
+            // Axis labels
             HStack {
                 ForEach(axisLabels, id: \.self) { label in
                     Text(label)
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
-                    if label != axisLabels.last {
-                        Spacer(minLength: 0)
-                    }
+                    if label != axisLabels.last { Spacer(minLength: 0) }
                 }
             }
         }
     }
 
-    private var chartPoints: [MobileTrendPoint] {
-        Array(points.suffix(18))
-    }
-
-    private var maxTokens: Int {
-        max(chartPoints.map(\.tokens).max() ?? 1, 1)
-    }
-
-    private var maxLabel: String {
-        TokenFormat.compact(maxTokens)
-    }
-
-    private var axisLabels: [String] {
-        let labels = chartPoints.map(\.label).filter { !$0.isEmpty }
-        guard !labels.isEmpty else {
-            return ["00:00", "12:00", "23:59"]
-        }
-        if labels.count >= 3 {
-            return [labels.first ?? "", labels[labels.count / 2], labels.last ?? ""]
-        }
-        return labels
-    }
-
-    private func barHeight(for point: MobileTrendPoint) -> CGFloat {
-        max(point.tokens == 0 ? 4 : 6, CGFloat(point.tokens) / CGFloat(maxTokens) * 52)
+    private func tooltipX(idx: Int, width: CGFloat) -> CGFloat {
+        let n = chartPoints.count
+        guard n > 0 else { return 0 }
+        let step = width / CGFloat(n)
+        let centerX = CGFloat(idx) * step + step / 2
+        let tipW: CGFloat = 88
+        let clamped = max(tipW / 2, min(centerX, width - tipW / 2))
+        return clamped - width / 2
     }
 }
 
-struct CrossPlatformQuotaSection: View {
-    let groups: [LimitWindowGroup]
-    let onDetails: () -> Void
+struct ChartTooltip: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.system(size: 12, weight: .bold))
+                .monospacedDigit()
+            if !label.isEmpty {
+                Text(label)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(width: 88)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.14), radius: 6, y: 3)
+    }
+}
+
+// MARK: - Quota Rings Card
+
+struct QuotaRingsCard: View {
+    let limits: MobileLimits
+
+    private var groups: [LimitWindowGroup] {
+        limitGroups(from: limits.windows)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "额度") {
-                UnifiedDetailLink(action: onDetails)
-            }
+            Text("已用额度")
+                .font(.system(size: 11, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.4)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
             if groups.isEmpty {
                 Text("暂无可信额度数据")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(groups) { group in
-                        CrossPlatformQuotaRow(group: group)
+                HStack(alignment: .top, spacing: 8) {
+                    ForEach(Array(groups.prefix(2)), id: \.id) { group in
+                        ProviderQuotaCard(group: group)
+                            .frame(maxWidth: .infinity)
                     }
                 }
             }
         }
-        .padding(12)
-        .glassSurface(cornerRadius: 10)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface()
     }
 }
 
-struct CrossPlatformQuotaRow: View {
+struct ProviderQuotaCard: View {
     let group: LimitWindowGroup
 
-    var body: some View {
-        HStack(spacing: 12) {
-            BrandIcon(kind: BrandIcon.kind(for: group.provider), size: 20)
-                .frame(width: 32, height: 32)
-                .glassSurface(cornerRadius: 8)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(group.providerLabel)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
-                Text(group.sourceID)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 4) {
-                resetChip("5h", group.fiveHourResetText, color: Color(red: 10 / 255, green: 132 / 255, blue: 1))
-                resetChip("7d", group.weeklyResetText, color: Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255))
-            }
+    private var fiveHourWindow: MobileLimitWindow? {
+        group.windows.first { w in
+            let wl = w.window.lowercased()
+            return wl.contains("5h") || (w.windowDurationMinutes > 0 && w.windowDurationMinutes <= 360)
         }
-        .padding(10)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private func resetChip(_ label: String, _ value: String, color: Color) -> some View {
-        HStack(spacing: 5) {
-            Text(label)
-                .font(.system(size: 10, weight: .bold))
+    private var weeklyWindow: MobileLimitWindow? {
+        group.windows.first { w in
+            let wl = w.window.lowercased()
+            return wl.contains("week") || wl.contains("7d") || wl == "周" || w.windowDurationMinutes > 360
+        }
+    }
+
+    private var outerColor: Color { providerOuterColor(group.provider) }
+    private var innerColor: Color { providerInnerColor(group.provider) }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            // Ring
+            ZStack {
+                Circle()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 9)
+                    .frame(width: 80, height: 80)
+                Circle()
+                    .trim(from: 0, to: CGFloat((fiveHourWindow?.usedPercent ?? 0) / 100))
+                    .stroke(outerColor, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.5), value: fiveHourWindow?.usedPercent)
+
+                Circle()
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 7)
+                    .frame(width: 52, height: 52)
+                Circle()
+                    .trim(from: 0, to: CGFloat((weeklyWindow?.usedPercent ?? 0) / 100))
+                    .stroke(innerColor, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .frame(width: 52, height: 52)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.5), value: weeklyWindow?.usedPercent)
+
+                Text(group.providerLabel)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+
+            // Stat rows — compact, all data per row together
+            VStack(spacing: 4) {
+                if let w = fiveHourWindow {
+                    QuotaRow(
+                        windowLabel: "5h",
+                        pct: Int(w.usedPercent.rounded()),
+                        resetText: remainingTimeText(resetAt: w.resetAt),
+                        color: outerColor
+                    )
+                }
+                if let w = weeklyWindow {
+                    QuotaRow(
+                        windowLabel: "7d",
+                        pct: Int(w.usedPercent.rounded()),
+                        resetText: remainingTimeText(resetAt: w.resetAt),
+                        color: innerColor
+                    )
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+struct QuotaRow: View {
+    let windowLabel: String
+    let pct: Int
+    let resetText: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 0) {
+            // Left-aligned: label + percentage
+            Text(windowLabel)
+                .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(color)
-            Text(shortReset(value))
-                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .frame(width: 16, alignment: .leading)
+            Text("\(pct)%")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(color)
+                .monospacedDigit()
+            Spacer(minLength: 4)
+            // Right-aligned: remaining time
+            Text(resetText)
+                .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+                .monospacedDigit()
                 .lineLimit(1)
         }
     }
-
-    private func shortReset(_ value: String) -> String {
-        guard value.count >= 16 else {
-            return value
-        }
-        let start = value.index(value.startIndex, offsetBy: 11)
-        let end = value.index(value.startIndex, offsetBy: 16)
-        return String(value[start..<end])
-    }
 }
 
-struct CrossPlatformSourcesSection: View {
-    let rows: [MobileBreakdownRow]
-    let healthText: String
-    let onDetails: () -> Void
+private func remainingTimeText(resetAt: String?) -> String {
+    guard let resetAt else { return "--" }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    var date = formatter.date(from: resetAt)
+    if date == nil {
+        formatter.formatOptions = [.withInternetDateTime]
+        date = formatter.date(from: resetAt)
+    }
+    if date == nil {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        for fmt in ["yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ssZ"] {
+            df.dateFormat = fmt
+            if let d = df.date(from: resetAt) { date = d; break }
+        }
+    }
+    guard let date else {
+        // Fallback: show time portion of string
+        if resetAt.count >= 16 {
+            let start = resetAt.index(resetAt.startIndex, offsetBy: 11)
+            let end = resetAt.index(resetAt.startIndex, offsetBy: 16)
+            return String(resetAt[start..<end])
+        }
+        return resetAt
+    }
+    let interval = date.timeIntervalSinceNow
+    guard interval > 0 else { return "已重置" }
+    let totalMinutes = Int(interval / 60)
+    let days = totalMinutes / (24 * 60)
+    let hours = (totalMinutes % (24 * 60)) / 60
+    let minutes = totalMinutes % 60
+    if days > 0 { return "\(days)d \(hours)h" }
+    if hours > 0 { return "\(hours)h \(minutes)min" }
+    return "\(minutes)min"
+}
+
+private func providerOuterColor(_ provider: String) -> Color {
+    let p = provider.lowercased()
+    return (p.contains("claude") || p.contains("anthropic"))
+        ? BrandColor.claudeOrange
+        : BrandColor.openaiBlue
+}
+
+private func providerInnerColor(_ provider: String) -> Color {
+    let p = provider.lowercased()
+    return (p.contains("claude") || p.contains("anthropic"))
+        ? BrandColor.claudePeach
+        : BrandColor.openaiCyan
+}
+
+// MARK: - Sources Card
+
+struct PeriodSourcesCard: View {
+    let sources: [MobileSource]
+    let byMachine: [MobileBreakdownRow]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "来源") {
-                UnifiedDetailLink(action: onDetails)
-            }
-            if rows.isEmpty {
+            Text("来源")
+                .font(.system(size: 11, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.4)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            if byMachine.isEmpty {
                 Text("暂无来源数据")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(rows) { row in
-                        CrossPlatformSourceRow(row: row, maxValue: maxValue)
+                VStack(spacing: 0) {
+                    ForEach(Array(byMachine.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 {
+                            Divider().padding(.leading, 17)
+                        }
+                        PeriodSourceRow(row: row, source: matchingSource(for: row))
                     }
                 }
-            }
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(healthText.lowercased().contains("issue") ? Color.orange : Color.green)
-                    .frame(width: 7, height: 7)
-                Text(healthText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Spacer()
+                .padding(.horizontal, 4)
             }
         }
-        .padding(12)
-        .glassSurface(cornerRadius: 10)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface()
     }
 
-    private var maxValue: Int {
-        max(rows.map(\.tokens).max() ?? 1, 1)
+    private func matchingSource(for row: MobileBreakdownRow) -> MobileSource? {
+        sources.first { ($0.machine ?? $0.displayName ?? $0.sourceID) == row.label }
+            ?? sources.first { row.sourceIDs?.contains($0.sourceID) == true }
     }
 }
 
-struct CrossPlatformSourceRow: View {
+struct PeriodSourceRow: View {
     let row: MobileBreakdownRow
-    let maxValue: Int
+    let source: MobileSource?
+    private var isOnline: Bool { source?.status == "ok" }
+
+    private var displayName: String {
+        source?.osUser ?? source?.displayName ?? row.label
+    }
 
     var body: some View {
         HStack(spacing: 10) {
             Circle()
-                .fill(Color.green)
+                .fill(isOnline ? Color.green : Color.orange)
                 .frame(width: 7, height: 7)
-            VStack(alignment: .leading, spacing: 5) {
-                HStack {
-                    Text(row.label)
-                        .font(.system(size: 13, weight: .semibold))
-                        .lineLimit(1)
-                    Spacer()
-                    Text(TokenFormat.compact(row.tokens))
-                        .font(.system(size: 12, weight: .bold).monospacedDigit())
-                }
-                GeometryReader { proxy in
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(Color.secondary.opacity(0.14))
-                        .overlay(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color(red: 10 / 255, green: 132 / 255, blue: 1), Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .frame(width: max(8, proxy.size.width * CGFloat(row.tokens) / CGFloat(max(maxValue, 1))))
-                        }
-                }
-                .frame(height: 6)
-            }
-        }
-    }
-}
-
-struct SourcesView: View {
-    let sources: [MobileSource]
-
-    var body: some View {
-        AppScrollView(topPadding: 14, bottomPadding: 128) {
-            SummaryStrip(
-                eyebrow: "采集",
-                title: "采集来源",
-                subtitle: "按机器与系统账户查看上报状态",
-                value: "\(healthyCount)/\(sources.count)",
-                label: "正常"
-            )
-
-            MaterialCard {
-                SectionHeader(title: "采集列表") {
-                    Text("\(sources.count) 个来源")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                VStack(spacing: 12) {
-                    ForEach(sources) { source in
-                        SourceCard(source: source)
-                    }
-                }
-            }
-        }
-    }
-
-    private var healthyCount: Int {
-        sources.filter { $0.status == "ok" }.count
-    }
-}
-
-struct BreakdownView: View {
-    let breakdown: MobileBreakdown
-    @Binding var selectedPeriodID: String
-    let refreshingPeriodID: String?
-    let onPeriodSelected: (String) -> Void
-    @State private var dimension: BreakdownDimension = .date
-    @State private var selectedRow: MobileBreakdownRow?
-
-    var body: some View {
-        AppScrollView(topPadding: 14, bottomPadding: 128) {
-            if let selectedRow {
-                BreakdownDrilldownView(
-                    row: selectedRow,
-                    dimension: dimension,
-                    sections: BreakdownDrilldown.sections(
-                        for: selectedRow,
-                        dimension: dimension,
-                        breakdown: breakdown
-                    )
-                ) {
-                    self.selectedRow = nil
-                }
-            } else {
-                SummaryStrip(
-                    eyebrow: "明细",
-                    title: "用量明细",
-                    subtitle: "按不同维度拆解当前周期",
-                    value: "5",
-                    label: "维度"
-                )
-
-                PeriodSelector(
-                    selectedPeriodID: $selectedPeriodID,
-                    refreshingPeriodID: refreshingPeriodID,
-                    onPeriodSelected: onPeriodSelected
-                )
-                BreakdownSegmentedControl(selection: $dimension)
-
-                MaterialCard {
-                    SectionHeader(title: dimension.title) {
-                        Text("Tokens")
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-                    VStack(spacing: 12) {
-                        ForEach(rows) { row in
-                            Button {
-                                selectedRow = row
-                            } label: {
-                                BarRow(label: row.label, value: row.tokens, maxValue: maxValue)
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-        }
-        .onChange(of: dimension) { _, _ in
-            selectedRow = nil
-        }
-        .onChange(of: selectedPeriodID) { _, _ in
-            selectedRow = nil
-        }
-    }
-
-    private var rows: [MobileBreakdownRow] {
-        switch dimension {
-        case .machine:
-            return breakdown.byMachine
-        case .account:
-            return breakdown.byOSUser
-        case .agent:
-            return breakdown.byAgent
-        case .model:
-            return breakdown.byModel
-        case .date:
-            return breakdown.byDate
-        }
-    }
-
-    private var maxValue: Int {
-        max(rows.map(\.tokens).max() ?? 1, 1)
-    }
-}
-
-struct LimitsView: View {
-    let limits: MobileLimits
-    @State private var reminderEnabled = true
-
-    var body: some View {
-        AppScrollView(topPadding: 14, bottomPadding: 128) {
-            QuotaPageHeader(
-                observedCount: limits.observedCount,
-                totalCount: limits.totalCount
-            )
-
-            LimitReminderRow(isOn: $reminderEnabled)
-
-            VStack(spacing: 12) {
-                ForEach(limitGroups(from: limits.windows)) { group in
-                    LimitAccountGroupCard(group: group)
-                }
-            }
-        }
-    }
-}
-
-struct QuotaPageHeader: View {
-    let observedCount: Int
-    let totalCount: Int
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Quota")
-                    .font(.caption.monospaced())
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                Text("额度")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                Text("可用百分比越高，剩余额度越多")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            Gauge(value: Double(observedCount), in: 0...Double(max(totalCount, 1))) {
-                EmptyView()
-            } currentValueLabel: {
-                Text("\(observedCount)/\(totalCount)")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-            }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(.blue)
-            .frame(width: 58, height: 58)
-        }
-        .padding(14)
-        .glassSurface()
-    }
-}
-
-struct RefreshSummaryCard: View {
-    let group: LimitWindowGroup
-
-    var body: some View {
-        HStack(spacing: 12) {
-            BrandIcon(kind: BrandIcon.kind(for: group.provider), size: 20)
-                .frame(width: 32, height: 32)
-                .glassSurface(cornerRadius: 8)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(group.providerLabel)
-                    .font(.subheadline.weight(.semibold))
-                Text(group.sourceID)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(displayName)
+                    .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 5) {
-                Text("周 \(group.weeklyResetText)")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                Text("5h \(group.fiveHourResetText)")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-            }
-            .foregroundStyle(.secondary)
-        }
-        .padding(12)
-        .glassSurface()
-    }
-}
-
-struct LimitAccountGroupCard: View {
-    let group: LimitWindowGroup
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                BrandIcon(kind: BrandIcon.kind(for: group.provider), size: 24)
-                    .frame(width: 34, height: 34)
-                    .glassSurface(cornerRadius: 8)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(group.providerLabel)
-                        .font(.headline.weight(.semibold))
-                    Text(group.sourceID)
-                        .font(.caption)
+                if let sub = sourceSub(source) {
+                    Text(sub)
+                        .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
-                Spacer()
-                Text(group.statText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
-
-            ForEach(group.windows) { window in
-                LimitWindowCard(window: window)
-            }
+            Spacer()
+            Text(TokenFormat.compact(row.tokens))
+                .font(.system(size: 13, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(.primary.opacity(0.72))
         }
-        .padding(12)
-        .glassSurface()
+        .padding(.vertical, 8)
+    }
+
+    private func sourceSub(_ s: MobileSource?) -> String? {
+        guard let s else { return nil }
+        var parts: [String] = []
+        // machine name now in subtitle (was primary before)
+        if let m = s.machine { parts.append(m) }
+        if let p = s.platform { parts.append(p) }
+        if let t = s.lastPushedAt ?? s.lastObservedAt { parts.append(shortTime(t)) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
-struct RefreshActionButton: View {
-    let isRefreshing: Bool
+// MARK: - Model Usage Card
+
+struct ModelUsageCard: View {
+    let rows: [MobileBreakdownRow]
+    private var total: Int { rows.reduce(0) { $0 + $1.tokens } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("模型用量")
+                .font(.system(size: 11, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.4)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+
+            VStack(spacing: 0) {
+                ForEach(Array(rows.prefix(5).enumerated()), id: \.element.id) { index, row in
+                    if index > 0 { Divider().padding(.leading, 40) }
+                    ModelUsageRow(row: row, total: total)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface()
+    }
+}
+
+struct ModelUsageRow: View {
+    let row: MobileBreakdownRow
+    let total: Int
+
+    private var pct: Int {
+        total > 0 ? Int((Double(row.tokens) / Double(total) * 100).rounded()) : 0
+    }
+    private var isAnthropic: Bool { row.label.lowercased().contains("claude") }
+    private var iconBg: Color {
+        isAnthropic ? BrandColor.claudeOrange.opacity(0.14) : Color.blue.opacity(0.12)
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(iconBg)
+                    .frame(width: 30, height: 30)
+                BrandIcon(kind: BrandIcon.kind(for: row.label), size: 16)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(row.label)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(isAnthropic ? "Anthropic" : "OpenAI")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(TokenFormat.compact(row.tokens))
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                Text("\(pct)%")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.vertical, 9)
+    }
+}
+
+// MARK: - Floating Period Tab Bar
+
+struct PeriodTabBar: View {
+    @Binding var selection: PeriodTab
+    let onSelect: (PeriodTab) -> Void
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(PeriodTab.allCases, id: \.self) { tab in
+                FloatingTabButton(tab: tab, isSelected: selection == tab) {
+                    guard selection != tab else { return }
+                    selection = tab
+                    onSelect(tab)
+                }
+            }
+        }
+        .padding(5)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.18), radius: 20, x: 0, y: 8)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 28)
+    }
+}
+
+struct FloatingTabButton: View {
+    let tab: PeriodTab
+    let isSelected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Group {
-                if isRefreshing {
-                    ProgressView()
-                        .controlSize(.small)
-                } else {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 16, weight: .semibold))
+            HStack(spacing: isSelected ? 5 : 0) {
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 22)
+                if isSelected {
+                    Text(tab.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .leading).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        ))
                 }
             }
-            .frame(width: 36, height: 36)
-            .glassSurface()
+            .padding(.horizontal, isSelected ? 16 : 12)
+            .padding(.vertical, 12)
+            .frame(minHeight: 44)
+            .background {
+                if isSelected {
+                    Capsule().fill(Color.blue)
+                }
+            }
+            .foregroundStyle(isSelected ? .white : Color.primary.opacity(0.55))
         }
         .buttonStyle(.plain)
-        .disabled(isRefreshing)
-        .accessibilityLabel("刷新数据")
+        .animation(.spring(duration: 0.28, bounce: 0.2), value: isSelected)
     }
 }
 
-struct PeriodSelector: View {
-    @Binding var selectedPeriodID: String
-    let refreshingPeriodID: String?
-    let onPeriodSelected: (String) -> Void
-
-    private let periods: [(id: String, title: String)] = [
-        ("today", "今天"),
-        ("week", "周"),
-        ("month", "月"),
-        ("all", "全部")
-    ]
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(periods, id: \.id) { period in
-                let isActive = selectedPeriodID == period.id
-                let isRefreshing = refreshingPeriodID == period.id
-                Button {
-                    guard selectedPeriodID != period.id else {
-                        return
-                    }
-                    selectedPeriodID = period.id
-                    onPeriodSelected(period.id)
-                } label: {
-                    HStack(spacing: 5) {
-                        Text(period.title)
-                        if isRefreshing {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                    }
-                        .font(.system(size: 14, weight: isActive ? .semibold : .regular))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                        .foregroundStyle(isActive ? Color.primary : Color.secondary)
-                        .background {
-                            if isActive {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(.background)
-                                    .shadow(color: .black.opacity(0.08), radius: 8, y: 2)
-                            }
-                        }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .glassSurface()
-    }
-}
-
-struct LimitReminderRow: View {
-    @Binding var isOn: Bool
-
-    var body: some View {
-        Toggle(isOn: $isOn) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("重置提醒")
-                    .font(.subheadline.weight(.semibold))
-                Text(isOn ? "已开启；窗口 reset 时通知" : "窗口 reset 时通知")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .toggleStyle(.switch)
-        .padding(.vertical, 8)
-    }
-}
-
-struct UnifiedDetailLink: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button("查看明细", action: action)
-            .font(.footnote.weight(.semibold))
-            .buttonStyle(.plain)
-            .foregroundStyle(.blue)
-    }
-}
-
-struct HealthCompactRow: View {
-    let text: String
-    let action: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-            Text(text)
-                .font(.system(size: 15, weight: .semibold))
-            Spacer()
-            UnifiedDetailLink(action: action)
-        }
-        .padding(12)
-        .glassSurface()
-    }
-}
-
-struct SummaryStrip: View {
-    let eyebrow: String
-    let title: String
-    let subtitle: String
-    let value: String
-    let label: String
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(eyebrow)
-                    .font(.caption.monospaced())
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                Text(title)
-                    .font(.title3.weight(.bold))
-                Text(subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(spacing: 2) {
-                Text(value)
-                    .font(.title3.monospacedDigit().weight(.semibold))
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(minWidth: 72)
-            .padding(.vertical, 10)
-            .glassSurface()
-        }
-        .padding(12)
-        .glassSurface()
-    }
-}
-
-struct SectionHeader<Trailing: View>: View {
-    let title: String
-    @ViewBuilder let trailing: Trailing
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.system(size: 17, weight: .bold))
-            Spacer()
-            trailing
-        }
-    }
-}
-
-struct MaterialCard<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .glassSurface()
-    }
-}
-
-struct SourceCard: View {
-    let source: MobileSource
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                HStack(spacing: 7) {
-                    BrandIcon(kind: BrandIcon.kind(for: sourceBrandHint), size: 18)
-                    Text(source.displayName ?? source.machine ?? source.sourceID)
-                        .font(.subheadline.weight(.semibold))
-                }
-                Spacer()
-                Text(statusLabel(source.status))
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.13), in: Capsule())
-                    .foregroundStyle(statusColor)
-            }
-            Text(sourceMeta)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let error = source.errorMessage, !error.isEmpty {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private var sourceBrandHint: String {
-        [
-            source.sourceID,
-            source.displayName,
-            source.machine,
-            source.platform
-        ]
-        .compactMap { $0 }
-        .joined(separator: " ")
-    }
-
-    private var statusColor: Color {
-        switch source.status {
-        case "ok":
-            return .green
-        case "stale":
-            return .orange
-        default:
-            return .red
-        }
-    }
-
-    private var sourceMeta: String {
-        [
-            source.sourceID,
-            source.platform,
-            source.osUser.map { "user \($0)" },
-            source.lastObservedAt.map { "观测 \(shortTime($0))" },
-            source.lastPushedAt.map { "上报 \(shortTime($0))" }
-        ]
-        .compactMap { $0 }
-        .joined(separator: " · ")
-    }
-}
-
-struct BreakdownSegmentedControl: View {
-    @Binding var selection: BreakdownDimension
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(BreakdownDimension.allCases, id: \.self) { dimension in
-                    let isSelected = selection == dimension
-                    Button {
-                        selection = dimension
-                    } label: {
-                        Text(dimension.label)
-                            .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 8)
-                            .foregroundStyle(isSelected ? Color.primary : Color.secondary)
-                            .background(segmentBackground(isSelected: isSelected), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(4)
-        }
-        .glassSurface()
-    }
-}
-
-struct BreakdownDrilldownView: View {
-    let row: MobileBreakdownRow
-    let dimension: BreakdownDimension
-    let sections: [BreakdownDrilldownSection]
-    let onBack: () -> Void
-
-    var body: some View {
-        SummaryStrip(
-            eyebrow: dimension.label,
-            title: row.label,
-            subtitle: detailMeta,
-            value: TokenFormat.compact(row.tokens),
-            label: "Tokens"
-        )
-
-        Button {
-            onBack()
-        } label: {
-            Label("返回明细", systemImage: "chevron.left")
-                .font(.footnote.weight(.semibold))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(.blue)
-        .frame(maxWidth: .infinity, alignment: .leading)
-
-        ForEach(sections) { section in
-            DrilldownSectionCard(section: section)
-        }
-    }
-
-    private var detailMeta: String {
-        let sourceCount = row.sourceIDs?.count ?? 0
-        if sourceCount > 0 {
-            return "\(sourceCount) 个来源 · 当前周期下钻"
-        }
-        return "当前周期下钻"
-    }
-}
-
-struct DrilldownSectionCard: View {
-    let section: BreakdownDrilldownSection
-
-    var body: some View {
-        MaterialCard {
-            SectionHeader(title: section.title) {
-                Text("\(section.rows.count)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            VStack(spacing: 12) {
-                ForEach(section.rows) { row in
-                    BarRow(label: row.label, value: row.tokens, maxValue: maxValue)
-                }
-            }
-        }
-    }
-
-    private var maxValue: Int {
-        max(section.rows.map(\.tokens).max() ?? 1, 1)
-    }
-}
-
-struct BarRow: View {
-    let label: String
-    let value: Int
-    let maxValue: Int
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(label)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                Spacer()
-                Text(TokenFormat.compact(value))
-                    .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.secondary.opacity(0.14))
-                    Capsule()
-                        .fill(LinearGradient(colors: [.blue, .mint], startPoint: .leading, endPoint: .trailing))
-                        .frame(width: max(8, proxy.size.width * CGFloat(value) / CGFloat(max(maxValue, 1))))
-                }
-            }
-            .frame(height: 8)
-        }
-    }
-}
-
-struct LimitWindowCard: View {
-    let window: MobileLimitWindow
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            BrandIcon(kind: BrandIcon.kind(for: window.provider), size: 24)
-                .frame(width: 34, height: 34)
-                .glassSurface(cornerRadius: 8)
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("\(window.provider.capitalized) · \(window.window)")
-                        .font(.subheadline.weight(.semibold))
-                    Spacer()
-                    Text(statusLabel(window.isOfficialObserved ? "observed" : window.confidence))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(window.isOfficialObserved ? Color.green : Color.orange)
-                }
-                if window.isOfficialObserved {
-                    Gauge(value: window.remainingPercent, in: 0...100) {
-                        EmptyView()
-                    } currentValueLabel: {
-                        Text("\(Int(window.remainingPercent.rounded()))%")
-                            .font(.caption.monospacedDigit().weight(.semibold))
-                    }
-                    .gaugeStyle(.accessoryLinearCapacity)
-                    .tint(limitTint)
-                    ProgressView(value: window.remainingPercent, total: 100)
-                        .tint(limitTint)
-                    Text("剩余 \(Int(window.remainingPercent.rounded()))% · 重置 \(window.resetAt ?? "--") · \(window.sourceType ?? "--")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(window.status)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(12)
-        .glassSurface()
-    }
-
-    private var limitTint: Color {
-        if window.remainingPercent < 35 {
-            return .red
-        }
-        if window.remainingPercent < 60 {
-            return .orange
-        }
-        return .green
-    }
-}
+// MARK: - Shared: Brand Icons
 
 enum BrandKind: Equatable {
     case claudeCode
     case codex
+    case faviconURL(String)
     case generic
 }
 
@@ -1132,14 +794,13 @@ struct BrandIcon: View {
     let kind: BrandKind
     let size: CGFloat
 
-    static func kind(for rawValue: String) -> BrandKind {
-        let lowercased = rawValue.lowercased()
-        if lowercased.contains("claude") {
-            return .claudeCode
-        }
-        if lowercased.contains("codex") || lowercased.contains("openai") || lowercased.contains("gpt") {
-            return .codex
-        }
+    static func kind(for raw: String) -> BrandKind {
+        let lc = raw.lowercased()
+        if lc.contains("claude") { return .claudeCode }
+        if lc.contains("codex") || lc.contains("openai") || lc.contains("gpt") { return .codex }
+        if lc.contains("deepseek") { return .faviconURL("deepseek.com") }
+        if lc.contains("gemini") || lc.contains("google") { return .faviconURL("gemini.google.com") }
+        if lc.contains("mistral") { return .faviconURL("mistral.ai") }
         return .generic
     }
 
@@ -1147,216 +808,121 @@ struct BrandIcon: View {
         Group {
             switch kind {
             case .claudeCode:
-                ClaudeCodeLogo()
-                    .fill(Color(red: 0.85, green: 0.47, blue: 0.34))
+                ClaudeCodeLogo().fill(BrandColor.claudeOrange)
+                    .frame(width: size, height: size)
             case .codex:
                 CodexLogo()
+                    .frame(width: size, height: size)
+            case .faviconURL(let domain):
+                let url = URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=128")
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFit()
+                            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+                    default:
+                        Image(systemName: "globe")
+                            .font(.system(size: size * 0.72))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: size, height: size)
             case .generic:
                 Image(systemName: "terminal")
                     .font(.system(size: size * 0.72, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .frame(width: size, height: size)
             }
         }
-        .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
 }
 
 struct ClaudeCodeLogo: Shape {
     func path(in rect: CGRect) -> Path {
-        var path = Path()
-        func x(_ value: CGFloat) -> CGFloat { rect.minX + value / 24 * rect.width }
-        func y(_ value: CGFloat) -> CGFloat { rect.minY + value / 24 * rect.height }
-        path.move(to: CGPoint(x: x(20.998), y: y(10.949)))
-        path.addLine(to: CGPoint(x: x(24), y: y(10.949)))
-        path.addLine(to: CGPoint(x: x(24), y: y(14.051)))
-        path.addLine(to: CGPoint(x: x(21), y: y(14.051)))
-        path.addLine(to: CGPoint(x: x(21), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(19.513), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(19.513), y: y(20)))
-        path.addLine(to: CGPoint(x: x(18), y: y(20)))
-        path.addLine(to: CGPoint(x: x(18), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(16.513), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(16.513), y: y(20)))
-        path.addLine(to: CGPoint(x: x(15), y: y(20)))
-        path.addLine(to: CGPoint(x: x(15), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(9), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(9), y: y(20)))
-        path.addLine(to: CGPoint(x: x(7.488), y: y(20)))
-        path.addLine(to: CGPoint(x: x(7.488), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(6), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(6), y: y(20)))
-        path.addLine(to: CGPoint(x: x(4.487), y: y(20)))
-        path.addLine(to: CGPoint(x: x(4.487), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(3), y: y(17.079)))
-        path.addLine(to: CGPoint(x: x(3), y: y(14.05)))
-        path.addLine(to: CGPoint(x: x(0), y: y(14.05)))
-        path.addLine(to: CGPoint(x: x(0), y: y(10.95)))
-        path.addLine(to: CGPoint(x: x(3), y: y(10.95)))
-        path.addLine(to: CGPoint(x: x(3), y: y(5)))
-        path.addLine(to: CGPoint(x: x(20.998), y: y(5)))
-        path.closeSubpath()
-        path.move(to: CGPoint(x: x(6), y: y(10.949)))
-        path.addLine(to: CGPoint(x: x(7.488), y: y(10.949)))
-        path.addLine(to: CGPoint(x: x(7.488), y: y(8.102)))
-        path.addLine(to: CGPoint(x: x(6), y: y(8.102)))
-        path.closeSubpath()
-        path.move(to: CGPoint(x: x(16.51), y: y(10.949)))
-        path.addLine(to: CGPoint(x: x(18), y: y(10.949)))
-        path.addLine(to: CGPoint(x: x(18), y: y(8.102)))
-        path.addLine(to: CGPoint(x: x(16.51), y: y(8.102)))
-        path.closeSubpath()
-        return path
+        var p = Path()
+        func x(_ v: CGFloat) -> CGFloat { rect.minX + v / 24 * rect.width }
+        func y(_ v: CGFloat) -> CGFloat { rect.minY + v / 24 * rect.height }
+        p.move(to: CGPoint(x: x(20.998), y: y(10.949))); p.addLine(to: CGPoint(x: x(24), y: y(10.949)))
+        p.addLine(to: CGPoint(x: x(24), y: y(14.051))); p.addLine(to: CGPoint(x: x(21), y: y(14.051)))
+        p.addLine(to: CGPoint(x: x(21), y: y(17.079))); p.addLine(to: CGPoint(x: x(19.513), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(19.513), y: y(20))); p.addLine(to: CGPoint(x: x(18), y: y(20)))
+        p.addLine(to: CGPoint(x: x(18), y: y(17.079))); p.addLine(to: CGPoint(x: x(16.513), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(16.513), y: y(20))); p.addLine(to: CGPoint(x: x(15), y: y(20)))
+        p.addLine(to: CGPoint(x: x(15), y: y(17.079))); p.addLine(to: CGPoint(x: x(9), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(9), y: y(20))); p.addLine(to: CGPoint(x: x(7.488), y: y(20)))
+        p.addLine(to: CGPoint(x: x(7.488), y: y(17.079))); p.addLine(to: CGPoint(x: x(6), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(6), y: y(20))); p.addLine(to: CGPoint(x: x(4.487), y: y(20)))
+        p.addLine(to: CGPoint(x: x(4.487), y: y(17.079))); p.addLine(to: CGPoint(x: x(3), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(3), y: y(14.05))); p.addLine(to: CGPoint(x: x(0), y: y(14.05)))
+        p.addLine(to: CGPoint(x: x(0), y: y(10.95))); p.addLine(to: CGPoint(x: x(3), y: y(10.95)))
+        p.addLine(to: CGPoint(x: x(3), y: y(5))); p.addLine(to: CGPoint(x: x(20.998), y: y(5)))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: x(6), y: y(10.949))); p.addLine(to: CGPoint(x: x(7.488), y: y(10.949)))
+        p.addLine(to: CGPoint(x: x(7.488), y: y(8.102))); p.addLine(to: CGPoint(x: x(6), y: y(8.102)))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: x(16.51), y: y(10.949))); p.addLine(to: CGPoint(x: x(18), y: y(10.949)))
+        p.addLine(to: CGPoint(x: x(18), y: y(8.102))); p.addLine(to: CGPoint(x: x(16.51), y: y(8.102)))
+        p.closeSubpath()
+        return p
     }
 }
 
 struct CodexLogo: Shape {
     func path(in rect: CGRect) -> Path {
-        var path = Path()
-        func x(_ value: CGFloat) -> CGFloat { rect.minX + value / 24 * rect.width }
-        func y(_ value: CGFloat) -> CGFloat { rect.minY + value / 24 * rect.height }
-
-        path.move(to: CGPoint(x: x(9.064), y: y(3.344)))
-        path.addCurve(to: CGPoint(x: x(11.349), y: y(3.032)), control1: CGPoint(x: x(9.754), y: y(3.02)), control2: CGPoint(x: x(10.516), y: y(2.916)))
-        path.addCurve(to: CGPoint(x: x(14.022), y: y(4.307)), control1: CGPoint(x: x(12.349), y: y(3.147)), control2: CGPoint(x: x(13.24), y: y(3.572)))
-        path.addCurve(to: CGPoint(x: x(14.102), y: y(4.328)), control1: CGPoint(x: x(14.032), y: y(4.317)), control2: CGPoint(x: x(14.076), y: y(4.333)))
-        path.addCurve(to: CGPoint(x: x(17.148), y: y(4.603)), control1: CGPoint(x: x(15.06), y: y(3.995)), control2: CGPoint(x: x(16.075), y: y(4.087)))
-        path.addLine(to: CGPoint(x: x(17.311), y: y(4.682)))
-        path.addCurve(to: CGPoint(x: x(19.499), y: y(7.081)), control1: CGPoint(x: x(18.321), y: y(5.177)), control2: CGPoint(x: x(19.05), y: y(5.977)))
-        path.addCurve(to: CGPoint(x: x(19.68), y: y(9.899)), control1: CGPoint(x: x(19.84), y: y(7.914)), control2: CGPoint(x: x(19.9), y: y(8.854)))
-        path.addCurve(to: CGPoint(x: x(19.71), y: y(10.014)), control1: CGPoint(x: x(19.672), y: y(9.94)), control2: CGPoint(x: x(19.683), y: y(9.984)))
-        path.addCurve(to: CGPoint(x: x(20.893), y: y(12.184)), control1: CGPoint(x: x(20.304), y: y(10.621)), control2: CGPoint(x: x(20.698), y: y(11.344)))
-        path.addCurve(to: CGPoint(x: x(20.006), y: y(16.038)), control1: CGPoint(x: x(21.182), y: y(13.609)), control2: CGPoint(x: x(20.886), y: y(14.894)))
-        path.addLine(to: CGPoint(x: x(19.87), y: y(16.204)))
-        path.addCurve(to: CGPoint(x: x(17.669), y: y(17.592)), control1: CGPoint(x: x(19.296), y: y(16.865)), control2: CGPoint(x: x(18.562), y: y(17.328)))
-        path.addCurve(to: CGPoint(x: x(17.588), y: y(17.668)), control1: CGPoint(x: x(17.629), y: y(17.604)), control2: CGPoint(x: x(17.6), y: y(17.631)))
-        path.addCurve(to: CGPoint(x: x(16.848), y: y(19.158)), control1: CGPoint(x: x(17.397), y: y(18.219)), control2: CGPoint(x: x(17.205), y: y(18.687)))
-        path.addCurve(to: CGPoint(x: x(13.137), y: y(20.996)), control1: CGPoint(x: x(15.948), y: y(20.345)), control2: CGPoint(x: x(14.626), y: y(21.004)))
-        path.addCurve(to: CGPoint(x: x(9.98), y: y(19.694)), control1: CGPoint(x: x(11.95), y: y(20.99)), control2: CGPoint(x: x(10.898), y: y(20.556)))
-        path.addCurve(to: CGPoint(x: x(9.875), y: y(19.67)), control1: CGPoint(x: x(9.954), y: y(19.67)), control2: CGPoint(x: x(9.914), y: y(19.661)))
-        path.addCurve(to: CGPoint(x: x(8.671), y: y(19.808)), control1: CGPoint(x: x(9.487), y: y(19.795)), control2: CGPoint(x: x(9.095), y: y(19.813)))
-        path.addCurve(to: CGPoint(x: x(6.726), y: y(19.342)), control1: CGPoint(x: x(7.975), y: y(19.8)), control2: CGPoint(x: x(7.327), y: y(19.645)))
-        path.addCurve(to: CGPoint(x: x(4.702), y: y(17.39)), control1: CGPoint(x: x(5.983), y: y(18.965)), control2: CGPoint(x: x(5.307), y: y(18.314)))
-        path.addCurve(to: CGPoint(x: x(4.318), y: y(14.131)), control1: CGPoint(x: x(4.342), y: y(16.553)), control2: CGPoint(x: x(4.214), y: y(15.467)))
-        path.addCurve(to: CGPoint(x: x(4.297), y: y(14.027)), control1: CGPoint(x: x(4.327), y: y(14.09)), control2: CGPoint(x: x(4.318), y: y(14.049)))
-        path.addCurve(to: CGPoint(x: x(3.263), y: y(12.376)), control1: CGPoint(x: x(3.842), y: y(13.579)), control2: CGPoint(x: x(3.497), y: y(13.029)))
-        path.addCurve(to: CGPoint(x: x(3.153), y: y(9.584)), control1: CGPoint(x: x(3.126), y: y(11.994)), control2: CGPoint(x: x(3.063), y: y(10.647)))
-        path.addCurve(to: CGPoint(x: x(5.086), y: y(6.966)), control1: CGPoint(x: x(3.49), y: y(8.472)), control2: CGPoint(x: x(4.135), y: y(7.599)))
-        path.addCurve(to: CGPoint(x: x(6.333), y: y(6.409)), control1: CGPoint(x: x(5.298), y: y(6.825)), control2: CGPoint(x: x(5.963), y: y(6.516)))
-        path.addCurve(to: CGPoint(x: x(6.398), y: y(6.343)), control1: CGPoint(x: x(6.363), y: y(6.4)), control2: CGPoint(x: x(6.389), y: y(6.374)))
-        path.addCurve(to: CGPoint(x: x(7.227), y: y(4.728)), control1: CGPoint(x: x(6.575), y: y(5.738)), control2: CGPoint(x: x(6.851), y: y(5.199)))
-        path.addCurve(to: CGPoint(x: x(9.064), y: y(3.344)), control1: CGPoint(x: x(7.704), y: y(4.13)), control2: CGPoint(x: x(8.316), y: y(3.668)))
-        path.closeSubpath()
-
-        path.move(to: CGPoint(x: x(12.546), y: y(13.909)))
-        path.addCurve(to: CGPoint(x: x(12.546), y: y(15.181)), control1: CGPoint(x: x(12.193), y: y(13.909)), control2: CGPoint(x: x(11.91), y: y(14.193)))
-        path.addLine(to: CGPoint(x: x(16.182), y: y(15.181)))
-        path.addCurve(to: CGPoint(x: x(16.182), y: y(13.909)), control1: CGPoint(x: x(17.03), y: y(15.181)), control2: CGPoint(x: x(17.03), y: y(13.909)))
-        path.addLine(to: CGPoint(x: x(12.546), y: y(13.909)))
-        path.closeSubpath()
-
-        path.move(to: CGPoint(x: x(8.462), y: y(9.23)))
-        path.addCurve(to: CGPoint(x: x(7.356), y: y(9.861)), control1: CGPoint(x: x(8.112), y: y(8.612)), control2: CGPoint(x: x(7.007), y: y(9.241)))
-        path.addLine(to: CGPoint(x: x(8.628), y: y(12.085)))
-        path.addLine(to: CGPoint(x: x(7.362), y: y(14.221)))
-        path.addCurve(to: CGPoint(x: x(8.457), y: y(14.87)), control1: CGPoint(x: x(7.006), y: y(14.822)), control2: CGPoint(x: x(8.105), y: y(15.474)))
-        path.addLine(to: CGPoint(x: x(9.911), y: y(12.415)))
-        path.addCurve(to: CGPoint(x: x(9.916), y: y(11.775)), control1: CGPoint(x: x(10.025), y: y(12.222)), control2: CGPoint(x: x(10.027), y: y(11.968)))
-        path.addLine(to: CGPoint(x: x(8.462), y: y(9.23)))
-        path.closeSubpath()
-
-        return path
+        var p = Path()
+        func x(_ v: CGFloat) -> CGFloat { rect.minX + v / 24 * rect.width }
+        func y(_ v: CGFloat) -> CGFloat { rect.minY + v / 24 * rect.height }
+        p.move(to: CGPoint(x: x(9.064), y: y(3.344)))
+        p.addCurve(to: CGPoint(x: x(11.349), y: y(3.032)), control1: CGPoint(x: x(9.754), y: y(3.02)), control2: CGPoint(x: x(10.516), y: y(2.916)))
+        p.addCurve(to: CGPoint(x: x(14.022), y: y(4.307)), control1: CGPoint(x: x(12.349), y: y(3.147)), control2: CGPoint(x: x(13.24), y: y(3.572)))
+        p.addCurve(to: CGPoint(x: x(14.102), y: y(4.328)), control1: CGPoint(x: x(14.032), y: y(4.317)), control2: CGPoint(x: x(14.076), y: y(4.333)))
+        p.addCurve(to: CGPoint(x: x(17.148), y: y(4.603)), control1: CGPoint(x: x(15.06), y: y(3.995)), control2: CGPoint(x: x(16.075), y: y(4.087)))
+        p.addLine(to: CGPoint(x: x(17.311), y: y(4.682)))
+        p.addCurve(to: CGPoint(x: x(19.499), y: y(7.081)), control1: CGPoint(x: x(18.321), y: y(5.177)), control2: CGPoint(x: x(19.05), y: y(5.977)))
+        p.addCurve(to: CGPoint(x: x(19.68), y: y(9.899)), control1: CGPoint(x: x(19.84), y: y(7.914)), control2: CGPoint(x: x(19.9), y: y(8.854)))
+        p.addCurve(to: CGPoint(x: x(19.71), y: y(10.014)), control1: CGPoint(x: x(19.672), y: y(9.94)), control2: CGPoint(x: x(19.683), y: y(9.984)))
+        p.addCurve(to: CGPoint(x: x(20.893), y: y(12.184)), control1: CGPoint(x: x(20.304), y: y(10.621)), control2: CGPoint(x: x(20.698), y: y(11.344)))
+        p.addCurve(to: CGPoint(x: x(20.006), y: y(16.038)), control1: CGPoint(x: x(21.182), y: y(13.609)), control2: CGPoint(x: x(20.886), y: y(14.894)))
+        p.addLine(to: CGPoint(x: x(19.87), y: y(16.204)))
+        p.addCurve(to: CGPoint(x: x(17.669), y: y(17.592)), control1: CGPoint(x: x(19.296), y: y(16.865)), control2: CGPoint(x: x(18.562), y: y(17.328)))
+        p.addCurve(to: CGPoint(x: x(17.588), y: y(17.668)), control1: CGPoint(x: x(17.629), y: y(17.604)), control2: CGPoint(x: x(17.6), y: y(17.631)))
+        p.addCurve(to: CGPoint(x: x(16.848), y: y(19.158)), control1: CGPoint(x: x(17.397), y: y(18.219)), control2: CGPoint(x: x(17.205), y: y(18.687)))
+        p.addCurve(to: CGPoint(x: x(13.137), y: y(20.996)), control1: CGPoint(x: x(15.948), y: y(20.345)), control2: CGPoint(x: x(14.626), y: y(21.004)))
+        p.addCurve(to: CGPoint(x: x(9.98), y: y(19.694)), control1: CGPoint(x: x(11.95), y: y(20.99)), control2: CGPoint(x: x(10.898), y: y(20.556)))
+        p.addCurve(to: CGPoint(x: x(9.875), y: y(19.67)), control1: CGPoint(x: x(9.954), y: y(19.67)), control2: CGPoint(x: x(9.914), y: y(19.661)))
+        p.addCurve(to: CGPoint(x: x(8.671), y: y(19.808)), control1: CGPoint(x: x(9.487), y: y(19.795)), control2: CGPoint(x: x(9.095), y: y(19.813)))
+        p.addCurve(to: CGPoint(x: x(6.726), y: y(19.342)), control1: CGPoint(x: x(7.975), y: y(19.8)), control2: CGPoint(x: x(7.327), y: y(19.645)))
+        p.addCurve(to: CGPoint(x: x(4.702), y: y(17.39)), control1: CGPoint(x: x(5.983), y: y(18.965)), control2: CGPoint(x: x(5.307), y: y(18.314)))
+        p.addCurve(to: CGPoint(x: x(4.318), y: y(14.131)), control1: CGPoint(x: x(4.342), y: y(16.553)), control2: CGPoint(x: x(4.214), y: y(15.467)))
+        p.addCurve(to: CGPoint(x: x(4.297), y: y(14.027)), control1: CGPoint(x: x(4.327), y: y(14.09)), control2: CGPoint(x: x(4.318), y: y(14.049)))
+        p.addCurve(to: CGPoint(x: x(3.263), y: y(12.376)), control1: CGPoint(x: x(3.842), y: y(13.579)), control2: CGPoint(x: x(3.497), y: y(13.029)))
+        p.addCurve(to: CGPoint(x: x(3.153), y: y(9.584)), control1: CGPoint(x: x(3.126), y: y(11.994)), control2: CGPoint(x: x(3.063), y: y(10.647)))
+        p.addCurve(to: CGPoint(x: x(5.086), y: y(6.966)), control1: CGPoint(x: x(3.49), y: y(8.472)), control2: CGPoint(x: x(4.135), y: y(7.599)))
+        p.addCurve(to: CGPoint(x: x(6.333), y: y(6.409)), control1: CGPoint(x: x(5.298), y: y(6.825)), control2: CGPoint(x: x(5.963), y: y(6.516)))
+        p.addCurve(to: CGPoint(x: x(6.398), y: y(6.343)), control1: CGPoint(x: x(6.363), y: y(6.4)), control2: CGPoint(x: x(6.389), y: y(6.374)))
+        p.addCurve(to: CGPoint(x: x(7.227), y: y(4.728)), control1: CGPoint(x: x(6.575), y: y(5.738)), control2: CGPoint(x: x(6.851), y: y(5.199)))
+        p.addCurve(to: CGPoint(x: x(9.064), y: y(3.344)), control1: CGPoint(x: x(7.704), y: y(4.13)), control2: CGPoint(x: x(8.316), y: y(3.668)))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: x(12.546), y: y(13.909)))
+        p.addCurve(to: CGPoint(x: x(12.546), y: y(15.181)), control1: CGPoint(x: x(12.193), y: y(13.909)), control2: CGPoint(x: x(11.91), y: y(14.193)))
+        p.addLine(to: CGPoint(x: x(16.182), y: y(15.181)))
+        p.addCurve(to: CGPoint(x: x(16.182), y: y(13.909)), control1: CGPoint(x: x(17.03), y: y(15.181)), control2: CGPoint(x: x(17.03), y: y(13.909)))
+        p.addLine(to: CGPoint(x: x(12.546), y: y(13.909))); p.closeSubpath()
+        p.move(to: CGPoint(x: x(8.462), y: y(9.23)))
+        p.addCurve(to: CGPoint(x: x(7.356), y: y(9.861)), control1: CGPoint(x: x(8.112), y: y(8.612)), control2: CGPoint(x: x(7.007), y: y(9.241)))
+        p.addLine(to: CGPoint(x: x(8.628), y: y(12.085))); p.addLine(to: CGPoint(x: x(7.362), y: y(14.221)))
+        p.addCurve(to: CGPoint(x: x(8.457), y: y(14.87)), control1: CGPoint(x: x(7.006), y: y(14.822)), control2: CGPoint(x: x(8.105), y: y(15.474)))
+        p.addLine(to: CGPoint(x: x(9.911), y: y(12.415)))
+        p.addCurve(to: CGPoint(x: x(9.916), y: y(11.775)), control1: CGPoint(x: x(10.025), y: y(12.222)), control2: CGPoint(x: x(10.027), y: y(11.968)))
+        p.addLine(to: CGPoint(x: x(8.462), y: y(9.23))); p.closeSubpath()
+        return p
     }
 }
 
-struct CustomGlassTabBar: View {
-    @Binding var selection: AppTab
+// MARK: - Shared: Colors & Surface
 
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(AppTab.allCases, id: \.self) { tab in
-                LiquidGlassTabButton(
-                    tab: tab,
-                    isSelected: selection == tab
-                ) {
-                    selection = tab
-                }
-            }
-        }
-        .padding(6)
-        .glassSurface(cornerRadius: 8)
-    }
-}
-
-struct LiquidGlassTabButton: View {
-    let tab: AppTab
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            VStack(spacing: 3) {
-                Image(systemName: tab.systemImage)
-                    .font(.system(size: 21, weight: .semibold))
-                    .frame(width: 42, height: 30)
-                    .background {
-                        if isSelected {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .stroke(.white.opacity(0.55), lineWidth: 1)
-                                }
-                        }
-                    }
-                Text(tab.title)
-                    .font(.caption2.weight(.semibold))
-            }
-            .frame(maxWidth: .infinity)
-            .foregroundStyle(isSelected ? Color.blue : Color.secondary)
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-struct AppScrollView<Content: View>: View {
-    var topPadding: CGFloat = 0
-    var bottomPadding: CGFloat = 110
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 10) {
-                content
-            }
-            .padding(.top, topPadding)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 12)
-        }
-        .background {
-            ZStack(alignment: .top) {
-                Color.appGroupedBackground
-                    .ignoresSafeArea()
-                LinearGradient(
-                    colors: [Color.blue.opacity(0.14), Color.mint.opacity(0.08), .clear],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .frame(height: 220)
-                .ignoresSafeArea()
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: bottomPadding)
-        }
-    }
-}
-
-private func segmentBackground(isSelected: Bool) -> Color {
-    isSelected ? Color.appSecondaryGroupedBackground : Color.clear
-}
-
-private extension Color {
+extension Color {
     static var appGroupedBackground: Color {
         #if canImport(UIKit)
         Color(UIColor.systemGroupedBackground)
@@ -1367,114 +933,175 @@ private extension Color {
         #endif
     }
 
-    static var appSecondaryGroupedBackground: Color {
+    static var cardBackground: Color {
         #if canImport(UIKit)
         Color(UIColor.secondarySystemGroupedBackground)
         #elseif canImport(AppKit)
         Color(NSColor.controlBackgroundColor)
         #else
-        Color.gray.opacity(0.18)
+        Color.white
         #endif
     }
 }
 
 private extension View {
-    func glassSurface(cornerRadius: CGFloat = 8) -> some View {
-        modifier(GlassSurface(cornerRadius: cornerRadius))
+    func cardSurface() -> some View {
+        self.background(Color.cardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
-struct GlassSurface: ViewModifier {
-    let cornerRadius: CGFloat
+// MARK: - Shared: Helpers
 
-    func body(content: Content) -> some View {
-        content
-            .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(.ultraThinMaterial)
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.46),
-                                    .white.opacity(0.10),
-                                    .white.opacity(0.30)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(.white.opacity(0.46), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
+func shortTime(_ value: String) -> String {
+    guard value.count >= 16 else { return value }
+    let start = value.index(value.startIndex, offsetBy: 11)
+    let end   = value.index(value.startIndex, offsetBy: 16)
+    return String(value[start..<end])
+}
+
+func statusLabel(_ status: String) -> String {
+    switch status {
+    case "ok":       return "正常"
+    case "stale":    return "过期"
+    case "observed": return "可信"
+    case "missing":  return "缺失"
+    default:         return status
     }
 }
+
+// MARK: - Breakdown Dimension (used by MobileViewModel)
 
 enum BreakdownDimension: CaseIterable {
     static let allCases: [BreakdownDimension] = [.date, .machine, .account, .model, .agent]
-
-    case machine
-    case account
-    case agent
-    case model
-    case date
+    case machine, account, agent, model, date
 
     var label: String {
         switch self {
-        case .machine:
-            return "Machine"
-        case .account:
-            return "OS User"
-        case .agent:
-            return "Agent"
-        case .model:
-            return "Model"
-        case .date:
-            return "Date"
+        case .machine: return "Machine"
+        case .account: return "OS User"
+        case .agent:   return "Agent"
+        case .model:   return "Model"
+        case .date:    return "Date"
         }
     }
 
     var title: String {
         switch self {
-        case .machine:
-            return "按机器"
-        case .account:
-            return "按系统账户"
-        case .agent:
-            return "按 Agent"
-        case .model:
-            return "按模型"
-        case .date:
-            return "按日期"
+        case .machine: return "按机器"
+        case .account: return "按系统账户"
+        case .agent:   return "按 Agent"
+        case .model:   return "按模型"
+        case .date:    return "按日期"
         }
     }
 }
 
-func statusLabel(_ status: String) -> String {
-    switch status {
-    case "ok":
-        return "正常"
-    case "stale":
-        return "过期"
-    case "observed":
-        return "可信"
-    case "missing":
-        return "缺失"
-    default:
-        return status
+// MARK: - Settings Sheet (used in AIUsageMobileApp.swift)
+
+public struct MobileServerSettingsView: View {
+    let tokenStore: MobileTokenStore
+    let period: String
+    let onSaved: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var baseURLString: String
+    @State private var token: String
+    @State private var status: SettingsStatus?
+    @State private var isTesting = false
+
+    public init(tokenStore: MobileTokenStore, period: String, onSaved: @escaping () -> Void) {
+        self.tokenStore = tokenStore
+        self.period = period
+        self.onSaved = onSaved
+        let form = MobileSummaryRuntimeConfig.settingsForm(tokenStore: tokenStore)
+        self._baseURLString = State(initialValue: form.baseURLString)
+        self._token = State(initialValue: form.token)
+    }
+
+    public var body: some View {
+        NavigationStack {
+            Form {
+                Section("服务") {
+                    TextField("Server URL", text: $baseURLString)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField("Token", text: $token)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+                Section {
+                    Button { save() } label: { Label("保存", systemImage: "tray.and.arrow.down") }
+                    Button { Task { await testConnection() } } label: {
+                        isTesting
+                            ? Label("测试中", systemImage: "arrow.triangle.2.circlepath")
+                            : Label("测试连接", systemImage: "network")
+                    }
+                    .disabled(isTesting)
+                }
+                if let status {
+                    Section {
+                        Label(status.message, systemImage: status.systemImage).foregroundStyle(status.color)
+                    }
+                }
+            }
+            .navigationTitle("服务设置")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } }
+            }
+        }
+    }
+
+    private func save() {
+        do {
+            _ = try saveCurrentSettings()
+            status = .success("已保存，正在刷新数据")
+            onSaved()
+        } catch MobileRuntimeConfigurationError.invalidBaseURL {
+            status = .failure("服务地址格式不正确")
+        } catch MobileRuntimeConfigurationError.missingToken {
+            status = .failure("请填写 token")
+        } catch MobileRuntimeConfigurationError.nonProductionServer {
+            status = .failure("当前服务地址不受信任。请使用 HTTPS 域名。")
+        } catch {
+            status = .failure("保存失败，请重试")
+        }
+    }
+
+    private func testConnection() async {
+        isTesting = true
+        defer { isTesting = false }
+        do {
+            let config = try saveCurrentSettings()
+            _ = try await MobileSummaryAPIClient(config: config).load()
+            status = .success("连接成功")
+            onSaved()
+        } catch MobileRuntimeConfigurationError.invalidBaseURL {
+            status = .failure("服务地址格式不正确")
+        } catch MobileRuntimeConfigurationError.missingToken {
+            status = .failure("请填写 token")
+        } catch MobileRuntimeConfigurationError.nonProductionServer {
+            status = .failure("当前服务地址不受信任。请使用 HTTPS 域名。")
+        } catch {
+            status = .failure("连接失败，请检查服务地址或 token")
+        }
+    }
+
+    private func saveCurrentSettings() throws -> MobileSummaryAPIConfig {
+        try MobileSummaryRuntimeConfig.saveSettings(
+            baseURLString: baseURLString,
+            token: token,
+            period: period.isEmpty ? MobileSummaryRuntimeConfig.initialPeriod() : period,
+            tokenStore: tokenStore
+        )
     }
 }
 
-func shortTime(_ value: String) -> String {
-    if value.count >= 16 {
-        let start = value.index(value.startIndex, offsetBy: 11)
-        let end = value.index(value.startIndex, offsetBy: 16)
-        return String(value[start..<end])
-    }
-    return value
+private struct SettingsStatus: Equatable {
+    let message: String
+    let isSuccess: Bool
+    static func success(_ m: String) -> Self { .init(message: m, isSuccess: true) }
+    static func failure(_ m: String) -> Self { .init(message: m, isSuccess: false) }
+    var systemImage: String { isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill" }
+    var color: Color { isSuccess ? .green : .orange }
 }
