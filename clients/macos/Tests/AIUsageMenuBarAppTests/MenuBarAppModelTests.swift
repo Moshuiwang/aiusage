@@ -4,6 +4,20 @@ import XCTest
 
 @MainActor
 final class MenuBarAppModelTests: XCTestCase {
+    func testPopoverQuitActionTerminatesApplication() {
+        var didQuit = false
+        let controller = StatusBarController(
+            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            quitApplication: {
+                didQuit = true
+            }
+        )
+
+        controller.quitFromPopover()
+
+        XCTAssertTrue(didQuit)
+    }
+
     func testIgnoresStaleRefreshAfterPeriodSwitch() async throws {
         let loader = ControlledSummaryLoader()
         let config = MenuBarRuntimeConfig(

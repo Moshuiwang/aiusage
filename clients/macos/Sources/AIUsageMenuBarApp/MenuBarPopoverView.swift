@@ -4,7 +4,7 @@ import SwiftUI
 
 struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarAppModel
-    var onClose: (() -> Void)?
+    var onQuit: (() -> Void)?
     @State private var hoveredBar: MenuTrendBar?
     @State private var hoverLocation: CGPoint?
 
@@ -54,12 +54,12 @@ struct MenuBarPopoverView: View {
             .buttonStyle(.borderless)
             .focusable(false)
             .help("打开 Dashboard")
-            Button { onClose?() } label: {
-                Image(systemName: "xmark").frame(width: 26, height: 26)
+            Button { onQuit?() } label: {
+                Image(systemName: "power").frame(width: 26, height: 26)
             }
             .buttonStyle(.borderless)
             .focusable(false)
-            .help("关闭")
+            .help("退出 AI Usage")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)

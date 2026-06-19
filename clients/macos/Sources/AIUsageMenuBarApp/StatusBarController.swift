@@ -9,11 +9,13 @@ final class StatusBarController: NSObject {
     private let popover = NSPopover()
     private let model: MenuBarAppModel
     private let paths: RuntimePaths
+    private let quitApplication: () -> Void
     private var cancellables: Set<AnyCancellable> = []
     private var timer: Timer?
 
-    init(paths: RuntimePaths) {
+    init(paths: RuntimePaths, quitApplication: @escaping () -> Void = { NSApp.terminate(nil) }) {
         self.paths = paths
+        self.quitApplication = quitApplication
         let config = MenuBarRuntimeConfigLoader.load(paths: paths)
         let cached = SummaryCache.load(from: paths.cacheURL)
         self.model = MenuBarAppModel(paths: paths, config: config, cachedSummary: cached)
@@ -45,11 +47,15 @@ final class StatusBarController: NSObject {
         popover.behavior = .transient
         popover.contentSize = NSSize(width: 320, height: 520)
         popover.contentViewController = NSHostingController(
-            rootView: MenuBarPopoverView(model: model, onClose: { [weak self] in
-                self?.popover.performClose(nil)
+            rootView: MenuBarPopoverView(model: model, onQuit: { [weak self] in
+                self?.quitFromPopover()
             })
             .frame(width: 320, height: 520)
         )
+    }
+
+    func quitFromPopover() {
+        quitApplication()
     }
 
     private func bindStatusTitle() {
