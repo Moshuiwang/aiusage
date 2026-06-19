@@ -22,10 +22,28 @@ class ClaudeProviderError(RuntimeError):
 
 OAUTH_FALLBACK_ERRORS = {"missing_credentials", "unauthorized"}
 
+# Old format: "5h window: 68% used, resets at 2026-06-03T15:30:00+08:00, duration 300 minutes"
 _CLI_WINDOW_PATTERNS = (
     ("session", re.compile(r"5h\s+window:\s*([0-9]+(?:\.[0-9]+)?)%\s+used,\s*resets\s+at\s*([^,\s]+),\s*duration\s+([0-9]+)\s+minutes", re.IGNORECASE)),
     ("week", re.compile(r"weekly\s+window:\s*([0-9]+(?:\.[0-9]+)?)%\s+used,\s*resets\s+at\s*([^,\s]+),\s*duration\s+([0-9]+)\s+minutes", re.IGNORECASE)),
 )
+# New format: "Current session: 35% used · resets Jun 19 at 6:09pm (Asia/Shanghai)"
+_CLI_NEW_WINDOW_PATTERNS = (
+    ("session", 300, re.compile(
+        r"Current\s+session:\s*([0-9]+(?:\.[0-9]+)?)%\s+used\s*[·•]\s*resets\s+"
+        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+:[0-9]+\s*[ap]m)\s*\([^)]+\)",
+        re.IGNORECASE,
+    )),
+    ("week", 10080, re.compile(
+        r"Current\s+week(?:\s+\([^)]+\))?:\s*([0-9]+(?:\.[0-9]+)?)%\s+used\s*[·•]\s*resets\s+"
+        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+:[0-9]+\s*[ap]m)\s*\([^)]+\)",
+        re.IGNORECASE,
+    )),
+)
+_MONTH_ABBR = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
 _CLI_LIMIT_MESSAGE_PATTERN = re.compile(
     r"hit\s+your\s+session\s+limit.*?resets\s+([0-9]{1,2}:[0-9]{2})\s*([ap]m)\s*\(([^)]+)\)",
     re.IGNORECASE,
@@ -63,6 +81,12 @@ def parse_claude_cli_usage(text: str, *, observed_at: str) -> List[LimitWindow]:
     if limit_message_windows:
         return limit_message_windows
 
+    # Try new format first ("Current session: X% used · resets ...")
+    new_format_windows = _parse_cli_new_format(text, observed_at=observed_at)
+    if new_format_windows:
+        return new_format_windows
+
+    # Fall back to old format ("5h window: X% used, resets at ISO8601, duration N minutes")
     windows: List[LimitWindow] = []
     for window, pattern in _CLI_WINDOW_PATTERNS:
         match = pattern.search(text)
@@ -86,6 +110,72 @@ def parse_claude_cli_usage(text: str, *, observed_at: str) -> List[LimitWindow]:
             )
         )
     return windows
+
+
+def _parse_cli_new_format(text: str, *, observed_at: str) -> List[LimitWindow]:
+    """Parse new-style /usage output: 'Current session: X% used · resets Mon DD at H:MMam (TZ)'"""
+    windows: List[LimitWindow] = []
+    for window, duration_minutes, pattern in _CLI_NEW_WINDOW_PATTERNS:
+        match = pattern.search(text)
+        if match is None:
+            return []
+        used_percent = float(match.group(1))
+        reset_at = _parse_human_reset_at(match.group(2), observed_at=observed_at)
+        windows.append(
+            parse_limit_window(
+                {
+                    "provider": "claude",
+                    "window": window,
+                    "used_percent": used_percent,
+                    "remaining_percent": 100.0 - used_percent,
+                    "reset_at": reset_at,
+                    "window_duration_minutes": duration_minutes,
+                    "observed_at": observed_at,
+                    "source_type": "official_cli",
+                    "confidence": "observed",
+                    "status": "ok",
+                }
+            )
+        )
+    return windows
+
+
+def _parse_human_reset_at(time_text: str, *, observed_at: str) -> str:
+    """Convert 'Jun 19 at 6:09pm' to ISO8601, using observed_at for UTC offset and year context."""
+    try:
+        observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise LimitContractError("claude_cli_schema_invalid", "observed_at must be ISO 8601") from exc
+
+    m = re.match(
+        r"([A-Za-z]+)\s+([0-9]+)\s+at\s+([0-9]+):([0-9]+)\s*(am|pm)",
+        time_text.strip(),
+        re.IGNORECASE,
+    )
+    if not m:
+        raise LimitContractError("claude_cli_schema_invalid", f"Cannot parse reset time: {time_text!r}")
+
+    month = _MONTH_ABBR.get(m.group(1).lower()[:3])
+    if month is None:
+        raise LimitContractError("claude_cli_schema_invalid", f"Unknown month: {m.group(1)!r}")
+    day = int(m.group(2))
+    hour = int(m.group(3))
+    minute = int(m.group(4))
+    if m.group(5).lower() == "am":
+        hour = 0 if hour == 12 else hour
+    else:
+        hour = 12 if hour == 12 else hour + 12
+
+    utc_offset = observed.utcoffset()
+    tz = dt_timezone(utc_offset) if utc_offset is not None else dt_timezone.utc
+    year = observed.year
+    try:
+        candidate = datetime(year, month, day, hour, minute, 0, tzinfo=tz)
+    except ValueError as exc:
+        raise LimitContractError("claude_cli_schema_invalid", f"Invalid date: {time_text!r}") from exc
+    if candidate < observed - timedelta(hours=1):
+        candidate = datetime(year + 1, month, day, hour, minute, 0, tzinfo=tz)
+    return candidate.isoformat()
 
 
 def _parse_cli_limit_message(text: str, *, observed_at: str) -> List[LimitWindow]:

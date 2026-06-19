@@ -156,6 +156,32 @@ final class MobileSummaryTests: XCTestCase {
         XCTAssertEqual(sections[3].rows.map(\.label), ["2026-06-02"])
     }
 
+    func testCompanionCacheRejectsNonTodaySummaryForWidgets() throws {
+        let summary = try loadFixture()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cacheURL = directory.appendingPathComponent(MobileSummaryCache.fileName)
+
+        try MobileSummaryCache.write(summary, to: cacheURL)
+
+        XCTAssertNil(MobileSummaryCache.readCompanionSummary(from: cacheURL))
+    }
+
+    func testCompanionCacheRoundTripsTodaySummaryForWidgets() throws {
+        let summary = try makeTodaySummary()
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let cacheURL = directory.appendingPathComponent(MobileSummaryCache.fileName)
+
+        try MobileSummaryCache.write(summary, to: cacheURL)
+        let cached = try XCTUnwrap(MobileSummaryCache.readCompanionSummary(from: cacheURL))
+
+        XCTAssertEqual(cached.period.id, "today")
+        XCTAssertEqual(cached.period.totalTokens, 5000)
+        XCTAssertEqual(cached.breakdown.byMachine.map(\.label), ["linux-dev", "macbook-pro"])
+        XCTAssertEqual(cached.limits.observedCount, 1)
+    }
+
     private func loadFixture() throws -> MobileSummary {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
         let data = try Data(contentsOf: url)
@@ -187,6 +213,39 @@ final class MobileSummaryTests: XCTestCase {
         json["limits"] = limits
         let modified = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
         return try JSONDecoder().decode(MobileSummary.self, from: modified)
+    }
+
+    private func makeTodaySummary() throws -> MobileSummary {
+        let summary = try loadFixture()
+        return MobileSummary(
+            schemaVersion: summary.schemaVersion,
+            client: summary.client,
+            generatedAt: "2026-06-02T10:45:00+08:00",
+            timezone: summary.timezone,
+            period: MobilePeriod(
+                id: "today",
+                date: "2026-06-02",
+                startDate: nil,
+                endDate: nil,
+                totalTokens: summary.period.totalTokens,
+                inputTokens: summary.period.inputTokens,
+                outputTokens: summary.period.outputTokens,
+                cacheTokens: summary.period.cacheTokens,
+                cacheRatio: summary.period.cacheRatio,
+                machine: nil,
+                account: nil
+            ),
+            trend: MobileTrend(
+                period: "today",
+                granularity: "hour",
+                startDate: "2026-06-02T00:00:00+08:00",
+                endDate: "2026-06-02T23:00:00+08:00",
+                points: summary.trend.points
+            ),
+            sources: summary.sources,
+            breakdown: summary.breakdown,
+            limits: summary.limits
+        )
     }
 
     private func trendPoint(bucket: String, tokens: Int) -> MobileTrendPoint {

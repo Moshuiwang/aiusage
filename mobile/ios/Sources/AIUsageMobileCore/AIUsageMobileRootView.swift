@@ -126,7 +126,7 @@ struct HomeView: View {
 
     var body: some View {
         AppScrollView(bottomPadding: 128) {
-            HomeHeader(
+            CrossPlatformHomeHeader(
                 lastServerReadText: state.lastServerReadText,
                 isRefreshing: refreshingPeriodID == selectedPeriodID,
                 onRefresh: {
@@ -138,60 +138,328 @@ struct HomeView: View {
                 refreshingPeriodID: refreshingPeriodID,
                 onPeriodSelected: onPeriodSelected
             )
-            HeroPanel(state: state)
-
-            MaterialCard {
-                SectionHeader(title: "用量趋势") {
-                    UnifiedDetailLink {
-                        selectedPeriodID = selectedPeriodID
-                        selectedTab = .breakdown
-                    }
-                }
-                Text(state.rangeText)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                UsageTrendChart(points: state.trendPoints)
-                    .frame(height: 132)
-                    .padding(.top, 2)
+            CrossPlatformHeroPanel(state: state) {
+                selectedTab = .breakdown
             }
-
-            MaterialCard {
-                SectionHeader(title: "刷新时间") {
-                    UnifiedDetailLink {
-                        selectedTab = .limits
-                    }
-                }
-                Text("多账号额度窗口")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                VStack(spacing: 10) {
-                    ForEach(state.refreshGroups) { group in
-                        RefreshSummaryCard(group: group)
-                    }
-                }
+            CrossPlatformQuotaSection(groups: state.refreshGroups) {
+                selectedTab = .limits
             }
-
-            HealthCompactRow(text: state.healthText) {
+            CrossPlatformSourcesSection(
+                rows: state.topSources,
+                healthText: state.healthText
+            ) {
                 selectedTab = .sources
-            }
-
-            MaterialCard {
-                SectionHeader(title: "主要来源") {
-                    Text("Top 3")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
-                }
-                VStack(spacing: 12) {
-                    ForEach(state.topSources) { row in
-                        BarRow(label: row.label, value: row.tokens, maxValue: topSourceMax)
-                    }
-                }
             }
         }
     }
 
     private var topSourceMax: Int {
         max(state.topSources.map(\.tokens).max() ?? 1, 1)
+    }
+}
+
+struct CrossPlatformHomeHeader: View {
+    let lastServerReadText: String
+    let isRefreshing: Bool
+    let onRefresh: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            AIUsageBrandMark(size: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AI Usage")
+                    .font(.system(size: 18, weight: .semibold))
+                    .kerning(0)
+                Text(lastServerReadText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            Spacer()
+            RefreshActionButton(isRefreshing: isRefreshing, action: onRefresh)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .glassSurface(cornerRadius: 10)
+    }
+}
+
+struct CrossPlatformHeroPanel: View {
+    let state: MobileHomeState
+    let onDetails: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .lastTextBaseline, spacing: 8) {
+                Text(state.totalText)
+                    .font(.system(size: 42, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+                    .contentTransition(.numericText(value: Double(state.totalTokens)))
+                    .animation(.snappy(duration: 0.42), value: state.totalTokens)
+                Text(state.healthText)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(healthColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(healthColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                Spacer(minLength: 0)
+            }
+
+            Text(state.tokenBreakdownText)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            CompactHandoffBarChart(points: state.trendPoints)
+                .frame(height: 76)
+
+            HStack {
+                Text(state.rangeText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                Spacer()
+                UnifiedDetailLink(action: onDetails)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .glassSurface(cornerRadius: 10)
+    }
+
+    private var healthColor: Color {
+        state.healthText.lowercased().contains("issue") || state.healthText.contains("异常") ? .orange : .green
+    }
+}
+
+struct CompactHandoffBarChart: View {
+    let points: [MobileTrendPoint]
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack(alignment: .topTrailing) {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.18))
+                    .frame(height: 1)
+                    .offset(y: 8)
+                Text(maxLabel)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary.opacity(0.78))
+                HStack(alignment: .bottom, spacing: 4) {
+                    ForEach(chartPoints) { point in
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color(red: 10 / 255, green: 132 / 255, blue: 1), Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(height: barHeight(for: point))
+                            .frame(maxWidth: .infinity, alignment: .bottom)
+                            .opacity(point.tokens == 0 ? 0.28 : 1)
+                    }
+                }
+                .frame(height: 52, alignment: .bottom)
+                .padding(.top, 10)
+            }
+            HStack {
+                ForEach(axisLabels, id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    if label != axisLabels.last {
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private var chartPoints: [MobileTrendPoint] {
+        Array(points.suffix(18))
+    }
+
+    private var maxTokens: Int {
+        max(chartPoints.map(\.tokens).max() ?? 1, 1)
+    }
+
+    private var maxLabel: String {
+        TokenFormat.compact(maxTokens)
+    }
+
+    private var axisLabels: [String] {
+        let labels = chartPoints.map(\.label).filter { !$0.isEmpty }
+        guard !labels.isEmpty else {
+            return ["00:00", "12:00", "23:59"]
+        }
+        if labels.count >= 3 {
+            return [labels.first ?? "", labels[labels.count / 2], labels.last ?? ""]
+        }
+        return labels
+    }
+
+    private func barHeight(for point: MobileTrendPoint) -> CGFloat {
+        max(point.tokens == 0 ? 4 : 6, CGFloat(point.tokens) / CGFloat(maxTokens) * 52)
+    }
+}
+
+struct CrossPlatformQuotaSection: View {
+    let groups: [LimitWindowGroup]
+    let onDetails: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "额度") {
+                UnifiedDetailLink(action: onDetails)
+            }
+            if groups.isEmpty {
+                Text("暂无可信额度数据")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(groups) { group in
+                        CrossPlatformQuotaRow(group: group)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .glassSurface(cornerRadius: 10)
+    }
+}
+
+struct CrossPlatformQuotaRow: View {
+    let group: LimitWindowGroup
+
+    var body: some View {
+        HStack(spacing: 12) {
+            BrandIcon(kind: BrandIcon.kind(for: group.provider), size: 20)
+                .frame(width: 32, height: 32)
+                .glassSurface(cornerRadius: 8)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(group.providerLabel)
+                    .font(.system(size: 14, weight: .semibold))
+                    .lineLimit(1)
+                Text(group.sourceID)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 4) {
+                resetChip("5h", group.fiveHourResetText, color: Color(red: 10 / 255, green: 132 / 255, blue: 1))
+                resetChip("7d", group.weeklyResetText, color: Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255))
+            }
+        }
+        .padding(10)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func resetChip(_ label: String, _ value: String, color: Color) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(color)
+            Text(shortReset(value))
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func shortReset(_ value: String) -> String {
+        guard value.count >= 16 else {
+            return value
+        }
+        let start = value.index(value.startIndex, offsetBy: 11)
+        let end = value.index(value.startIndex, offsetBy: 16)
+        return String(value[start..<end])
+    }
+}
+
+struct CrossPlatformSourcesSection: View {
+    let rows: [MobileBreakdownRow]
+    let healthText: String
+    let onDetails: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionHeader(title: "来源") {
+                UnifiedDetailLink(action: onDetails)
+            }
+            if rows.isEmpty {
+                Text("暂无来源数据")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(rows) { row in
+                        CrossPlatformSourceRow(row: row, maxValue: maxValue)
+                    }
+                }
+            }
+            HStack(spacing: 7) {
+                Circle()
+                    .fill(healthText.lowercased().contains("issue") ? Color.orange : Color.green)
+                    .frame(width: 7, height: 7)
+                Text(healthText)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .padding(12)
+        .glassSurface(cornerRadius: 10)
+    }
+
+    private var maxValue: Int {
+        max(rows.map(\.tokens).max() ?? 1, 1)
+    }
+}
+
+struct CrossPlatformSourceRow: View {
+    let row: MobileBreakdownRow
+    let maxValue: Int
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(Color.green)
+                .frame(width: 7, height: 7)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text(row.label)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer()
+                    Text(TokenFormat.compact(row.tokens))
+                        .font(.system(size: 12, weight: .bold).monospacedDigit())
+                }
+                GeometryReader { proxy in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(Color.secondary.opacity(0.14))
+                        .overlay(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color(red: 10 / 255, green: 132 / 255, blue: 1), Color(red: 90 / 255, green: 200 / 255, blue: 250 / 255)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(width: max(8, proxy.size.width * CGFloat(row.tokens) / CGFloat(max(maxValue, 1))))
+                        }
+                }
+                .frame(height: 6)
+            }
+        }
     }
 }
 
@@ -430,41 +698,6 @@ struct LimitAccountGroupCard: View {
     }
 }
 
-struct HomeHeader: View {
-    let lastServerReadText: String
-    let isRefreshing: Bool
-    let onRefresh: () -> Void
-
-    var body: some View {
-        HStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Personal Monitor")
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                Text("AI Usage")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .kerning(0)
-                Text("Personal usage monitor")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            HStack(spacing: 8) {
-                Text(lastServerReadText)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
-                RefreshActionButton(isRefreshing: isRefreshing, action: onRefresh)
-            }
-            .frame(maxWidth: 156, alignment: .trailing)
-        }
-        .padding(14)
-        .glassSurface()
-    }
-}
-
 struct RefreshActionButton: View {
     let isRefreshing: Bool
     let action: () -> Void
@@ -536,268 +769,6 @@ struct PeriodSelector: View {
             }
         }
         .padding(4)
-        .glassSurface()
-    }
-}
-
-struct HeroPanel: View {
-    let state: MobileHomeState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(periodTitle(state.periodID))
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
-                    .textCase(.uppercase)
-                    .foregroundStyle(.secondary)
-                Text(state.totalText)
-                    .font(.system(size: 44, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .contentTransition(.numericText(value: Double(state.totalTokens)))
-                    .animation(.snappy(duration: 0.45), value: state.totalTokens)
-                Text(state.rangeText)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-            }
-            MetricGrid(state: state)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.blue.opacity(0.20),
-                            Color.mint.opacity(0.13),
-                            Color.appSecondaryGroupedBackground.opacity(0.88)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        }
-        .overlay(alignment: .topTrailing) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 36, weight: .semibold))
-                .foregroundStyle(Color.blue.opacity(0.26))
-                .padding(16)
-        }
-    }
-
-    private func periodTitle(_ periodID: String) -> String {
-        switch periodID {
-        case "today":
-            return "今天"
-        case "week":
-            return "周"
-        case "month":
-            return "月"
-        case "all":
-            return "全部"
-        default:
-            return state.periodLabelText
-        }
-    }
-}
-
-struct MetricGrid: View {
-    let state: MobileHomeState
-
-    private let columns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10)
-    ]
-
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 10) {
-            MetricTile(title: "Input", value: state.inputText, numericValue: state.inputTokens, tint: .blue)
-            MetricTile(title: "Output", value: state.outputText, numericValue: state.outputTokens, tint: .mint)
-            MetricTile(title: "Cache", value: state.cacheText, numericValue: state.cacheTokens, tint: .green)
-            MetricTile(title: "缓存命中", value: state.cacheHitText, numericValue: state.cacheTokens, tint: .orange)
-        }
-    }
-}
-
-struct MetricTile: View {
-    let title: String
-    let value: String
-    let numericValue: Int
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
-                .minimumScaleFactor(0.75)
-                .lineLimit(1)
-                .contentTransition(.numericText(value: Double(numericValue)))
-                .animation(.snappy(duration: 0.42), value: numericValue)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .glassSurface()
-    }
-}
-
-struct UsageTrendChart: View {
-    let points: [MobileTrendPoint]
-    @State private var selectedPoint: MobileTrendPoint?
-
-    var body: some View {
-        BarTrendChart(points: points, selectedPoint: $selectedPoint)
-        .onChange(of: points) { _, newPoints in
-            selectedPoint = nil
-        }
-    }
-
-    init(points: [MobileTrendPoint]) {
-        self.points = points
-        self._selectedPoint = State(initialValue: nil)
-    }
-}
-
-struct BarTrendChart: View {
-    let points: [MobileTrendPoint]
-    @Binding var selectedPoint: MobileTrendPoint?
-
-    var body: some View {
-        GeometryReader { proxy in
-            let bars = barFrames(in: proxy.size)
-            ZStack(alignment: .bottom) {
-                gridLines
-                ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
-                    if bars.indices.contains(index) {
-                        RoundedRectangle(cornerRadius: 4, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.blue.opacity(0.95), Color.mint.opacity(0.72)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .frame(width: bars[index].width, height: bars[index].height)
-                            .position(x: bars[index].midX, y: bars[index].midY)
-                            .opacity(point.tokens == 0 ? 0.28 : 1)
-                    }
-                }
-                if let selectedPoint,
-                   let selectedIndex = points.firstIndex(where: { $0.id == selectedPoint.id }),
-                   bars.indices.contains(selectedIndex) {
-                    selectedPointIndicator(at: bars[selectedIndex], height: proxy.size.height)
-                    TrendTooltipBubble(point: selectedPoint)
-                        .position(
-                            x: tooltipX(bars[selectedIndex].midX, width: proxy.size.width),
-                            y: 26
-                        )
-                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
-                        .allowsHitTesting(false)
-                }
-                HStack {
-                    ForEach(axisLabels, id: \.self) { label in
-                        Text(label)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .bottom)
-            }
-            .contentShape(Rectangle())
-            .glassSurface()
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        selectedPoint = TrendPointSelection.nearestPoint(
-                            in: points,
-                            xLocation: Double(value.location.x),
-                            width: Double(proxy.size.width)
-                        )
-                    }
-            )
-            .animation(.snappy(duration: 0.18), value: selectedPoint?.id)
-        }
-    }
-
-    @ViewBuilder
-    private func selectedPointIndicator(at rect: CGRect, height: CGFloat) -> some View {
-        Rectangle()
-            .fill(Color.blue.opacity(0.16))
-            .frame(width: 1, height: max(height - 18, 1))
-            .position(x: rect.midX, y: (height - 18) / 2)
-    }
-
-    private func tooltipX(_ x: CGFloat, width: CGFloat) -> CGFloat {
-        min(max(x, 104), max(width - 104, 104))
-    }
-
-    private var gridLines: some View {
-        VStack(spacing: 0) {
-            ForEach(0..<4, id: \.self) { _ in
-                Divider()
-                Spacer()
-            }
-        }
-        .opacity(0.36)
-    }
-
-    private var axisLabels: [String] {
-        guard !points.isEmpty else { return [] }
-        if points.count <= 4 {
-            return points.map(\.label)
-        }
-        return [
-            points.first?.label ?? "",
-            points[points.count / 2].label,
-            points.last?.label ?? ""
-        ]
-    }
-
-    private func barFrames(in size: CGSize) -> [CGRect] {
-        guard !points.isEmpty else { return [] }
-        let maxTokens = max(points.map(\.tokens).max() ?? 1, 1)
-        let left: CGFloat = 6
-        let right: CGFloat = 6
-        let top: CGFloat = 10
-        let bottom: CGFloat = 30
-        let width = max(size.width - left - right, 1)
-        let height = max(size.height - top - bottom, 1)
-        let slot = width / CGFloat(max(points.count, 1))
-        let barWidth = min(22, max(4, slot * 0.56))
-
-        return points.enumerated().map { index, point in
-            let barHeight = max(point.tokens == 0 ? 3 : 6, CGFloat(point.tokens) / CGFloat(maxTokens) * height)
-            let x = left + CGFloat(index) * slot + (slot - barWidth) / 2
-            let y = top + height - barHeight
-            return CGRect(x: x, y: y, width: barWidth, height: barHeight)
-        }
-    }
-}
-
-struct TrendTooltipBubble: View {
-    let point: MobileTrendPoint
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(point.label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.primary)
-            Text("Input \(TokenFormat.compact(point.inputTokens)) · Output \(TokenFormat.compact(point.outputTokens))")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-            Text("Cache \(TokenFormat.compact(point.cacheTokens)) · 缓存 \(point.cacheRatio)%")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.secondary)
-        }
-        .lineLimit(1)
-        .minimumScaleFactor(0.82)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .frame(width: 208, alignment: .leading)
         .glassSurface()
     }
 }

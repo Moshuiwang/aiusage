@@ -254,6 +254,10 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [clients/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/clients/README.md)：跨端客户端目标目录和迁移规则。
 - [client-platforms.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/client-platforms.md)：iOS、Android、macOS、Windows、Web 的展示边界。
 - [mobile-app-design-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/mobile-app-design-brief.md)：iPhone App + iOS Widget 的设计入口、信息架构和原型协作方式。
+- [multi-platform-design-prd.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-prd.md)：最新多端设计包对应的产品体验、范围和优先级。
+- [multi-platform-design-architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-architecture.md)：Web、macOS、iOS Widget 和 Watch 共用事实链路的架构方案。
+- [multi-platform-design-database.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-database.md)：多端设计所需展示字段与现有 SQLite 表的映射。
+- [multi-platform-design-interface.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-interface.md)：多端展示所需 Summary API 字段和降级约定。
 - [task-plan.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-plan.md)：旧任务入口兼容层，指向任务包目录。
 - [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。
 - [task-packages/RULES.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。

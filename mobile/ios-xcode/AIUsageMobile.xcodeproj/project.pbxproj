@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -11,10 +11,13 @@
 		1BFC03DF2266535E686F9123 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C9CA15D935757E88AC4F4EB4 /* Assets.xcassets */; };
 		542B1594B3FCF16F5E588F72 /* AIUsageMobileCore in Frameworks */ = {isa = PBXBuildFile; productRef = 660A764F8E617CF2F727D556 /* AIUsageMobileCore */; };
 		62BD2E0DAEEA0DAA588870F6 /* AIUsageMobileCore in Frameworks */ = {isa = PBXBuildFile; productRef = A8ECECCC03772977DE2C4EEB /* AIUsageMobileCore */; };
+		6502FB2494904D68BE2BC1B3 /* mobile-summary.json in Resources */ = {isa = PBXBuildFile; fileRef = 10F1A2877251DCF193EDFDB7 /* mobile-summary.json */; };
 		78C55C239516F3ECE4DF118B /* AIUsageMobileWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CFFFDFD19B7A31F6C448F8D /* AIUsageMobileWidget.swift */; };
+		854227A34B2CABAB6BD1D7AD /* AIUsageWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63AE2DF037D43F3DBAFBA47 /* AIUsageWatchApp.swift */; };
 		8920D82866576D4106F1F2EA /* AIUsageMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B327990F901B1DD17ADA097 /* AIUsageMobileApp.swift */; };
 		960979697A9388C3179E6C83 /* mobile-summary.json in Resources */ = {isa = PBXBuildFile; fileRef = 10F1A2877251DCF193EDFDB7 /* mobile-summary.json */; };
 		B3FAC967D7ADFED8A18544AC /* AIUsageMobileWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6F3129C86628961DD97DBDE3 /* AIUsageMobileWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E57ED596456B9216D0FEC315 /* AIUsageWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = F63AE2DF037D43F3DBAFBA47 /* AIUsageWatchApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,9 +49,11 @@
 		0CFFFDFD19B7A31F6C448F8D /* AIUsageMobileWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsageMobileWidget.swift; sourceTree = "<group>"; };
 		10F1A2877251DCF193EDFDB7 /* mobile-summary.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "mobile-summary.json"; sourceTree = "<group>"; };
 		6F3129C86628961DD97DBDE3 /* AIUsageMobileWidgetExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = AIUsageMobileWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C4E7C01927E3F0C3DA18C99A /* AIUsageWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AIUsageWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C669E472B854293B58B9DAF5 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ../ios; sourceTree = SOURCE_ROOT; };
 		C9CA15D935757E88AC4F4EB4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		ECCE5CDA32E67737FE07FE33 /* AIUsageMobileApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = AIUsageMobileApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F63AE2DF037D43F3DBAFBA47 /* AIUsageWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIUsageWatchApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -75,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				0CFFFDFD19B7A31F6C448F8D /* AIUsageMobileWidget.swift */,
+				F63AE2DF037D43F3DBAFBA47 /* AIUsageWatchApp.swift */,
 			);
 			name = AIUsageMobileWidgetExtension;
 			path = Sources/AIUsageMobileWidgetExtension;
@@ -96,6 +102,7 @@
 			children = (
 				ECCE5CDA32E67737FE07FE33 /* AIUsageMobileApp.app */,
 				6F3129C86628961DD97DBDE3 /* AIUsageMobileWidgetExtension.appex */,
+				C4E7C01927E3F0C3DA18C99A /* AIUsageWatchApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -171,6 +178,24 @@
 			productReference = 6F3129C86628961DD97DBDE3 /* AIUsageMobileWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		D37CB58B4EE2E51BA9315043 /* AIUsageWatchApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1DD948E7CE40F8852E48FAC2 /* Build configuration list for PBXNativeTarget "AIUsageWatchApp" */;
+			buildPhases = (
+				A8420D616CF522EA1C67BD5E /* Sources */,
+				1D258AF6F73F6544961F5399 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AIUsageWatchApp;
+			packageProductDependencies = (
+			);
+			productName = AIUsageWatchApp;
+			productReference = C4E7C01927E3F0C3DA18C99A /* AIUsageWatchApp.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -188,10 +213,13 @@
 						DevelopmentTeam = HL4BQ6T4HU;
 						ProvisioningStyle = Automatic;
 					};
+					D37CB58B4EE2E51BA9315043 = {
+						DevelopmentTeam = HL4BQ6T4HU;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = E71472114C815EA93D0D2670 /* Build configuration list for PBXProject "AIUsageMobile" */;
-			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -203,17 +231,27 @@
 			packageReferences = (
 				B175C0C9C73F03B10DE4C341 /* XCLocalSwiftPackageReference "../ios" */,
 			);
-			preferredProjectObjectVersion = 54;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 5BC72C91F4E1F67C43FE5F63 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				5648D45C5957F7C9A79556A6 /* AIUsageMobileApp */,
 				AA34F72C97966B19A5C000DE /* AIUsageMobileWidgetExtension */,
+				D37CB58B4EE2E51BA9315043 /* AIUsageWatchApp */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1D258AF6F73F6544961F5399 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6502FB2494904D68BE2BC1B3 /* mobile-summary.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		5079ACB7D84F9BE5E4E65C41 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -239,6 +277,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				78C55C239516F3ECE4DF118B /* AIUsageMobileWidget.swift in Sources */,
+				E57ED596456B9216D0FEC315 /* AIUsageWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A8420D616CF522EA1C67BD5E /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				854227A34B2CABAB6BD1D7AD /* AIUsageWatchApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -266,6 +313,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/AIUsageMobileApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = "Config/AIUsageMobileApp-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -283,6 +331,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/AIUsageMobileWidgetExtension.entitlements;
 				INFOPLIST_FILE = "Config/AIUsageMobileWidgetExtension-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -293,6 +342,20 @@
 				SDKROOT = iphoneos;
 				SKIP_INSTALL = YES;
 				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		9C2D93984D5FA9A90A78729F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = "Config/AIUsageWatchApp-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = com.wangzhipeng.aiusage.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
 			};
 			name = Release;
 		};
@@ -349,12 +412,26 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 6.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Release;
+		};
+		C8B906A1F107EB477E8F102F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = "Config/AIUsageWatchApp-Info.plist";
+				PRODUCT_BUNDLE_IDENTIFIER = com.wangzhipeng.aiusage.watch;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+			};
+			name = Debug;
 		};
 		E1BB0BDD4A2025A08E74813D /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -416,10 +493,10 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 6.0;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
 			};
 			name = Debug;
 		};
@@ -428,6 +505,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/AIUsageMobileWidgetExtension.entitlements;
 				INFOPLIST_FILE = "Config/AIUsageMobileWidgetExtension-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -446,6 +524,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/AIUsageMobileApp.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				INFOPLIST_FILE = "Config/AIUsageMobileApp-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -466,6 +545,15 @@
 			buildConfigurations = (
 				4493C66306E28424EF614AE2 /* Debug */,
 				FEC0561D2AD6AD0F0D638DC3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1DD948E7CE40F8852E48FAC2 /* Build configuration list for PBXNativeTarget "AIUsageWatchApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C8B906A1F107EB477E8F102F /* Debug */,
+				9C2D93984D5FA9A90A78729F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

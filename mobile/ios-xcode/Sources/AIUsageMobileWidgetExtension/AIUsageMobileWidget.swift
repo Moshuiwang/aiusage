@@ -29,10 +29,15 @@ struct AIUsageWidgetEntryView: View {
     var body: some View {
         let state = WidgetSummaryBuilder.build(from: entry.summary)
         Group {
-            if family == .systemMedium {
+            if family == .systemLarge {
+                AIUsageLargeWidgetContentView(
+                    state: state,
+                    summary: entry.summary
+                )
+            } else if family == .systemMedium {
                 AIUsageMediumWidgetContentView(
                     state: state,
-                    topSources: entry.summary.breakdown.byMachine
+                    summary: entry.summary
                 )
             } else {
                 AIUsageSmallWidgetContentView(state: state)
@@ -51,7 +56,7 @@ struct AIUsageMobileWidget: Widget {
         }
         .configurationDisplayName("AI Usage")
         .description("查看当前 AI usage 和额度状态。")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -63,14 +68,11 @@ struct AIUsageMobileWidgetBundle: WidgetBundle {
 }
 
 enum WidgetFixtureLoader {
-    static func load(bundle: Bundle = .main) -> MobileSummary {
-        guard let url = bundle.url(forResource: "mobile-summary", withExtension: "json"),
-              let data = try? Data(contentsOf: url),
-              let summary = try? JSONDecoder().decode(MobileSummary.self, from: data)
-        else {
-            return MobileSummaryFixture.empty
+    static func load() -> MobileSummary {
+        if let cachedSummary = MobileSummaryCache.readFromAppGroup() {
+            return cachedSummary
         }
-        return summary
+        return MobileSummaryFixture.empty
     }
 }
 

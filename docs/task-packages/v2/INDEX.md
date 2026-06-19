@@ -25,16 +25,18 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 
 移动端高保真改版 handoff 已形成：`docs/prototypes/ios-high-fidelity/HANDOFF.md` 是设计到 SwiftUI 的开发交接入口，TP-V2-062 是可执行实现任务包。
 
+最新多端设计包已形成产品、架构、数据库和接口文档，并完成两轮 AI Review。TP-V2-065 到 TP-V2-072 是本轮执行链路：先统一图标和设计资产，再并行推进 Web、macOS 菜单栏、iOS App、iOS Widget、Watch，最后做跨端数据/设计验收、AI Review、PR 和部署。
+
 下一步候选：
 
-1. TP-V2-060 MSWusage Codex parser contract：先固定本机 parser / CLI / fixture 合约，保证小时桶、cache 口径和无敏感路径输出。
-2. TP-V2-061 MSWusage Codex hourly integration：TP-V2-060 完成后再做 push / ingest / storage / snapshot 集成，让 Codex 小时换源为 `mswusage_codex_token_count`。
-3. TP-V2-062 iOS high fidelity app redesign：按高保真 handoff 把 SwiftUI App 对齐到当前 App 版玻璃界面。
-4. 跨端客户端任务包：分别为 `clients/android`、`clients/macos`、`clients/windows` 新建任务包；macOS / Windows 先做轻量入口，Android 复用移动端摘要合同。
-5. 移动端生产配置 UX：把 simulator env 配置演进成 App 内只读 server/token 设置、Keychain 保存和连接状态提示。
-6. 真实命令 smoke：先跑 `collect-limits --doctor`，再只在本机 `config/limits.local.json` 明确存在时执行，不提交凭据或真实输出。
-7. Antigravity real LS reader：围绕本地 Language Server 调用能力单独开任务包。
-8. 提交 / PR 整理：继续收敛文档、harness 或发布交接。
+1. TP-V2-065 Multi Platform Design Assets：生成并接入新双环 App Icon 和共享品牌图形。
+2. TP-V2-066 Web Dashboard High Fidelity：按最新 Web 设计包改版，同时保持 `/api/summary` 数据准确。
+3. TP-V2-067 macOS Menu Bar High Fidelity：基于 TP-V2-064 已有菜单栏入口改版，不复用 legacy macOS Widget。
+4. TP-V2-068 iOS App High Fidelity And Icon：修正 iOS 图标，并用现有 `MobileSummary` 完成 App 高保真对齐。
+5. TP-V2-069 iOS Widget High Fidelity：补齐 Small / Medium / Large Widget。
+6. TP-V2-070 watchOS Summary App：新增 Apple Watch 只读摘要 App。
+7. TP-V2-071 Multi Platform Data And Design Verification：用 API/DB/screenshot/Anti Gravity 完成数据和设计验收。
+8. TP-V2-072 Final Review PR Deploy：最终 AI Review、提交、Push、PR 和必要部署。
 
 ## 任务列表
 
@@ -103,6 +105,14 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 | TP-V2-062 | [TP-V2-062-ios-high-fidelity-app-redesign.md](TP-V2-062-ios-high-fidelity-app-redesign.md) | ready | TP-V2-059 | TP-V2-060, TP-V2-061 |
 | TP-V2-063 | [TP-V2-063-cross-platform-client-directory-boundary.md](TP-V2-063-cross-platform-client-directory-boundary.md) | done | none | docs / architecture |
 | TP-V2-064 | [TP-V2-064-macos-menu-bar-client.md](TP-V2-064-macos-menu-bar-client.md) | done | TP-V2-043 | TP-V2-060, TP-V2-061 |
+| TP-V2-065 | [TP-V2-065-multi-platform-design-assets.md](TP-V2-065-multi-platform-design-assets.md) | ready | multi-platform design docs AI review | TP-V2-066, TP-V2-067 |
+| TP-V2-066 | [TP-V2-066-web-dashboard-high-fidelity.md](TP-V2-066-web-dashboard-high-fidelity.md) | ready | TP-V2-065 | TP-V2-067, TP-V2-068, TP-V2-069 |
+| TP-V2-067 | [TP-V2-067-macos-menu-bar-high-fidelity.md](TP-V2-067-macos-menu-bar-high-fidelity.md) | ready | TP-V2-064, TP-V2-065 | TP-V2-066, TP-V2-068, TP-V2-069 |
+| TP-V2-068 | [TP-V2-068-ios-app-high-fidelity-and-icon.md](TP-V2-068-ios-app-high-fidelity-and-icon.md) | ready | TP-V2-059, TP-V2-062, TP-V2-065 | TP-V2-066, TP-V2-067, TP-V2-069 |
+| TP-V2-069 | [TP-V2-069-ios-widget-high-fidelity.md](TP-V2-069-ios-widget-high-fidelity.md) | ready | TP-V2-045, TP-V2-046, TP-V2-065 | TP-V2-066, TP-V2-067, TP-V2-068 |
+| TP-V2-070 | [TP-V2-070-watchos-summary-app.md](TP-V2-070-watchos-summary-app.md) | ready | TP-V2-065, TP-V2-068 | TP-V2-066, TP-V2-067, TP-V2-069 |
+| TP-V2-071 | [TP-V2-071-multi-platform-data-design-verification.md](TP-V2-071-multi-platform-data-design-verification.md) | ready | TP-V2-066, TP-V2-067, TP-V2-068, TP-V2-069, TP-V2-070 | none |
+| TP-V2-072 | [TP-V2-072-final-review-pr-deploy.md](TP-V2-072-final-review-pr-deploy.md) | ready | TP-V2-071 | none |
 
 ## subagent 分配建议
 
@@ -124,3 +134,11 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 - Mobile App agent：执行 TP-V2-062，把 `docs/prototypes/ios-high-fidelity/HANDOFF.md` 落到 SwiftUI App；不要改移动端 API contract，不要提交生产 token。
 - Cross-platform client agent：后续新增 Android、macOS、Windows 时，先从 `docs/architecture/client-platforms.md` 和 `clients/<platform>/README.md` 开任务包；不得复用 legacy macOS Widget 作为新产品 UI。
 - macOS Client agent：TP-V2-064 新增菜单栏轻入口，只读 `/api/mobile/summary`，不执行采集，不读取 SQLite，不复用 legacy macOS Widget。
+- Design Assets agent：执行 TP-V2-065，统一 App Icon 和跨端品牌图形。
+- Web UI agent：执行 TP-V2-066，按新设计包改 Web Dashboard，并用 `/api/summary` 校验数据。
+- macOS Client agent：执行 TP-V2-067，基于 TP-V2-064 改造现有菜单栏 popover。
+- Mobile App agent：执行 TP-V2-068，修正 iOS 图标并保持现有 `MobileSummary` 合同。
+- iOS Widget agent：执行 TP-V2-069，补齐 Small / Medium / Large Widget。
+- Watch agent：执行 TP-V2-070，新增 watchOS 只读摘要 App。
+- QA / Anti Gravity agent：执行 TP-V2-071，使用 `agy --model gemini-3.5-flash` 进行跨端数据和设计验收。
+- Release agent：执行 TP-V2-072，做最终 AI Review、提交、PR 和必要部署。

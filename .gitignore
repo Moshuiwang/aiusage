@@ -1,5 +1,6 @@
 .DS_Store
 .obsidian/
+.codex/
 ai-usage-widget/
 config/sources.local.json
 config/limits.local.json
