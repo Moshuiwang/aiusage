@@ -3,7 +3,10 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import subprocess
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +33,7 @@ SIZES = {
     "AppIcon-60@2x.png": 120,
     "AppIcon-60@3x.png": 180,
     "AppIcon-1024.png": 1024,
+    "AppIcon-1024-dark.png": 1024,
 }
 
 MAC_SIZES = {
@@ -70,13 +74,23 @@ def render_png(size: int) -> bytes:
         bytestring=svg_data,
         output_width=size,
         output_height=size,
+        background_color="#0c0d18",
     )
+
+
+def make_opaque(png_data: bytes) -> bytes:
+    image = Image.open(BytesIO(png_data)).convert("RGBA")
+    background = Image.new("RGBA", image.size, (12, 13, 24, 255))
+    background.alpha_composite(image)
+    output = BytesIO()
+    background.convert("RGB").save(output, format="PNG")
+    return output.getvalue()
 
 
 def main() -> None:
     ICON_DIR.mkdir(parents=True, exist_ok=True)
     for name, size in SIZES.items():
-        (ICON_DIR / name).write_bytes(render_png(size))
+        (ICON_DIR / name).write_bytes(make_opaque(render_png(size)))
         print(f"  {name} ({size}px)")
 
     MAC_ICONSET_DIR.mkdir(parents=True, exist_ok=True)

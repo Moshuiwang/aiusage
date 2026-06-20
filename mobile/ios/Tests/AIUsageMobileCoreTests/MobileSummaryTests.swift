@@ -45,6 +45,156 @@ final class MobileSummaryTests: XCTestCase {
         XCTAssertEqual(state.home.refreshGroups.first?.statText, "0/1 可信")
     }
 
+    func testDecodesQuotaAccountAndPlanLabels() throws {
+        let data = """
+        {
+          "source_id": "codex-main",
+          "provider": "codex",
+          "window": "session",
+          "used_percent": 3.0,
+          "remaining_percent": 97.0,
+          "reset_at": "2026-06-02T15:45:00+08:00",
+          "window_duration_minutes": 300,
+          "observed_at": "2026-06-02T10:45:00+08:00",
+          "source_type": "runtime_api",
+          "confidence": "observed",
+          "status": "ok",
+          "official": true,
+          "account_label": "startimessocietegn@gmail.com",
+          "account_plan_label": "Pro 20x"
+        }
+        """.data(using: .utf8)!
+
+        let window = try JSONDecoder().decode(MobileLimitWindow.self, from: data)
+
+        XCTAssertEqual(window.accountLabel, "startimessocietegn@gmail.com")
+        XCTAssertEqual(window.accountPlanLabel, "Pro 20x")
+    }
+
+    func testLimitGroupsExposeAccountLabelsFromWindows() throws {
+        let window = MobileLimitWindow(
+            sourceID: "codex-main",
+            provider: "codex",
+            window: "session",
+            usedPercent: 3,
+            remainingPercent: 97,
+            resetAt: "2026-06-02T15:45:00+08:00",
+            windowDurationMinutes: 300,
+            observedAt: "2026-06-02T10:45:00+08:00",
+            sourceType: "runtime_api",
+            confidence: "observed",
+            status: "ok",
+            official: true,
+            accountLabel: "startimessocietegn@gmail.com",
+            accountPlanLabel: "Pro 20x"
+        )
+
+        let group = try XCTUnwrap(limitGroups(from: [window]).first)
+
+        XCTAssertEqual(group.accountLabel, "startimessocietegn@gmail.com")
+        XCTAssertEqual(group.accountPlanLabel, "Pro 20x")
+    }
+
+    func testAccountLabelTextCompactsLongEmailsInTheMiddle() {
+        XCTAssertEqual(AccountLabelText.compactEmail("wangzhipeng2010@gmail.com"), "wang****010@gmail.com")
+        XCTAssertEqual(AccountLabelText.compactEmail("startimessocietegn@gmail.com"), "star****egn@gmail.com")
+        XCTAssertEqual(AccountLabelText.compactEmail("short@example.com"), "short@example.com")
+    }
+
+    func testFiveHourDisplayStateShowsResetZeroWhenObservedAtZeroPercent() {
+        let window = MobileLimitWindow(
+            sourceID: "claude-main",
+            provider: "claude",
+            window: "session",
+            usedPercent: 0,
+            remainingPercent: 100,
+            resetAt: nil,
+            windowDurationMinutes: 300,
+            observedAt: "2026-06-02T10:45:00+08:00",
+            sourceType: "oauth_usage_api",
+            confidence: "observed",
+            status: "ok",
+            official: true,
+            accountLabel: nil,
+            accountPlanLabel: nil
+        )
+
+        XCTAssertEqual(QuotaWindowDisplayState.fiveHour(window: window).rowText, "5h 0% 已重置")
+    }
+
+    func testFiveHourDisplayStateKeepsUnknownRowWhenMissing() {
+        XCTAssertEqual(QuotaWindowDisplayState.fiveHour(window: nil).rowText, "5h -- --")
+    }
+
+    func testSourcesViewStateFiltersZeroRowsAndDoesNotLimitToThree() {
+        let rows = [
+            breakdownRow("one", tokens: 100, sourceID: "s1"),
+            breakdownRow("zero", tokens: 0, sourceID: "s0"),
+            breakdownRow("two", tokens: 90, sourceID: "s2"),
+            breakdownRow("three", tokens: 80, sourceID: "s3"),
+            breakdownRow("four", tokens: 70, sourceID: "s4"),
+        ]
+
+        let visible = SourcesDisplayState.visibleRows(rows)
+
+        XCTAssertEqual(visible.map(\.label), ["one", "two", "three", "four"])
+    }
+
+    func testHealthTextCountsFailedSourcesEvenWhenHiddenFromPeriodSources() {
+        let summary = MobileSummary(
+            schemaVersion: 1,
+            client: "ios",
+            generatedAt: "2026-06-21T10:00:00+08:00",
+            timezone: "Asia/Shanghai",
+            period: MobilePeriod(
+                id: "today",
+                date: "2026-06-21",
+                startDate: nil,
+                endDate: nil,
+                totalTokens: 4000,
+                inputTokens: 2000,
+                outputTokens: 2000,
+                cacheTokens: 0,
+                cacheRatio: 0,
+                machine: nil,
+                account: nil
+            ),
+            trend: MobileTrend(
+                period: "today",
+                granularity: "hour",
+                startDate: nil,
+                endDate: nil,
+                points: []
+            ),
+            sources: [
+                mobileSource("active", status: "ok"),
+                mobileSource("failed", status: "provider_failed")
+            ],
+            breakdown: MobileBreakdown(
+                byMachine: [breakdownRow("active", tokens: 4000, sourceID: "active")],
+                byOSUser: [],
+                byAgent: [],
+                byModel: [],
+                byDate: []
+            ),
+            limits: MobileLimits(observedCount: 0, totalCount: 0, windows: [])
+        )
+
+        let state = MobileViewModel.build(from: summary)
+
+        XCTAssertEqual(state.sources.map(\.sourceID), ["active"])
+        XCTAssertEqual(state.home.healthText, "1 source issues")
+    }
+
+    func testSourceUpdateDateTextIncludesDayContext() {
+        let now = makeDate("2026-06-21T10:00:00+08:00")
+
+        XCTAssertEqual(SourceUpdateDateText.format("2026-06-21T09:42:00+08:00", now: now, timezone: "Asia/Shanghai"), "今天 09:42")
+        XCTAssertEqual(SourceUpdateDateText.format("2026-06-20T22:10:00+08:00", now: now, timezone: "Asia/Shanghai"), "昨天 22:10")
+        XCTAssertEqual(SourceUpdateDateText.format("2026-06-19T18:30:00+08:00", now: now, timezone: "Asia/Shanghai"), "06-19 18:30")
+        XCTAssertEqual(SourceUpdateDateText.format("2025-12-31T18:30:00+08:00", now: now, timezone: "Asia/Shanghai"), "2025-12-31 18:30")
+    }
+
     func testTokenFormatting() {
         XCTAssertEqual(TokenFormat.compact(999), "999")
         XCTAssertEqual(TokenFormat.compact(5_000), "5.0K")
@@ -258,5 +408,34 @@ final class MobileSummaryTests: XCTestCase {
             cacheTokens: 0,
             cacheRatio: 0
         )
+    }
+
+    private func breakdownRow(_ label: String, tokens: Int, sourceID: String) -> MobileBreakdownRow {
+        MobileBreakdownRow(
+            id: label,
+            label: label,
+            tokens: tokens,
+            sourceIDs: [sourceID],
+            contributions: [MobileBreakdownContribution(sourceID: sourceID, tokens: tokens)]
+        )
+    }
+
+    private func mobileSource(_ sourceID: String, status: String) -> MobileSource {
+        MobileSource(
+            sourceID: sourceID,
+            machine: "\(sourceID)-host",
+            osUser: "wang",
+            platform: "darwin",
+            displayName: "\(sourceID)-host · wang",
+            status: status,
+            lastObservedAt: "2026-06-21T09:42:00+08:00",
+            lastPushedAt: "2026-06-21T09:42:00+08:00",
+            errorMessage: nil
+        )
+    }
+
+    private func makeDate(_ value: String) -> Date {
+        let formatter = ISO8601DateFormatter()
+        return formatter.date(from: value)!
     }
 }

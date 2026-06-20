@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+from datetime import datetime, timedelta, timezone
 from http.cookies import SimpleCookie
 import urllib.request
 import urllib.error
@@ -405,7 +406,7 @@ class TestWebServerSummary(unittest.TestCase):
                     window="session",
                     used_percent=40.0,
                     remaining_percent=60.0,
-                    reset_at="2026-06-02T15:40:00+08:00",
+                    reset_at=(datetime.now(timezone.utc) + timedelta(hours=5)).isoformat(),
                     window_duration_minutes=300,
                     observed_at="2026-06-02T10:45:00+08:00",
                     source_type="runtime_api",

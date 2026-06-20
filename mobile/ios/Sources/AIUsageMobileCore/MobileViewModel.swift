@@ -5,6 +5,8 @@ public struct LimitWindowGroup: Equatable, Sendable, Identifiable {
     public let provider: String
     public let sourceID: String
     public let windows: [MobileLimitWindow]
+    public let accountLabel: String?
+    public let accountPlanLabel: String?
 
     public var providerLabel: String {
         provider.capitalized
@@ -30,27 +32,124 @@ public func limitGroups(from windows: [MobileLimitWindow]) -> [LimitWindowGroup]
     }
     return grouped.map { key, groupWindows in
         let first = groupWindows[0]
-        return LimitWindowGroup(
-            id: key,
-            provider: first.provider,
-            sourceID: first.sourceID,
-            windows: groupWindows.sorted { lhs, rhs in
-                if lhs.window == rhs.window {
-                    return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
-                }
-                if lhs.window.lowercased().contains("week") {
-                    return true
-                }
-                if rhs.window.lowercased().contains("week") {
-                    return false
-                }
-                return lhs.window.localizedStandardCompare(rhs.window) == .orderedAscending
-            }
+            return LimitWindowGroup(
+                id: key,
+                provider: first.provider,
+                sourceID: first.sourceID,
+                windows: groupWindows.sorted { lhs, rhs in
+                    if lhs.window == rhs.window {
+                        return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+                    }
+                    if lhs.window.lowercased().contains("week") {
+                        return true
+                    }
+                    if rhs.window.lowercased().contains("week") {
+                        return false
+                    }
+                    return lhs.window.localizedStandardCompare(rhs.window) == .orderedAscending
+                },
+                accountLabel: groupWindows.compactMap(\.accountLabel).first,
+                accountPlanLabel: groupWindows.compactMap(\.accountPlanLabel).first
         )
     }
     .sorted { lhs, rhs in
         lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
     }
+}
+
+public struct QuotaWindowDisplayState: Equatable, Sendable {
+    public let rowText: String
+    public let percent: Int?
+    public let resetText: String
+    public let isKnown: Bool
+
+    public static func fiveHour(window: MobileLimitWindow?) -> QuotaWindowDisplayState {
+        guard let window else {
+            return QuotaWindowDisplayState(rowText: "5h -- --", percent: nil, resetText: "--", isKnown: false)
+        }
+        let pct = Int(window.usedPercent.rounded())
+        let reset = quotaResetText(resetAt: window.resetAt)
+        return QuotaWindowDisplayState(rowText: "5h \(pct)% \(reset)", percent: pct, resetText: reset, isKnown: true)
+    }
+}
+
+public enum SourcesDisplayState {
+    public static func visibleRows(_ rows: [MobileBreakdownRow]) -> [MobileBreakdownRow] {
+        rows.filter { $0.tokens > 0 }
+    }
+}
+
+public enum SourceUpdateDateText {
+    public static func format(_ value: String?, now: Date = Date(), timezone: String?) -> String {
+        guard let value, !value.isEmpty else { return "--" }
+        guard let date = parseDate(value) else { return value }
+        var calendar = Calendar(identifier: .gregorian)
+        if let timezone, let tz = TimeZone(identifier: timezone) {
+            calendar.timeZone = tz
+        }
+        let timeFormatter = DateFormatter()
+        timeFormatter.locale = Locale(identifier: "zh_CN")
+        timeFormatter.timeZone = calendar.timeZone
+        timeFormatter.dateFormat = "HH:mm"
+
+        if calendar.isDate(date, inSameDayAs: now) {
+            return "今天 \(timeFormatter.string(from: date))"
+        }
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "昨天 \(timeFormatter.string(from: date))"
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "zh_CN")
+        dateFormatter.timeZone = calendar.timeZone
+        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
+        dateFormatter.dateFormat = sameYear ? "MM-dd HH:mm" : "yyyy-MM-dd HH:mm"
+        return dateFormatter.string(from: date)
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso.date(from: value) { return date }
+        iso.formatOptions = [.withInternetDateTime]
+        return iso.date(from: value)
+    }
+}
+
+public enum AccountLabelText {
+    public static func compactEmail(_ label: String) -> String {
+        guard label.count > 24, let at = label.firstIndex(of: "@") else { return label }
+        let local = String(label[..<at])
+        let domain = String(label[at...])
+        guard local.count > 8 else { return label }
+        return "\(local.prefix(4))****\(local.suffix(3))\(domain)"
+    }
+}
+
+private func quotaResetText(resetAt: String?) -> String {
+    guard let resetAt, !resetAt.isEmpty else { return "已重置" }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    var date = formatter.date(from: resetAt)
+    if date == nil {
+        formatter.formatOptions = [.withInternetDateTime]
+        date = formatter.date(from: resetAt)
+    }
+    guard let date else { return resetAt.count >= 16 ? String(resetAt.dropFirst(11).prefix(5)) : resetAt }
+    return date.timeIntervalSinceNow > 0 ? remainingDurationText(until: date) : "已重置"
+}
+
+private func remainingDurationText(until date: Date) -> String {
+    let interval = date.timeIntervalSinceNow
+    guard interval > 0 else { return "已重置" }
+    let totalMinutes = Int(interval / 60)
+    let days = totalMinutes / (24 * 60)
+    let hours = (totalMinutes % (24 * 60)) / 60
+    let minutes = totalMinutes % 60
+    if days > 0 { return "\(days)d \(hours)h" }
+    if hours > 0 { return "\(hours)h \(minutes)min" }
+    return "\(minutes)min"
 }
 
 public struct MobileHomeState: Equatable, Sendable {
@@ -108,8 +207,18 @@ public enum MobilePeriodSelection {
 
 public enum MobileViewModel {
     public static func build(from summary: MobileSummary) -> MobileViewState {
+        let visibleMachineRows = SourcesDisplayState.visibleRows(summary.breakdown.byMachine)
+        let visibleSourceIDs = Set(visibleMachineRows.flatMap { $0.sourceIDs ?? [] })
+        let visibleSources = summary.sources.filter { visibleSourceIDs.contains($0.sourceID) }
+        let visibleBreakdown = MobileBreakdown(
+            byMachine: visibleMachineRows,
+            byOSUser: summary.breakdown.byOSUser,
+            byAgent: summary.breakdown.byAgent,
+            byModel: summary.breakdown.byModel,
+            byDate: summary.breakdown.byDate
+        )
         let failedSources = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }
-        let okSources = summary.sources.filter { $0.status == "ok" }
+        let okSources = visibleSources.filter { $0.status == "ok" }
         let observedLimit = summary.limits.windows
             .filter(\.isOfficialObserved)
             .sorted {
@@ -122,7 +231,7 @@ public enum MobileViewModel {
 
         let healthText: String
         if failedSources.isEmpty {
-            healthText = "\(okSources.count)/\(summary.sources.count) sources"
+            healthText = "\(okSources.count)/\(visibleSources.count) sources"
         } else {
             healthText = "\(failedSources.count) source issues"
         }
@@ -150,11 +259,11 @@ public enum MobileViewModel {
                 healthText: healthText,
                 primaryLimitText: limitText(observedLimit),
                 trendPoints: summary.trend.points,
-                topSources: Array(summary.breakdown.byMachine.prefix(3)),
+                topSources: Array(visibleMachineRows.prefix(3)),
                 refreshGroups: Array(limitGroups(from: summary.limits.windows).prefix(3))
             ),
-            sources: summary.sources,
-            breakdown: summary.breakdown,
+            sources: visibleSources,
+            breakdown: visibleBreakdown,
             limits: summary.limits
         )
     }

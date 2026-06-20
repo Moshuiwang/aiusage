@@ -1,0 +1,61 @@
+## Review Findings — `codex/ios-tp-v2-073-078` working tree
+
+Read-only review. No files modified. Scope = the uncommitted diff (iOS quota/source/nav/icon + server mobile-summary/snapshot).
+
+---
+
+### 1. [Medium] Time-bomb integration test — `test_web_server` breaks starting 2026‑06‑22
+**File:** `tests/test_web_server.py:408` (assertions `:491-493`)
+
+The mobile endpoint builds its snapshot with `generated_at = datetime.now()` — `_build_request_snapshot` (`server_services.py:288`) does **not** pass `current_time_str`, so `build_snapshot` falls back to real now (`snapshot_builder.py:45`). The new `_expired_short_window` filter (`mobile_summary.py`) drops any *short* window whose `reset_at <= generated_at`. `codex-main` is `window="session"` → short.
+
+The test bumped `reset_at` to a fixed `2026-06-22T15:40:00+08:00` so it stays "future" relative to today (2026‑06‑21). After that instant the window is filtered out, so `data["limits"]["windows"]` no longer contains `codex-main`:
+- `limits["codex-main"]["confidence"]` → KeyError
+- `observed_count == 1` and `total_count == 2` both fail
+
+**Impact:** the suite goes red ~tomorrow afternoon and stays red, masking real regressions. Fix by injecting a fixed clock into the request path or using a reset time computed relative to now.
+
+---
+
+### 2. [Low–Medium] Period-scoped source filter can hide offline/failed sources from the health badge
+**Files:** `src/ai_usage_widget/mobile_summary.py:28-32,56` and `:166`; `mobile/ios/.../MobileViewModel.swift:210-236`
+
+`sources` is now filtered to only `source_id`s that appear in `by_machine` with `tokens > 0` (server), and the client re-derives `visibleSources`/`failedSources`/`healthText` from the same period-active set. A source that pushed **zero tokens in the selected period** (e.g. a machine that went offline and stopped reporting) is removed from both `by_machine` and `sources`, so:
+- it never counts as a "source issue", and `healthText` shows `N/N sources` (all green);
+- on **Today**, a silently-offline machine is invisible.
+
+This is consistent with TP‑V2‑078's intent (hide stale 0-usage sources), but the side effect is a monitoring blind spot. Consider keeping non-`ok` sources visible regardless of period usage so the health badge can still surface a dead source.
+
+---
+
+### 3. [Low] `by_machine` vs `by_os_user` zero-token inconsistency
+**File:** `src/ai_usage_widget/mobile_summary.py:166` vs the `by_os_user` line
+
+`_group_rows` now skips rows with `total_tokens <= 0` (drives `by_machine`), but `by_os_user` is still built from the **raw** `groups.get("by_machine")`, and the client doesn't re-filter `byOSUser`. A 0-token OS user can appear in the OS-user breakdown while its machine is hidden. Cosmetic only.
+
+---
+
+### 4. [Low] Hardcoded plan-label mapping risks misleading / leaky labels
+**File:** `src/ai_usage_widget/mobile_summary.py` `_safe_plan_label`
+
+Codex `pro → "Pro 20x"`, `prolite/"pro lite" → "Pro 5x"`; the generic fallback title-cases the raw subscription and **preserves underscores** (e.g. `max_5x → "Max_5x"`). If the stored `subscription` string doesn't actually correspond to the "20x/5x" tier, the quota card shows a misleading plan; unmapped values surface raw internal codes. Worth confirming the mapping against the real `subscription` values written by the pusher.
+
+---
+
+### 5. [Low] Dark and light 1024 app icons are now byte-identical
+**File:** `packages/design-tokens/generate_ai_usage_icon.py`
+
+Both `AppIcon-1024.png` and `AppIcon-1024-dark.png` render from the same SVG with the same `#0c0d18` background, and `make_opaque` composites onto that same color (diff stat: both → 89873 bytes). The "dark" asset provides no dark-mode differentiation. Acceptable if a single opaque brand icon is the goal (TP‑V2‑073), but flagging the intent.
+
+---
+
+### Confirmed safe (priority‑3 account-label checks)
+- `_safe_account_label` blocks `sk-`/`sess-`/`eyJ` prefixes; `token`/`bearer `/`authorization`/`auth.json`/`.codex`/`.claude`/`/users/`/`/home/` fragments; and >120-char strings. **No token/path/OS-username leak path found.**
+- Labels come only from AI-account email/label/display_name — never `os_user`. `account_id` (UUID) is used solely as a dedup key, not displayed.
+- A provider's label is applied only when exactly **one** account exists for it (`_account_context` `len(accounts) == 1` guard), so multi-account setups show no label rather than a wrong one. iOS `MobileLimitWindow` new fields are optional and decode-tolerant — no contract break for older payloads.
+
+### Residual risks / test gaps
+- **Schema dependency:** both `_fetch_account_hourly_rows` and the new `_fetch_ai_accounts` now `SELECT subscription FROM ai_accounts`. The column is in the `CREATE TABLE` and the existing (unchanged) UPSERT already writes it, so any DB accepting pushes has it — but there is **no `_ensure_column` migration** for `ai_accounts.subscription`. A pre-existing DB without the column would 500 the mobile endpoint. Low likelihood; reachable via the new SELECTs.
+- **`generated_at` tz handling:** `_align_datetimes` assumes a naive `generated_at` shares the reset's tz; only the naive-reset crash case is tested (`test_naive_short_quota_reset_does_not_crash_period_summary`), not aware/naive offset skew.
+- **Untested:** Finding 2 (offline source hidden from health), and the multi-account "no label" path.
+- **Duplication (non-blocking):** `quotaResetText`/`remainingDurationText` (new, 5h) duplicate `remainingTimeText` (7d); formats match, so no visible inconsistency.

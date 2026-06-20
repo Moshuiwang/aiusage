@@ -113,6 +113,14 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 | TP-V2-070 | [TP-V2-070-watchos-summary-app.md](TP-V2-070-watchos-summary-app.md) | ready | TP-V2-065, TP-V2-068 | TP-V2-066, TP-V2-067, TP-V2-069 |
 | TP-V2-071 | [TP-V2-071-multi-platform-data-design-verification.md](TP-V2-071-multi-platform-data-design-verification.md) | ready | TP-V2-066, TP-V2-067, TP-V2-068, TP-V2-069, TP-V2-070 | none |
 | TP-V2-072 | [TP-V2-072-final-review-pr-deploy.md](TP-V2-072-final-review-pr-deploy.md) | ready | TP-V2-071 | none |
+| TP-V2-073 | [TP-V2-073-ios-app-icon-opaque-exit-animation.md](TP-V2-073-ios-app-icon-opaque-exit-animation.md) | done | TP-V2-048, TP-V2-065 | none |
+| TP-V2-074 | [TP-V2-074-ios-navigation-liquid-glass-icons.md](TP-V2-074-ios-navigation-liquid-glass-icons.md) | done | TP-V2-062, TP-V2-068 | TP-V2-073 |
+| TP-V2-075 | [TP-V2-075-ios-claude-5h-quota-period-consistency.md](TP-V2-075-ios-claude-5h-quota-period-consistency.md) | done | TP-V2-043, TP-V2-052, TP-V2-068 | TP-V2-073, TP-V2-074 |
+| TP-V2-076 | [TP-V2-076-ios-quota-card-account-label.md](TP-V2-076-ios-quota-card-account-label.md) | done | TP-V2-043, TP-V2-068 | none |
+| TP-V2-077 | [TP-V2-077-ios-quota-5h-zero-state-layout.md](TP-V2-077-ios-quota-5h-zero-state-layout.md) | done | TP-V2-068, TP-V2-075 | none |
+| TP-V2-078 | [TP-V2-078-ios-sources-current-period-and-updated-date.md](TP-V2-078-ios-sources-current-period-and-updated-date.md) | done | TP-V2-043, TP-V2-052, TP-V2-068 | TP-V2-076, TP-V2-077 |
+| TP-V2-079 | [TP-V2-079-ios-source-row-layout-usage-and-update-time.md](TP-V2-079-ios-source-row-layout-usage-and-update-time.md) | done | TP-V2-078 | none |
+| TP-V2-080 | [TP-V2-080-ios-native-liquid-glass-tab-bar.md](TP-V2-080-ios-native-liquid-glass-tab-bar.md) | done | TP-V2-074 | TP-V2-079 |
 
 ## subagent 分配建议
 
@@ -142,3 +150,11 @@ Codex hourly usage 方向已拆成 TP-V2-060 和 TP-V2-061。TP-V2-060 只新增
 - Watch agent：执行 TP-V2-070，新增 watchOS 只读摘要 App。
 - QA / Anti Gravity agent：执行 TP-V2-071，使用 `agy --model gemini-3.5-flash` 进行跨端数据和设计验收。
 - Release agent：执行 TP-V2-072，做最终 AI Review、提交、PR 和必要部署。
+- Mobile App agent：执行 TP-V2-073，修正 iOS AppIcon 透明角和预圆角问题，并以物理 iPhone 上滑退出动画不露底作为最终验收。
+- Mobile App agent：执行 TP-V2-074，修正 iOS 底部导航图标的液态玻璃质感，以真机视觉为最终验收。
+- Mobile App / Server agent：执行 TP-V2-075，修正 Claude 5h 额度在 Today / Week / Month / All 之间不一致和疑似 stale 96% 外圈问题。
+- Mobile App / Server agent：执行 TP-V2-076，在 iOS 已用额度卡片中展示安全的 Claude / Codex 账号标签。
+- Mobile App agent：执行 TP-V2-077，修正 Claude 5h 为 0% 或已重置时行信息消失导致卡片高度不一致的问题。
+- Mobile App / Server agent：执行 TP-V2-078，修正 iOS Today 来源区展示 0 用量旧来源和更新时间缺日期上下文的问题。
+- Mobile App agent：执行 TP-V2-079，修正 iOS 来源行布局为第一行用户名+用量、第二行机器名+更新时间，并防止长文本遮挡右侧字段。
+- Mobile App agent：执行 TP-V2-080，把 iOS 底部周期切换从自定义毛玻璃胶囊升级为苹果推荐的原生 Liquid Glass Tab Bar / TabView 体验；如果当前 SDK 不支持，必须明确报告 fallback。

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List
+from datetime import datetime
+from typing import Any, Dict, Iterable, List, Optional
 
 
 def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
@@ -10,11 +11,31 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     groups = _dict(snapshot.get("groups"))
     items = _list(snapshot.get("items"))
     limits = _list(snapshot.get("limits"))
+    generated_at = _parse_datetime(snapshot.get("generated_at"))
 
     cache_tokens = _int(summary.get("cache_creation_tokens")) + _int(summary.get("cache_read_tokens"))
     total_tokens = _int(summary.get("total_tokens"))
 
-    windows = [_limit_window(row) for row in limits if isinstance(row, dict)]
+    account_context = _account_context(snapshot.get("account_hourly"), snapshot.get("ai_accounts"))
+    windows = [
+        window
+        for row in limits
+        if isinstance(row, dict)
+        for window in [_limit_window(row, account_context)]
+        if not _expired_short_window(window, generated_at)
+    ]
+    by_machine = _group_rows(_list(groups.get("by_machine")))
+    visible_source_ids = {
+        str(source_id)
+        for row in by_machine
+        for source_id in _list(row.get("source_ids"))
+    }
+    health_source_ids = {
+        str(row.get("source_id") or "")
+        for row in source_status
+        if isinstance(row, dict) and _is_health_issue_source(row)
+    }
+    mobile_source_ids = visible_source_ids | health_source_ids
     return {
         "schema_version": 1,
         "client": "ios",
@@ -34,9 +55,14 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "account": summary.get("account"),
         },
         "trend": _mobile_trend(trend),
-        "sources": [_mobile_source(row) for row in source_status if isinstance(row, dict)],
+        "sources": [
+            _mobile_source(row)
+            for row in source_status
+            if isinstance(row, dict)
+            and str(row.get("source_id") or "") in mobile_source_ids
+        ],
         "breakdown": {
-            "by_machine": _group_rows(_list(groups.get("by_machine"))),
+            "by_machine": by_machine,
             "by_os_user": _os_user_rows(_list(groups.get("by_machine")), items),
             "by_agent": _agent_rows(items),
             "by_model": _model_rows(items),
@@ -99,10 +125,30 @@ def _mobile_source(row: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _limit_window(row: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+def _is_health_issue_source(row: Dict[str, Any]) -> bool:
+    status = str(row.get("status") or "").lower()
+    return status not in {"", "ok", "disabled"}
+
+
+def _limit_window(row: Dict[str, Any], account_context: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    provider = str(row.get("provider") or "")
+    provider_context = account_context.get(provider.lower(), {})
+    account_label = _safe_account_label(
+        row.get("account_email")
+        or row.get("account_label")
+        or provider_context.get("label")
+        or provider_context.get("display_name")
+    )
+    plan_label = _safe_plan_label(
+        provider,
+        row.get("account_plan_label")
+        or row.get("account_plan")
+        or row.get("subscription")
+        or provider_context.get("subscription")
+    )
+    result = {
         "source_id": row.get("source_id"),
-        "provider": row.get("provider"),
+        "provider": provider,
         "window": row.get("window"),
         "used_percent": _number(row.get("used_percent")),
         "remaining_percent": _number(row.get("remaining_percent")),
@@ -114,6 +160,11 @@ def _limit_window(row: Dict[str, Any]) -> Dict[str, Any]:
         "status": row.get("status") or "unknown",
         "official": bool(row.get("official")),
     }
+    if account_label:
+        result["account_label"] = account_label
+    if plan_label:
+        result["account_plan_label"] = plan_label
+    return result
 
 
 def _group_rows(rows: List[Any]) -> List[Dict[str, Any]]:
@@ -123,6 +174,8 @@ def _group_rows(rows: List[Any]) -> List[Dict[str, Any]]:
             continue
         label = row.get("display_name") or row.get("name")
         total_tokens = _int(row.get("total_tokens"))
+        if total_tokens <= 0:
+            continue
         source_ids = set(str(source_id) for source_id in _list(row.get("source_ids")))
         contributions: Dict[str, int] = {}
         for user in _list(row.get("users")):
@@ -150,6 +203,9 @@ def _os_user_rows(machine_rows: List[Any], items: List[Any]) -> List[Dict[str, A
         for user in _list(machine.get("users")):
             if not isinstance(user, dict):
                 continue
+            total_tokens = _int(user.get("total_tokens"))
+            if total_tokens <= 0:
+                continue
             label = user.get("account") or "unknown"
             entry = rows.setdefault(str(label), {
                 "id": label,
@@ -158,13 +214,16 @@ def _os_user_rows(machine_rows: List[Any], items: List[Any]) -> List[Dict[str, A
                 "source_ids": set(),
                 "contributions": {},
             })
-            entry["tokens"] += _int(user.get("total_tokens"))
+            entry["tokens"] += total_tokens
             entry["source_ids"].update(str(source_id) for source_id in _list(user.get("source_ids")))
-            _add_contribution(entry["contributions"], _list(user.get("source_ids")), _int(user.get("total_tokens")))
+            _add_contribution(entry["contributions"], _list(user.get("source_ids")), total_tokens)
 
     if not rows:
         for item in items:
             if not isinstance(item, dict):
+                continue
+            total_tokens = _int(item.get("total_tokens"))
+            if total_tokens <= 0:
                 continue
             label = item.get("account") or "unknown"
             entry = rows.setdefault(str(label), {
@@ -174,13 +233,15 @@ def _os_user_rows(machine_rows: List[Any], items: List[Any]) -> List[Dict[str, A
                 "source_ids": set(),
                 "contributions": {},
             })
-            entry["tokens"] += _int(item.get("total_tokens"))
+            entry["tokens"] += total_tokens
             if item.get("source_id"):
                 entry["source_ids"].add(str(item["source_id"]))
-                _add_contribution(entry["contributions"], [item["source_id"]], _int(item.get("total_tokens")))
+                _add_contribution(entry["contributions"], [item["source_id"]], total_tokens)
 
     normalized = []
     for row in rows.values():
+        if _int(row["tokens"]) <= 0:
+            continue
         normalized.append({
             "id": row["id"],
             "label": row["label"],
@@ -319,6 +380,166 @@ def _display_name(machine: Any, os_user: Any) -> str:
     if machine and os_user:
         return f"{machine} · {os_user}"
     return str(machine or os_user or "unknown-source")
+
+
+def _expired_short_window(window: Dict[str, Any], generated_at: Optional[datetime]) -> bool:
+    if generated_at is None or not _is_short_window(window):
+        return False
+    reset_at = _parse_datetime(window.get("reset_at"))
+    if reset_at is None:
+        return False
+    reset_at, generated_at = _align_datetimes(reset_at, generated_at)
+    return reset_at <= generated_at
+
+
+def _is_short_window(window: Dict[str, Any]) -> bool:
+    name = str(window.get("window") or "").lower()
+    duration = _int(window.get("window_duration_minutes"))
+    return (
+        "5h" in name
+        or "session" in name
+        or (duration > 0 and duration <= 360)
+    )
+
+
+def _account_context(account_hourly: Any, ai_accounts: Any = None) -> Dict[str, Dict[str, Any]]:
+    rows = _list(_dict(account_hourly).get("by_ai_account")) + _list(ai_accounts)
+    grouped: Dict[str, Dict[str, Dict[str, Any]]] = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            continue
+        provider = _provider_context_key(row.get("provider"))
+        context = _account_context_row(row)
+        if not provider or not context:
+            continue
+        key = _account_context_key(context, index)
+        provider_accounts = grouped.setdefault(provider, {})
+        if key in provider_accounts:
+            _merge_account_context(provider_accounts[key], context)
+        else:
+            provider_accounts[key] = context
+    result: Dict[str, Dict[str, Any]] = {}
+    for provider, provider_accounts in grouped.items():
+        accounts = list(provider_accounts.values())
+        if len(accounts) == 1:
+            result[provider] = accounts[0]
+    return result
+
+
+def _account_context_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    account_id = str(row.get("account_id") or row.get("ai_account_id") or "").strip()
+    label = _safe_account_label(row.get("label") or row.get("account_label") or row.get("account_email"))
+    display_name = _safe_account_label(row.get("display_name"))
+    subscription = row.get("subscription") or row.get("account_plan") or row.get("account_plan_label")
+    result = {
+        "account_id": account_id,
+        "label": label,
+        "display_name": display_name,
+        "subscription": subscription,
+    }
+    return {
+        key: value
+        for key, value in result.items()
+        if value not in (None, "")
+    }
+
+
+def _account_context_key(context: Dict[str, Any], index: int) -> str:
+    for key in ("account_id", "label", "display_name"):
+        value = context.get(key)
+        if value:
+            return f"{key}:{value}"
+    return f"row:{index}"
+
+
+def _merge_account_context(target: Dict[str, Any], source: Dict[str, Any]) -> None:
+    for key, value in source.items():
+        if target.get(key) in (None, "") and value not in (None, ""):
+            target[key] = value
+
+
+def _provider_context_key(value: Any) -> str:
+    provider = str(value or "").lower()
+    if provider == "openai":
+        return "codex"
+    if provider == "anthropic":
+        return "claude"
+    return provider
+
+
+def _safe_account_label(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    lowered = text.lower()
+    unsafe_fragments = (
+        "token",
+        "bearer ",
+        "authorization",
+        "auth.json",
+        ".codex",
+        ".claude",
+        "/users/",
+        "/home/",
+        "\\users\\",
+    )
+    if lowered.startswith(("sk-", "sess-", "eyj")):
+        return None
+    if any(fragment in lowered for fragment in unsafe_fragments):
+        return None
+    if len(text) > 120:
+        return None
+    return text
+
+
+def _safe_plan_label(provider: str, value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    lowered = raw.lower().replace("_", " ").replace("-", " ")
+    normalized = " ".join(lowered.split())
+    provider_key = provider.lower()
+    if "codex" in provider_key or "openai" in provider_key:
+        if normalized == "pro":
+            return "Pro 20x"
+        if normalized in {"prolite", "pro lite"}:
+            return "Pro 5x"
+    if "claude" in provider_key or "anthropic" in provider_key:
+        if normalized in {"pro", "claude pro"}:
+            return "Pro"
+    if len(raw) <= 32 and all(ch.isalnum() or ch in " .+-_" for ch in raw):
+        display = " ".join(raw.replace("_", " ").replace("-", " ").split())
+        return " ".join(_title_plan_part(part) for part in display.split())
+    return None
+
+
+def _title_plan_part(value: str) -> str:
+    if value.lower().endswith("x") and any(ch.isdigit() for ch in value):
+        return value.lower()
+    return value[:1].upper() + value[1:]
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _align_datetimes(lhs: datetime, rhs: datetime) -> tuple[datetime, datetime]:
+    if lhs.tzinfo is None and rhs.tzinfo is not None:
+        lhs = lhs.replace(tzinfo=rhs.tzinfo)
+    elif lhs.tzinfo is not None and rhs.tzinfo is None:
+        rhs = rhs.replace(tzinfo=lhs.tzinfo)
+    elif lhs.tzinfo is not None and rhs.tzinfo is not None:
+        lhs = lhs.astimezone(rhs.tzinfo)
+    return lhs, rhs
 
 
 def _ratio(part: int, total: int) -> int:

@@ -98,6 +98,7 @@ def build_snapshot(
                 ref_time if period_id == "today" and end_date == ref_time.date().isoformat() else None,
             )
             account_hourly_rows = _fetch_account_hourly_rows(conn, start_date, end_date, timezone_str)
+            ai_accounts = _fetch_ai_accounts(conn)
     except sqlite3.OperationalError as exc:
         if "no such table" in str(exc):
             empty_snapshot = _empty_snapshot(
@@ -388,6 +389,7 @@ def build_snapshot(
         "source_status": source_status,
         "limits": limits,
         "account_hourly": account_hourly,
+        "ai_accounts": ai_accounts,
         "metadata": {
             "codex_hourly": {
                 "drift": codex_hourly_context_data["drift"],
@@ -642,7 +644,7 @@ def _fetch_account_hourly_rows(
         SELECT f.fact_id, f.source_id, f.machine_id, COALESCE(m.machine_name, f.machine_id) AS machine_name,
                f.os_user, f.ai_provider, f.ai_account_id,
                COALESCE(a.account_label, f.ai_account_id) AS account_label,
-               a.display_name, f.agent, f.client, f.window_start, f.window_end,
+               a.display_name, a.subscription, f.agent, f.client, f.window_start, f.window_end,
                f.input_tokens, f.output_tokens, f.cache_creation_tokens, f.cache_read_tokens,
                f.reasoning_output_tokens, f.total_tokens, f.event_count, f.session_count,
                f.attribution_confidence, f.provenance
@@ -658,13 +660,36 @@ def _fetch_account_hourly_rows(
     ]
 
 
+def _fetch_ai_accounts(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    if not _table_exists(conn, "ai_accounts"):
+        return []
+    rows = conn.execute(
+        """
+        SELECT provider, account_id, account_label, display_name, subscription, last_seen_at
+        FROM ai_accounts
+        ORDER BY provider ASC, account_id ASC
+        """
+    ).fetchall()
+    return [
+        {
+            "provider": row[0],
+            "account_id": row[1],
+            "label": row[2],
+            "display_name": row[3],
+            "subscription": row[4],
+            "last_seen_at": row[5],
+        }
+        for row in rows
+    ]
+
+
 def _account_hourly_row_in_period(
     row: Any,
     start_date: Optional[str],
     end_date: str,
     timezone_str: str,
 ) -> bool:
-    window_start = parse_datetime(str(row[11] or ""))
+    window_start = parse_datetime(str(row[12] or ""))
     if window_start is None:
         return False
     tz = zoneinfo(timezone_str)
@@ -702,7 +727,7 @@ def _account_hourly_summary(rows: list[Any]) -> dict[str, Any]:
     for row in rows:
         (
             _fact_id, source_id, machine_id, machine_name, os_user, ai_provider,
-            ai_account_id, account_label, display_name, agent, _client,
+            ai_account_id, account_label, display_name, subscription, agent, _client,
             _window_start, _window_end, inp, out, cc, cr, reasoning, tot,
             _event_count, _session_count, confidence, _provenance,
         ) = row
@@ -714,6 +739,7 @@ def _account_hourly_summary(rows: list[Any]) -> dict[str, Any]:
             "account_id": ai_account_id,
             "label": account_label,
             "display_name": display_name,
+            "subscription": subscription,
             "total_tokens": 0,
             "input_tokens": 0,
             "output_tokens": 0,
@@ -853,6 +879,7 @@ def _empty_snapshot(
         "source_status": [],
         "limits": [],
         "account_hourly": _empty_account_hourly_summary(),
+        "ai_accounts": [],
     }
     if machine_filter:
         snapshot["summary"]["machine"] = machine_filter

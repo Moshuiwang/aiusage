@@ -3,6 +3,7 @@ from __future__ import annotations
 import pathlib
 import struct
 import unittest
+import zlib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -63,6 +64,25 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         icon_1024 = app_icon_dir / "AppIcon-1024.png"
         self.assertTrue(icon_1024.exists())
         self.assertEqual(self._png_size(icon_1024), (1024, 1024))
+
+    def test_ios_app_icons_are_fully_opaque_square_artwork(self) -> None:
+        app_icon_dir = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Resources"
+            / "Assets.xcassets"
+            / "AppIcon.appiconset"
+        )
+        icon_paths = sorted(app_icon_dir.glob("*.png"))
+        self.assertGreaterEqual(len(icon_paths), 10)
+        for path in icon_paths:
+            with self.subTest(filename=path.name):
+                self.assertEqual(
+                    self._png_alpha_extrema(path),
+                    (255, 255),
+                    "iOS AppIcon PNG must be fully opaque square artwork; transparent corners can flash a backing color during iOS exit animations.",
+                )
 
     def test_multi_platform_brand_icon_assets_are_wired(self) -> None:
         token_svg = ROOT / "packages" / "design-tokens" / "ai-usage-icon.svg"
@@ -387,11 +407,10 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "AIUsageBrandMark(size: 30)",
             "onRefresh",
             "RefreshActionButton",
-            "CustomGlassTabBar",
-            "GlassSurface",
             "BrandIcon",
             "BrandIcon.kind(for:",
-            "LiquidGlassTabButton",
+            "NativeLiquidGlassPeriodTabs",
+            "NativeLiquidGlassPeriodTabsCapability",
             "LimitReminderRow",
             "RefreshSummaryCard",
             "LimitAccountGroupCard",
@@ -399,18 +418,12 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "limitGroups",
             "UnifiedDetailLink",
             "MaterialCard",
-            "safeAreaInset(edge: .bottom)",
             "initialTabID",
-            "@State private var selectedPeriodID",
-            "@Binding var selectedPeriodID",
             ".onChange(of: state.home.periodID)",
             "onPeriodSelected(period.id)",
-            "guard selectedPeriodID != period.id else",
             "refreshingPeriodID",
             "cachedSummaries",
-            "MobilePeriodSelection.decision",
             "keepVisibleSummary",
-            ".onChange(of: selectedPeriodID)",
             "state.tokenBreakdownText",
             ".frame(height: 52, alignment: .bottom)",
             "state.topSources",
@@ -439,7 +452,7 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "withAnimation(.easeInOut(duration: 0.16)) {\n            summary = .empty(periodID: period)",
             content,
         )
-        self.assertNotIn("TabView(selection:", content)
+        self.assertIn("TabView(selection:", content)
         self.assertNotIn("chart.line.uptrend.xyaxis", content)
         self.assertNotIn("linePath(points:", content)
         self.assertNotIn("areaPath(points:", content)
@@ -448,6 +461,78 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertLessEqual(content.count("List {"), 0)
         self.assertEqual(content.count("AI Usage"), 1)
 
+    def test_bottom_navigation_uses_native_liquid_glass_tab_view(self) -> None:
+        root_view = (
+            ROOT
+            / "mobile"
+            / "ios"
+            / "Sources"
+            / "AIUsageMobileCore"
+            / "AIUsageMobileRootView.swift"
+        )
+        content = root_view.read_text(encoding="utf-8")
+        self.assertIn("struct NativeLiquidGlassPeriodTabs", content)
+        self.assertIn("NativeLiquidGlassPeriodTabsCapability", content)
+        self.assertIn("static let nativeLiquidGlassBehavior", content)
+        self.assertIn("TabView(selection:", content)
+        self.assertIn(".tabItem", content)
+        self.assertIn("nativeLiquidGlassPeriodTabBehavior()", content)
+        self.assertIn("tabBarMinimizeBehavior(.onScrollDown)", content)
+        self.assertIn("PeriodTab.allCases", content)
+        for title in ["今天", "周", "月", "全部"]:
+            with self.subTest(title=title):
+                self.assertIn(f'return "{title}"', content)
+        self.assertIn('case .week:  return "gauge.with.dots.needle.33percent"', content)
+        self.assertNotIn("Capsule().fill(Color.blue)", content)
+        self.assertNotIn(".foregroundStyle(isSelected ? .white", content)
+        self.assertNotIn(".background(.regularMaterial, in: Capsule())", content)
+        self.assertNotIn("ZStack(alignment: .bottom)", content)
+
+    def test_ios_sources_card_uses_source_level_usage_rows(self) -> None:
+        root_view = (
+            ROOT
+            / "mobile"
+            / "ios"
+            / "Sources"
+            / "AIUsageMobileCore"
+            / "AIUsageMobileRootView.swift"
+        )
+        content = root_view.read_text(encoding="utf-8")
+        card_start = content.index("struct PeriodSourcesCard")
+        card_end = content.index("struct PeriodSourceRow", card_start)
+        card_content = content[card_start:card_end]
+
+        self.assertIn("sourceUsageRows(sources: sources, byMachine: byMachine)", card_content)
+        self.assertIn("tokensBySource[contribution.sourceID", card_content)
+        self.assertNotIn("SourcesDisplayState.visibleRows(byMachine)", card_content)
+
+    def test_ios_source_row_keeps_user_usage_machine_and_update_time_separate(self) -> None:
+        root_view = (
+            ROOT
+            / "mobile"
+            / "ios"
+            / "Sources"
+            / "AIUsageMobileCore"
+            / "AIUsageMobileRootView.swift"
+        )
+        content = root_view.read_text(encoding="utf-8")
+        row_start = content.index("struct PeriodSourceRow")
+        row_end = content.index("// MARK: - Model Usage Card", row_start)
+        row_content = content[row_start:row_end]
+
+        self.assertIn("private var displayUser", row_content)
+        self.assertIn("private var machineName", row_content)
+        self.assertIn("private var updateText", row_content)
+        self.assertIn("Text(displayUser)", row_content)
+        self.assertIn("Text(TokenFormat.compact(row.tokens))", row_content)
+        self.assertIn("Text(machineName)", row_content)
+        self.assertIn("Text(updateText)", row_content)
+        self.assertGreaterEqual(row_content.count("HStack"), 2)
+        self.assertIn(".truncationMode(.middle)", row_content)
+        self.assertIn(".layoutPriority(1)", row_content)
+        self.assertIn(".fixedSize(horizontal: true, vertical: false)", row_content)
+        self.assertNotIn("parts.joined(separator:", row_content)
+
     @staticmethod
     def _png_size(path: pathlib.Path) -> tuple[int, int]:
         with path.open("rb") as handle:
@@ -455,3 +540,73 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         if header[:8] != b"\x89PNG\r\n\x1a\n":
             raise AssertionError(f"{path} is not a PNG")
         return struct.unpack(">II", header[16:24])
+
+    @staticmethod
+    def _png_alpha_extrema(path: pathlib.Path) -> tuple[int, int]:
+        with path.open("rb") as handle:
+            data = handle.read()
+        if data[:8] != b"\x89PNG\r\n\x1a\n":
+            raise AssertionError(f"{path} is not a PNG")
+        pos = 8
+        color_type = None
+        bit_depth = None
+        width = height = None
+        compressed = bytearray()
+        while pos < len(data):
+            length = struct.unpack(">I", data[pos : pos + 4])[0]
+            chunk_type = data[pos + 4 : pos + 8]
+            chunk_data = data[pos + 8 : pos + 8 + length]
+            pos += 12 + length
+            if chunk_type == b"IHDR":
+                width, height, bit_depth, color_type = struct.unpack(">IIBB", chunk_data[:10])
+            elif chunk_type == b"IDAT":
+                compressed.extend(chunk_data)
+            elif chunk_type == b"IEND":
+                break
+        if color_type not in (4, 6):
+            return (255, 255)
+        if bit_depth != 8 or width is None or height is None:
+            raise AssertionError(f"{path} uses unsupported PNG alpha format")
+        channels = 4 if color_type == 6 else 2
+        stride = width * channels
+        raw = zlib.decompress(bytes(compressed))
+        previous = [0] * stride
+        alphas: list[int] = []
+        idx = 0
+        for _ in range(height):
+            filter_type = raw[idx]
+            idx += 1
+            row = list(raw[idx : idx + stride])
+            idx += stride
+            IOSXcodeIntegrationTests._unfilter_png_row(row, previous, filter_type, channels)
+            alphas.extend(row[channels - 1 :: channels])
+            previous = row
+        return (min(alphas), max(alphas))
+
+    @staticmethod
+    def _unfilter_png_row(row: list[int], previous: list[int], filter_type: int, bpp: int) -> None:
+        def paeth(a: int, b: int, c: int) -> int:
+            p = a + b - c
+            pa = abs(p - a)
+            pb = abs(p - b)
+            pc = abs(p - c)
+            if pa <= pb and pa <= pc:
+                return a
+            if pb <= pc:
+                return b
+            return c
+
+        for i, value in enumerate(row):
+            left = row[i - bpp] if i >= bpp else 0
+            up = previous[i]
+            upper_left = previous[i - bpp] if i >= bpp else 0
+            if filter_type == 1:
+                row[i] = (value + left) & 0xFF
+            elif filter_type == 2:
+                row[i] = (value + up) & 0xFF
+            elif filter_type == 3:
+                row[i] = (value + ((left + up) // 2)) & 0xFF
+            elif filter_type == 4:
+                row[i] = (value + paeth(left, up, upper_left)) & 0xFF
+            elif filter_type != 0:
+                raise AssertionError(f"unsupported PNG filter {filter_type}")

@@ -330,9 +330,43 @@ public struct MobileLimitWindow: Codable, Equatable, Sendable, Identifiable {
     public let confidence: String
     public let status: String
     public let official: Bool
+    public let accountLabel: String?
+    public let accountPlanLabel: String?
 
     public var isOfficialObserved: Bool {
         official && confidence == "observed" && status == "ok"
+    }
+
+    public init(
+        sourceID: String,
+        provider: String,
+        window: String,
+        usedPercent: Double,
+        remainingPercent: Double,
+        resetAt: String?,
+        windowDurationMinutes: Int,
+        observedAt: String?,
+        sourceType: String?,
+        confidence: String,
+        status: String,
+        official: Bool,
+        accountLabel: String? = nil,
+        accountPlanLabel: String? = nil
+    ) {
+        self.sourceID = sourceID
+        self.provider = provider
+        self.window = window
+        self.usedPercent = usedPercent
+        self.remainingPercent = remainingPercent
+        self.resetAt = resetAt
+        self.windowDurationMinutes = windowDurationMinutes
+        self.observedAt = observedAt
+        self.sourceType = sourceType
+        self.confidence = confidence
+        self.status = status
+        self.official = official
+        self.accountLabel = accountLabel
+        self.accountPlanLabel = accountPlanLabel
     }
 
     enum CodingKeys: String, CodingKey {
@@ -348,5 +382,7 @@ public struct MobileLimitWindow: Codable, Equatable, Sendable, Identifiable {
         case confidence
         case status
         case official
+        case accountLabel = "account_label"
+        case accountPlanLabel = "account_plan_label"
     }
 }

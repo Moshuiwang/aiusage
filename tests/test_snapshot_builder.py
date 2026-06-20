@@ -214,6 +214,7 @@ class TestSnapshotBuilder(unittest.TestCase):
         self.assertEqual(account_hourly["total_tokens"], 155)
         self.assertEqual(account_hourly["facts"], 1)
         self.assertEqual(account_hourly["by_ai_account"][0]["label"], "start@example.com")
+        self.assertIsNone(account_hourly["by_ai_account"][0]["subscription"])
         self.assertEqual(account_hourly["by_ai_account"][0]["attribution_confidence"], "account_observed_usage_inferred")
         self.assertEqual(
             account_hourly["by_ai_account"][0]["confidence_breakdown"],
@@ -221,6 +222,59 @@ class TestSnapshotBuilder(unittest.TestCase):
         )
         self.assertEqual(account_hourly["by_os_user"][0]["os_user"], "wangzhipeng")
         self.assertEqual(account_hourly["confidence_breakdown"][0]["confidence"], "account_observed_usage_inferred")
+
+    def test_build_snapshot_includes_known_ai_accounts_without_hourly_facts(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-11T14:30:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[],
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO ai_accounts (
+                  provider, account_id, account_label, display_name, subscription, first_seen_at, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "codex",
+                    "86b44ff3-d85f-4fa7-bbbb-1a662509b3b7",
+                    "startimessocietegn@gmail.com",
+                    "StarTimes",
+                    "pro",
+                    "2026-06-11T14:30:00+08:00",
+                    "2026-06-11T14:30:00+08:00",
+                ),
+            )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-11",
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-11T14:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["account_hourly"]["by_ai_account"], [])
+        self.assertEqual(
+            snapshot["ai_accounts"],
+            [
+                {
+                    "provider": "codex",
+                    "account_id": "86b44ff3-d85f-4fa7-bbbb-1a662509b3b7",
+                    "label": "startimessocietegn@gmail.com",
+                    "display_name": "StarTimes",
+                    "subscription": "pro",
+                    "last_seen_at": "2026-06-11T14:30:00+08:00",
+                }
+            ],
+        )
 
     def test_account_hourly_mixed_confidence_is_visible_per_account(self) -> None:
         facts = []

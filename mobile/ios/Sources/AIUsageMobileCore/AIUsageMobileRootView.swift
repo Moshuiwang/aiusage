@@ -38,27 +38,34 @@ public struct AIUsageMobileRootView: View {
     }
 
     public var body: some View {
-        ZStack(alignment: .bottom) {
+        NativeLiquidGlassPeriodTabs(selection: periodSelection) { period in
             PeriodScrollView(
                 summary: summary,
                 state: state,
-                selectedPeriod: selectedPeriod,
+                selectedPeriod: period,
                 refreshingPeriodID: refreshingPeriodID,
-                onRefreshAsync: { await onRefreshAsync(selectedPeriod.periodID) },
+                onRefreshAsync: { await onRefreshAsync(period.periodID) },
                 onSettingsTapped: onSettingsTapped
             )
-
-            PeriodTabBar(selection: $selectedPeriod) { newPeriod in
-                onPeriodSelected(newPeriod.periodID)
-            }
         }
         .background(Color.appGroupedBackground.ignoresSafeArea())
         .dynamicTypeSize(.xSmall ... .large)
-        .onChange(of: summary.period.id) { _, newID in
+        .onChange(of: state.home.periodID) { _, newID in
             if let tab = PeriodTab(rawValue: newID) {
                 selectedPeriod = tab
             }
         }
+    }
+
+    private var periodSelection: Binding<PeriodTab> {
+        Binding(
+            get: { selectedPeriod },
+            set: { period in
+                guard selectedPeriod != period else { return }
+                selectedPeriod = period
+                onPeriodSelected(period.id)
+            }
+        )
     }
 }
 
@@ -74,6 +81,7 @@ enum PeriodTab: String, Hashable {
 
     init(id: String) { self = PeriodTab(rawValue: id) ?? .today }
 
+    var id: String { rawValue }
     var periodID: String { rawValue }
 
     var title: String {
@@ -88,10 +96,56 @@ enum PeriodTab: String, Hashable {
     var systemImage: String {
         switch self {
         case .today: return "sun.max"
-        case .week:  return "calendar"
+        case .week:  return "gauge.with.dots.needle.33percent"
         case .month: return "calendar.circle"
         case .all:   return "list.bullet"
         }
+    }
+}
+
+// MARK: - Native Liquid Glass Period Tabs
+
+enum NativeLiquidGlassPeriodTabsCapability {
+    static let usesNativeTabView = true
+    static let nativeLiquidGlassBehavior = "iOS 26+ system TabView Liquid Glass with tabBarMinimizeBehavior(.onScrollDown)"
+    static let fallbackBehavior = "iOS 17-25 uses native TabView without the iOS 26 Liquid Glass minimization API"
+}
+
+struct NativeLiquidGlassPeriodTabs<Content: View>: View {
+    @Binding var selection: PeriodTab
+    let content: (PeriodTab) -> Content
+
+    init(selection: Binding<PeriodTab>, @ViewBuilder content: @escaping (PeriodTab) -> Content) {
+        self._selection = selection
+        self.content = content
+    }
+
+    var body: some View {
+        TabView(selection: $selection) {
+            ForEach(PeriodTab.allCases, id: \.self) { period in
+                content(period)
+                    .tag(period)
+                    .tabItem {
+                        Label(period.title, systemImage: period.systemImage)
+                    }
+            }
+        }
+        .nativeLiquidGlassPeriodTabBehavior()
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func nativeLiquidGlassPeriodTabBehavior() -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *) {
+            self.tabBarMinimizeBehavior(.onScrollDown)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
     }
 }
 
@@ -127,7 +181,9 @@ struct PeriodScrollView: View {
 
                 PeriodSourcesCard(
                     sources: state.sources,
-                    byMachine: state.breakdown.byMachine
+                    byMachine: state.breakdown.byMachine,
+                    generatedAt: summary.generatedAt,
+                    timezone: summary.timezone
                 )
 
                 if !state.breakdown.byModel.isEmpty {
@@ -425,9 +481,21 @@ struct ProviderQuotaCard: View {
 
     private var outerColor: Color { providerOuterColor(group.provider) }
     private var innerColor: Color { providerInnerColor(group.provider) }
+    private var fiveHourDisplay: QuotaWindowDisplayState {
+        QuotaWindowDisplayState.fiveHour(window: fiveHourWindow)
+    }
 
     var body: some View {
         VStack(spacing: 10) {
+            if let account = group.accountLabel {
+                Text(AccountLabelText.compactEmail(account))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .frame(maxWidth: .infinity)
+            }
+
             // Ring
             ZStack {
                 Circle()
@@ -450,21 +518,28 @@ struct ProviderQuotaCard: View {
                     .rotationEffect(.degrees(-90))
                     .animation(.easeOut(duration: 0.5), value: weeklyWindow?.usedPercent)
 
-                Text(group.providerLabel)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 1) {
+                    Text(group.providerLabel)
+                        .font(.system(size: 9, weight: .bold))
+                    if let plan = group.accountPlanLabel {
+                        Text(plan)
+                            .font(.system(size: 8, weight: .semibold))
+                    }
+                }
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
             }
 
             // Stat rows — compact, all data per row together
             VStack(spacing: 4) {
-                if let w = fiveHourWindow {
-                    QuotaRow(
-                        windowLabel: "5h",
-                        pct: Int(w.usedPercent.rounded()),
-                        resetText: remainingTimeText(resetAt: w.resetAt),
-                        color: outerColor
-                    )
-                }
+                QuotaRow(
+                    windowLabel: "5h",
+                    pct: fiveHourDisplay.percent,
+                    resetText: fiveHourDisplay.resetText,
+                    color: fiveHourDisplay.isKnown ? outerColor : Color.secondary,
+                    isMuted: !fiveHourDisplay.isKnown
+                )
                 if let w = weeklyWindow {
                     QuotaRow(
                         windowLabel: "7d",
@@ -479,13 +554,15 @@ struct ProviderQuotaCard: View {
         .frame(maxWidth: .infinity)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
+
 }
 
 struct QuotaRow: View {
     let windowLabel: String
-    let pct: Int
+    let pct: Int?
     let resetText: String
     let color: Color
+    var isMuted: Bool = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -494,7 +571,7 @@ struct QuotaRow: View {
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(color)
                 .frame(width: 16, alignment: .leading)
-            Text("\(pct)%")
+            Text(pct.map { "\($0)%" } ?? "--")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(color)
                 .monospacedDigit()
@@ -506,6 +583,7 @@ struct QuotaRow: View {
                 .monospacedDigit()
                 .lineLimit(1)
         }
+        .opacity(isMuted ? 0.62 : 1)
     }
 }
 
@@ -565,6 +643,11 @@ private func providerInnerColor(_ provider: String) -> Color {
 struct PeriodSourcesCard: View {
     let sources: [MobileSource]
     let byMachine: [MobileBreakdownRow]
+    let generatedAt: String?
+    let timezone: String?
+    private var visibleRows: [MobileBreakdownRow] {
+        sourceUsageRows(sources: sources, byMachine: byMachine)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -575,18 +658,23 @@ struct PeriodSourcesCard: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
 
-            if byMachine.isEmpty {
+            if visibleRows.isEmpty {
                 Text("暂无来源数据")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(byMachine.enumerated()), id: \.element.id) { index, row in
+                    ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
                         if index > 0 {
                             Divider().padding(.leading, 17)
                         }
-                        PeriodSourceRow(row: row, source: matchingSource(for: row))
+                        PeriodSourceRow(
+                            row: row,
+                            source: matchingSource(for: row),
+                            generatedAt: generatedAt,
+                            timezone: timezone
+                        )
                     }
                 }
                 .padding(.horizontal, 4)
@@ -598,53 +686,112 @@ struct PeriodSourcesCard: View {
     }
 
     private func matchingSource(for row: MobileBreakdownRow) -> MobileSource? {
-        sources.first { ($0.machine ?? $0.displayName ?? $0.sourceID) == row.label }
-            ?? sources.first { row.sourceIDs?.contains($0.sourceID) == true }
+        sources.first { row.sourceIDs?.contains($0.sourceID) == true }
+            ?? sources.first { ($0.machine ?? $0.displayName ?? $0.sourceID) == row.label }
+    }
+
+    private func sourceUsageRows(sources: [MobileSource], byMachine: [MobileBreakdownRow]) -> [MobileBreakdownRow] {
+        var tokensBySource: [String: Int] = [:]
+        for machine in byMachine {
+            if let contributions = machine.contributions, !contributions.isEmpty {
+                for contribution in contributions {
+                    tokensBySource[contribution.sourceID, default: 0] += contribution.tokens
+                }
+            } else if let sourceIDs = machine.sourceIDs, sourceIDs.count == 1, let sourceID = sourceIDs.first {
+                tokensBySource[sourceID, default: 0] += machine.tokens
+            }
+        }
+
+        let sourceByID = Dictionary(uniqueKeysWithValues: sources.map { ($0.sourceID, $0) })
+        return tokensBySource
+            .filter { $0.value > 0 }
+            .map { sourceID, tokens in
+                let source = sourceByID[sourceID]
+                let label = source?.displayName ?? source?.osUser ?? source?.machine ?? sourceID
+                return MobileBreakdownRow(
+                    id: sourceID,
+                    label: label,
+                    tokens: tokens,
+                    sourceIDs: [sourceID],
+                    contributions: [MobileBreakdownContribution(sourceID: sourceID, tokens: tokens)]
+                )
+            }
+            .sorted {
+                if $0.tokens == $1.tokens {
+                    return $0.label.localizedStandardCompare($1.label) == .orderedAscending
+                }
+                return $0.tokens > $1.tokens
+            }
     }
 }
 
 struct PeriodSourceRow: View {
     let row: MobileBreakdownRow
     let source: MobileSource?
+    let generatedAt: String?
+    let timezone: String?
     private var isOnline: Bool { source?.status == "ok" }
 
-    private var displayName: String {
+    private var displayUser: String {
         source?.osUser ?? source?.displayName ?? row.label
     }
 
+    private var machineName: String {
+        source?.machine ?? source?.displayName ?? row.label
+    }
+
+    private var updateText: String {
+        SourceUpdateDateText.format(
+            source?.lastPushedAt ?? source?.lastObservedAt,
+            now: parsedGeneratedAt() ?? Date(),
+            timezone: timezone
+        )
+    }
+
     var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(isOnline ? Color.green : Color.orange)
-                .frame(width: 7, height: 7)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(displayName)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(isOnline ? Color.green : Color.orange)
+                    .frame(width: 7, height: 7)
+                Text(displayUser)
                     .font(.system(size: 14, weight: .semibold))
                     .lineLimit(1)
-                if let sub = sourceSub(source) {
-                    Text(sub)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
+                Text(TokenFormat.compact(row.tokens))
+                    .font(.system(size: 13, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary.opacity(0.72))
+                    .layoutPriority(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            Spacer()
-            Text(TokenFormat.compact(row.tokens))
-                .font(.system(size: 13, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(.primary.opacity(0.72))
+            HStack(spacing: 10) {
+                Text(machineName)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .padding(.leading, 17)
+                Spacer(minLength: 8)
+                Text(updateText)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .padding(.vertical, 8)
     }
 
-    private func sourceSub(_ s: MobileSource?) -> String? {
-        guard let s else { return nil }
-        var parts: [String] = []
-        // machine name now in subtitle (was primary before)
-        if let m = s.machine { parts.append(m) }
-        if let p = s.platform { parts.append(p) }
-        if let t = s.lastPushedAt ?? s.lastObservedAt { parts.append(shortTime(t)) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    private func parsedGeneratedAt() -> Date? {
+        guard let generatedAt else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: generatedAt) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: generatedAt)
     }
 }
 
@@ -718,66 +865,6 @@ struct ModelUsageRow: View {
             }
         }
         .padding(.vertical, 9)
-    }
-}
-
-// MARK: - Floating Period Tab Bar
-
-struct PeriodTabBar: View {
-    @Binding var selection: PeriodTab
-    let onSelect: (PeriodTab) -> Void
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(PeriodTab.allCases, id: \.self) { tab in
-                FloatingTabButton(tab: tab, isSelected: selection == tab) {
-                    guard selection != tab else { return }
-                    selection = tab
-                    onSelect(tab)
-                }
-            }
-        }
-        .padding(5)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Color.primary.opacity(0.1), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.18), radius: 20, x: 0, y: 8)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 28)
-    }
-}
-
-struct FloatingTabButton: View {
-    let tab: PeriodTab
-    let isSelected: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: isSelected ? 5 : 0) {
-                Image(systemName: tab.systemImage)
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 22)
-                if isSelected {
-                    Text(tab.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .leading).combined(with: .opacity),
-                            removal: .move(edge: .trailing).combined(with: .opacity)
-                        ))
-                }
-            }
-            .padding(.horizontal, isSelected ? 16 : 12)
-            .padding(.vertical, 12)
-            .frame(minHeight: 44)
-            .background {
-                if isSelected {
-                    Capsule().fill(Color.blue)
-                }
-            }
-            .foregroundStyle(isSelected ? .white : Color.primary.opacity(0.55))
-        }
-        .buttonStyle(.plain)
-        .animation(.spring(duration: 0.28, bounce: 0.2), value: isSelected)
     }
 }
 
@@ -1023,12 +1110,9 @@ public struct MobileServerSettingsView: View {
             Form {
                 Section("服务") {
                     TextField("Server URL", text: $baseURLString)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .mobileURLTextInput()
                     SecureField("Token", text: $token)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                        .mobilePlainTextInput()
                 }
                 Section {
                     Button { save() } label: { Label("保存", systemImage: "tray.and.arrow.down") }
@@ -1094,6 +1178,33 @@ public struct MobileServerSettingsView: View {
             period: period.isEmpty ? MobileSummaryRuntimeConfig.initialPeriod() : period,
             tokenStore: tokenStore
         )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func mobileURLTextInput() -> some View {
+        #if canImport(UIKit)
+        self
+            .keyboardType(.URL)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+        #else
+        self
+            .autocorrectionDisabled()
+        #endif
+    }
+
+    @ViewBuilder
+    func mobilePlainTextInput() -> some View {
+        #if canImport(UIKit)
+        self
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+        #else
+        self
+            .autocorrectionDisabled()
+        #endif
     }
 }
 
