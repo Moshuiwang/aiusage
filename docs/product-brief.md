@@ -169,6 +169,17 @@ iOS Widget 是 iPhone App 的轻量 glanceable 展示面，只读 App 或 server
 
 Widget 不承载完整 dashboard，不做复杂 drilldown，不直接调用采集命令或官方 provider。
 
+### Apple Watch
+
+Apple Watch 是 iPhone App 的 companion glance 入口，产品边界见 [`watch-companion-testflight-prd.md`](product/watch-companion-testflight-prd.md)。
+
+目标体验：
+
+- 通过 iPhone App / TestFlight 稳定安装和管理。
+- 在 Watch App 中查看 Codex 额度、reset time、今日用量和数据新鲜度。
+- 在系统表盘 WidgetKit accessory 中抬腕查看最小摘要。
+- 只消费 iPhone App 派生的移动摘要，不执行采集、不保存服务端 token。
+
 ### Android App / Widget
 
 Android 复用 iPhone 的移动信息架构：
