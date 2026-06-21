@@ -1,0 +1,25 @@
+name = "aiusage-api"
+main = "cloudflare/aiusage-api-worker.js"
+compatibility_date = "2026-06-21"
+workers_dev = false
+
+[vars]
+ENVIRONMENT = "development"
+ORIGIN_BASE_URL = "https://vpn2.chunbai.com:8443"
+
+[[routes]]
+pattern = "aiusage.chunbai.com/*"
+zone_name = "chunbai.com"
+
+[[d1_databases]]
+binding = "AIUSAGE_DB"
+database_name = "aiusage-dev-db"
+database_id = "35ba085b-f437-41a1-b3c4-9bba30ec4723"
+
+[[kv_namespaces]]
+binding = "AIUSAGE_KV"
+id = "ce0c08082b034abcb2012b91eed9991a"
+
+[[r2_buckets]]
+binding = "AIUSAGE_ASSETS"
+bucket_name = "aiusage-dev-assets"

@@ -1,0 +1,13 @@
+{
+  "name": "ai-usage-widget",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cf:pages:deploy": "wrangler pages deploy src/ai_usage_widget/static --project-name aiusage-dashboard",
+    "cf:worker:deploy": "wrangler deploy",
+    "cf:worker:dev": "wrangler dev --local"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
