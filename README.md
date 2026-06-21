@@ -248,28 +248,19 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 ## 关键文件
 
 - [AGENTS.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/AGENTS.md)：每次会话自动读取的最小硬规则和文档路由。
+- [project-map.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/project-map.md)：项目地图、文档索引、客户端当前/目标目录映射。
 - [status.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/status.md)：当前阶段、有效决策和下一步。
+- [architecture/architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/architecture.md)：当前真实架构、模块 owner 和禁止事项。
+- [architecture/database.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/database.md)：当前 SQLite 结构索引，代码为唯一事实源。
+- [architecture/interfaces.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/interfaces.md)：当前 HTTP / summary / mobile 接口索引。
 - [product-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
-- [architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture.md)：工程架构、数据链路、schema 目标和测试架构。
-- [clients/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/clients/README.md)：跨端客户端目标目录和迁移规则。
-- [client-platforms.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/client-platforms.md)：iOS、Android、macOS、Windows、Web 的展示边界。
-- [mobile-app-design-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/mobile-app-design-brief.md)：iPhone App + iOS Widget 的设计入口、信息架构和原型协作方式。
-- [multi-platform-design-prd.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-prd.md)：最新多端设计包对应的产品体验、范围和优先级。
-- [multi-platform-design-architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-architecture.md)：Web、macOS、iOS Widget 和 Watch 共用事实链路的架构方案。
-- [multi-platform-design-database.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-database.md)：多端设计所需展示字段与现有 SQLite 表的映射。
-- [multi-platform-design-interface.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/multi-platform-design-interface.md)：多端展示所需 Summary API 字段和降级约定。
-- [task-plan.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-plan.md)：旧任务入口兼容层，指向任务包目录。
 - [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。
 - [task-packages/RULES.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
-- [task-packages/v2/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/v2/INDEX.md)：V2 任务包索引，面向个人 HTTP push 架构。
-- [task-packages/v1/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/v1/INDEX.md)：V1 任务包索引，旧 SSH pull / Widget-first 执行序列，仅作历史参考。
+- [task-packages/v2/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/v2/INDEX.md)：V2 当前任务包索引；`done` 包链接到归档区。
+- [archive/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/archive/INDEX.md)：历史设计稿、已完成任务包和 review 记录索引。
 - [operations.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
 - [schedulers.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/schedulers.md)：各平台终端定时任务配置文档。
-- [handoff.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/handoff.md)：项目重构完成后的交接及后续部署指引。
-- [display-options.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/display-options.md)：历史 Widget 展示候选和信息块，仅作移动端设计参考。
 - [subscription-usage-source.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/subscription-usage-source.md)：limits/quota 数据源方向。
-- [widget-macos.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/widget-macos.md)：legacy macOS SwiftUI/WidgetKit 构建、预览和同步。
-- [ui-direction/wight-ai-usage/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/ui-direction/wight-ai-usage/README.md)：目标 UI 设计稿归档说明。
 
 ## 快照方向
 

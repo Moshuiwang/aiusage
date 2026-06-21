@@ -4,7 +4,7 @@ Version: V2
 ID: TP-V2-074
 Status: done
 Type: implementation
-Depends on: TP-V2-062, TP-V2-068
+Depends on: none
 Parallel with: TP-V2-073
 
 ## Goal

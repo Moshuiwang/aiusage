@@ -82,9 +82,20 @@
 
 状态：completed
 
+### Round 8: Directory And Document Governance
+
+目标：
+
+- 收敛架构、数据库、接口和项目地图入口。
+- 归档已弃用路线、已完成任务包、历史设计稿和 review。
+- 不改产品代码、API、SQLite schema 或客户端物理目录。
+- 让 AI Agent 默认读取更少、更准的当前事实源。
+
+状态：completed
+
 ## Upcoming Rounds
 
-当前路线图内治理轮次已完成。后续如要继续治理，必须新建 Round 8 任务包，不得混入已完成轮次。
+当前路线图内治理轮次已完成。后续如要继续治理，必须新建独立任务包和新轮次，不得混入已完成轮次。
 
 ## Subagent Workflow
 

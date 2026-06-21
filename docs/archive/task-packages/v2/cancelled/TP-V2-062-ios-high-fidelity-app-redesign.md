@@ -2,10 +2,10 @@
 
 Version: V2
 ID: TP-V2-062
-Status: ready
+Status: cancelled
 Type: implementation
-Depends on: TP-V2-059
-Parallel with: TP-V2-060, TP-V2-061
+Depends on: none
+Parallel with: none
 
 ## Goal
 
@@ -16,6 +16,8 @@ Implement the approved high-fidelity iOS App interface from `docs/prototypes/ios
 The current high-fidelity HTML is the design source for the App redesign. It was generated from the earlier wireframe and keeps the product information architecture: Home, Limits, Breakdown, Sources. The handoff package is `docs/prototypes/ios-high-fidelity/HANDOFF.md`.
 
 The SwiftUI App already has the live `MobileSummary` pipeline, period switching, glass UI pieces, bar trend chart, drilldown, and physical-device install workflow. This task is a visual and interaction alignment pass, not a data-contract change.
+
+Round 9 cancellation note: this old high-fidelity handoff route is superseded by TP-V2-073 to TP-V2-080 and is kept only as historical context.
 
 ## Scope
 

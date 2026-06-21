@@ -27,12 +27,16 @@ docs/task-packages/
   RULES.md
   v2/
     INDEX.md
-    TP-V2-001-*.md
-    TP-V2-002-*.md
+    TP-V2-060-*.md
+    TP-V2-081-*.md
+  v1/
+    INDEX.md  # superseded pointer only
+docs/archive/task-packages/
   v1/
     INDEX.md
-    TP-V1-001-*.md
-    TP-V1-002-*.md
+    TP-V1-*.md
+  v2/completed/
+    TP-V2-*.md
 ```
 
 ## 编号规则

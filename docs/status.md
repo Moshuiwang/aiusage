@@ -11,7 +11,7 @@
 - 展示方向：Web dashboard 继续作为完整查看入口；客户端按 `clients/` 分层推进。iPhone App + iOS Widget 是已落地方向；macOS 下一步只做菜单栏或轻量桌面入口，不回到 macOS Widget 主线；Windows 走托盘或轻量桌面入口；Android 复用移动端摘要合同。
 - 客户端设计方向：iPhone App 信息架构和手机尺寸可交互原型已收敛；Swift Package 已固定 DTO、view model 和可复用视图；Xcode App / Widget extension target 已生成；Personal Team 签名、物理 iPhone 安装和 AppIcon 资产均已打通；SwiftUI App 内部页面已从系统 List 占位改为原型结构，并在模拟器内补齐周期选择、趋势点详情、Breakdown row 明细卡和随系统深浅色表现。当前模拟器 App 已配置到生产 `https://vpn2.chunbai.com:8443`，today / week / month / all 切换会重新请求生产对应 period 并同步 UI 状态；真机 App 本轮未重新推送到手机。
 - 工程顺序：HTTP ingest、终端 pusher、canonical store / snapshot、Web dashboard 已形成 baseline；official limits contract、Codex / Claude offline provider parser、limits store、snapshot/API、Web 展示、`collect-limits` fixture runtime、Codex WHAM 显式 auth adapter、Claude OAuth 显式 auth adapter、Codex app-server RPC adapter、Claude CLI `/usage` adapter、limits 本地配置契约、doctor readiness、dry-run、config-only check、scheduler 模板、真实 smoke handoff、V2 索引状态对齐、V2 backlog 入口清理和 Antigravity limits fixture parser baseline 已形成 baseline。
-- 任务入口：`docs/task-packages/README.md` + `docs/task-packages/v2/INDEX.md`；跨端客户端下一步应从 `clients/` 目标目录和 `docs/architecture/client-platforms.md` 开始，单独开包做 iOS 配置 UX、macOS 菜单栏、Windows 托盘或 Android App，不混在同一个实现任务里。
+- 任务入口：`docs/task-packages/README.md` + `docs/task-packages/v2/INDEX.md`；跨端客户端下一步应从 `docs/project-map.md` 的客户端目录边界和 `clients/` 目标目录开始，单独开包做 iOS 配置 UX、macOS 菜单栏、Windows 托盘或 Android App，不混在同一个实现任务里。
 - 执行规则：所有开发任务必须 TDD。
 - limits 原则：历史 token / session logs 只做统计，不参与官方 reset time 计算。
 - Codex provider 决策：参考 CodexBar 源码，后台采集采用 OAuth/WHAM usage 优先，`codex app-server` RPC `account/rateLimits/read` fallback。
@@ -27,7 +27,6 @@
 
 ## 注意
 
-- `docs/agent-harness-rules.md` 有既有未提交改动，本文件不覆盖它。
 - 不要把任务细节重新写回本文件。
 - V1 任务包代表旧的 SSH pull / Widget-first 方向；新开发默认不要从 V1 继续执行。
 - 既有 macOS Widget 文档和任务包只作为历史/兼容资料；不要再把 macOS Widget 当成后续产品交付目标。

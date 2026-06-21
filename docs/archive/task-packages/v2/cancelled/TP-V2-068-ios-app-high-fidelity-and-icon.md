@@ -2,10 +2,10 @@
 
 Version: V2
 ID: TP-V2-068
-Status: ready
+Status: cancelled
 Type: implementation
-Depends on: TP-V2-059, TP-V2-062, TP-V2-065
-Parallel with: TP-V2-066, TP-V2-067, TP-V2-069
+Depends on: none
+Parallel with: none
 
 ## Goal
 
@@ -14,6 +14,8 @@ Bring the iOS App UI and icon into alignment with the latest design direction wh
 ## Context
 
 The App already has live `/api/mobile/summary` loading, period switching, and high-fidelity shell work. Current App Icon is known to be wrong.
+
+Round 9 cancellation note: this old iOS high-fidelity direction is superseded by the completed TP-V2-073 to TP-V2-080 iOS delivery line.
 
 ## Scope
 

@@ -2,10 +2,10 @@
 
 Version: V2
 ID: TP-V2-065
-Status: ready
+Status: done
 Type: implementation
 Depends on: multi-platform design docs AI review
-Parallel with: TP-V2-066, TP-V2-067
+Parallel with: TP-V2-066
 
 ## Goal
 

@@ -4,7 +4,7 @@ Version: V2
 ID: TP-V2-076
 Status: done
 Type: implementation
-Depends on: TP-V2-043, TP-V2-068
+Depends on: TP-V2-043
 Parallel with: none
 
 ## Goal
@@ -55,7 +55,7 @@ Research update:
 
 Target layout mock:
 
-![TP-V2-076 quota card account label mock](assets/TP-V2-076-ios-quota-card-account-label.svg)
+![TP-V2-076 quota card account label mock](../assets/TP-V2-076-ios-quota-card-account-label.svg)
 
 ## Scope
 

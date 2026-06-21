@@ -1,5 +1,4 @@
-docs/ui-direction/wight-ai-usage/*.jsx
-docs/ui-direction/wight-ai-usage/*.html
-docs/ui-direction/wight-ai-usage/*.zip
+docs/archive/
+reviews/*-request.md
 widget/macos-xcode/AIUsageWidget.xcodeproj/
 widget/macos/.build/

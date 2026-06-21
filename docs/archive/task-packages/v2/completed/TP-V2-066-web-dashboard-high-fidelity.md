@@ -2,10 +2,10 @@
 
 Version: V2
 ID: TP-V2-066
-Status: ready
+Status: done
 Type: implementation
 Depends on: TP-V2-065
-Parallel with: TP-V2-067, TP-V2-068, TP-V2-069
+Parallel with: TP-V2-069
 
 ## Goal
 

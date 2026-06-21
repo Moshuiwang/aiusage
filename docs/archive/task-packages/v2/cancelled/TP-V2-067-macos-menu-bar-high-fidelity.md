@@ -2,10 +2,10 @@
 
 Version: V2
 ID: TP-V2-067
-Status: ready
+Status: cancelled
 Type: implementation
-Depends on: TP-V2-064, TP-V2-065
-Parallel with: TP-V2-066, TP-V2-068, TP-V2-069
+Depends on: none
+Parallel with: none
 
 ## Goal
 
@@ -14,6 +14,8 @@ Upgrade the existing TP-V2-064 macOS menu bar app to match `macos-popover.html` 
 ## Context
 
 The project already has `clients/macos` as the supported macOS light entry. This task must improve that app, not revive the legacy macOS Widget route.
+
+Round 9 cancellation note: the current macOS menu bar UI is accepted. The project will not continue pursuing this old high-fidelity popover direction.
 
 ## Scope
 

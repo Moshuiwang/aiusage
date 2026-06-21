@@ -21,10 +21,10 @@
 
 - 当前状态：`docs/status.md`
 - 产品方向：`docs/product-brief.md`
-- 工程架构：`docs/architecture.md`
+- 工程架构：`docs/architecture/architecture.md`
 - 任务包入口：`docs/task-packages/README.md`
 - 任务包规则：`docs/task-packages/RULES.md`
-- 任务包索引：`docs/task-packages/v1/INDEX.md`
+- 任务包索引：`docs/task-packages/v2/INDEX.md`
 - 项目命令：`README.md`
 
 如果当前任务能用本文件和指定任务包完成，不要额外读取其他文档。
@@ -50,8 +50,4 @@
 - 如果发现实际代码和 roadmap 冲突，以实际代码和测试为准，并在报告里说明。
 - 如果发现任务范围会扩大，停止并报告，不要擅自扩大。
 
-当前已完成轮次：
-
-- Round 1: `server.py` / `server_services.py` / architecture boundary / legacy SSH marking
-- Round 2: snapshot period/filter/trend helper extraction
-- Round 3: iOS runtime server settings and Keychain token storage
+已完成轮次和下一轮以 `docs/architecture/governance-state.md` 为准，不在本文件手工维护。

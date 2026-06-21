@@ -2,7 +2,7 @@
 
 Version: V2
 ID: TP-V2-060
-Status: ready
+Status: done
 Type: implementation
 Depends on: none
 Parallel with: mobile UI polish

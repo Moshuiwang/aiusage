@@ -2,6 +2,14 @@
 
 本文记录当前真实架构和后续治理边界。它不是理想重写方案；目标是在不改变用户可见行为的前提下，避免后续功能把入口、口径和 legacy 路线继续混在一起。
 
+## 权威入口
+
+- 当前真实架构：本文。
+- SQLite 表结构索引：[`database.md`](database.md)；字段以 `storage_sqlite.py` 和 `models.py` 为准。
+- 服务接口索引：[`interfaces.md`](interfaces.md)；接口以 `server.py`、`server_services.py`、`ingest.py`、`mobile_summary.py` 为准。
+- 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
+- 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
+
 ## 当前真实架构
 
 当前主流程已经跑通：
@@ -63,6 +71,13 @@ CLI / HTTP handler / clients
 | `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
 | `collector.py` / SSH source | Legacy compatibility only。 | V2 新功能不得依赖这条路径。 |
 
+## Source / Trust Boundary
+
+- 每个 source 只能在自己的 OS 用户上下文运行采集；`wang` 不读取 `/home/ubuntu`，Mac 不读取远程 `.claude` / `.codex` 原始日志目录。
+- 汇聚端不通过 SSH 抓取 usage；V2 只接受终端主动 push 的结构化 payload。
+- `observed` 只用于 provider/runtime/structured export 明确给出的事实；本地 history、`ccusage daily`、`ccusage blocks` 不能伪装成官方 quota。
+- `estimated`、`missing`、`unsupported` 必须在 UI 中降级展示，不得作为强结论。
+
 ## 数据口径
 
 以下口径以当前代码为准：
@@ -78,6 +93,10 @@ CLI / HTTP handler / clients
 - `official observed quota`：只有 `official == true`、`confidence == "observed"`、`status == "ok"` 同时成立，才可在 Mobile / Widget / dashboard 中当作可信官方额度展示。本地 `ccusage daily` / `ccusage blocks` 即使有 observed 字段，也只能是本地估算，不能计入 observed quota。
 - `hourly residual`：today 趋势里，当小时级事实不足以覆盖 daily total 时，把差额补到当前可见小时，避免用户看到今日总量和趋势总量明显不一致。Codex 使用 `mswusage_codex_token_count` 时会避免把同一 Codex daily baseline 重复补入小时趋势。
 - `mobile summary`：由 `/api/summary` 的 snapshot 派生，只做 DTO 转换和字段裁剪，不重新计算 canonical usage；`limits.observed_count` 只统计 official observed quota。
+
+详细 SQLite 表和当前 snapshot 顶层字段见 [`database.md`](database.md) 与
+[`interfaces.md`](interfaces.md)。旧 `docs/architecture.md` 中的 `snapshot_builds`
+和旧 limits 字段是历史目标，不是当前代码事实。
 
 ## Legacy SSH 策略
 

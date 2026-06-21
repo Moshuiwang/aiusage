@@ -4,12 +4,12 @@ Version: V2
 ID: TP-V2-071
 Status: ready
 Type: verification
-Depends on: TP-V2-066, TP-V2-067, TP-V2-068, TP-V2-069, TP-V2-070
+Depends on: TP-V2-066, TP-V2-069, TP-V2-070, TP-V2-073, TP-V2-074, TP-V2-075, TP-V2-076, TP-V2-077, TP-V2-078, TP-V2-079, TP-V2-080
 Parallel with: none
 
 ## Goal
 
-Verify that Web, macOS, iOS App, iOS Widget, and Watch show accurate data and match the latest design package.
+Verify that Web, the accepted iOS TP-V2-073 to TP-V2-080 line, iOS Widget, and Watch show accurate data and match the accepted product direction.
 
 ## Context
 
@@ -19,7 +19,7 @@ The user requires data accuracy and design fidelity, not just builds passing. An
 
 - Compare UI totals, period windows, trend buckets, source rows, and limits against API responses and SQLite where needed.
 - Use `agy --model gemini-3.5-flash` for independent test/inspection.
-- Capture screenshots for every user-visible surface.
+- Capture screenshots for Web, iOS App, iOS Widget, and Watch.
 - Verify light/dark where supported.
 
 ## Out of Scope
