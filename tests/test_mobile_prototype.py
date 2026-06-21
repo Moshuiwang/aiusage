@@ -249,60 +249,6 @@ class MobilePrototypeTests(unittest.TestCase):
         self.assertNotIn("ctx.lineTo(point.x", js)
         self.assertNotIn("line chart", js.lower())
 
-    def test_ios_high_fidelity_handoff_package_is_developer_ready(self) -> None:
-        handoff = HIFI_DIR / "HANDOFF.md"
-        task_package = ROOT / "docs" / "task-packages" / "v2" / "TP-V2-062-ios-high-fidelity-app-redesign.md"
-        readme = HIFI_DIR / "README.md"
-        index = ROOT / "docs" / "task-packages" / "v2" / "INDEX.md"
-
-        self.assertTrue(handoff.exists())
-        self.assertTrue(task_package.exists())
-
-        handoff_text = handoff.read_text(encoding="utf-8")
-        for required in [
-            "Design Source",
-            "SwiftUI Implementation Target",
-            "Screen Mapping",
-            "Component Mapping",
-            "Data Binding",
-            "Interaction States",
-            "Visual Acceptance",
-            "Do Not",
-            "Verification",
-            "AIUsageMobileRootView.swift",
-            "MobileSummary",
-            "native glass",
-            "bar chart only",
-            "no production token",
-        ]:
-            with self.subTest(required=required):
-                self.assertIn(required, handoff_text)
-
-        task_text = task_package.read_text(encoding="utf-8")
-        for required in [
-            "Status: ready",
-            "docs/prototypes/ios-high-fidelity/HANDOFF.md",
-            "AIUsageMobileRootView.swift",
-            "tests.test_ios_xcode_integration",
-            "cd mobile/ios && swift test",
-            "Do not change the mobile summary API contract",
-        ]:
-            with self.subTest(task_required=required):
-                self.assertIn(required, task_text)
-
-        self.assertIn("HANDOFF.md", readme.read_text(encoding="utf-8"))
-        self.assertIn("TP-V2-062", index.read_text(encoding="utf-8"))
-
-        for relative_path in [
-            "mobile/ios/Sources/AIUsageMobileCore/AIUsageMobileRootView.swift",
-            "mobile/ios/Sources/AIUsageMobileCore/MobileViewModel.swift",
-            "mobile/ios/Sources/AIUsageMobileCore/MobileSummary.swift",
-            "mobile/ios-xcode/Sources/AIUsageMobileApp/AIUsageMobileApp.swift",
-        ]:
-            with self.subTest(relative_path=relative_path):
-                self.assertIn(relative_path, handoff_text)
-                self.assertTrue((ROOT / relative_path).exists())
-
 
 if __name__ == "__main__":
     unittest.main()

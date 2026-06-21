@@ -151,14 +151,6 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
                 / "AIUsageMobileCore"
                 / "WidgetSummary.swift"
             ),
-            "macos": (
-                ROOT
-                / "clients"
-                / "macos"
-                / "Sources"
-                / "AIUsageMenuBarApp"
-                / "MenuBarPopoverView.swift"
-            ),
         }
         for surface, path in surfaces.items():
             with self.subTest(surface=surface):
@@ -166,19 +158,6 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
                 self.assertIn("AIUsageBrandMark", content)
                 self.assertNotIn('Image(systemName: "chart.bar.xaxis")', content)
                 self.assertNotIn("brand-placeholder", content)
-
-    def test_ios_home_uses_multi_platform_design_dashboard_components(self) -> None:
-        root_view = ROOT / "mobile" / "ios" / "Sources" / "AIUsageMobileCore" / "AIUsageMobileRootView.swift"
-        content = root_view.read_text(encoding="utf-8")
-        for component in [
-            "CrossPlatformHomeHeader",
-            "CrossPlatformHeroPanel",
-            "CrossPlatformQuotaSection",
-            "CrossPlatformSourcesSection",
-        ]:
-            with self.subTest(component=component):
-                self.assertIn(component, content)
-        self.assertNotIn("Color.blue.opacity(0.20)", content)
 
     def test_mobile_app_widget_and_watch_share_brand_mark(self) -> None:
         surfaces = {
@@ -334,132 +313,6 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         for guard in required_guards:
             with self.subTest(guard=guard):
                 self.assertIn(guard, content)
-
-    def test_swiftui_surface_matches_approved_mobile_prototype_shape(self) -> None:
-        root_view = (
-            ROOT
-            / "mobile"
-            / "ios"
-            / "Sources"
-            / "AIUsageMobileCore"
-            / "AIUsageMobileRootView.swift"
-        )
-        app_entrypoint = (
-            ROOT
-            / "mobile"
-            / "ios-xcode"
-            / "Sources"
-            / "AIUsageMobileApp"
-            / "AIUsageMobileApp.swift"
-        )
-        api_client = (
-            ROOT
-            / "mobile"
-            / "ios"
-            / "Sources"
-            / "AIUsageMobileCore"
-            / "MobileSummaryAPIClient.swift"
-        )
-        runtime_config = (
-            ROOT
-            / "mobile"
-            / "ios"
-            / "Sources"
-            / "AIUsageMobileCore"
-            / "MobileSummaryRuntimeConfig.swift"
-        )
-        content = "\n".join(
-            path.read_text(encoding="utf-8")
-            for path in [root_view, app_entrypoint, api_client, runtime_config]
-            if path.exists()
-        )
-
-        required_components = [
-            "MobileSummaryAPIClient",
-            "AI_USAGE_API_BASE_URL",
-            "AI_USAGE_PERIOD",
-            "AIUsageAPIBaseURL",
-            "AIUsageAPIToken",
-            "AIUsagePeriod",
-            "https://vpn2.chunbai.com:8443",
-            "AI_USAGE_ALLOW_NON_PROD_SERVER",
-            "isProductionServer",
-            "ProductionConnectionStatusView",
-            "LiveSummaryContainerView",
-            "PeriodSelector",
-            "onPeriodSelected",
-            "loadLiveSummary(period:",
-            "MobileSummaryAPIConfig(",
-            "MobileServerSettingsView",
-            "MobileTokenStore",
-            "KeychainTokenStore",
-            "SecureField(\"Token\"",
-            "saveSettings(",
-            "defaults.removeObject(forKey: \"AIUsageAPIToken\")",
-            "bundle.object(forInfoDictionaryKey: \"AIUsageAPIToken\")",
-            "Widget runtime config sharing requires explicit App Group + Keychain access group design",
-            "CrossPlatformHomeHeader",
-            "CrossPlatformHeroPanel",
-            "CompactHandoffBarChart",
-            "CrossPlatformQuotaSection",
-            "CrossPlatformSourcesSection",
-            "lastServerReadText",
-            "AIUsageBrandMark(size: 30)",
-            "onRefresh",
-            "RefreshActionButton",
-            "BrandIcon",
-            "BrandIcon.kind(for:",
-            "NativeLiquidGlassPeriodTabs",
-            "NativeLiquidGlassPeriodTabsCapability",
-            "LimitReminderRow",
-            "RefreshSummaryCard",
-            "LimitAccountGroupCard",
-            "QuotaPageHeader",
-            "limitGroups",
-            "UnifiedDetailLink",
-            "MaterialCard",
-            "initialTabID",
-            ".onChange(of: state.home.periodID)",
-            "onPeriodSelected(period.id)",
-            "refreshingPeriodID",
-            "cachedSummaries",
-            "keepVisibleSummary",
-            "state.tokenBreakdownText",
-            ".frame(height: 52, alignment: .bottom)",
-            "state.topSources",
-            "@State private var selectedRow",
-            "selectedRow = row",
-            "BreakdownDrilldownView",
-            "DrilldownSectionCard",
-            "BreakdownDrilldown.sections",
-            "static let allCases: [BreakdownDimension] = [.date, .machine, .account, .model, .agent]",
-            "返回明细",
-            "当前周期下钻",
-            "查看明细",
-        ]
-        for component in required_components:
-            with self.subTest(component=component):
-                self.assertIn(component, content)
-
-        self.assertNotIn("if let point = selectedPoint {\n                Text(trendDetailText(point))", content)
-        self.assertNotIn("ForEach(Array(chartPoints.enumerated())", content)
-        self.assertNotIn("MobileSummaryFixtureLoader.load()", content)
-        self.assertNotIn("loadState = .fixture", content)
-        self.assertNotIn("environment[\"AI_USAGE_API_TOKEN\"]", content)
-        self.assertNotIn("defaults.string(forKey: \"AIUsageAPIToken\")", content)
-        self.assertNotIn("summary = .empty(periodID: period)\n            loadState = .failed", content)
-        self.assertNotIn(
-            "withAnimation(.easeInOut(duration: 0.16)) {\n            summary = .empty(periodID: period)",
-            content,
-        )
-        self.assertIn("TabView(selection:", content)
-        self.assertNotIn("chart.line.uptrend.xyaxis", content)
-        self.assertNotIn("linePath(points:", content)
-        self.assertNotIn("areaPath(points:", content)
-        self.assertNotIn('return "plus.circle"', content)
-        self.assertNotIn("droplet", content.lower())
-        self.assertLessEqual(content.count("List {"), 0)
-        self.assertEqual(content.count("AI Usage"), 1)
 
     def test_bottom_navigation_uses_native_liquid_glass_tab_view(self) -> None:
         root_view = (

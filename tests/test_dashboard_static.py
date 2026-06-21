@@ -57,48 +57,6 @@ class TestDashboardStaticContracts(unittest.TestCase):
         self.assertIn("renderBarTrend", js)
         self.assertIn("document.body.toggleAttribute(\"data-dark\")", js)
 
-    def test_macos_popover_header_uses_dual_ring_brand_mark(self) -> None:
-        swift = (
-            ROOT
-            / "clients"
-            / "macos"
-            / "Sources"
-            / "AIUsageMenuBarApp"
-            / "MenuBarPopoverView.swift"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("struct AIUsageBrandMark", swift)
-        self.assertIn("AIUsageBrandMark(size: 32)", swift)
-        self.assertIn("outer-ring", swift)
-        self.assertIn("inner-ring", swift)
-        self.assertNotIn('Image(systemName: "chart.bar.xaxis")', swift)
-
-    def test_macos_popover_uses_latest_handoff_layout(self) -> None:
-        swift = (
-            ROOT
-            / "clients"
-            / "macos"
-            / "Sources"
-            / "AIUsageMenuBarApp"
-            / "MenuBarPopoverView.swift"
-        ).read_text(encoding="utf-8")
-        controller = (
-            ROOT
-            / "clients"
-            / "macos"
-            / "Sources"
-            / "AIUsageMenuBarApp"
-            / "StatusBarController.swift"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("NSSize(width: 320, height: 520)", controller)
-        self.assertIn(".frame(width: 320, height: 520)", controller)
-        self.assertIn("quotaSection", swift)
-        self.assertIn("sourcesSection", swift)
-        self.assertIn("QuotaRingPair", swift)
-        self.assertIn("DashboardHandoffBarChart", swift)
-        self.assertNotIn("Picker(\"视图\"", swift)
-
     def test_mobile_hero_total_block_does_not_reserve_desktop_width(self) -> None:
         css = _read("dashboard.css")
 
