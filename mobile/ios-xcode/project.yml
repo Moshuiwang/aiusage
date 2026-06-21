@@ -24,6 +24,8 @@ targets:
         product: AIUsageMobileCore
       - target: AIUsageMobileWidgetExtension
         embed: true
+      - target: AIUsageWatchApp
+        embed: true
     sources:
       - path: Sources/AIUsageMobileApp
       - path: Resources/Assets.xcassets
@@ -89,20 +91,55 @@ targets:
   AIUsageWatchApp:
     type: application
     platform: watchOS
+    dependencies:
+      - target: AIUsageWatchWidgetExtension
+        embed: true
     sources:
-      - path: Sources/AIUsageMobileWidgetExtension/AIUsageWatchApp.swift
-      - path: Resources/mobile-summary.json
-        buildPhase: resources
+      - path: Sources/AIUsageWatchApp
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.wangzhipeng.aiusage.watch
+        PRODUCT_BUNDLE_IDENTIFIER: com.wangzhipeng.aiusage.mobile.watch
         TARGETED_DEVICE_FAMILY: 4
         CODE_SIGN_STYLE: Automatic
         ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    entitlements:
+      path: Config/AIUsageWatchApp.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.wangzhipeng.aiusage.watch
     info:
       path: Config/AIUsageWatchApp-Info.plist
       properties:
         CFBundleDisplayName: AI Usage
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        WKCompanionAppBundleIdentifier: com.wangzhipeng.aiusage.mobile
         WKApplication: true
+
+  AIUsageWatchWidgetExtension:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: Sources/AIUsageWatchWidgetExtension
+      - path: Sources/AIUsageWatchApp/WatchSummaryStore.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.wangzhipeng.aiusage.mobile.watch.widget
+        TARGETED_DEVICE_FAMILY: 4
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    entitlements:
+      path: Config/AIUsageWatchWidgetExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.wangzhipeng.aiusage.watch
+    info:
+      path: Config/AIUsageWatchWidgetExtension-Info.plist
+      properties:
+        CFBundleDisplayName: AI Usage
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension

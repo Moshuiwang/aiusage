@@ -72,7 +72,9 @@ struct LiveSummaryContainerView: View {
                 }
             }
             .task {
-                await loadLiveSummary(period: MobileSummaryRuntimeConfig.initialPeriod())
+                let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
+                await loadLiveSummary(period: initialPeriod)
+                await ensureTodayCompanionSummary(visiblePeriod: initialPeriod)
             }
     }
 
@@ -157,6 +159,23 @@ struct LiveSummaryContainerView: View {
         try? MobileSummaryCache.writeToAppGroup(loadedSummary)
         WatchSummaryBridge.shared.push(loadedSummary)
     }
+
+    private func ensureTodayCompanionSummary(visiblePeriod: String) async {
+        guard visiblePeriod != MobileSummaryCache.companionPeriodID else {
+            return
+        }
+        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: MobileSummaryCache.companionPeriodID,
+            tokenStore: tokenStore
+        ) else {
+            return
+        }
+        guard let loadedSummary = try? await MobileSummaryAPIClient(config: config).load() else {
+            return
+        }
+        shareWithCompanionIfNeeded(loadedSummary)
+        cachedSummaries[loadedSummary.period.id] = loadedSummary
+    }
 }
 
 enum LoadState: Equatable {
@@ -207,7 +226,9 @@ final class WatchSummaryBridge: NSObject, WCSessionDelegate, @unchecked Sendable
         guard let data = try? JSONEncoder().encode(summary) else {
             return
         }
-        try? session.updateApplicationContext(["mobileSummary": data])
+        let context = ["mobileSummary": data]
+        try? session.updateApplicationContext(context)
+        session.transferCurrentComplicationUserInfo(context)
     }
 
     func session(

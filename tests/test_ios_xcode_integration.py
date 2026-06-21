@@ -175,8 +175,8 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
                 / "mobile"
                 / "ios-xcode"
                 / "Sources"
-                / "AIUsageMobileWidgetExtension"
-                / "AIUsageWatchApp.swift"
+                / "AIUsageWatchApp"
+                / "AIUsageWatchSummaryView.swift"
             ),
         }
         for surface, path in surfaces.items():
@@ -250,15 +250,34 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             / "mobile"
             / "ios-xcode"
             / "Sources"
-            / "AIUsageMobileWidgetExtension"
+            / "AIUsageWatchApp"
             / "AIUsageWatchApp.swift"
         )
+        watch_store = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "WatchSummaryStore.swift"
+        )
+        watch_view = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "AIUsageWatchSummaryView.swift"
+        )
         project_content = project_yml.read_text(encoding="utf-8")
-        watch_content = watch_app.read_text(encoding="utf-8")
+        watch_content = "\n".join(
+            path.read_text(encoding="utf-8") for path in [watch_app, watch_store, watch_view]
+        )
 
         self.assertIn("AIUsageWatchApp", project_content)
         self.assertIn("platform: watchOS", project_content)
-        self.assertIn("com.wangzhipeng.aiusage.watch", project_content)
+        self.assertIn("com.wangzhipeng.aiusage.mobile.watch", project_content)
+        self.assertIn("WKCompanionAppBundleIdentifier: com.wangzhipeng.aiusage.mobile", project_content)
         self.assertIn("@main", watch_content)
         self.assertIn("AIUsageWatchSummaryView", watch_content)
         self.assertIn("WatchConnectivity", watch_content)
@@ -283,6 +302,133 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
         self.assertIn("WatchSummaryBridge.shared.activate", app_content)
         self.assertIn("WatchSummaryBridge.shared.push", app_content)
+        self.assertIn("ensureTodayCompanionSummary", app_content)
+        self.assertIn("transferCurrentComplicationUserInfo", app_content)
+
+    def test_watch_companion_and_widget_targets_are_embedded_for_testflight(self) -> None:
+        project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
+        content = project_yml.read_text(encoding="utf-8")
+
+        mobile_target = content[content.index("  AIUsageMobileApp:") : content.index("  AIUsageMobileWidgetExtension:")]
+        self.assertIn("target: AIUsageWatchApp", mobile_target)
+        self.assertIn("embed: true", mobile_target)
+
+        watch_target = content[content.index("  AIUsageWatchApp:") : content.index("  AIUsageWatchWidgetExtension:")]
+        self.assertIn("target: AIUsageWatchWidgetExtension", watch_target)
+        self.assertIn("embed: true", watch_target)
+        self.assertIn("WKCompanionAppBundleIdentifier: com.wangzhipeng.aiusage.mobile", watch_target)
+        self.assertIn("Config/AIUsageWatchApp.entitlements", watch_target)
+        self.assertIn("Sources/AIUsageWatchApp", watch_target)
+        self.assertNotIn("Sources/AIUsageMobileWidgetExtension/AIUsageWatchApp.swift", watch_target)
+
+        widget_target = content[content.index("  AIUsageWatchWidgetExtension:") :]
+        self.assertIn("type: app-extension", widget_target)
+        self.assertIn("platform: watchOS", widget_target)
+        self.assertIn("com.wangzhipeng.aiusage.mobile.watch.widget", widget_target)
+        self.assertIn("Config/AIUsageWatchWidgetExtension.entitlements", widget_target)
+        self.assertIn("Sources/AIUsageWatchWidgetExtension", widget_target)
+        self.assertIn("NSExtensionPointIdentifier: com.apple.widgetkit-extension", widget_target)
+        self.assertNotIn("Resources/mobile-summary.json", watch_target)
+
+    def test_watch_app_and_watch_widget_share_app_group_cache(self) -> None:
+        project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
+        watch_entitlements = ROOT / "mobile" / "ios-xcode" / "Config" / "AIUsageWatchApp.entitlements"
+        watch_widget_entitlements = (
+            ROOT / "mobile" / "ios-xcode" / "Config" / "AIUsageWatchWidgetExtension.entitlements"
+        )
+        watch_store = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "WatchSummaryStore.swift"
+        )
+        watch_widget = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchWidgetExtension"
+            / "AIUsageWatchWidget.swift"
+        )
+
+        for path in [watch_entitlements, watch_widget_entitlements, watch_store, watch_widget]:
+            with self.subTest(path=str(path)):
+                self.assertTrue(path.exists())
+
+        app_group = "group.com.wangzhipeng.aiusage.watch"
+        self.assertIn(app_group, project_yml.read_text(encoding="utf-8"))
+        self.assertIn(app_group, watch_entitlements.read_text(encoding="utf-8"))
+        self.assertIn(app_group, watch_widget_entitlements.read_text(encoding="utf-8"))
+
+        store_content = watch_store.read_text(encoding="utf-8")
+        self.assertIn("static let appGroupIdentifier = \"group.com.wangzhipeng.aiusage.watch\"", store_content)
+        self.assertIn("containerURL(forSecurityApplicationGroupIdentifier:", store_content)
+        self.assertIn("last-watch-summary.json", store_content)
+        self.assertNotIn(".cachesDirectory", store_content)
+        self.assertNotIn("AIUsageAPIToken", store_content)
+        self.assertNotIn("Bearer", store_content)
+
+        widget_content = watch_widget.read_text(encoding="utf-8")
+        self.assertIn("WatchSummaryStore.read()", widget_content)
+        self.assertIn(".accessoryRectangular", widget_content)
+        self.assertIn(".accessoryCircular", widget_content)
+        self.assertIn(".accessoryInline", widget_content)
+        self.assertIn("WatchSummaryDisplay.circularText(from: summary)", widget_content)
+        self.assertIn('return "--"', store_content)
+        self.assertIn("TokenFormat.compact(summary.period.totalTokens)", store_content)
+        self.assertNotIn(".cachesDirectory", widget_content)
+        forbidden = ["ccusage", "SQLite", ".codex", ".claude", "Authorization", "Bearer", "URLSession", "ssh"]
+        for token in forbidden:
+            with self.subTest(token=token):
+                self.assertNotIn(token, widget_content)
+
+    def test_watch_decode_contract_matches_mobile_summary_fixture(self) -> None:
+        fixture = (
+            ROOT / "mobile" / "ios-xcode" / "Resources" / "mobile-summary.json"
+        ).read_text(encoding="utf-8")
+        store_content = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "WatchSummaryStore.swift"
+        ).read_text(encoding="utf-8")
+
+        for key in [
+            '"generated_at"',
+            '"timezone"',
+            '"period"',
+            '"total_tokens"',
+            '"input_tokens"',
+            '"output_tokens"',
+            '"cache_tokens"',
+            '"cache_ratio"',
+            '"breakdown"',
+            '"by_machine"',
+            '"limits"',
+            '"windows"',
+            '"remaining_percent"',
+            '"reset_at"',
+            '"sources"',
+        ]:
+            with self.subTest(fixture_key=key):
+                self.assertIn(key, fixture)
+        for coding_key in [
+            'case generatedAt = "generated_at"',
+            'case totalTokens = "total_tokens"',
+            'case inputTokens = "input_tokens"',
+            'case outputTokens = "output_tokens"',
+            'case cacheTokens = "cache_tokens"',
+            'case cacheRatio = "cache_ratio"',
+            'case byMachine = "by_machine"',
+            'case remainingPercent = "remaining_percent"',
+            'case resetAt = "reset_at"',
+        ]:
+            with self.subTest(coding_key=coding_key):
+                self.assertIn(coding_key, store_content)
 
     def test_device_install_guard_requires_live_token_and_exact_production_url(self) -> None:
         script = ROOT / "mobile" / "ios-xcode" / "install_device_with_live_config.py"

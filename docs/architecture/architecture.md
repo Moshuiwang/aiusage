@@ -26,12 +26,14 @@ flowchart LR
     snapshot --> webApi["GET /api/summary"]
     snapshot --> mobileApi["GET /api/mobile/summary<br/>mobile_summary.py DTO"]
     webApi --> dashboard["clients/web<br/>Web dashboard"]
-    mobileApi --> iphone["clients/ios<br/>iPhone App / iOS Widget"]
+    mobileApi --> iphone["clients/ios<br/>iPhone App / iOS Widget / Watch companion"]
     mobileApi --> android["clients/android<br/>Android App / Widget"]
     mobileApi --> desktop["clients/macos + clients/windows<br/>light desktop entries"]
 ```
 
 用户现在真实看到的是 Web dashboard 和 iPhone App / Widget 的只读结果。后续 Android、macOS、Windows 也必须沿用同一套 read model 和 DTO：Web 是完整 dashboard，iOS / Android 是移动查看，macOS / Windows 是轻量入口。它们不执行采集，不执行 SSH，不重新定义 token / limits 口径。
+
+Apple Watch 的稳定安装和表盘组件路线见 [`watch-companion-testflight.md`](watch-companion-testflight.md)。该路线复用 `/api/mobile/summary` 和 iPhone App 缓存，不新增数据库或服务端接口。
 
 ## 依赖方向
 
