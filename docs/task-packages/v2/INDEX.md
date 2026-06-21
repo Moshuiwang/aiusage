@@ -119,6 +119,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-080 | [TP-V2-080-ios-native-liquid-glass-tab-bar.md](../../archive/task-packages/v2/completed/TP-V2-080-ios-native-liquid-glass-tab-bar.md) | done | TP-V2-074 | TP-V2-079 |
 | TP-V2-081 | [TP-V2-081-directory-doc-governance.md](TP-V2-081-directory-doc-governance.md) | in_progress | architecture governance approval | none |
 | TP-V2-082 | [TP-V2-082-test-baseline-backlog-reconcile.md](../../archive/task-packages/v2/completed/TP-V2-082-test-baseline-backlog-reconcile.md) | done | Round 9 approval | none |
+| TP-V2-083 | [TP-V2-083-cloudflare-entrypoint-migration.md](TP-V2-083-cloudflare-entrypoint-migration.md) | in_progress | Cloudflare resources created | none |
 | TP-V2-084 | [TP-V2-084-watch-companion-testflight.md](TP-V2-084-watch-companion-testflight.md) | draft | TP-V2-070, PRD/architecture approval | none |
 
 ## subagent 分配建议
