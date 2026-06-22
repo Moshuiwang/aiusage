@@ -524,18 +524,20 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
 
         content = script.read_text(encoding="utf-8")
         required_guards = [
-            "PRODUCTION_BASE_URL = \"https://vpn2.chunbai.com:8443\"",
+            "PRODUCTION_BASE_URL = \"https://aiusage.chunbai.com\"",
             "SUMMARY_SMOKE_PATH = \"/api/mobile/summary?period=all\"",
             "verify_production_summary",
             "Authorization",
             "Bearer ",
+            "User-Agent",
+            "AIUsageMobileInstaller/1.0",
             "read_token_from_vpn2_systemd",
             "systemctl",
             "show",
             "ai-usage-server",
             "--preflight-only",
             "write_temp_xcconfig",
-            "https:/$()/vpn2.chunbai.com:8443",
+            "https:/$()/aiusage.chunbai.com",
             "verify_built_app_config",
             "AIUsageAPIBaseURL",
             "AIUsageAPIToken",

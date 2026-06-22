@@ -8,23 +8,23 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         let tokenStore = InMemoryTokenStore()
 
         let config = try MobileSummaryRuntimeConfig.saveSettings(
-            baseURLString: " https://vpn2.chunbai.com:8443 ",
+            baseURLString: " https://aiusage.chunbai.com ",
             token: " secret-token ",
             period: "week",
             defaults: defaults,
             tokenStore: tokenStore
         )
 
-        XCTAssertEqual(config.baseURL.absoluteString, "https://vpn2.chunbai.com:8443")
+        XCTAssertEqual(config.baseURL.absoluteString, "https://aiusage.chunbai.com")
         XCTAssertEqual(config.bearerToken, "secret-token")
-        XCTAssertEqual(defaults.string(forKey: "AIUsageAPIBaseURL"), "https://vpn2.chunbai.com:8443")
+        XCTAssertEqual(defaults.string(forKey: "AIUsageAPIBaseURL"), "https://aiusage.chunbai.com")
         XCTAssertNil(defaults.string(forKey: "AIUsageAPIToken"))
         XCTAssertEqual(tokenStore.savedToken, "secret-token")
     }
 
     func testLoadsSavedSettingsFromDefaultsAndTokenStore() throws {
         let defaults = try makeIsolatedDefaults()
-        defaults.set("https://vpn2.chunbai.com:8443", forKey: "AIUsageAPIBaseURL")
+        defaults.set("https://aiusage.chunbai.com", forKey: "AIUsageAPIBaseURL")
         let tokenStore = InMemoryTokenStore(savedToken: "stored-token")
 
         let config = try XCTUnwrap(MobileSummaryRuntimeConfig.makeAPIConfig(
@@ -34,14 +34,14 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
             tokenStore: tokenStore
         ))
 
-        XCTAssertEqual(config.baseURL.absoluteString, "https://vpn2.chunbai.com:8443")
+        XCTAssertEqual(config.baseURL.absoluteString, "https://aiusage.chunbai.com")
         XCTAssertEqual(config.bearerToken, "stored-token")
         XCTAssertEqual(config.period, "today")
     }
 
     func testDoesNotReadPlainUserDefaultsToken() throws {
         let defaults = try makeIsolatedDefaults()
-        defaults.set("https://vpn2.chunbai.com:8443", forKey: "AIUsageAPIBaseURL")
+        defaults.set("https://aiusage.chunbai.com", forKey: "AIUsageAPIBaseURL")
         defaults.set("plain-defaults-token", forKey: "AIUsageAPIToken")
 
         XCTAssertNil(MobileSummaryRuntimeConfig.makeAPIConfig(
@@ -55,7 +55,7 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
     func testUsesProductionBundleTokenWhenKeychainIsEmpty() throws {
         let defaults = try makeIsolatedDefaults()
         let bundle = RuntimeConfigurationFixtureBundle(values: [
-            "AIUsageAPIBaseURL": "https://vpn2.chunbai.com:8443",
+            "AIUsageAPIBaseURL": "https://aiusage.chunbai.com",
             "AIUsageAPIToken": "bundle-production-token"
         ])
 
@@ -67,7 +67,7 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
             tokenStore: InMemoryTokenStore()
         ))
 
-        XCTAssertEqual(config.baseURL.absoluteString, "https://vpn2.chunbai.com:8443")
+        XCTAssertEqual(config.baseURL.absoluteString, "https://aiusage.chunbai.com")
         XCTAssertEqual(config.bearerToken, "bundle-production-token")
         XCTAssertNil(defaults.string(forKey: "AIUsageAPIToken"))
     }
@@ -75,7 +75,7 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
     func testSavedKeychainTokenWinsOverProductionBundleToken() throws {
         let defaults = try makeIsolatedDefaults()
         let bundle = RuntimeConfigurationFixtureBundle(values: [
-            "AIUsageAPIBaseURL": "https://vpn2.chunbai.com:8443",
+            "AIUsageAPIBaseURL": "https://aiusage.chunbai.com",
             "AIUsageAPIToken": "bundle-production-token"
         ])
 
@@ -95,7 +95,7 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         let tokenStore = InMemoryTokenStore()
 
         XCTAssertThrowsError(try MobileSummaryRuntimeConfig.saveSettings(
-            baseURLString: "https://vpn2.chunbai.com:8443",
+            baseURLString: "https://aiusage.chunbai.com",
             token: " ",
             period: "week",
             defaults: defaults,
@@ -109,19 +109,19 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
 
     func testTokenStoreFailureDoesNotPartiallySaveServerURLOrClearLegacyToken() throws {
         let defaults = try makeIsolatedDefaults()
-        defaults.set("https://vpn2.chunbai.com:8443", forKey: "AIUsageAPIBaseURL")
+        defaults.set("https://aiusage.chunbai.com", forKey: "AIUsageAPIBaseURL")
         defaults.set("legacy-token", forKey: "AIUsageAPIToken")
         let tokenStore = FailingTokenStore()
 
         XCTAssertThrowsError(try MobileSummaryRuntimeConfig.saveSettings(
-            baseURLString: "https://vpn2.chunbai.com:8443/new-path",
+            baseURLString: "https://aiusage.chunbai.com/new-path",
             token: "new-token",
             period: "week",
             defaults: defaults,
             tokenStore: tokenStore
         ))
 
-        XCTAssertEqual(defaults.string(forKey: "AIUsageAPIBaseURL"), "https://vpn2.chunbai.com:8443")
+        XCTAssertEqual(defaults.string(forKey: "AIUsageAPIBaseURL"), "https://aiusage.chunbai.com")
         XCTAssertEqual(defaults.string(forKey: "AIUsageAPIToken"), "legacy-token")
     }
 

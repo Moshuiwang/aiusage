@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 
-PRODUCTION_BASE_URL = "https://vpn2.chunbai.com:8443"
+PRODUCTION_BASE_URL = "https://aiusage.chunbai.com"
 SUMMARY_SMOKE_PATH = "/api/mobile/summary?period=all"
 DEFAULT_DEVICE_ID = "00008140-0002792C1AFB001C"
 DEFAULT_DEVICECTL_ID = "EEA2E255-8C7E-50FB-A951-A9DE9B7E26C6"
@@ -97,7 +97,10 @@ def read_token_from_vpn2_systemd(token_ssh_host: str | None) -> str:
 def verify_production_summary(token: str) -> None:
     request = urllib.request.Request(
         PRODUCTION_BASE_URL + SUMMARY_SMOKE_PATH,
-        headers={"Authorization": "Bearer " + token},
+        headers={
+            "Authorization": "Bearer " + token,
+            "User-Agent": "AIUsageMobileInstaller/1.0",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
@@ -133,7 +136,7 @@ def write_temp_xcconfig(token: str) -> Path:
     path = Path(handle.name)
     try:
         os.chmod(path, 0o600)
-        handle.write("AI_USAGE_API_BASE_URL = https:/$()/vpn2.chunbai.com:8443\n")
+        handle.write("AI_USAGE_API_BASE_URL = https:/$()/aiusage.chunbai.com\n")
         handle.write(f"AI_USAGE_API_TOKEN = {token}\n")
     finally:
         handle.close()

@@ -22,7 +22,7 @@ public enum MobileRuntimeConfigurationError: Error, Equatable {
 }
 
 public enum MobileSummaryRuntimeConfig {
-    public static let productionBaseURLString = "https://vpn2.chunbai.com:8443"
+    public static let productionBaseURLString = "https://aiusage.chunbai.com"
 
     public static func initialPeriod(
         environment: [String: String] = ProcessInfo.processInfo.environment,
@@ -122,8 +122,8 @@ public enum MobileSummaryRuntimeConfig {
 
     public static func isProductionServer(_ url: URL) -> Bool {
         url.scheme == "https"
-            && url.host?.lowercased() == "vpn2.chunbai.com"
-            && url.port == 8443
+            && url.host?.lowercased() == "aiusage.chunbai.com"
+            && url.port == nil
     }
 
     public static func isTrustedServer(_ url: URL) -> Bool {

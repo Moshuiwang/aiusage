@@ -32,7 +32,7 @@ python3 mobile/ios-xcode/install_device_with_live_config.py
 The guarded installer:
 
 - reads the production token from `AI_USAGE_INGEST_TOKEN`, `--token-file`, or the `vpn2` systemd service fallback;
-- verifies `https://vpn2.chunbai.com:8443/api/mobile/summary?period=all` before building;
+- verifies `https://aiusage.chunbai.com/api/mobile/summary?period=all` before building;
 - writes a temporary 0600 xcconfig with the escaped production URL;
 - refuses to install unless the built App `Info.plist` has the exact production URL and a non-empty token;
 - removes the temporary xcconfig after install.
