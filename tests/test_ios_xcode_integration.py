@@ -352,6 +352,24 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("BGTaskSchedulerPermittedIdentifiers:", project_content)
         self.assertIn("UIBackgroundModes:", project_content)
 
+    def test_ios_background_refresh_is_not_scheduled_before_handler_registration(self) -> None:
+        app_path = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageMobileApp"
+            / "AIUsageMobileApp.swift"
+        )
+        app_content = app_path.read_text(encoding="utf-8")
+        init_body = app_content[
+            app_content.index("    init() {") : app_content.index("    var body: some Scene")
+        ]
+
+        self.assertNotIn("WatchSummaryBackgroundRefresh.schedule()", init_body)
+        self.assertIn(".backgroundTask(.appRefresh(WatchSummaryBackgroundRefresh.taskIdentifier))", app_content)
+        self.assertIn("scheduleWatchSummaryBackgroundRefresh()", app_content)
+
     def test_watch_companion_and_widget_targets_are_embedded_for_testflight(self) -> None:
         project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
         content = project_yml.read_text(encoding="utf-8")

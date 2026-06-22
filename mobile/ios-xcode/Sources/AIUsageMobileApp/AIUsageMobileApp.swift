@@ -11,7 +11,6 @@ struct AIUsageMobileApp: App {
 
     init() {
         WatchSummaryBridge.shared.activate()
-        WatchSummaryBackgroundRefresh.schedule()
     }
 
     var body: some Scene {
@@ -106,6 +105,7 @@ struct LiveSummaryContainerView: View {
                 }
             }
             .task {
+                scheduleWatchSummaryBackgroundRefresh()
                 let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
                 await loadLiveSummary(period: initialPeriod)
                 await ensureTodayCompanionSummary(visiblePeriod: initialPeriod)
@@ -192,6 +192,10 @@ struct LiveSummaryContainerView: View {
         }
         try? MobileSummaryCache.writeToAppGroup(loadedSummary)
         WatchSummaryBridge.shared.push(loadedSummary)
+        scheduleWatchSummaryBackgroundRefresh()
+    }
+
+    private func scheduleWatchSummaryBackgroundRefresh() {
         WatchSummaryBackgroundRefresh.schedule()
     }
 
