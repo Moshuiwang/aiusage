@@ -37,17 +37,23 @@ public enum MobileSummaryRuntimeConfig {
         bundle: Bundle = .main,
         tokenStore: MobileTokenStore?
     ) -> MobileRuntimeSettingsForm {
-        MobileRuntimeSettingsForm(
-            baseURLString: runtimeValue(
-                environmentKey: "AI_USAGE_API_BASE_URL",
-                defaultsKey: "AIUsageAPIBaseURL",
-                bundleKey: "AIUsageAPIBaseURL",
-                fallback: productionBaseURLString,
-                environment: environment,
-                defaults: defaults,
-                bundle: bundle
-            ) ?? productionBaseURLString,
-            token: normalizedRuntimeValue(tokenStore?.readToken()) ?? ""
+        let baseURLString = runtimeValue(
+            environmentKey: "AI_USAGE_API_BASE_URL",
+            defaultsKey: "AIUsageAPIBaseURL",
+            bundleKey: "AIUsageAPIBaseURL",
+            fallback: productionBaseURLString,
+            environment: environment,
+            defaults: defaults,
+            bundle: bundle
+        ) ?? productionBaseURLString
+        let baseURL = normalizedURL(baseURLString)
+        return MobileRuntimeSettingsForm(
+            baseURLString: baseURLString,
+            token: runtimeToken(
+                tokenStore: tokenStore,
+                bundle: bundle,
+                prefersBundleToken: baseURL.map(isProductionServer) ?? false
+            ) ?? ""
         )
     }
 
@@ -79,7 +85,7 @@ public enum MobileSummaryRuntimeConfig {
         guard let token = runtimeToken(
             tokenStore: tokenStore,
             bundle: bundle,
-            allowsBundleToken: isProductionServer(baseURL)
+            prefersBundleToken: isProductionServer(baseURL)
         ) else {
             return nil
         }
@@ -161,15 +167,19 @@ public enum MobileSummaryRuntimeConfig {
     private static func runtimeToken(
         tokenStore: MobileTokenStore?,
         bundle: Bundle,
-        allowsBundleToken: Bool
+        prefersBundleToken: Bool
     ) -> String? {
+        let bundleToken = normalizedRuntimeValue(bundle.object(forInfoDictionaryKey: "AIUsageAPIToken") as? String)
+        if prefersBundleToken, let bundleToken {
+            return bundleToken
+        }
         if let token = normalizedRuntimeValue(tokenStore?.readToken()) {
             return token
         }
-        guard allowsBundleToken else {
+        guard prefersBundleToken else {
             return nil
         }
-        return normalizedRuntimeValue(bundle.object(forInfoDictionaryKey: "AIUsageAPIToken") as? String)
+        return bundleToken
     }
 
     private static func runtimeValue(

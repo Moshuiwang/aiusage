@@ -16,6 +16,8 @@
 - 不要直接修改生产账户文件。
 - 不要提交 SSH key、token、原始 usage 日志、`config/sources.local.json` 或生成数据。
 - 不能把 `ccusage daily`、`ccusage blocks` 或本地估算伪装成官方额度状态。
+- iPhone / Apple Watch 交付不能只以 build、预检或安装成功为完成；真机可用时必须启动 App，并用进程仍存活或 console 无启动崩溃证据确认用户点开不会闪退。若设备不可用，必须在交付说明里明确这个验收缺口。
+- iPhone 生产入口、token 或安装包配置变更后，必须验证运行时不会被设备上残留的 Keychain / UserDefaults 旧配置覆盖；真机可用时要确认 App 实际能拉到非空生产数据，而不只是包内 token 存在。
 
 ## 按需入口
 
