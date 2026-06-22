@@ -23,6 +23,7 @@ final class MobileSummaryAPIClientTests: XCTestCase {
         XCTAssertEqual(request.url?.path, "/api/mobile/summary")
         XCTAssertEqual(request.url?.query, "period=week")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret-token")
+        XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
     }
 
     func testRejectsNonSuccessHTTPStatus() async throws {

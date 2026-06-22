@@ -8,7 +8,7 @@ final class MobileSummaryClientTests: XCTestCase {
         let transport = RecordingTransport(data: data, statusCode: 200)
         let client = MobileSummaryClient(
             config: MobileSummaryClientConfig(
-                baseURL: try XCTUnwrap(URL(string: "https://vpn2.chunbai.com:8443")),
+                baseURL: try XCTUnwrap(URL(string: "https://aiusage.chunbai.com")),
                 bearerToken: "test-token",
                 period: "month"
             ),
@@ -20,7 +20,7 @@ final class MobileSummaryClientTests: XCTestCase {
         XCTAssertEqual(summary.period.id, "week")
         XCTAssertEqual(
             transport.requests.first?.url?.absoluteString,
-            "https://vpn2.chunbai.com:8443/api/mobile/summary?period=month"
+            "https://aiusage.chunbai.com/api/mobile/summary?period=month"
         )
         XCTAssertEqual(
             transport.requests.first?.value(forHTTPHeaderField: "Authorization"),
@@ -33,7 +33,7 @@ final class MobileSummaryClientTests: XCTestCase {
         let transport = RecordingTransport(data: Data("{}".utf8), statusCode: 401)
         let client = MobileSummaryClient(
             config: MobileSummaryClientConfig(
-                baseURL: try XCTUnwrap(URL(string: "https://vpn2.chunbai.com:8443")),
+                baseURL: try XCTUnwrap(URL(string: "https://aiusage.chunbai.com")),
                 bearerToken: nil,
                 period: "today"
             ),
@@ -56,7 +56,7 @@ final class MobileSummaryClientTests: XCTestCase {
         )
         let client = MobileSummaryClient(
             config: MobileSummaryClientConfig(
-                baseURL: try XCTUnwrap(URL(string: "https://vpn2.chunbai.com:8443")),
+                baseURL: try XCTUnwrap(URL(string: "https://aiusage.chunbai.com")),
                 bearerToken: nil,
                 period: "today"
             ),

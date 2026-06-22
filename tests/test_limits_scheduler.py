@@ -17,7 +17,7 @@ class TestLimitsScheduler(unittest.TestCase):
             config = LimitsSchedulerConfig(
                 repo_dir=base / "repo",
                 limits_config=base / "repo/config/limits.local.json",
-                url="https://vpn2.chunbai.com:8443/ingest-limits",
+                url="https://aiusage.chunbai.com/ingest-limits",
                 token_env_file=base / "state/limits-push.env",
                 runner_path=base / "bin/limits-push",
                 plist_path=base / "LaunchAgents/com.chunbai.aiusage.limits-push.plist",
@@ -42,7 +42,7 @@ class TestLimitsScheduler(unittest.TestCase):
             config = LimitsSchedulerConfig(
                 repo_dir=repo_dir,
                 limits_config=repo_dir / "config/limits.local.json",
-                url="https://vpn2.chunbai.com:8443/ingest-limits",
+                url="https://aiusage.chunbai.com/ingest-limits",
                 token_env_file=base / "state/limits-push.env",
                 runner_path=base / "bin/limits-push",
                 plist_path=base / "LaunchAgents/com.chunbai.aiusage.limits-push.plist",

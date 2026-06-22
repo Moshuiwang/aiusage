@@ -16,9 +16,9 @@
 - 不要直接修改生产账户文件。
 - 不要提交 SSH key、token、原始 usage 日志、`config/sources.local.json` 或生成数据。
 - 不能把 `ccusage daily`、`ccusage blocks` 或本地估算伪装成官方额度状态。
-- iPhone / Apple Watch 交付不能只以 build、预检或安装成功为完成；真机可用时必须启动 App，并用进程仍存活或 console 无启动崩溃证据确认用户点开不会闪退。若设备不可用，必须在交付说明里明确这个验收缺口。
-- iPhone 生产入口、token 或安装包配置变更后，必须验证运行时不会被设备上残留的 Keychain / UserDefaults 旧配置覆盖；真机可用时要确认 App 实际能拉到非空生产数据，而不只是包内 token 存在。
-- iPhone 真机安装前必须先跑可自动化验收：生产接口预检通过后，用真实生产 baseURL + token 构建 Simulator 包，启动模拟器 App，截图或 UI 自动化确认 App 不闪退且首页展示非空真实生产数据；该闸门通过后才能继续安装真机。若模拟器不可用，必须停止并说明缺口，不得直接跳到真机安装。
+- 本仓库 GitHub remote 使用 `https://github.com/Moshuiwang/aiusage.git`，默认 GitHub 身份是 `Moshuiwang`（`gh` active account）。不要因为本机 SSH 到 GitHub 识别为 `wangzhipeng2010-a11y` 就切换仓库身份；若工具必须走 SSH，先报告账号不一致风险。
+- iPhone / Apple Watch 交付不能只以 build、预检或安装成功为完成；必须有用户可见启动和非空真实数据证据，设备不可用时明确验收缺口。
+- 首次安装验收使用本地 skill：`ai-usage-first-install`（`/Users/wangzhipeng/.codex/skills/ai-usage-first-install`），不要把模拟器、真机、Watch 安装细节继续塞回本文件。升级路径验收只有在用户明确要求时再单独设计和报告。
 
 ## 按需入口
 

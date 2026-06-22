@@ -549,10 +549,6 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             "Bearer ",
             "User-Agent",
             "AIUsageMobileInstaller/1.0",
-            "read_token_from_vpn2_systemd",
-            "systemctl",
-            "show",
-            "ai-usage-server",
             "--preflight-only",
             "write_temp_xcconfig",
             "https:/$()/aiusage.chunbai.com",
@@ -567,6 +563,8 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         for guard in required_guards:
             with self.subTest(guard=guard):
                 self.assertIn(guard, content)
+        self.assertNotIn("vpn2", content)
+        self.assertNotIn("systemctl", content)
 
     def test_bottom_navigation_uses_native_liquid_glass_tab_view(self) -> None:
         root_view = (

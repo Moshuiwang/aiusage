@@ -63,7 +63,7 @@ public struct MobileSummaryAPIClient {
             throw MobileSummaryAPIError.invalidURL
         }
 
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let bearerToken = config.bearerToken, !bearerToken.isEmpty {

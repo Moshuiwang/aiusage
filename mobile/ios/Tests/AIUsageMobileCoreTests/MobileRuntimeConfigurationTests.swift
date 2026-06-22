@@ -147,6 +147,31 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         XCTAssertEqual(form.token, "bundle-production-token")
     }
 
+    func testRuntimeDiagnosticWritesRequestURLAndSummaryWithoutToken() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MobileRuntimeDiagnosticTests-\(UUID().uuidString)")
+        let url = directory.appendingPathComponent(MobileRuntimeDiagnostics.fileName)
+        let diagnostic = MobileRuntimeDiagnostic(
+            status: "success",
+            requestURL: "https://aiusage.chunbai.com/api/mobile/summary?period=week",
+            period: "week",
+            totalTokens: 788697772,
+            generatedAt: "2026-06-22T13:11:10+08:00",
+            error: nil,
+            recordedAt: "2026-06-22T14:40:00Z"
+        )
+
+        try MobileRuntimeDiagnostics.write(diagnostic, to: url)
+
+        let raw = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(raw.contains("788697772"))
+        XCTAssertFalse(raw.contains("Bearer"))
+        XCTAssertFalse(raw.contains("bundle-production-token"))
+        let decoded = try XCTUnwrap(MobileRuntimeDiagnostics.read(from: url))
+        XCTAssertEqual(decoded, diagnostic)
+        XCTAssertEqual(decoded.requestURL, "https://aiusage.chunbai.com/api/mobile/summary?period=week")
+    }
+
     func testRejectsSaveWithoutToken() throws {
         let defaults = try makeIsolatedDefaults()
         let tokenStore = InMemoryTokenStore()

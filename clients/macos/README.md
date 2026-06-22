@@ -27,7 +27,7 @@
 ```bash
 cd /Users/wangzhipeng/Documents/ai-usage-widget
 python3 clients/macos/scripts/install_menu_bar_app.py \
-  --server-url https://vpn2.chunbai.com:8443
+  --server-url https://aiusage.chunbai.com
 ```
 
 安装脚本会构建并安装到：

@@ -5,7 +5,7 @@
   "os_user": "ubuntu",
   "platform": "linux",
   "timezone": "UTC",
-  "server_url": "http://vpn2.chunbai.com:8000/ingest",
+  "server_url": "https://aiusage.chunbai.com/ingest",
   "timeout_seconds": 30,
   "token_env": "AI_USAGE_TOKEN"
 }

@@ -175,7 +175,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 
 ## 5. Systemd 服务配置 (Linux 远程部署)
 
-对于远程 Linux 服务器（如 `vpn2.chunbai.com`），建议配置 systemd 守护进程来管理服务。当前 `vpn2` 以 `root` 账户部署在 `/home/ubuntu/ai-usage-widget`：
+对于远程 Linux 生产源站主机，建议配置 systemd 守护进程来管理服务。当前源站以 `root` 账户部署在 `/home/ubuntu/ai-usage-widget`：
 
 ```ini
 # /etc/systemd/system/ai-usage-server.service

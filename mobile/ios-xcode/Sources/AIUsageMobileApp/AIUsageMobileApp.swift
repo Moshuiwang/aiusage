@@ -39,14 +39,20 @@ enum WatchSummaryBackgroundRefresh {
             period: MobileSummaryCache.companionPeriodID,
             tokenStore: tokenStore
         ) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: MobileSummaryCache.companionPeriodID)
             return
         }
-        guard let loadedSummary = try? await MobileSummaryAPIClient(config: config).load() else {
+        let loadedSummary: MobileSummary
+        do {
+            loadedSummary = try await MobileSummaryAPIClient(config: config).load()
+        } catch {
+            MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
             return
         }
         guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
             return
         }
+        MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
         try? MobileSummaryCache.writeToAppGroup(loadedSummary)
         WatchSummaryBridge.shared.push(loadedSummary)
     }
@@ -132,6 +138,7 @@ struct LiveSummaryContainerView: View {
         let requestID = UUID()
         latestRequestID = requestID
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: period)
             loadState = .configurationRequired
             return
         }
@@ -143,6 +150,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
             shareWithCompanionIfNeeded(loadedSummary)
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
@@ -153,6 +161,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error)
             loadState = .failed
         }
     }
@@ -161,6 +170,7 @@ struct LiveSummaryContainerView: View {
         let requestID = UUID()
         latestRequestID = requestID
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: period)
             loadState = .configurationRequired
             return
         }
@@ -172,6 +182,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
             shareWithCompanionIfNeeded(loadedSummary)
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
@@ -182,6 +193,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error)
             loadState = .failed
         }
     }
@@ -207,13 +219,18 @@ struct LiveSummaryContainerView: View {
             period: MobileSummaryCache.companionPeriodID,
             tokenStore: tokenStore
         ) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: MobileSummaryCache.companionPeriodID)
             return
         }
-        guard let loadedSummary = try? await MobileSummaryAPIClient(config: config).load() else {
+        do {
+            let loadedSummary = try await MobileSummaryAPIClient(config: config).load()
+            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
+            shareWithCompanionIfNeeded(loadedSummary)
+            cachedSummaries[loadedSummary.period.id] = loadedSummary
+        } catch {
+            MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
             return
         }
-        shareWithCompanionIfNeeded(loadedSummary)
-        cachedSummaries[loadedSummary.period.id] = loadedSummary
     }
 }
 
