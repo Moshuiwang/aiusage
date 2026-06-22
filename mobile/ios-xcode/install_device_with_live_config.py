@@ -13,7 +13,7 @@ import urllib.request
 from pathlib import Path
 
 
-PRODUCTION_BASE_URL = "https://vpn2.chunbai.com:8443"
+PRODUCTION_BASE_URL = "https://aiusage.chunbai.com"
 SUMMARY_SMOKE_PATH = "/api/mobile/summary?period=all"
 DEFAULT_DEVICE_ID = "00008140-0002792C1AFB001C"
 DEFAULT_DEVICECTL_ID = "EEA2E255-8C7E-50FB-A951-A9DE9B7E26C6"
@@ -28,7 +28,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--devicectl-id", default=DEFAULT_DEVICECTL_ID, help="devicectl device id")
     parser.add_argument("--token-env", default="AI_USAGE_INGEST_TOKEN", help="environment variable containing token")
     parser.add_argument("--token-file", default=None, help="0600 file containing token; never printed")
-    parser.add_argument("--token-ssh-host", default="vpn2", help="SSH host used as final token fallback")
     parser.add_argument("--preflight-only", action="store_true", help="verify token and production API without building")
     parser.add_argument("--skip-launch", action="store_true", help="install only")
     args = parser.parse_args(argv)
@@ -37,7 +36,7 @@ def main(argv: list[str] | None = None) -> int:
     project_dir = root / "mobile" / "ios-xcode"
     project = project_dir / "AIUsageMobile.xcodeproj"
 
-    token = read_token(args.token_env, args.token_file, args.token_ssh_host)
+    token = read_token(args.token_env, args.token_file)
     verify_production_summary(token)
     if args.preflight_only:
         print("预检完成：生产 token 和移动端接口可用。")
@@ -59,45 +58,24 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def read_token(token_env: str, token_file: str | None, token_ssh_host: str | None) -> str:
+def read_token(token_env: str, token_file: str | None) -> str:
     token = ""
     if token_file:
         token = Path(token_file).read_text(encoding="utf-8").strip()
     if not token:
         token = os.environ.get(token_env, "").strip()
     if not token:
-        token = read_token_from_vpn2_systemd(token_ssh_host)
-    if not token:
-        raise RuntimeError(f"missing token: set {token_env}, pass --token-file, or configure vpn2 SSH")
+        raise RuntimeError(f"missing token: set {token_env} or pass --token-file")
     return token
-
-
-def read_token_from_vpn2_systemd(token_ssh_host: str | None) -> str:
-    if not token_ssh_host:
-        return ""
-    command = [
-        "ssh",
-        token_ssh_host,
-        "systemctl",
-        "show",
-        "ai-usage-server",
-        "-p",
-        "Environment",
-        "--value",
-    ]
-    result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        return ""
-    for part in result.stdout.split():
-        if part.startswith("AI_USAGE_INGEST_TOKEN="):
-            return part.split("=", 1)[1].strip()
-    return ""
 
 
 def verify_production_summary(token: str) -> None:
     request = urllib.request.Request(
         PRODUCTION_BASE_URL + SUMMARY_SMOKE_PATH,
-        headers={"Authorization": "Bearer " + token},
+        headers={
+            "Authorization": "Bearer " + token,
+            "User-Agent": "AIUsageMobileInstaller/1.0",
+        },
     )
     try:
         with urllib.request.urlopen(request, timeout=15) as response:
@@ -133,7 +111,7 @@ def write_temp_xcconfig(token: str) -> Path:
     path = Path(handle.name)
     try:
         os.chmod(path, 0o600)
-        handle.write("AI_USAGE_API_BASE_URL = https:/$()/vpn2.chunbai.com:8443\n")
+        handle.write("AI_USAGE_API_BASE_URL = https:/$()/aiusage.chunbai.com\n")
         handle.write(f"AI_USAGE_API_TOKEN = {token}\n")
     finally:
         handle.close()

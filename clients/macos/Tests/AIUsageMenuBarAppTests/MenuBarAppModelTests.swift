@@ -21,7 +21,7 @@ final class MenuBarAppModelTests: XCTestCase {
     func testIgnoresStaleRefreshAfterPeriodSwitch() async throws {
         let loader = ControlledSummaryLoader()
         let config = MenuBarRuntimeConfig(
-            serverURL: "https://vpn2.chunbai.com:8443",
+            serverURL: "https://aiusage.chunbai.com",
             token: "test-token",
             dashboardURL: nil,
             defaultPeriod: "all"
@@ -52,7 +52,7 @@ final class MenuBarAppModelTests: XCTestCase {
     func testIgnoresStaleFailureAfterNewerRefreshSucceeds() async throws {
         let loader = ControlledSummaryLoader()
         let config = MenuBarRuntimeConfig(
-            serverURL: "https://vpn2.chunbai.com:8443",
+            serverURL: "https://aiusage.chunbai.com",
             token: "test-token",
             dashboardURL: nil,
             defaultPeriod: "all"
@@ -83,7 +83,7 @@ final class MenuBarAppModelTests: XCTestCase {
     func testKeepsCachedSummaryQuietlyWhenRefreshFails() async throws {
         let loader = ControlledSummaryLoader()
         let config = MenuBarRuntimeConfig(
-            serverURL: "https://vpn2.chunbai.com:8443",
+            serverURL: "https://aiusage.chunbai.com",
             token: "test-token",
             dashboardURL: nil,
             defaultPeriod: "today"

@@ -41,6 +41,7 @@ struct WatchMobileSummary: Codable, Equatable {
     let generatedAt: String?
     let timezone: String?
     let period: WatchPeriod
+    let trend: WatchTrend
     let breakdown: WatchBreakdown
     let limits: WatchLimits
     let sources: [WatchSource]
@@ -49,9 +50,21 @@ struct WatchMobileSummary: Codable, Equatable {
         case generatedAt = "generated_at"
         case timezone
         case period
+        case trend
         case breakdown
         case limits
         case sources
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+        self.timezone = try container.decodeIfPresent(String.self, forKey: .timezone)
+        self.period = try container.decode(WatchPeriod.self, forKey: .period)
+        self.trend = try container.decodeIfPresent(WatchTrend.self, forKey: .trend) ?? WatchTrend(points: [])
+        self.breakdown = try container.decode(WatchBreakdown.self, forKey: .breakdown)
+        self.limits = try container.decode(WatchLimits.self, forKey: .limits)
+        self.sources = try container.decode([WatchSource].self, forKey: .sources)
     }
 }
 
@@ -87,27 +100,49 @@ struct WatchBreakdownRow: Codable, Equatable, Identifiable {
     let tokens: Int
 }
 
+struct WatchTrend: Codable, Equatable {
+    let points: [WatchTrendPoint]
+}
+
+struct WatchTrendPoint: Codable, Equatable, Identifiable {
+    var id: String { bucket }
+
+    let bucket: String
+    let label: String
+    let tokens: Int
+}
+
 struct WatchLimits: Codable, Equatable {
     let windows: [WatchLimitWindow]
 }
 
 struct WatchLimitWindow: Codable, Equatable {
+    let sourceID: String?
     let provider: String
     let window: String
+    let usedPercentValue: Double?
     let remainingPercent: Double
+    let windowDurationMinutes: Int?
     let confidence: String
     let status: String
     let official: Bool
     let resetAt: String?
+    let accountLabel: String?
+    let accountPlanLabel: String?
 
     enum CodingKeys: String, CodingKey {
+        case sourceID = "source_id"
         case provider
         case window
+        case usedPercentValue = "used_percent"
         case remainingPercent = "remaining_percent"
+        case windowDurationMinutes = "window_duration_minutes"
         case confidence
         case status
         case official
         case resetAt = "reset_at"
+        case accountLabel = "account_label"
+        case accountPlanLabel = "account_plan_label"
     }
 
     var isOfficialObserved: Bool {
@@ -115,7 +150,8 @@ struct WatchLimitWindow: Codable, Equatable {
     }
 
     var usedPercent: Int {
-        max(0, min(100, Int((100 - remainingPercent).rounded())))
+        let value = usedPercentValue ?? (100 - remainingPercent)
+        return max(0, min(100, Int(value.rounded())))
     }
 }
 

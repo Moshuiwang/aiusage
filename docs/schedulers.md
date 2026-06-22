@@ -95,7 +95,7 @@ limits provider 必须在拥有对应 Codex / Claude credential 的当前 macOS 
 cd /Users/<user>/Documents/ai-usage-widget
 PYTHONPATH=src AI_USAGE_INGEST_TOKEN=<token-from-production> \
 python3 -m ai_usage_widget.cli install-limits-scheduler \
-  --url https://vpn2.chunbai.com:8443/ingest-limits \
+  --url https://aiusage.chunbai.com/ingest-limits \
   --dry-run
 ```
 
@@ -105,7 +105,7 @@ python3 -m ai_usage_widget.cli install-limits-scheduler \
 cd /Users/<user>/Documents/ai-usage-widget
 PYTHONPATH=src AI_USAGE_INGEST_TOKEN=<token-from-production> \
 python3 -m ai_usage_widget.cli install-limits-scheduler \
-  --url https://vpn2.chunbai.com:8443/ingest-limits
+  --url https://aiusage.chunbai.com/ingest-limits
 ```
 
 默认生成：

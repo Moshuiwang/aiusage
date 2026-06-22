@@ -1,4 +1,5 @@
 import AIUsageMobileCore
+import BackgroundTasks
 import Foundation
 import Security
 import SwiftUI
@@ -16,6 +17,44 @@ struct AIUsageMobileApp: App {
         WindowGroup {
             LiveSummaryContainerView(initialTabID: initialTabID)
         }
+        .backgroundTask(.appRefresh(WatchSummaryBackgroundRefresh.taskIdentifier)) {
+            await WatchSummaryBackgroundRefresh.run(tokenStore: KeychainTokenStore())
+        }
+    }
+}
+
+enum WatchSummaryBackgroundRefresh {
+    static let taskIdentifier = "com.wangzhipeng.aiusage.mobile.watch-refresh"
+    private static let refreshInterval: TimeInterval = 30 * 60
+
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: refreshInterval)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    static func run(tokenStore: MobileTokenStore) async {
+        defer { schedule() }
+        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: MobileSummaryCache.companionPeriodID,
+            tokenStore: tokenStore
+        ) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: MobileSummaryCache.companionPeriodID)
+            return
+        }
+        let loadedSummary: MobileSummary
+        do {
+            loadedSummary = try await MobileSummaryAPIClient(config: config).load()
+        } catch {
+            MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
+            return
+        }
+        guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
+            return
+        }
+        MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
+        try? MobileSummaryCache.writeToAppGroup(loadedSummary)
+        WatchSummaryBridge.shared.push(loadedSummary)
     }
 }
 
@@ -72,6 +111,7 @@ struct LiveSummaryContainerView: View {
                 }
             }
             .task {
+                scheduleWatchSummaryBackgroundRefresh()
                 let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
                 await loadLiveSummary(period: initialPeriod)
                 await ensureTodayCompanionSummary(visiblePeriod: initialPeriod)
@@ -98,6 +138,7 @@ struct LiveSummaryContainerView: View {
         let requestID = UUID()
         latestRequestID = requestID
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: period)
             loadState = .configurationRequired
             return
         }
@@ -109,6 +150,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
             shareWithCompanionIfNeeded(loadedSummary)
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
@@ -119,6 +161,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error)
             loadState = .failed
         }
     }
@@ -127,6 +170,7 @@ struct LiveSummaryContainerView: View {
         let requestID = UUID()
         latestRequestID = requestID
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: period)
             loadState = .configurationRequired
             return
         }
@@ -138,6 +182,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
             shareWithCompanionIfNeeded(loadedSummary)
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
@@ -148,6 +193,7 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
+            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error)
             loadState = .failed
         }
     }
@@ -158,6 +204,11 @@ struct LiveSummaryContainerView: View {
         }
         try? MobileSummaryCache.writeToAppGroup(loadedSummary)
         WatchSummaryBridge.shared.push(loadedSummary)
+        scheduleWatchSummaryBackgroundRefresh()
+    }
+
+    private func scheduleWatchSummaryBackgroundRefresh() {
+        WatchSummaryBackgroundRefresh.schedule()
     }
 
     private func ensureTodayCompanionSummary(visiblePeriod: String) async {
@@ -168,13 +219,18 @@ struct LiveSummaryContainerView: View {
             period: MobileSummaryCache.companionPeriodID,
             tokenStore: tokenStore
         ) else {
+            MobileRuntimeDiagnostics.configurationRequired(period: MobileSummaryCache.companionPeriodID)
             return
         }
-        guard let loadedSummary = try? await MobileSummaryAPIClient(config: config).load() else {
+        do {
+            let loadedSummary = try await MobileSummaryAPIClient(config: config).load()
+            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
+            shareWithCompanionIfNeeded(loadedSummary)
+            cachedSummaries[loadedSummary.period.id] = loadedSummary
+        } catch {
+            MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
             return
         }
-        shareWithCompanionIfNeeded(loadedSummary)
-        cachedSummaries[loadedSummary.period.id] = loadedSummary
     }
 }
 

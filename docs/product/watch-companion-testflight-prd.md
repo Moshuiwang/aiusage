@@ -98,6 +98,32 @@ Watch App 和 WidgetKit accessory 使用 iPhone App 已经拿到的 mobile summa
 - Watch 端离线或摘要过期时，用户能看出“这是旧数据”。
 - iPhone App、iOS Widget、Watch App、表盘组件看到的 usage / limits 口径一致。
 - 90 天过期前可以通过新 TestFlight build 平滑更新。
+- iPhone App 和 Apple Watch App 已安装到用户设备后，Watch 表盘可以在不每次手动打开 iPhone App 的情况下通过后台刷新拿到最新 today summary；如果系统没有给到后台刷新机会，Watch 表盘必须明确显示 stale，而不是显示成实时数据。
+
+## 刷新体验
+
+### 用户期望
+
+用户不应该为了看手表表盘，每次都先打开 iPhone App。合理体验是：
+
+1. iPhone App 打开时立即刷新 today summary，并同步给 Watch。
+2. iPhone App 获得系统后台刷新机会时，只拉取 `today` summary，并同步给 Watch。
+3. Apple Watch App 打开时先显示最近一次 Watch 本地缓存，再等待 iPhone 同步。
+4. 表盘组件只读 Watch 本地共享缓存，显示最新可用摘要。
+5. 超过 freshness 窗口时，Watch App 和表盘显示 stale。
+
+### Apple 平台约束
+
+- WidgetKit 表盘组件不是实时常驻进程；刷新由系统调度，不能承诺秒级实时。
+- iPhone Background App Refresh 也不是固定定时器；系统会根据电量、网络、使用习惯决定是否唤醒。
+- WatchConnectivity 的后台传输可能延迟，但适合传递当前状态快照。
+- Watch 端直接联网可行，但不作为本产品默认路径，因为它会让 Watch 变成第二套带 token 的客户端。
+
+参考：
+
+- Apple WidgetKit: `https://developer.apple.com/documentation/widgetkit/keeping-a-widget-up-to-date`
+- Apple WatchConnectivity: `https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity`
+- Apple WatchConnectivity background guidance: `https://developer.apple.com/library/archive/documentation/General/Conceptual/AppleWatch2TransitionGuide/UpdatetheAppCode.html`
 
 ## 风险
 

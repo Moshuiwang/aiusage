@@ -83,6 +83,19 @@ SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个
 - `.claude`、`.codex` 原始日志目录、token、cookie、完整 provider response 不进入 SQLite。
 - 任何改表都必须单独任务包，先写迁移方案和测试；本轮不做 SQLite 迁移。
 
+## Apple Watch companion
+
+本轮 Apple Watch 刷新不新增数据库表，也不修改现有 schema。
+
+原因：
+
+- Watch 只展示 `/api/mobile/summary?period=today` 已经具备的 usage、trend、limits 和 source health。
+- iPhone 后台刷新只是多一个移动端读取路径，不产生新的服务端事实。
+- Watch App Group cache 是设备本地展示缓存，不是服务端数据库状态。
+- 表盘的安装状态、组件选择和 timeline 状态由 watchOS 管理，不写入 SQLite。
+
+如果未来要做用户可配置表盘偏好、设备列表、独立 watchOS token 或推送刷新，再单独开数据库迁移任务包；不能把这些作为本轮后台刷新实现的隐性前置条件。
+
 ## 历史目标 / 未实现
 
 以下名称曾出现在旧设计文档中，但当前代码没有对应表或没有作为当前 schema 使用：
