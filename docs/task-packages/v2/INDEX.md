@@ -121,6 +121,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-082 | [TP-V2-082-test-baseline-backlog-reconcile.md](../../archive/task-packages/v2/completed/TP-V2-082-test-baseline-backlog-reconcile.md) | done | Round 9 approval | none |
 | TP-V2-083 | [TP-V2-083-cloudflare-entrypoint-migration.md](TP-V2-083-cloudflare-entrypoint-migration.md) | in_progress | Cloudflare resources created | none |
 | TP-V2-084 | [TP-V2-084-watch-companion-testflight.md](TP-V2-084-watch-companion-testflight.md) | draft | TP-V2-070, PRD/architecture approval | none |
+| TP-V2-085 | [TP-V2-085-watch-refresh-best-practice.md](TP-V2-085-watch-refresh-best-practice.md) | in_progress | TP-V2-084 | none |
 
 ## subagent 分配建议
 
@@ -159,3 +160,4 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 - Mobile App agent：执行 TP-V2-080，把 iOS 底部周期切换从自定义毛玻璃胶囊升级为苹果推荐的原生 Liquid Glass Tab Bar / TabView 体验；如果当前 SDK 不支持，必须明确报告 fallback。
 - Docs / QA agent：执行 TP-V2-081，做目录与文档治理，只收敛入口、索引、归档和文档漂移检查，不改产品代码、API、SQLite schema 或客户端物理目录。
 - Docs / QA agent：TP-V2-082 已完成测试基线和 backlog 对账，删除废弃方向测试，保留真实 backlog。
+- Watch agent：执行 TP-V2-085，按 Apple 推荐路径实现 iPhone 后台刷新、WatchConnectivity、Watch App Group cache 和 WidgetKit complication 刷新闭环，最终以 iPhone 和 Apple Watch 安装后数据正常为验收目标。

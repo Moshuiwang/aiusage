@@ -158,8 +158,38 @@
 当前目标客户端：
 
 - iPhone App / iOS Widget 使用 mobile summary。
+- iPhone App 后台刷新使用 `period=today` 的 mobile summary，并把结果同步给 Apple Watch。
+- Apple Watch App 和表盘组件不直接调用本接口；它们只读取 iPhone 同步过来的本地摘要。
 - Android、macOS 菜单栏、Windows 托盘后续也复用 mobile summary 或由它裁剪的轻量摘要。
 - 客户端不得直接读取 SQLite，不得执行 `ccusage`、SSH 或 provider。
+
+### Apple Watch 刷新合同
+
+本轮不新增 Watch 专用 HTTP endpoint。Watch 看到的数据来自这条本地链路：
+
+```text
+/api/mobile/summary?period=today
+  -> iPhone App cache
+  -> WatchConnectivity
+  -> Watch App Group cache
+  -> Watch App / Watch WidgetKit accessory
+```
+
+Watch 所需字段必须来自 mobile summary 已有字段：
+
+- `generated_at` 和 `timezone`：用于更新时间和 stale 判断。
+- `period.total_tokens`、`period.input_tokens`、`period.output_tokens`、`period.cache_tokens`：用于 today usage 展示。
+- `trend`：用于 today chart complication。
+- `limits.windows`：用于 Codex / Claude quota ring。
+- `sources`：用于判断 source health 和可解释的 stale/error。
+
+用户在 iPhone 前台选择 week/month/all 不改变 Watch 表盘刷新口径；后台和表盘只同步 today summary。这样表盘语义稳定，不会因为 iPhone 页面停留在某个筛选项而显示错口径。
+
+失败语义：
+
+- HTTP 失败不清空 iPhone 或 Watch 已有缓存。
+- WatchConnectivity 延迟不算接口失败，只表示 Watch 暂时展示旧缓存。
+- 超过 freshness window 时客户端显示 stale，不把旧数据当成实时。
 
 ## 错误模型
 

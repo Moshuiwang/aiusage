@@ -287,7 +287,22 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("decoded.period.id == \"today\"", watch_content)
         self.assertIn("isStale", watch_content)
         self.assertIn("updatedText", watch_content)
-        forbidden = ["ccusage", "SQLite", ".codex", ".claude", "Authorization", "Bearer", "URLSession", "ssh"]
+        self.assertIn('reloadTimelines(ofKind: "AIUsageCodexQuotaRingComplication")', watch_content)
+        self.assertIn('reloadTimelines(ofKind: "AIUsageClaudeQuotaRingComplication")', watch_content)
+        self.assertIn('reloadTimelines(ofKind: "AIUsageTodayChartComplication")', watch_content)
+        self.assertNotIn('reloadTimelines(ofKind: "AIUsageWatchWidget")', watch_content)
+        forbidden = [
+            "ccusage",
+            "SQLite",
+            "~/.codex",
+            "~/.claude",
+            "/.codex",
+            "/.claude",
+            "Authorization",
+            "Bearer",
+            "URLSession",
+            "ssh",
+        ]
         for token in forbidden:
             with self.subTest(token=token):
                 self.assertNotIn(token, watch_content)
@@ -304,6 +319,38 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("WatchSummaryBridge.shared.push", app_content)
         self.assertIn("ensureTodayCompanionSummary", app_content)
         self.assertIn("transferCurrentComplicationUserInfo", app_content)
+
+    def test_ios_background_refresh_updates_today_watch_summary(self) -> None:
+        app_path = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageMobileApp"
+            / "AIUsageMobileApp.swift"
+        )
+        plist_path = ROOT / "mobile" / "ios-xcode" / "Config" / "AIUsageMobileApp-Info.plist"
+        project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
+
+        app_content = app_path.read_text(encoding="utf-8")
+        plist_content = plist_path.read_text(encoding="utf-8")
+        project_content = project_yml.read_text(encoding="utf-8")
+
+        task_id = "com.wangzhipeng.aiusage.mobile.watch-refresh"
+        self.assertIn("import BackgroundTasks", app_content)
+        self.assertIn(task_id, app_content)
+        self.assertIn(".backgroundTask(.appRefresh(WatchSummaryBackgroundRefresh.taskIdentifier))", app_content)
+        self.assertIn("BGAppRefreshTaskRequest(identifier: taskIdentifier)", app_content)
+        self.assertIn("MobileSummaryCache.companionPeriodID", app_content)
+        self.assertIn("MobileSummaryAPIClient(config: config).load()", app_content)
+        self.assertIn("MobileSummaryCache.writeToAppGroup(loadedSummary)", app_content)
+        self.assertIn("WatchSummaryBridge.shared.push(loadedSummary)", app_content)
+        self.assertIn("BGTaskSchedulerPermittedIdentifiers", plist_content)
+        self.assertIn(task_id, plist_content)
+        self.assertIn("UIBackgroundModes", plist_content)
+        self.assertIn("fetch", plist_content)
+        self.assertIn("BGTaskSchedulerPermittedIdentifiers:", project_content)
+        self.assertIn("UIBackgroundModes:", project_content)
 
     def test_watch_companion_and_widget_targets_are_embedded_for_testflight(self) -> None:
         project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
@@ -374,12 +421,48 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("WatchSummaryStore.read()", widget_content)
         self.assertIn(".accessoryRectangular", widget_content)
         self.assertIn(".accessoryCircular", widget_content)
+        self.assertIn(".accessoryCorner", widget_content)
         self.assertIn(".accessoryInline", widget_content)
-        self.assertIn("WatchSummaryDisplay.circularText(from: summary)", widget_content)
+        self.assertIn("AIUsageCodexQuotaRingComplication", widget_content)
+        self.assertIn("AIUsageClaudeQuotaRingComplication", widget_content)
+        self.assertIn("AIUsageTodayChartComplication", widget_content)
+        self.assertIn('configurationDisplayName("AI Usage Codex")', widget_content)
+        self.assertIn('configurationDisplayName("AI Usage Claude")', widget_content)
+        self.assertIn('configurationDisplayName("AI Usage Today")', widget_content)
+        self.assertIn("FixedQuotaRingProvider(selection: .codex)", widget_content)
+        self.assertIn("FixedQuotaRingProvider(selection: .claude)", widget_content)
+        self.assertIn("TodayChartProvider", widget_content)
+        self.assertIn("TodayChartComplicationView", widget_content)
+        self.assertIn("ComplicationBarChart", widget_content)
+        self.assertIn("widgetCurvesContent()", widget_content)
+        self.assertIn("outerUsedPercent", widget_content)
+        self.assertIn("innerUsedPercent", widget_content)
+        self.assertIn("accountShortName", widget_content)
+        self.assertIn("Circle().trim(from: 0, to: CGFloat(entry.state.outerUsedPercent)", widget_content)
+        self.assertIn("Circle().trim(from: 0, to: CGFloat(entry.state.innerUsedPercent)", widget_content)
+        self.assertIn("WatchSummaryFreshness.isStale(summary)", widget_content)
+        self.assertIn("isStale: WatchSummaryFreshness.isStale(summary)", widget_content)
+        self.assertIn('Text("stale")', widget_content)
+        self.assertIn("state.isStale", widget_content)
+        self.assertIn("TodayChartState", widget_content)
+        self.assertIn("isStale: WatchSummaryFreshness.isStale(summary)", widget_content)
+        self.assertNotIn(".gaugeStyle(.accessoryCircularCapacity)", widget_content)
+        self.assertNotIn('Text("AI")', widget_content)
         self.assertIn('return "--"', store_content)
         self.assertIn("TokenFormat.compact(summary.period.totalTokens)", store_content)
         self.assertNotIn(".cachesDirectory", widget_content)
-        forbidden = ["ccusage", "SQLite", ".codex", ".claude", "Authorization", "Bearer", "URLSession", "ssh"]
+        forbidden = [
+            "ccusage",
+            "SQLite",
+            "~/.codex",
+            "~/.claude",
+            "/.codex",
+            "/.claude",
+            "Authorization",
+            "Bearer",
+            "URLSession",
+            "ssh",
+        ]
         for token in forbidden:
             with self.subTest(token=token):
                 self.assertNotIn(token, widget_content)
@@ -401,6 +484,9 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             '"generated_at"',
             '"timezone"',
             '"period"',
+            '"trend"',
+            '"points"',
+            '"bucket"',
             '"total_tokens"',
             '"input_tokens"',
             '"output_tokens"',
@@ -429,6 +515,8 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         ]:
             with self.subTest(coding_key=coding_key):
                 self.assertIn(coding_key, store_content)
+        self.assertIn("decodeIfPresent(WatchTrend.self, forKey: .trend)", store_content)
+        self.assertIn("WatchTrend(points: [])", store_content)
 
     def test_device_install_guard_requires_live_token_and_exact_production_url(self) -> None:
         script = ROOT / "mobile" / "ios-xcode" / "install_device_with_live_config.py"

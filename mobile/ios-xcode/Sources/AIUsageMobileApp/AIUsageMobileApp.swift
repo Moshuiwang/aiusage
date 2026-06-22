@@ -1,4 +1,5 @@
 import AIUsageMobileCore
+import BackgroundTasks
 import Foundation
 import Security
 import SwiftUI
@@ -10,12 +11,45 @@ struct AIUsageMobileApp: App {
 
     init() {
         WatchSummaryBridge.shared.activate()
+        WatchSummaryBackgroundRefresh.schedule()
     }
 
     var body: some Scene {
         WindowGroup {
             LiveSummaryContainerView(initialTabID: initialTabID)
         }
+        .backgroundTask(.appRefresh(WatchSummaryBackgroundRefresh.taskIdentifier)) {
+            await WatchSummaryBackgroundRefresh.run(tokenStore: KeychainTokenStore())
+        }
+    }
+}
+
+enum WatchSummaryBackgroundRefresh {
+    static let taskIdentifier = "com.wangzhipeng.aiusage.mobile.watch-refresh"
+    private static let refreshInterval: TimeInterval = 30 * 60
+
+    static func schedule() {
+        let request = BGAppRefreshTaskRequest(identifier: taskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: refreshInterval)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    static func run(tokenStore: MobileTokenStore) async {
+        defer { schedule() }
+        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: MobileSummaryCache.companionPeriodID,
+            tokenStore: tokenStore
+        ) else {
+            return
+        }
+        guard let loadedSummary = try? await MobileSummaryAPIClient(config: config).load() else {
+            return
+        }
+        guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
+            return
+        }
+        try? MobileSummaryCache.writeToAppGroup(loadedSummary)
+        WatchSummaryBridge.shared.push(loadedSummary)
     }
 }
 
@@ -158,6 +192,7 @@ struct LiveSummaryContainerView: View {
         }
         try? MobileSummaryCache.writeToAppGroup(loadedSummary)
         WatchSummaryBridge.shared.push(loadedSummary)
+        WatchSummaryBackgroundRefresh.schedule()
     }
 
     private func ensureTodayCompanionSummary(visiblePeriod: String) async {

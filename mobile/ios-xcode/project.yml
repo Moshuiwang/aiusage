@@ -50,12 +50,16 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         AIUsageAPIBaseURL: "$(AI_USAGE_API_BASE_URL)"
         AIUsageAPIToken: "$(AI_USAGE_API_TOKEN)"
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.wangzhipeng.aiusage.mobile.watch-refresh
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         UILaunchScreen:
           UIColorName: ""
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        UIBackgroundModes:
+          - fetch
 
   AIUsageMobileWidgetExtension:
     type: app-extension

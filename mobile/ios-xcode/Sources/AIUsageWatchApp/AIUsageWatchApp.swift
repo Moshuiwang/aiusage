@@ -66,7 +66,9 @@ final class WatchSummaryModel: NSObject, ObservableObject, WCSessionDelegate, @u
             return
         }
         WatchSummaryStore.write(decoded)
-        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageWatchWidget")
+        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageCodexQuotaRingComplication")
+        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageClaudeQuotaRingComplication")
+        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageTodayChartComplication")
         DispatchQueue.main.async {
             self.summary = decoded
         }

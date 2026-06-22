@@ -8,12 +8,12 @@
 
 ```mermaid
 flowchart LR
-    server["AI Usage server<br/>/api/mobile/summary"] --> iphone["iPhone App<br/>live fetch + cache"]
-    iphone --> iosWidget["iOS Widget<br/>App Group cache"]
-    iphone --> watchSync["WatchConnectivity<br/>summary transfer"]
-    watchSync --> watchApp["Apple Watch App<br/>read-only summary"]
+    server["AI Usage server<br/>/api/mobile/summary?period=today"] --> iphoneRefresh["iPhone App<br/>foreground + BGAppRefreshTask"]
+    iphoneRefresh --> iphoneCache["iPhone App Group cache"]
+    iphoneCache --> iosWidget["iOS Widget<br/>local summary"]
+    iphoneRefresh --> watchSync["WatchConnectivity<br/>application context / user info"]
     watchSync --> watchCache["Watch App Group cache"]
-    watchCache --> watchApp
+    watchCache --> watchApp["Apple Watch App<br/>read-only summary"]
     watchCache --> complication["Watch WidgetKit accessory<br/>glance summary"]
 ```
 
@@ -36,7 +36,9 @@ iPhone App 继续负责：
 - 保存最近一次可用 mobile summary。
 - 保护 server token 和配置。
 - 复用 TP-V2-070 已有 WatchConnectivity 通道，把符合 companion 条件的 MobileSummary 同步给 Watch。
-- 在数据更新后触发 WidgetKit / Watch 刷新。
+- 在前台刷新和系统允许的后台刷新后触发 WidgetKit / Watch 刷新。
+
+本轮按 Apple 推荐的 companion 形态处理刷新：iPhone App 是唯一联网 owner，watchOS 侧不变成第二个 server client。iOS 使用 `BGAppRefreshTask` 申请轻量后台刷新，成功拿到 today summary 后写入 iPhone App Group cache，再通过 WatchConnectivity 发送给 Watch。后台刷新不是固定闹钟，系统会根据电量、使用频率和网络状态决定是否执行；用户体验上必须显示最后更新时间和 stale，而不是承诺实时。
 
 Watch 端不保存 token，不直接请求生产 server，不执行采集。本轮不默认新增第二套 iPhone -> Watch 数据合同。
 
@@ -48,6 +50,7 @@ Watch App 只消费 iPhone 同步来的摘要：
 - 本地保留最近一次成功摘要，启动时先显示 Watch App Group shared cache。
 - 收到新摘要后更新 UI。
 - 超过新鲜度窗口后显示 stale。
+- 不因为用户没有打开 Watch App 就丢失已有数据。
 
 ### Watch WidgetKit accessory 是独立 glance 层
 
@@ -58,6 +61,13 @@ Watch App 只消费 iPhone 同步来的摘要：
 - `.accessoryInline`：短文字额度或 stale 状态，作为文本承载。
 
 组件必须由独立 watchOS WidgetKit extension 提供，并嵌入 `AIUsageWatchApp`。Watch App 和 watchOS WidgetKit extension 必须声明同一个 watchOS App Group，用共享容器读写摘要缓存；不能依赖 Watch App 私有 `.cachesDirectory`。它可以 deep link 回 Watch App，但不能要求用户打开 App 才刷新一次。`.accessoryCorner` 可作为后续增强，不阻塞本轮。
+
+表盘组件的刷新由两个信号共同驱动：
+
+- WatchConnectivity 收到新 summary 后写入 Watch App Group cache，并请求 WidgetKit reload。
+- WidgetKit 自身根据 timeline policy 重新读取 Watch App Group cache。
+
+表盘组件永远不直接联网。它只负责把 Watch 本地缓存里的最新可信数据展示出来，并在数据过期时给出 stale 状态。
 
 ## 数据合同
 
@@ -128,6 +138,8 @@ Watch 展示层只做字段选择和格式化，不重新聚合 usage 或 limits
 
 如果未来要支持完全独立 watchOS App，再另开任务包设计 watch-only auth 和 read model。
 
+本轮移动端只调用现有 `/api/mobile/summary?period=today`。iPhone 前台页面可以继续支持用户切换 period，但后台刷新和 Watch 同步只使用 today，避免 Watch 表盘拿到和用户当前 iPhone 页面筛选状态绑定的数据。
+
 ## Xcode / 分发结构
 
 目标结构：
@@ -160,11 +172,14 @@ AIUsageWatchWidgetExtension
 ## 刷新和过期策略
 
 - iPhone App 每次成功拉取 summary 后写缓存并同步给 Watch。
+- iPhone App 注册一个 BGAppRefreshTask，用于系统允许时拉取 today summary。
+- 后台刷新每次结束前重新提交下一次 BGAppRefreshTask 请求。
 - Watch App 启动时先读 Watch App Group cache，再等待同步。
 - iPhone -> Watch 同步成功后，Watch App 写入 Watch App Group cache。
 - watchOS WidgetKit accessory 读取同一个 Watch App Group cache。
 - `generated_at` 超过 2 小时显示 stale，保持和当前 Watch App 行为一致；如果未来要缩短为 30 分钟，必须作为有意产品变更单独说明。
 - 同步失败不清空旧数据，只改变 freshness 状态。
+- 如果 iPhone 长期不被系统唤醒，Watch 仍展示最后一次成功同步的数据和 stale，不伪装成实时。
 - TestFlight build 到期前 10-20 天发布新 build。
 
 ## 安全边界
