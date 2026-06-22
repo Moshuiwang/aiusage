@@ -37,15 +37,8 @@ public enum MobileSummaryRuntimeConfig {
         bundle: Bundle = .main,
         tokenStore: MobileTokenStore?
     ) -> MobileRuntimeSettingsForm {
-        let baseURLString = runtimeValue(
-            environmentKey: "AI_USAGE_API_BASE_URL",
-            defaultsKey: "AIUsageAPIBaseURL",
-            bundleKey: "AIUsageAPIBaseURL",
-            fallback: productionBaseURLString,
-            environment: environment,
-            defaults: defaults,
-            bundle: bundle
-        ) ?? productionBaseURLString
+        let baseURLString = runtimeBaseURLString(environment: environment, defaults: defaults, bundle: bundle)
+            ?? productionBaseURLString
         let baseURL = normalizedURL(baseURLString)
         return MobileRuntimeSettingsForm(
             baseURLString: baseURLString,
@@ -64,15 +57,7 @@ public enum MobileSummaryRuntimeConfig {
         bundle: Bundle = .main,
         tokenStore: MobileTokenStore?
     ) -> MobileSummaryAPIConfig? {
-        let rawBaseURL = runtimeValue(
-            environmentKey: "AI_USAGE_API_BASE_URL",
-            defaultsKey: "AIUsageAPIBaseURL",
-            bundleKey: "AIUsageAPIBaseURL",
-            fallback: productionBaseURLString,
-            environment: environment,
-            defaults: defaults,
-            bundle: bundle
-        )
+        let rawBaseURL = runtimeBaseURLString(environment: environment, defaults: defaults, bundle: bundle)
         guard let rawBaseURL,
               let baseURL = normalizedURL(rawBaseURL)
         else {
@@ -180,6 +165,29 @@ public enum MobileSummaryRuntimeConfig {
             return nil
         }
         return bundleToken
+    }
+
+    private static func runtimeBaseURLString(
+        environment: [String: String],
+        defaults: UserDefaults,
+        bundle: Bundle
+    ) -> String? {
+        if let environmentBaseURL = normalizedRuntimeValue(environment["AI_USAGE_API_BASE_URL"]) {
+            return environmentBaseURL
+        }
+        if let bundleBaseURL = normalizedRuntimeValue(bundle.object(forInfoDictionaryKey: "AIUsageAPIBaseURL") as? String),
+           normalizedURL(bundleBaseURL).map(isProductionServer) == true {
+            return bundleBaseURL
+        }
+        return runtimeValue(
+            environmentKey: "AI_USAGE_API_BASE_URL",
+            defaultsKey: "AIUsageAPIBaseURL",
+            bundleKey: "AIUsageAPIBaseURL",
+            fallback: productionBaseURLString,
+            environment: environment,
+            defaults: defaults,
+            bundle: bundle
+        )
     }
 
     private static func runtimeValue(
