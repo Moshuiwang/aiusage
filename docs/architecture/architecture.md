@@ -9,6 +9,8 @@
 - 服务接口索引：[`interfaces.md`](interfaces.md)；接口以 `server.py`、`server_services.py`、`ingest.py`、`mobile_summary.py` 为准。
 - 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
+- Cloudflare 迁移长期目标（北极星，尚未执行）：[`cloudflare-migration-objective.md`](cloudflare-migration-objective.md)。
+- Cloudflare Worker Native 迁移规划（路线，尚未实施）：[`cloudflare-worker-native-migration-plan.md`](cloudflare-worker-native-migration-plan.md)。
 
 ## 当前真实架构
 

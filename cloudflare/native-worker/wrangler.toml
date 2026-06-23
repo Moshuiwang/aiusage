@@ -1,0 +1,13 @@
+name = "aiusage-native-staging"
+main = "src/index.ts"
+compatibility_date = "2026-06-21"
+workers_dev = true
+
+[vars]
+AIUSAGE_TIMEZONE = "Asia/Shanghai"
+
+[[d1_databases]]
+binding = "AIUSAGE_DB"
+database_name = "aiusage-prod-db"
+database_id = "be19e4de-4fa3-446c-8028-0d31ff0bb9f2"
+migrations_dir = "../migrations"

@@ -21,6 +21,7 @@ config/limits.local.json
 /tmp/
 __pycache__/
 .pytest_cache/
+node_modules/
 .env
 .env.local
 .env.*.local
@@ -32,6 +33,7 @@ auth.json
 /logs/
 *.local.log
 /.build/
+cloudflare/native-worker/tmp/
 widget/macos/.build/
 widget/macos/.swiftpm/
 mobile/ios/.build/
