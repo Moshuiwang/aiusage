@@ -214,3 +214,10 @@ HTTP 错误响应统一 shape：
 - `internal_error`
 
 历史文档中出现过但当前并非所有路径都会直接返回的错误类型，只能作为设计参考或 source status 分类，不应被客户端当成完整枚举。
+
+## Data freshness / accuracy design
+
+数据来源、缓存落盘、`backend_mode` / `canonical_store` metadata、iPhone/Watch
+本地 diagnostic 的接口规划见
+[`data-freshness-accuracy-interfaces.md`](data-freshness-accuracy-interfaces.md)。
+该文档是后续实现规划，新增 HTTP 字段必须保持可选，不能破坏当前客户端。

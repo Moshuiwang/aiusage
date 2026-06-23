@@ -122,6 +122,18 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-083 | [TP-V2-083-cloudflare-entrypoint-migration.md](TP-V2-083-cloudflare-entrypoint-migration.md) | in_progress | Cloudflare resources created | none |
 | TP-V2-084 | [TP-V2-084-watch-companion-testflight.md](TP-V2-084-watch-companion-testflight.md) | draft | TP-V2-070, PRD/architecture approval | none |
 | TP-V2-085 | [TP-V2-085-watch-refresh-best-practice.md](TP-V2-085-watch-refresh-best-practice.md) | in_progress | TP-V2-084 | none |
+| TP-V2-086 | [TP-V2-086-m0-api-contract-tests.md](TP-V2-086-m0-api-contract-tests.md) | done | Cloudflare migration objective | none |
+| TP-V2-087 | [TP-V2-087-m1-d1-schema-and-quota.md](TP-V2-087-m1-d1-schema-and-quota.md) | done | TP-V2-086 | none |
+| TP-V2-088 | [TP-V2-088-m2-ts-worker-readonly-api.md](TP-V2-088-m2-ts-worker-readonly-api.md) | done | TP-V2-086, TP-V2-087 | none |
+| TP-V2-089 | [TP-V2-089-m3-ts-worker-write-and-dual-write.md](TP-V2-089-m3-ts-worker-write-and-dual-write.md) | done | TP-V2-087, TP-V2-088 | none |
+| TP-V2-090 | [TP-V2-090-m4-data-import-and-parity.md](TP-V2-090-m4-data-import-and-parity.md) | in_progress | TP-V2-088, TP-V2-089 | none |
+| TP-V2-091 | [TP-V2-091-m5-cutover-to-native.md](TP-V2-091-m5-cutover-to-native.md) | draft | TP-V2-090 | none |
+| TP-V2-092 | [TP-V2-092-m6-vpn2-cold-backup.md](TP-V2-092-m6-vpn2-cold-backup.md) | draft | TP-V2-091 | none |
+| TP-V2-093 | [TP-V2-093-native-web-surface.md](TP-V2-093-native-web-surface.md) | done | TP-V2-088, TP-V2-089 | none |
+| TP-V2-094 | [TP-V2-094-live-entry-shadow-write.md](TP-V2-094-live-entry-shadow-write.md) | done | TP-V2-093 | none |
+| TP-V2-095 | [TP-V2-095-waf-ingest-block-fix.md](TP-V2-095-waf-ingest-block-fix.md) | done | none | none |
+| TP-V2-096 | [TP-V2-096-native-source-health-parity.md](TP-V2-096-native-source-health-parity.md) | done | TP-V2-088 | none |
+| TP-V2-097 | [TP-V2-097-data-freshness-accuracy-contract.md](TP-V2-097-data-freshness-accuracy-contract.md) | draft | TP-V2-085, TP-V2-090 | none |
 
 ## subagent 分配建议
 
@@ -161,3 +173,4 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 - Docs / QA agent：执行 TP-V2-081，做目录与文档治理，只收敛入口、索引、归档和文档漂移检查，不改产品代码、API、SQLite schema 或客户端物理目录。
 - Docs / QA agent：TP-V2-082 已完成测试基线和 backlog 对账，删除废弃方向测试，保留真实 backlog。
 - Watch agent：执行 TP-V2-085，按 Apple 推荐路径实现 iPhone 后台刷新、WatchConnectivity、Watch App Group cache 和 WidgetKit complication 刷新闭环，最终以 iPhone 和 Apple Watch 安装后数据正常为验收目标。
+- Data Accuracy agent：执行 TP-V2-097，把本轮事实核查暴露的数据及时性、缓存落盘、Watch cache 证据、origin/D1 limits parity 问题收口；不做 UI 改版。

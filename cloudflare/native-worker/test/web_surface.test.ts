@@ -1,0 +1,298 @@
+import { execFile as execFileWithCallback } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { build } from "esbuild";
+import { Miniflare } from "miniflare";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
+const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
+const staticRoot = path.join(repoRoot, "src/ai_usage_widget/static");
+const token = "contract-test-token";
+const sessionSecret = "cutover-session-secret";
+const fixedNow = "2026-06-03T12:00:00+08:00";
+const execFile = promisify(execFileWithCallback);
+
+describe.sequential("native TS Worker web surface", () => {
+  let mf: Miniflare;
+
+  beforeEach(async () => {
+    mf = await createMiniflare({
+      AIUSAGE_TOKEN: token,
+      AIUSAGE_SESSION_SECRET: sessionSecret,
+      AIUSAGE_NOW: fixedNow,
+    });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await seedMinimalUsage(db);
+    await seedHealthRows(db);
+  });
+
+  afterEach(async () => {
+    await mf.dispose();
+  });
+
+  it("issues a Python-compatible session cookie on login", async () => {
+    const pythonValue = await pythonSessionCookieValue(sessionSecret);
+    const response = await mf.dispatchFetch("http://native.test/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }).toString(),
+      redirect: "manual",
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("Location")).toBe("/dashboard");
+    expect(response.headers.get("Set-Cookie")).toBe(
+      `ai_usage_session=${pythonValue}; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`,
+    );
+  });
+
+  it("rejects invalid login and renders the Python-style error page", async () => {
+    const response = await mf.dispatchFetch("http://native.test/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "wrong-token" }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(await response.text()).toContain('<p class="error">Invalid token</p>');
+  });
+
+  it("serves login page before auth and dashboard HTML after cookie auth", async () => {
+    const expectedLogin = (await readStatic("login.html")).replace("{{ERROR_BLOCK}}", "");
+    const expectedDashboard = await readStatic("index.html");
+    const cookie = await sessionCookieHeader();
+
+    const publicRoot = await mf.dispatchFetch("http://native.test/");
+    const publicDashboard = await mf.dispatchFetch("http://native.test/dashboard");
+    const authenticatedRoot = await mf.dispatchFetch("http://native.test/", {
+      headers: { Cookie: cookie },
+    });
+    const authenticatedDashboard = await mf.dispatchFetch("http://native.test/dashboard", {
+      headers: { Cookie: cookie },
+    });
+
+    expect(publicRoot.status).toBe(200);
+    expect(publicRoot.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
+    expect(await publicRoot.text()).toBe(expectedLogin);
+    expect(await publicDashboard.text()).toBe(expectedLogin);
+    expect(authenticatedRoot.status).toBe(200);
+    expect(authenticatedRoot.headers.get("Cache-Control")).toBe("no-cache");
+    expect(await authenticatedRoot.text()).toBe(expectedDashboard);
+    expect(await authenticatedDashboard.text()).toBe(expectedDashboard);
+  });
+
+  it("serves static assets byte-for-byte from src/ai_usage_widget/static behind session auth", async () => {
+    const cookie = await sessionCookieHeader();
+
+    for (const asset of ["dashboard.css", "dashboard.js", "index.html", "login.html"]) {
+      const unauthenticated = await mf.dispatchFetch(`http://native.test/static/${asset}`);
+      expect(unauthenticated.status).toBe(401);
+
+      const response = await mf.dispatchFetch(`http://native.test/static/${asset}`, {
+        headers: { Cookie: cookie },
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toBe("no-cache");
+      expect(await response.text()).toBe(await readStatic(asset));
+    }
+  });
+
+  it("protects health with the same session cookie and keeps the M0 response shape", async () => {
+    const unauthenticated = await mf.dispatchFetch("http://native.test/api/health");
+    expect(unauthenticated.status).toBe(401);
+
+    const response = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Cookie: await sessionCookieHeader() },
+    });
+    const payload = await response.json<Record<string, unknown>>();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      status: "ok",
+      generated_at: fixedNow,
+      database: {
+        path: "D1:AIUSAGE_DB",
+        exists: true,
+      },
+      snapshot: {
+        path: "D1:latest-snapshot-metadata",
+        exists: true,
+        updated_at: "2026-06-03T11:55:00+08:00",
+      },
+      source_status: {
+        total: 2,
+        counts: { ok: 1, provider_failed: 1 },
+        non_ok: [{ source_id: "linux-dev-bob", status: "provider_failed" }],
+      },
+    });
+    expect(payload.database).toHaveProperty("size_bytes");
+  });
+
+  it("accepts the session cookie on read APIs", async () => {
+    const rejected = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03");
+    expect(rejected.status).toBe(401);
+
+    const response = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03", {
+      headers: { Cookie: await sessionCookieHeader() },
+    });
+    const payload = await response.json<Record<string, unknown>>();
+
+    expect(response.status).toBe(200);
+    expect(payload.summary).toMatchObject({ total_tokens: 300 });
+  });
+});
+
+async function sessionCookieHeader(): Promise<string> {
+  return `ai_usage_session=${await pythonSessionCookieValue(sessionSecret)}`;
+}
+
+async function pythonSessionCookieValue(secret: string): Promise<string> {
+  const script = `
+from ai_usage_widget.auth import TokenAuthenticator
+from ai_usage_widget.server import IngestAPIHandler
+
+class Server:
+    authenticator = TokenAuthenticator.from_values(${JSON.stringify(secret)})
+
+handler = object.__new__(IngestAPIHandler)
+handler.server = Server()
+print(handler._session_cookie_value())
+`;
+  const result = await execFile("python3", ["-c", script], {
+    cwd: repoRoot,
+    env: { ...process.env, PYTHONPATH: path.join(repoRoot, "src") },
+  });
+  return result.stdout.trim();
+}
+
+async function readStatic(asset: string): Promise<string> {
+  return readFile(path.join(staticRoot, asset), "utf8");
+}
+
+async function bundleWorker(): Promise<string> {
+  const outdir = path.join(tmpdir(), `aiusage-native-worker-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  await mkdir(outdir, { recursive: true });
+  const outfile = path.join(outdir, "index.mjs");
+  await build({
+    entryPoints: [workerEntry],
+    outfile,
+    bundle: true,
+    format: "esm",
+    platform: "browser",
+    target: "es2022",
+    sourcemap: false,
+  });
+  return readFile(outfile, "utf8");
+}
+
+async function createMiniflare(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
+  const bundleScript = await bundleWorker();
+  return new Miniflare({
+    modules: true,
+    script: bundleScript,
+    scriptPath: "index.mjs",
+    compatibilityDate: "2026-06-21",
+    d1Databases: ["AIUSAGE_DB"],
+    bindings: {
+      AIUSAGE_TOKEN: token,
+      AIUSAGE_TIMEZONE: "Asia/Shanghai",
+      ...extraBindings,
+    },
+  });
+}
+
+async function applySchema(db: D1Database): Promise<void> {
+  const sql = (await readFile(schemaPath, "utf8"))
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+  for (const statement of sql.split(";")) {
+    const trimmed = statement.trim();
+    if (trimmed) await db.prepare(trimmed).run();
+  }
+  await resetDatabase(db);
+}
+
+async function resetDatabase(db: D1Database): Promise<void> {
+  const tables = [
+    "usage_hourly_models",
+    "usage_hourly_facts",
+    "ai_accounts",
+    "os_identities",
+    "machines",
+    "limit_windows",
+    "source_identities",
+    "usage_blocks",
+    "usage_hourly",
+    "usage_daily_models",
+    "usage_daily",
+    "source_reports",
+    "collection_runs",
+  ];
+  for (const table of tables) {
+    await db.prepare(`DELETE FROM ${table}`).run();
+  }
+}
+
+async function seedMinimalUsage(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare("INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status) VALUES (?, ?, ?, ?, ?)")
+      .bind(1, "2026-06-03T11:55:00+08:00", "Asia/Shanghai", "0.1.0", "ok"),
+    db.prepare(`
+      INSERT INTO source_identities (
+        source_id, host, machine, os_user, platform, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind("mac-local", "macbook-pro", "macbook-pro", "alice", "darwin", "2026-06-03T11:55:00+08:00", "2026-06-03T11:55:00+08:00"),
+    db.prepare(`
+      INSERT INTO usage_daily (
+        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json,
+        first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local",
+      "2026-06-03",
+      "claude",
+      100,
+      150,
+      50,
+      0,
+      300,
+      null,
+      JSON.stringify({ machine: "macbook-pro", account: "alice", platform: "darwin" }),
+      "{}",
+      "2026-06-03T11:55:00+08:00",
+      "2026-06-03T11:55:00+08:00",
+    ),
+  ]);
+}
+
+async function seedHealthRows(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare(`
+      INSERT INTO source_reports (
+        id, run_id, source_id, report_type, command, status, ccusage_version,
+        first_period, last_period, error_type, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(1, 1, "mac-local", "daily", "HTTP Ingest", "ok", null, "2026-06-03", "2026-06-03", null, null),
+    db.prepare(`
+      INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(2, "2026-06-03T11:50:00+08:00", "Asia/Shanghai", "0.1.0", "ok"),
+    db.prepare(`
+      INSERT INTO source_reports (
+        id, run_id, source_id, report_type, command, status, ccusage_version,
+        first_period, last_period, error_type, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(2, 2, "linux-dev-bob", "limits", "HTTP Ingest", "provider_failed", null, null, null, "provider_failed", "provider down"),
+  ]);
+}

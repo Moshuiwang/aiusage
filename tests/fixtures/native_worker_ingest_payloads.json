@@ -1,0 +1,395 @@
+{
+  "timezone": "Asia/Shanghai",
+  "date": "2026-06-03",
+  "current_time": "2026-06-03T12:00:00+08:00",
+  "ingest_payloads": [
+    {
+      "schema_version": 1,
+      "source_id": "mac-local",
+      "host": "macbook-pro",
+      "machine": "macbook-pro",
+      "os_user": "alice",
+      "platform": "darwin",
+      "timezone": "Asia/Shanghai",
+      "observed_at": "2026-06-03T10:40:00+08:00",
+      "collection_window": "daily",
+      "collection_status": "ok",
+      "error_type": null,
+      "error_message": null,
+      "usage_daily": [
+        {
+          "agent": "claude",
+          "period": "2026-06-03",
+          "inputTokens": 1,
+          "outputTokens": 1,
+          "totalTokens": 2
+        }
+      ],
+      "ccusage_daily_report": {
+        "totals": {
+          "totalTokens": 5100
+        },
+        "daily": [
+          {
+            "agent": "claude",
+            "period": "2026-05-29",
+            "inputTokens": 1200,
+            "outputTokens": 500,
+            "cacheCreationTokens": 300,
+            "cacheReadTokens": 0,
+            "totalTokens": 2000,
+            "totalCost": 0.84,
+            "modelBreakdowns": [
+              {
+                "modelName": "claude-sonnet",
+                "inputTokens": 1200,
+                "outputTokens": 500,
+                "cacheCreationTokens": 300,
+                "cacheReadTokens": 0,
+                "totalTokens": 2000,
+                "cost": 0.84
+              }
+            ]
+          },
+          {
+            "agent": "claude",
+            "period": "2026-06-03",
+            "inputTokens": 2200,
+            "outputTokens": 600,
+            "cacheCreationTokens": 200,
+            "cacheReadTokens": 100,
+            "totalTokens": 3100,
+            "totalCost": 1.23,
+            "modelBreakdowns": [
+              {
+                "modelName": "claude-sonnet",
+                "inputTokens": 1600,
+                "outputTokens": 400,
+                "cacheCreationTokens": 100,
+                "cacheReadTokens": 50,
+                "totalTokens": 2150,
+                "cost": 0.86
+              },
+              {
+                "modelName": "claude-opus",
+                "inputTokens": 600,
+                "outputTokens": 200,
+                "cacheCreationTokens": 100,
+                "cacheReadTokens": 50,
+                "totalTokens": 950,
+                "cost": 0.37
+              }
+            ]
+          }
+        ]
+      },
+      "ccusage_blocks_report": {
+        "blocks": [
+          {
+            "agent": "claude",
+            "startTime": "2026-06-03T09:00:00+08:00",
+            "actualEndTime": "2026-06-03T10:00:00+08:00",
+            "tokenCounts": {
+              "inputTokens": 2200,
+              "outputTokens": 600,
+              "cacheCreationInputTokens": 200,
+              "cacheReadInputTokens": 100
+            },
+            "totalTokens": 3100,
+            "costUSD": 1.23
+          }
+        ]
+      },
+      "usage_hourly_facts": [
+        {
+          "fact_id": "fact-mac-20260603-09",
+          "agent": "claude",
+          "client": "cli",
+          "window_start": "2026-06-03T09:00:00+08:00",
+          "window_end": "2026-06-03T10:00:00+08:00",
+          "usage": {
+            "input_tokens": 2200,
+            "output_tokens": 600,
+            "cache_creation_tokens": 200,
+            "cache_read_tokens": 100,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 3100,
+            "total_cost": 1.23
+          },
+          "event_count": 4,
+          "session_count": 2,
+          "attribution_confidence": "observed",
+          "provenance": "fixture",
+          "ai_account": {
+            "provider": "claude",
+            "account_id": "claude-main",
+            "label": "Claude Team",
+            "display_name": "Claude Team",
+            "subscription": "pro"
+          },
+          "account_evidence": {
+            "source": "fixture"
+          },
+          "metadata": {
+            "fixture": "mac"
+          },
+          "model_breakdowns": [
+            {
+              "model": "claude-sonnet",
+              "input_tokens": 1600,
+              "output_tokens": 400,
+              "cache_creation_tokens": 100,
+              "cache_read_tokens": 50,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 2150,
+              "total_cost": 0.86
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "linux-dev-bob",
+      "host": "linux-dev",
+      "machine": "linux-dev",
+      "os_user": "bob",
+      "platform": "linux",
+      "timezone": "Asia/Shanghai",
+      "observed_at": "2026-06-03T10:55:00+08:00",
+      "collection_window": "hourly",
+      "collection_status": "ok",
+      "error_type": null,
+      "error_message": null,
+      "usage_daily": [
+        {
+          "agent": "codex",
+          "period": "2026-06-03",
+          "inputTokens": 1000,
+          "outputTokens": 500,
+          "cacheCreationTokens": 100,
+          "cacheReadTokens": 0,
+          "totalTokens": 1600,
+          "totalCost": 0.72,
+          "modelBreakdowns": [
+            {
+              "modelName": "gpt-5",
+              "inputTokens": 1000,
+              "outputTokens": 500,
+              "cacheCreationTokens": 100,
+              "cacheReadTokens": 0,
+              "totalTokens": 1600,
+              "cost": 0.72
+            }
+          ]
+        }
+      ],
+      "mswusage_codex_hourly_report": {
+        "provenance": "mswusage_codex_token_count",
+        "hourly": [
+          {
+            "hour": "2026-06-03T09:00:00+08:00",
+            "input_tokens": 50,
+            "output_tokens": 20,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+            "reasoning_output_tokens": 1,
+            "total_tokens": 70,
+            "event_count": 1,
+            "session_count": 1
+          },
+          {
+            "hour": "2026-06-03T10:00:00+08:00",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_tokens": 100,
+            "cache_read_tokens": 0,
+            "reasoning_output_tokens": 25,
+            "total_tokens": 1600,
+            "event_count": 3,
+            "session_count": 1
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": 1,
+      "source_id": "linux-dev-bob",
+      "host": "linux-dev",
+      "machine": "linux-dev",
+      "os_user": "bob",
+      "platform": "linux",
+      "timezone": "Asia/Shanghai",
+      "observed_at": "2026-06-03T11:05:00+08:00",
+      "collection_window": "hourly",
+      "collection_status": "ok",
+      "error_type": null,
+      "error_message": null,
+      "usage_daily": [
+        {
+          "agent": "codex",
+          "period": "2026-06-03",
+          "inputTokens": 1000,
+          "outputTokens": 500,
+          "cacheCreationTokens": 100,
+          "cacheReadTokens": 0,
+          "totalTokens": 1600,
+          "totalCost": 0.72,
+          "modelBreakdowns": [
+            {
+              "modelName": "gpt-5",
+              "inputTokens": 1000,
+              "outputTokens": 500,
+              "cacheCreationTokens": 100,
+              "cacheReadTokens": 0,
+              "totalTokens": 1600,
+              "cost": 0.72
+            }
+          ]
+        }
+      ],
+      "mswusage_codex_hourly_report": {
+        "provenance": "mswusage_codex_token_count",
+        "hourly": [
+          {
+            "hour": "2026-06-03T10:00:00+08:00",
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_tokens": 100,
+            "cache_read_tokens": 0,
+            "reasoning_output_tokens": 25,
+            "total_tokens": 1600,
+            "event_count": 3,
+            "session_count": 1
+          },
+          {
+            "hour": "2026-06-03T11:00:00+08:00",
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 15,
+            "event_count": 1,
+            "session_count": 1
+          }
+        ]
+      },
+      "usage_hourly_facts": [
+        {
+          "fact_id": "fact-linux-20260603-10",
+          "agent": "codex",
+          "client": "cli",
+          "window_start": "2026-06-03T10:00:00+08:00",
+          "window_end": "2026-06-03T11:00:00+08:00",
+          "usage": {
+            "input_tokens": 1000,
+            "output_tokens": 500,
+            "cache_creation_tokens": 100,
+            "cache_read_tokens": 0,
+            "reasoning_output_tokens": 25,
+            "total_tokens": 1600,
+            "total_cost": 0.72
+          },
+          "event_count": 3,
+          "session_count": 1,
+          "attribution_confidence": "observed",
+          "provenance": "fixture",
+          "ai_account": {
+            "provider": "codex",
+            "account_id": "codex-main",
+            "label": "Codex Team",
+            "display_name": "Codex Team",
+            "subscription": "pro"
+          },
+          "account_evidence": {
+            "source": "fixture"
+          },
+          "metadata": {
+            "fixture": "linux"
+          },
+          "model_breakdowns": [
+            {
+              "model": "gpt-5",
+              "input_tokens": 1000,
+              "output_tokens": 500,
+              "cache_creation_tokens": 100,
+              "cache_read_tokens": 0,
+              "reasoning_output_tokens": 25,
+              "total_tokens": 1600,
+              "total_cost": 0.72
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "source_id": "linux-stale-eve",
+      "host": "linux-stale",
+      "machine": "linux-stale",
+      "os_user": "eve",
+      "platform": "linux",
+      "timezone": "Asia/Shanghai",
+      "observed_at": "2026-06-03T09:20:00+08:00",
+      "collection_window": "hourly",
+      "collection_status": "failed",
+      "error_type": "codex_hourly_failed",
+      "error_message": "Codex hourly collector timed out",
+      "usage_daily": []
+    }
+  ],
+  "limits_payloads": [
+    {
+      "schema_version": 1,
+      "observed_at": "2026-06-03T10:50:00+08:00",
+      "windows": [
+        {
+          "source_id": "codex-main",
+          "provider": "codex",
+          "window": "5h",
+          "used_percent": 0,
+          "remaining_percent": 0,
+          "reset_at": "2026-06-03T16:00:00+08:00",
+          "window_duration_minutes": 300,
+          "observed_at": "2026-06-03T10:50:00+08:00",
+          "source_type": "provider_runtime",
+          "confidence": "missing",
+          "status": "provider_failed"
+        }
+      ]
+    },
+    {
+      "schema_version": 1,
+      "observed_at": "2026-06-03T11:00:00+08:00",
+      "windows": [
+        {
+          "source_id": "codex-main",
+          "provider": "codex",
+          "window": "5h",
+          "used_percent": 42.5,
+          "remaining_percent": 57.5,
+          "reset_at": "2026-06-03T16:00:00+08:00",
+          "window_duration_minutes": 300,
+          "observed_at": "2026-06-03T11:00:00+08:00",
+          "source_type": "runtime_api",
+          "confidence": "observed",
+          "status": "ok"
+        },
+        {
+          "source_id": "claude-main",
+          "provider": "claude",
+          "window": "week",
+          "used_percent": 78.25,
+          "remaining_percent": 21.75,
+          "reset_at": "2026-06-10T00:00:00+08:00",
+          "window_duration_minutes": 10080,
+          "observed_at": "2026-06-03T11:03:00+08:00",
+          "source_type": "oauth_usage_api",
+          "confidence": "observed",
+          "status": "ok"
+        }
+      ]
+    }
+  ]
+}

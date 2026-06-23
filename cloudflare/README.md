@@ -13,6 +13,8 @@
 
 ## 当前策略
 
+当前 Worker 只是统一入口反向代理，回源 VPN2。最终方向是 Worker Native（D1 作为权威库，不再回源 VPN2），规划见 [`../docs/architecture/cloudflare-worker-native-migration-plan.md`](../docs/architecture/cloudflare-worker-native-migration-plan.md)。
+
 Worker 发布 `cloudflare/aiusage-api-worker.js`，路由由 `wrangler.toml` 声明：
 
 - `aiusage.chunbai.com/*`

@@ -96,6 +96,12 @@ SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个
 
 如果未来要做用户可配置表盘偏好、设备列表、独立 watchOS token 或推送刷新，再单独开数据库迁移任务包；不能把这些作为本轮后台刷新实现的隐性前置条件。
 
+## Data freshness / accuracy design
+
+数据及时性、缓存落盘、D1/source parity 和 `limit_windows` 有效窗口选择的方案见
+[`data-freshness-accuracy-database.md`](data-freshness-accuracy-database.md)。
+该文档是后续实现规划，不改变本文列出的当前 schema 真相源。
+
 ## 历史目标 / 未实现
 
 以下名称曾出现在旧设计文档中，但当前代码没有对应表或没有作为当前 schema 使用：

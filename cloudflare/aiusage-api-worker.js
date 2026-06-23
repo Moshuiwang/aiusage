@@ -15,21 +15,24 @@ const BUSINESS_PATH_MARKERS = [
   "ingest-limits",
 ];
 
+const SHADOW_INGEST_PATHS = new Set(["/ingest", "/ingest-limits"]);
+
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const incomingURL = new URL(request.url);
 
     if (!isHandledPath(incomingURL.pathname)) {
       return jsonError(404, "not_found", "Cloudflare Worker only handles AI Usage web, API, and ingest paths.");
     }
 
-    return proxyToOrigin(request, env, incomingURL);
+    return proxyToOrigin(request, env, ctx, incomingURL);
   },
 };
 
-async function proxyToOrigin(request, env, incomingURL) {
+async function proxyToOrigin(request, env, ctx, incomingURL) {
   const originURL = buildOriginURL(env.ORIGIN_BASE_URL, incomingURL);
   const init = await buildProxyInit(request, incomingURL);
+  scheduleShadowIngest(request, env, ctx, incomingURL, init);
 
   const response = await fetch(new Request(originURL, init));
   const responseHeaders = new Headers(response.headers);
@@ -58,6 +61,43 @@ async function buildProxyInit(request, incomingURL) {
   }
 
   return init;
+}
+
+function scheduleShadowIngest(request, env, ctx, incomingURL, init) {
+  const shadowBase = getShadowIngestBaseURL(env);
+  if (!shadowBase || request.method !== "POST" || !SHADOW_INGEST_PATHS.has(incomingURL.pathname)) return;
+  if (!ctx || typeof ctx.waitUntil !== "function") return;
+
+  try {
+    const shadowURL = buildOriginURL(shadowBase, incomingURL);
+    const shadowInit = cloneProxyInit(init);
+    ctx.waitUntil(
+      Promise.resolve()
+        .then(() => fetch(new Request(shadowURL, shadowInit)))
+        .catch(() => undefined),
+    );
+  } catch {
+    // Shadow writes are best-effort and must never affect the live response.
+  }
+}
+
+function getShadowIngestBaseURL(env) {
+  const value = String(env.SHADOW_INGEST_URL || "").trim();
+  return value || null;
+}
+
+function cloneProxyInit(init) {
+  const cloned = {
+    method: init.method,
+    headers: new Headers(init.headers),
+    redirect: init.redirect,
+  };
+
+  if ("body" in init) {
+    cloned.body = init.body instanceof ArrayBuffer ? init.body.slice(0) : init.body;
+  }
+
+  return cloned;
 }
 
 function buildOriginURL(configuredOrigin, incomingURL) {

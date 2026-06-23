@@ -1,0 +1,1102 @@
+import { buildMobileSummary } from "./mobile-summary";
+
+export type Period = "today" | "week" | "month" | "all";
+
+export interface SummaryRequest {
+  date: string;
+  period: string;
+  timezone: string;
+  machine?: string | null;
+  account?: string | null;
+  currentTime?: string | null;
+}
+
+type DailyRow = {
+  source_id: string;
+  date: string;
+  agent: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+  total_cost: number | null;
+  metadata_json: string | null;
+};
+
+type ModelRow = {
+  source_id: string;
+  date: string;
+  agent: string;
+  model_name: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+  cost: number | null;
+};
+
+type TimedRow = {
+  source_id: string;
+  hour?: string;
+  start_time?: string;
+  end_time?: string;
+  agent: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+  total_cost: number | null;
+  metadata_json: string | null;
+};
+
+type SourceIdentity = {
+  host?: string | null;
+  machine?: string | null;
+  os_user?: string | null;
+  platform?: string | null;
+};
+
+type LimitRow = {
+  source_id: string;
+  provider: string;
+  window: string;
+  used_percent: number;
+  remaining_percent: number;
+  reset_at: string;
+  window_duration_minutes: number;
+  observed_at: string;
+  source_type: string;
+  confidence: string;
+  status: string;
+  official: boolean;
+};
+
+const localEstimateSourceTypes = new Set([
+  "local_history_estimate",
+  "ccusage_daily",
+  "ccusage_blocks",
+  "session_log_estimate",
+]);
+
+export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
+  const refTime = nowInTimezone(request.timezone, request.currentTime);
+  const [periodId, startDate, endDate] = periodBounds(request.date, request.period);
+  const hourAxisValues = periodId === "today" ? hourAxis(endDate) : [];
+  const dateParams = startDate === null ? [endDate] : [startDate, endDate];
+  const dateWhere = startDate === null ? "date <= ?" : "date >= ? AND date <= ?";
+
+  let rows = await all<DailyRow>(
+    db,
+    `
+      SELECT source_id, date, agent, input_tokens, output_tokens,
+             cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json
+      FROM usage_daily
+      WHERE ${dateWhere}
+      ORDER BY date ASC, source_id ASC, agent ASC
+    `,
+    dateParams,
+  );
+  const identities = await fetchSourceIdentities(db);
+  let modelRows = await all<ModelRow>(
+    db,
+    `
+      SELECT source_id, date, agent, model_name, input_tokens, output_tokens,
+             cache_creation_tokens, cache_read_tokens, total_tokens, cost
+      FROM usage_daily_models
+      WHERE ${dateWhere}
+      ORDER BY date ASC, source_id ASC, agent ASC, model_name ASC
+    `,
+    dateParams,
+  );
+  const statusRows = await all<Record<string, string | null>>(
+    db,
+    `
+      SELECT r.source_id, r.status, c.collected_at, r.error_message
+      FROM source_reports r
+      JOIN collection_runs c ON r.run_id = c.id
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM source_reports r2
+        JOIN collection_runs c2 ON r2.run_id = c2.id
+        WHERE r2.source_id = r.source_id
+          AND (
+            c2.collected_at > c.collected_at
+            OR (c2.collected_at = c.collected_at AND r2.id > r.id)
+          )
+      )
+      ORDER BY r.id ASC
+    `,
+  );
+  let hourlyRows: TimedRow[] = [];
+  let blockRows: TimedRow[] = [];
+  if (hourAxisValues.length > 0) {
+    hourlyRows = await fetchHourlyRows(db, hourAxisValues[0], hourAxisValues[hourAxisValues.length - 1]);
+    blockRows = await fetchBlockRows(db, hourAxisValues[0], hourAxisValues[hourAxisValues.length - 1]);
+  }
+  const limits = await fetchLimitWindows(
+    db,
+    periodId === "today" && endDate === formatDate(refTime) ? refTime : null,
+  );
+  const accountHourlyRows = await fetchAccountHourlyRows(db, startDate, endDate, request.timezone);
+  const aiAccounts = await fetchAiAccounts(db);
+
+  rows = rows.filter((row) => dailyRowMatchesFilter(row, request.machine, request.account));
+  const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
+  modelRows = modelRows.filter((row) => allowed.has(itemKey(row.source_id, row.date, row.agent)));
+  hourlyRows = hourlyRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
+  blockRows = blockRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
+  const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
+    accountHourlyRowMatchesFilter(row, request.machine, request.account),
+  );
+  const accountHourly = accountHourlySummary(filteredAccountHourlyRows);
+
+  const modelsByItem = new Map<string, Record<string, unknown>[]>();
+  for (const row of modelRows) {
+    const key = itemKey(row.source_id, row.date, row.agent);
+    const breakdown = {
+      model_name: row.model_name,
+      input_tokens: int(row.input_tokens),
+      output_tokens: int(row.output_tokens),
+      cache_creation_tokens: int(row.cache_creation_tokens),
+      cache_read_tokens: int(row.cache_read_tokens),
+      total_tokens: int(row.total_tokens),
+      cost: row.cost,
+    };
+    const list = modelsByItem.get(key) ?? [];
+    list.push(breakdown);
+    modelsByItem.set(key, list);
+  }
+
+  const items: Record<string, unknown>[] = [];
+  let totalTokens = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cacheCreationTokens = 0;
+  let cacheReadTokens = 0;
+  const machineTotals = new Map<string, {
+    name: string;
+    total_tokens: number;
+    source_ids: Set<string>;
+    users: Map<string, { account: string; machine: string; total_tokens: number; source_ids: Set<string> }>;
+  }>();
+  const accountTotals = new Map<string, number>();
+  const agentTotals = new Map<string, number>();
+  const trendDates = dateAxis(startDate, endDate, rows);
+  const trendByAgent = new Map<string, Map<string, number>>();
+  const trendByTokenType = {
+    input: new Map(trendDates.map((day) => [day, 0])),
+    output: new Map(trendDates.map((day) => [day, 0])),
+    cache: new Map(trendDates.map((day) => [day, 0])),
+  };
+  const trendPoints = new Map(trendDates.map((day) => [day, {
+    date: day,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_tokens: 0,
+    total_tokens: 0,
+  }]));
+
+  for (const row of rows) {
+    const metadata = metadataFromStr(row.metadata_json);
+    const machine = str(metadata.machine ?? row.source_id);
+    const account = str(metadata.account ?? "unknown");
+    const total = int(row.total_tokens);
+    const input = int(row.input_tokens);
+    const output = int(row.output_tokens);
+    const cacheCreation = int(row.cache_creation_tokens);
+    const cacheRead = int(row.cache_read_tokens);
+    totalTokens += total;
+    inputTokens += input;
+    outputTokens += output;
+    cacheCreationTokens += cacheCreation;
+    cacheReadTokens += cacheRead;
+
+    let machineEntry = machineTotals.get(machine);
+    if (!machineEntry) {
+      machineEntry = { name: machine, total_tokens: 0, source_ids: new Set(), users: new Map() };
+      machineTotals.set(machine, machineEntry);
+    }
+    machineEntry.total_tokens += total;
+    machineEntry.source_ids.add(row.source_id);
+    let userEntry = machineEntry.users.get(account);
+    if (!userEntry) {
+      userEntry = { account, machine, total_tokens: 0, source_ids: new Set() };
+      machineEntry.users.set(account, userEntry);
+    }
+    userEntry.total_tokens += total;
+    userEntry.source_ids.add(row.source_id);
+    accountTotals.set(account, (accountTotals.get(account) ?? 0) + total);
+    agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
+
+    if (!trendByAgent.has(row.agent)) {
+      trendByAgent.set(row.agent, new Map(trendDates.map((day) => [day, 0])));
+    }
+    trendByAgent.get(row.agent)?.set(row.date, (trendByAgent.get(row.agent)?.get(row.date) ?? 0) + total);
+    const cacheTokens = cacheCreation + cacheRead;
+    if (trendByTokenType.input.has(row.date)) {
+      trendByTokenType.input.set(row.date, (trendByTokenType.input.get(row.date) ?? 0) + input);
+      trendByTokenType.output.set(row.date, (trendByTokenType.output.get(row.date) ?? 0) + output);
+      trendByTokenType.cache.set(row.date, (trendByTokenType.cache.get(row.date) ?? 0) + cacheTokens);
+      const point = trendPoints.get(row.date);
+      if (point) {
+        point.input_tokens += input;
+        point.output_tokens += output;
+        point.cache_tokens += cacheTokens;
+        point.total_tokens += total;
+      }
+    }
+
+    items.push({
+      source_id: row.source_id,
+      machine,
+      account,
+      agent: row.agent,
+      date: row.date,
+      input_tokens: input,
+      output_tokens: output,
+      cache_creation_tokens: cacheCreation,
+      cache_read_tokens: cacheRead,
+      total_tokens: total,
+      total_cost: row.total_cost,
+      model_breakdowns: modelsByItem.get(itemKey(row.source_id, row.date, row.agent)) ?? [],
+    });
+  }
+
+  for (const [sourceId, identity] of Object.entries(identities)) {
+    const machine = str(identity.machine ?? identity.host ?? sourceId);
+    const account = str(identity.os_user ?? "unknown");
+    if (!identityMatchesFilter(identity, request.machine, request.account)) continue;
+    let machineEntry = machineTotals.get(machine);
+    if (!machineEntry) {
+      machineEntry = { name: machine, total_tokens: 0, source_ids: new Set(), users: new Map() };
+      machineTotals.set(machine, machineEntry);
+    }
+    machineEntry.source_ids.add(sourceId);
+    let userEntry = machineEntry.users.get(account);
+    if (!userEntry) {
+      userEntry = { account, machine, total_tokens: 0, source_ids: new Set() };
+      machineEntry.users.set(account, userEntry);
+    }
+    userEntry.source_ids.add(sourceId);
+  }
+
+  const byMachine = Array.from(machineTotals.values()).map((entry) => {
+    const users = Array.from(entry.users.values()).map((user) => ({
+      account: user.account,
+      machine: user.machine,
+      display_name: `${user.machine} · ${user.account}`,
+      total_tokens: user.total_tokens,
+      source_ids: Array.from(user.source_ids).sort(),
+    }));
+    users.sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
+    return {
+      name: entry.name,
+      display_name: entry.name,
+      total_tokens: entry.total_tokens,
+      source_ids: Array.from(entry.source_ids).sort(),
+      users,
+    };
+  });
+  byMachine.sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
+
+  const byAccount = Array.from(accountTotals.entries())
+    .map(([name, total]) => ({ name, total_tokens: total }))
+    .sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
+  const byAgent = Array.from(agentTotals.entries())
+    .map(([name, total]) => ({ name, total_tokens: total }))
+    .sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
+
+  const codexContext = codexHourlyContext(rows, hourlyRows);
+  let trend: Record<string, unknown>;
+  if (periodId === "today") {
+    trend = hourlyTrend(hourAxisValues, hourlyRows, blockRows);
+    fillTodayHourlyResidual(trend, refTime, {
+      total_tokens: totalTokens,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cache_tokens: cacheCreationTokens + cacheReadTokens,
+      excluded_daily: codexContext.skip_residual ? codexContext.daily : undefined,
+      excluded_hourly: codexContext.skip_residual ? codexContext.hourly : undefined,
+    });
+    capTodayHourlyToPeriodTotals(trend, {
+      total_tokens: totalTokens,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cache_tokens: cacheCreationTokens + cacheReadTokens,
+    });
+  } else {
+    trend = {
+      period: periodId,
+      granularity: "day",
+      start_date: startDate,
+      end_date: endDate,
+      axis: trendDates,
+      by_token_type: [
+        { type: "input", label: "Input", values: trendDates.map((day) => trendByTokenType.input.get(day) ?? 0) },
+        { type: "output", label: "Output", values: trendDates.map((day) => trendByTokenType.output.get(day) ?? 0) },
+        { type: "cache", label: "Cache", values: trendDates.map((day) => trendByTokenType.cache.get(day) ?? 0) },
+      ],
+      points: trendDates.map((day) => trendPoints.get(day)),
+      by_agent: Array.from(trendByAgent.entries())
+        .sort(([left], [right]) => (agentTotals.get(right) ?? 0) - (agentTotals.get(left) ?? 0))
+        .map(([agent, values]) => ({
+          agent,
+          total_tokens: agentTotals.get(agent) ?? 0,
+          values: trendDates.map((day) => values.get(day) ?? 0),
+        })),
+    };
+  }
+
+  const snapshot: Record<string, unknown> = {
+    schema_version: 1,
+    generated_at: toOffsetIso(refTime),
+    timezone: request.timezone,
+    summary: {
+      date: request.date,
+      period: periodId,
+      start_date: startDate,
+      end_date: endDate,
+      total_tokens: totalTokens,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cache_creation_tokens: cacheCreationTokens,
+      cache_read_tokens: cacheReadTokens,
+    },
+    groups: {
+      by_machine: byMachine,
+      by_account: byAccount,
+      by_agent: byAgent,
+    },
+    items,
+    trend,
+    source_status: buildSourceStatus(statusRows, identities, refTime, request.machine, request.account),
+    limits,
+    account_hourly: accountHourly,
+    ai_accounts: aiAccounts,
+    metadata: {
+      codex_hourly: {
+        drift: codexContext.drift,
+      },
+    },
+  };
+  if (request.machine) (snapshot.summary as Record<string, unknown>).machine = request.machine;
+  if (request.account) (snapshot.summary as Record<string, unknown>).account = request.account;
+  return snapshot;
+}
+
+export async function buildMobile(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
+  return buildMobileSummary(await buildSummary(db, request));
+}
+
+async function all<T>(db: D1Database, sql: string, params: unknown[] = []): Promise<T[]> {
+  const result = await db.prepare(sql).bind(...params).all<T>();
+  return result.results ?? [];
+}
+
+async function fetchSourceIdentities(db: D1Database): Promise<Record<string, SourceIdentity>> {
+  const rows = await all<Record<string, string | null>>(
+    db,
+    `
+      SELECT source_id, host, machine, os_user, platform, last_seen_at
+      FROM source_identities
+      ORDER BY last_seen_at DESC
+    `,
+  );
+  const result: Record<string, SourceIdentity> = {};
+  for (const row of rows) {
+    const sourceId = str(row.source_id);
+    if (sourceId in result) continue;
+    result[sourceId] = {
+      host: row.host,
+      machine: row.machine ?? row.host,
+      os_user: row.os_user,
+      platform: row.platform,
+    };
+  }
+  return result;
+}
+
+async function fetchHourlyRows(db: D1Database, startHour: string, endHour: string): Promise<TimedRow[]> {
+  return all<TimedRow>(
+    db,
+    `
+      SELECT source_id, hour, agent, input_tokens, output_tokens,
+             cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json
+      FROM usage_hourly
+      WHERE hour >= ? AND hour <= ?
+      ORDER BY hour ASC, source_id ASC, agent ASC
+    `,
+    [startHour, endHour],
+  );
+}
+
+async function fetchBlockRows(db: D1Database, startHour: string, endHour: string): Promise<TimedRow[]> {
+  const endExclusive = addHours(endHour, 1);
+  return all<TimedRow>(
+    db,
+    `
+      SELECT source_id, start_time, end_time, agent, input_tokens, output_tokens,
+             cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json
+      FROM usage_blocks
+      WHERE start_time < ? AND end_time > ?
+      ORDER BY start_time ASC, source_id ASC, agent ASC
+    `,
+    [endExclusive, startHour],
+  );
+}
+
+async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<LimitRow[]> {
+  const rows = await all<Omit<LimitRow, "official">>(
+    db,
+    `
+      SELECT source_id, provider, window, used_percent, remaining_percent, reset_at,
+             window_duration_minutes, observed_at, source_type, confidence, status
+      FROM limit_windows
+      ORDER BY source_id ASC, provider ASC, window ASC, source_type ASC
+    `,
+  );
+  let limits: LimitRow[] = rows.map((row) => ({
+    source_id: row.source_id,
+    provider: row.provider,
+    window: row.window,
+    used_percent: Number(row.used_percent),
+    remaining_percent: Number(row.remaining_percent),
+    reset_at: row.reset_at,
+    window_duration_minutes: int(row.window_duration_minutes),
+    observed_at: row.observed_at,
+    source_type: row.source_type,
+    confidence: row.confidence,
+    status: row.status,
+    official: row.status === "ok" && row.confidence === "observed" && !localEstimateSourceTypes.has(row.source_type),
+  }));
+  if (refTime) {
+    limits = limits.filter((limit) => !limitWindowExpired(limit, refTime));
+  }
+  return bestLimitWindows(limits);
+}
+
+async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, endDate: string, timezone: string): Promise<Record<string, unknown>[]> {
+  const rows = await all<Record<string, unknown>>(
+    db,
+    `
+      SELECT f.fact_id, f.source_id, f.machine_id, COALESCE(m.machine_name, f.machine_id) AS machine_name,
+             f.os_user, f.ai_provider, f.ai_account_id,
+             COALESCE(a.account_label, f.ai_account_id) AS account_label,
+             a.display_name, a.subscription, f.agent, f.client, f.window_start, f.window_end,
+             f.input_tokens, f.output_tokens, f.cache_creation_tokens, f.cache_read_tokens,
+             f.reasoning_output_tokens, f.total_tokens, f.event_count, f.session_count,
+             f.attribution_confidence, f.provenance
+      FROM usage_hourly_facts f
+      LEFT JOIN machines m ON m.machine_id = f.machine_id
+      LEFT JOIN ai_accounts a ON a.provider = f.ai_provider AND a.account_id = f.ai_account_id
+      ORDER BY f.window_start ASC, f.source_id ASC, f.agent ASC
+    `,
+  );
+  return rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
+}
+
+async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[]> {
+  const rows = await all<Record<string, unknown>>(
+    db,
+    `
+      SELECT provider, account_id, account_label, display_name, subscription, last_seen_at
+      FROM ai_accounts
+      ORDER BY provider ASC, account_id ASC
+    `,
+  );
+  return rows.map((row) => ({
+    provider: row.provider,
+    account_id: row.account_id,
+    label: row.account_label,
+    display_name: row.display_name,
+    subscription: row.subscription,
+    last_seen_at: row.last_seen_at,
+  }));
+}
+
+function buildSourceStatus(
+  statusRows: Record<string, string | null>[],
+  identities: Record<string, SourceIdentity>,
+  refTime: Date,
+  machineFilter?: string | null,
+  accountFilter?: string | null,
+): Record<string, unknown>[] {
+  const rows = statusRows
+    .filter((row) => identityMatchesFilter(identities[str(row.source_id)], machineFilter, accountFilter))
+    .map((row) => {
+      const identity = identities[str(row.source_id)] ?? {};
+      const status = statusWithStaleness(str(row.status), str(row.collected_at), refTime, 120);
+      const host = identity.host ?? identity.machine;
+      const osUser = identity.os_user;
+      const result: Record<string, unknown> = {
+        source_id: row.source_id,
+        status,
+        observed_at: row.collected_at,
+        error_message: row.error_message,
+      };
+      if (host) result.host = String(host);
+      if (osUser) result.os_user = String(osUser);
+      if (identity.platform) result.platform = String(identity.platform);
+      if (host && osUser) result.display_name = `${host} · ${osUser}`;
+      else if (host) result.display_name = String(host);
+      else result.display_name = str(row.source_id || "unknown-source");
+      return result;
+    });
+  return rows;
+}
+
+function statusWithStaleness(status: string, collectedAt: string, refTime: Date, staleMinutes: number): string {
+  const collected = new Date(collectedAt);
+  if (Number.isNaN(collected.getTime())) return status;
+  const diffMinutes = (refTime.getTime() - collected.getTime()) / 60000;
+  return diffMinutes > staleMinutes ? "stale" : status;
+}
+
+function hourlyTrend(axis: string[], rows: TimedRow[], blockRows: TimedRow[]): Record<string, unknown> {
+  const byTokenType = {
+    input: new Map(axis.map((hour) => [hour, 0])),
+    output: new Map(axis.map((hour) => [hour, 0])),
+    cache: new Map(axis.map((hour) => [hour, 0])),
+  };
+  const points = new Map(axis.map((hour) => [hour, {
+    date: hour,
+    hour,
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_tokens: 0,
+    total_tokens: 0,
+  }]));
+  const agentTotals = new Map<string, number>();
+  const byAgent = new Map<string, Map<string, number>>();
+  const blockSources = new Set(blockRows.map((row) => row.source_id));
+
+  for (const row of rows) {
+    const hour = str(row.hour);
+    if (!points.has(hour)) continue;
+    if (blockSources.has(row.source_id) && !isCodexAgent(row.agent)) continue;
+    addTimedPoint(axis, hour, row, byTokenType, points, agentTotals, byAgent);
+  }
+  for (const row of blockRows) {
+    addBlockToHourBuckets(axis, row, byTokenType, points, agentTotals, byAgent);
+  }
+
+  return {
+    period: "today",
+    granularity: "hour",
+    start_date: axis.length ? axis[0].slice(0, 10) : null,
+    end_date: axis.length ? axis[axis.length - 1].slice(0, 10) : null,
+    axis,
+    by_token_type: [
+      { type: "input", label: "Input", values: axis.map((hour) => Math.round(byTokenType.input.get(hour) ?? 0)) },
+      { type: "output", label: "Output", values: axis.map((hour) => Math.round(byTokenType.output.get(hour) ?? 0)) },
+      { type: "cache", label: "Cache", values: axis.map((hour) => Math.round(byTokenType.cache.get(hour) ?? 0)) },
+    ],
+    points: axis.map((hour) => points.get(hour)),
+    by_agent: Array.from(byAgent.entries())
+      .sort(([left], [right]) => (agentTotals.get(right) ?? 0) - (agentTotals.get(left) ?? 0))
+      .map(([agent, values]) => ({
+        agent,
+        total_tokens: Math.round(agentTotals.get(agent) ?? 0),
+        values: axis.map((hour) => Math.round(values.get(hour) ?? 0)),
+      })),
+  };
+}
+
+function addTimedPoint(
+  axis: string[],
+  hour: string,
+  row: TimedRow,
+  byTokenType: Record<"input" | "output" | "cache", Map<string, number>>,
+  points: Map<string, Record<string, number | string>>,
+  agentTotals: Map<string, number>,
+  byAgent: Map<string, Map<string, number>>,
+): void {
+  const cache = int(row.cache_creation_tokens) + int(row.cache_read_tokens);
+  byTokenType.input.set(hour, (byTokenType.input.get(hour) ?? 0) + int(row.input_tokens));
+  byTokenType.output.set(hour, (byTokenType.output.get(hour) ?? 0) + int(row.output_tokens));
+  byTokenType.cache.set(hour, (byTokenType.cache.get(hour) ?? 0) + cache);
+  const point = points.get(hour);
+  if (point) {
+    point.input_tokens = int(point.input_tokens) + int(row.input_tokens);
+    point.output_tokens = int(point.output_tokens) + int(row.output_tokens);
+    point.cache_tokens = int(point.cache_tokens) + cache;
+    point.total_tokens = int(point.total_tokens) + int(row.total_tokens);
+  }
+  agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + int(row.total_tokens));
+  if (!byAgent.has(row.agent)) byAgent.set(row.agent, new Map(axis.map((item) => [item, 0])));
+  byAgent.get(row.agent)?.set(hour, (byAgent.get(row.agent)?.get(hour) ?? 0) + int(row.total_tokens));
+}
+
+function addBlockToHourBuckets(
+  axis: string[],
+  row: TimedRow,
+  byTokenType: Record<"input" | "output" | "cache", Map<string, number>>,
+  points: Map<string, Record<string, number | string>>,
+  agentTotals: Map<string, number>,
+  byAgent: Map<string, Map<string, number>>,
+): void {
+  const start = parseDate(str(row.start_time));
+  const end = parseDate(str(row.end_time));
+  if (!start || !end || end <= start) return;
+  const duration = end.getTime() - start.getTime();
+  if (!byAgent.has(row.agent)) byAgent.set(row.agent, new Map(axis.map((hour) => [hour, 0])));
+  for (const hour of axis) {
+    const hourStart = parseDate(hour);
+    if (!hourStart) continue;
+    const hourEnd = new Date(hourStart.getTime() + 3600000);
+    const overlap = Math.max(0, Math.min(end.getTime(), hourEnd.getTime()) - Math.max(start.getTime(), hourStart.getTime()));
+    if (overlap <= 0) continue;
+    const ratio = overlap / duration;
+    const input = int(row.input_tokens) * ratio;
+    const output = int(row.output_tokens) * ratio;
+    const cache = (int(row.cache_creation_tokens) + int(row.cache_read_tokens)) * ratio;
+    const total = int(row.total_tokens) * ratio;
+    byTokenType.input.set(hour, (byTokenType.input.get(hour) ?? 0) + input);
+    byTokenType.output.set(hour, (byTokenType.output.get(hour) ?? 0) + output);
+    byTokenType.cache.set(hour, (byTokenType.cache.get(hour) ?? 0) + cache);
+    const point = points.get(hour);
+    if (point) {
+      point.input_tokens = Math.round(int(point.input_tokens) + input);
+      point.output_tokens = Math.round(int(point.output_tokens) + output);
+      point.cache_tokens = Math.round(int(point.cache_tokens) + cache);
+      point.total_tokens = Math.round(int(point.total_tokens) + total);
+    }
+    agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
+    byAgent.get(row.agent)?.set(hour, (byAgent.get(row.agent)?.get(hour) ?? 0) + total);
+  }
+}
+
+function fillTodayHourlyResidual(trend: Record<string, unknown>, refTime: Date, totals: {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
+  excluded_daily?: Record<string, number>;
+  excluded_hourly?: Record<string, number>;
+}): void {
+  const points = asArray<Record<string, unknown>>(trend.points);
+  const axis = asArray<string>(trend.axis);
+  if (!points.length || !axis.length) return;
+  const excludedDaily = totals.excluded_daily ?? emptyTokenTotals();
+  const excludedHourly = totals.excluded_hourly ?? emptyTokenTotals();
+  const currentTotal = points.reduce((sum, point) => sum + int(point.total_tokens), 0) - excludedHourly.total;
+  const residualTotal = Math.max(int(totals.total_tokens) - excludedDaily.total - currentTotal, 0);
+  const tokenResiduals = {
+    input: Math.max(int(totals.input_tokens) - excludedDaily.input - (sumTokenType(trend, "input") - excludedHourly.input), 0),
+    output: Math.max(int(totals.output_tokens) - excludedDaily.output - (sumTokenType(trend, "output") - excludedHourly.output), 0),
+    cache: Math.max(int(totals.cache_tokens) - excludedDaily.cache - (sumTokenType(trend, "cache") - excludedHourly.cache), 0),
+  };
+  if (residualTotal <= 0 && Object.values(tokenResiduals).every((value) => value <= 0)) return;
+  const refHour = toOffsetIso(new Date(Math.floor(refTime.getTime() / 3600000) * 3600000));
+  const targetHour = axis.includes(refHour) ? refHour : axis[axis.length - 1];
+  const index = axis.indexOf(targetHour);
+  const point = points[index];
+  point.input_tokens = int(point.input_tokens) + tokenResiduals.input;
+  point.output_tokens = int(point.output_tokens) + tokenResiduals.output;
+  point.cache_tokens = int(point.cache_tokens) + tokenResiduals.cache;
+  point.total_tokens = int(point.total_tokens) + residualTotal;
+  for (const row of asArray<Record<string, unknown>>(trend.by_token_type)) {
+    const tokenType = str(row.type) as "input" | "output" | "cache";
+    const values = asArray<number>(row.values);
+    if (tokenType in tokenResiduals && index < values.length) values[index] += tokenResiduals[tokenType];
+  }
+}
+
+function capTodayHourlyToPeriodTotals(trend: Record<string, unknown>, totals: {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
+}): void {
+  const points = asArray<Record<string, unknown>>(trend.points);
+  if (!points.length) return;
+  const pointTotals = points.map((point) => int(point.total_tokens));
+  const cappedTotals = scaleDownInts(pointTotals, int(totals.total_tokens));
+  if (JSON.stringify(cappedTotals) !== JSON.stringify(pointTotals)) {
+    points.forEach((point, index) => {
+      point.total_tokens = cappedTotals[index];
+    });
+    scaleAgentRows(trend, int(totals.total_tokens));
+  }
+  const targets = { input: int(totals.input_tokens), output: int(totals.output_tokens), cache: int(totals.cache_tokens) };
+  const pointFields = { input: "input_tokens", output: "output_tokens", cache: "cache_tokens" };
+  for (const row of asArray<Record<string, unknown>>(trend.by_token_type)) {
+    const tokenType = str(row.type) as "input" | "output" | "cache";
+    if (!(tokenType in targets)) continue;
+    const values = asArray<number>(row.values).map((value) => int(value));
+    const capped = scaleDownInts(values, targets[tokenType]);
+    row.values = capped;
+    points.forEach((point, index) => {
+      point[pointFields[tokenType]] = capped[index];
+    });
+  }
+}
+
+function scaleDownInts(values: number[], target: number): number[] {
+  const current = values.reduce((sum, value) => sum + value, 0);
+  if (current <= target || current <= 0) return values;
+  if (target <= 0) return values.map(() => 0);
+  const scaled = values.map((value) => value * target / current);
+  const floors = scaled.map((value) => Math.floor(value));
+  let remainder = target - floors.reduce((sum, value) => sum + value, 0);
+  const fractions = scaled.map((value, index) => ({ fraction: value - floors[index], index }))
+    .sort((lhs, rhs) => rhs.fraction - lhs.fraction || rhs.index - lhs.index);
+  for (const item of fractions) {
+    if (remainder <= 0) break;
+    floors[item.index] += 1;
+    remainder -= 1;
+  }
+  return floors;
+}
+
+function scaleAgentRows(trend: Record<string, unknown>, totalTokens: number): void {
+  for (const row of asArray<Record<string, unknown>>(trend.by_agent)) {
+    const values = asArray<number>(row.values).map((value) => int(value));
+    const capped = scaleDownInts(values, totalTokens);
+    row.values = capped;
+    row.total_tokens = capped.reduce((sum, value) => sum + value, 0);
+  }
+}
+
+function codexHourlyContext(dailyRows: DailyRow[], hourlyRows: TimedRow[]): {
+  drift: Record<string, unknown>;
+  daily: Record<string, number>;
+  hourly: Record<string, number>;
+  skip_residual: boolean;
+} {
+  let drift: Record<string, unknown> = { status: "comparison_unavailable" };
+  let daily = emptyTokenTotals();
+  const allDaily = emptyTokenTotals();
+  const hourly = emptyTokenTotals();
+  for (const row of dailyRows) {
+    let target: Record<string, number> | null = null;
+    if (isCodexAgent(row.agent)) target = daily;
+    else if (row.agent.toLowerCase() === "all") target = allDaily;
+    if (!target) continue;
+    target.input += int(row.input_tokens);
+    target.output += int(row.output_tokens);
+    target.cache += int(row.cache_creation_tokens) + int(row.cache_read_tokens);
+    target.total += int(row.total_tokens);
+  }
+  for (const row of hourlyRows) {
+    const metadata = metadataFromStr(row.metadata_json);
+    if (!isCodexAgent(row.agent) || metadata.provenance !== "mswusage_codex_token_count") continue;
+    hourly.input += int(row.input_tokens);
+    hourly.output += int(row.output_tokens);
+    hourly.cache += int(row.cache_creation_tokens) + int(row.cache_read_tokens);
+    hourly.total += int(row.total_tokens);
+    if (isRecord(metadata.drift)) drift = { ...metadata.drift };
+  }
+  if (daily.total === 0 && drift.baseline_agent === "all") daily = allDaily;
+  const status = str(drift.status);
+  return {
+    drift,
+    daily,
+    hourly,
+    skip_residual: ["drift_detected", "comparison_unavailable"].includes(status) && hourly.total > 0,
+  };
+}
+
+function accountHourlySummary(rows: Record<string, unknown>[]): Record<string, unknown> {
+  if (!rows.length) return emptyAccountHourlySummary();
+  let totalTokens = 0;
+  const byAiAccount = new Map<string, Record<string, unknown>>();
+  const byMachine = new Map<string, Record<string, unknown>>();
+  const byOsUser = new Map<string, Record<string, unknown>>();
+  const byAgent = new Map<string, number>();
+  const byConfidence = new Map<string, number>();
+  for (const row of rows) {
+    const tokens = int(row.total_tokens);
+    totalTokens += tokens;
+    const provider = str(row.ai_provider);
+    const accountId = str(row.ai_account_id);
+    const accountKey = `${provider}:${accountId}`;
+    const account = byAiAccount.get(accountKey) ?? {
+      provider,
+      account_id: accountId,
+      label: row.account_label,
+      display_name: row.display_name,
+      subscription: row.subscription,
+      total_tokens: 0,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_tokens: 0,
+      reasoning_output_tokens: 0,
+      confidence: new Map<string, number>(),
+      source_ids: new Set<string>(),
+    };
+    account.total_tokens = int(account.total_tokens) + tokens;
+    account.input_tokens = int(account.input_tokens) + int(row.input_tokens);
+    account.output_tokens = int(account.output_tokens) + int(row.output_tokens);
+    account.cache_tokens = int(account.cache_tokens) + int(row.cache_creation_tokens) + int(row.cache_read_tokens);
+    account.reasoning_output_tokens = int(account.reasoning_output_tokens) + int(row.reasoning_output_tokens);
+    const confidence = str(row.attribution_confidence);
+    (account.confidence as Map<string, number>).set(confidence, ((account.confidence as Map<string, number>).get(confidence) ?? 0) + tokens);
+    (account.source_ids as Set<string>).add(str(row.source_id));
+    byAiAccount.set(accountKey, account);
+
+    const machineId = str(row.machine_id);
+    const machine = byMachine.get(machineId) ?? { machine_id: machineId, machine_name: row.machine_name, total_tokens: 0 };
+    machine.total_tokens = int(machine.total_tokens) + tokens;
+    byMachine.set(machineId, machine);
+
+    const userKey = `${machineId}:${str(row.os_user)}`;
+    const user = byOsUser.get(userKey) ?? {
+      machine_id: machineId,
+      machine_name: row.machine_name,
+      os_user: row.os_user,
+      display_name: `${row.machine_name} · ${row.os_user}`,
+      total_tokens: 0,
+    };
+    user.total_tokens = int(user.total_tokens) + tokens;
+    byOsUser.set(userKey, user);
+
+    byAgent.set(str(row.agent), (byAgent.get(str(row.agent)) ?? 0) + tokens);
+    byConfidence.set(confidence, (byConfidence.get(confidence) ?? 0) + tokens);
+  }
+  const accounts: Record<string, unknown>[] = Array.from(byAiAccount.values()).map((entry) => {
+    const confidenceMap = entry.confidence as Map<string, number>;
+    const confidenceBreakdown = Array.from(confidenceMap.entries())
+      .map(([confidence, total]) => ({ confidence, total_tokens: total }))
+      .sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
+    const sourceIds = Array.from(entry.source_ids as Set<string>).sort();
+    const { confidence, source_ids, ...rest } = entry;
+    return {
+      ...rest,
+      confidence_breakdown: confidenceBreakdown,
+      attribution_confidence: confidenceBreakdown.length === 1 ? confidenceBreakdown[0].confidence : "mixed",
+      source_ids: sourceIds,
+    };
+  });
+  return {
+    total_tokens: totalTokens,
+    facts: rows.length,
+    by_ai_account: accounts.sort((lhs, rhs) => int(rhs.total_tokens) - int(lhs.total_tokens)),
+    by_machine: Array.from(byMachine.values()).sort((lhs, rhs) => int(rhs.total_tokens) - int(lhs.total_tokens)),
+    by_os_user: Array.from(byOsUser.values()).sort((lhs, rhs) => int(rhs.total_tokens) - int(lhs.total_tokens)),
+    by_agent: Array.from(byAgent.entries()).sort((lhs, rhs) => rhs[1] - lhs[1]).map(([name, tokens]) => ({ name, total_tokens: tokens })),
+    confidence_breakdown: Array.from(byConfidence.entries()).sort((lhs, rhs) => rhs[1] - lhs[1]).map(([confidence, tokens]) => ({ confidence, total_tokens: tokens })),
+  };
+}
+
+function emptyAccountHourlySummary(): Record<string, unknown> {
+  return {
+    total_tokens: 0,
+    facts: 0,
+    by_ai_account: [],
+    by_machine: [],
+    by_os_user: [],
+    by_agent: [],
+    confidence_breakdown: [],
+  };
+}
+
+function bestLimitWindows(limits: LimitRow[]): LimitRow[] {
+  const best = new Map<string, LimitRow>();
+  for (const limit of limits) {
+    const key = `${limit.source_id || limit.provider}:${limit.provider}:${limit.window}`;
+    const existing = best.get(key);
+    if (!existing || compareLimitRank(limit, existing) > 0) best.set(key, limit);
+  }
+  return Array.from(best.values()).sort((lhs, rhs) =>
+    `${lhs.source_id}:${lhs.provider}:${lhs.window}`.localeCompare(`${rhs.source_id}:${rhs.provider}:${rhs.window}`),
+  );
+}
+
+function compareLimitRank(lhs: LimitRow, rhs: LimitRow): number {
+  const left = limitRank(lhs);
+  const right = limitRank(rhs);
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] === right[index]) continue;
+    return left[index] > right[index] ? 1 : -1;
+  }
+  return 0;
+}
+
+function limitRank(limit: LimitRow): (number | string)[] {
+  const officialOk = limit.official && limit.confidence === "observed" && limit.status === "ok" ? 1 : 0;
+  return [officialOk, limitSourceQuality(limit.source_type), limit.observed_at || ""];
+}
+
+function limitSourceQuality(sourceType: string): number {
+  const quality: Record<string, number> = {
+    oauth_usage_api: 5,
+    runtime_api: 5,
+    official_cli: 4,
+    official_cli_limit_message: 3,
+    official_cli_subscription: 2,
+    active_limits_cache: 1,
+  };
+  return quality[sourceType] ?? 0;
+}
+
+function limitWindowExpired(limit: LimitRow, refTime: Date): boolean {
+  const reset = parseDate(limit.reset_at);
+  return !!reset && reset.getTime() <= refTime.getTime();
+}
+
+function periodBounds(date: string, period: string): [Period, string | null, string] {
+  const periodId: Period = ["today", "week", "month", "all"].includes(period) ? period as Period : "today";
+  const end = parseDateOnly(date);
+  if (periodId === "today") return [periodId, date, date];
+  if (periodId === "week") return [periodId, formatDate(addDays(end, -6)), date];
+  if (periodId === "month") return [periodId, formatDate(addDays(end, -29)), date];
+  return [periodId, null, date];
+}
+
+function dateAxis(startDate: string | null, endDate: string, rows: DailyRow[]): string[] {
+  if (startDate === null) return Array.from(new Set(rows.map((row) => row.date))).sort();
+  const result: string[] = [];
+  let current = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  while (current <= end) {
+    result.push(formatDate(current));
+    current = addDays(current, 1);
+  }
+  return result;
+}
+
+function hourAxis(date: string): string[] {
+  return Array.from({ length: 24 }, (_, index) => `${date}T${String(index).padStart(2, "0")}:00:00+08:00`);
+}
+
+function dailyRowMatchesFilter(row: DailyRow, machineFilter?: string | null, accountFilter?: string | null): boolean {
+  const metadata = metadataFromStr(row.metadata_json);
+  return identityMatchesFilter({
+    host: str(metadata.machine ?? metadata.host ?? row.source_id),
+    os_user: str(metadata.account ?? metadata.os_user ?? "unknown"),
+  }, machineFilter, accountFilter);
+}
+
+function timedRowMatchesFilter(row: TimedRow, machineFilter?: string | null, accountFilter?: string | null): boolean {
+  const metadata = metadataFromStr(row.metadata_json);
+  return identityMatchesFilter({
+    host: str(metadata.machine ?? metadata.host ?? row.source_id),
+    os_user: str(metadata.account ?? metadata.os_user ?? "unknown"),
+  }, machineFilter, accountFilter);
+}
+
+function identityMatchesFilter(identity: SourceIdentity | undefined, machineFilter?: string | null, accountFilter?: string | null): boolean {
+  const machine = str(identity?.machine ?? identity?.host ?? "");
+  const account = str(identity?.os_user ?? "");
+  if (machineFilter && machine !== machineFilter) return false;
+  if (accountFilter && account !== accountFilter) return false;
+  return true;
+}
+
+function accountHourlyRowInPeriod(row: Record<string, unknown>, startDate: string | null, endDate: string, _timezone: string): boolean {
+  const windowStart = parseDate(str(row.window_start));
+  if (!windowStart) return false;
+  const localDate = formatDateInShanghai(windowStart);
+  if (localDate > endDate) return false;
+  if (startDate === null) return true;
+  return localDate >= startDate;
+}
+
+function accountHourlyRowMatchesFilter(row: Record<string, unknown>, machineFilter?: string | null, accountFilter?: string | null): boolean {
+  const machineName = str(row.machine_name ?? row.machine_id ?? "");
+  const machineId = str(row.machine_id ?? "");
+  const osUser = str(row.os_user ?? "");
+  if (machineFilter && !new Set([machineId, machineName]).has(machineFilter)) return false;
+  if (accountFilter && osUser !== accountFilter) return false;
+  return true;
+}
+
+function metadataFromStr(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function sumTokenType(trend: Record<string, unknown>, tokenType: string): number {
+  for (const row of asArray<Record<string, unknown>>(trend.by_token_type)) {
+    if (row.type === tokenType) return asArray<number>(row.values).reduce((sum, value) => sum + int(value), 0);
+  }
+  return 0;
+}
+
+function emptyTokenTotals(): Record<string, number> {
+  return { input: 0, output: 0, cache: 0, total: 0 };
+}
+
+function isCodexAgent(agent: unknown): boolean {
+  const raw = str(agent).toLowerCase();
+  return raw.includes("codex") || raw.includes("gpt") || raw.includes("openai");
+}
+
+function itemKey(sourceId: string, date: string, agent: string): string {
+  return `${sourceId}\u0000${date}\u0000${agent}`;
+}
+
+function nowInTimezone(_timezone: string, currentTime?: string | null): Date {
+  if (currentTime) {
+    const parsed = new Date(currentTime);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+  return new Date();
+}
+
+function toOffsetIso(date: Date): string {
+  return formatDateInShanghai(date) + "T" +
+    `${String(Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", hour12: false, hour: "2-digit" }).format(date)) % 24).padStart(2, "0")}` +
+    `:${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", minute: "2-digit" }).format(date)}` +
+    `:${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", second: "2-digit" }).format(date)}+08:00`;
+}
+
+function formatDateInShanghai(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function parseDateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00+08:00`);
+}
+
+function parseDate(value: string): Date | null {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 86400000);
+}
+
+function addHours(value: string, hours: number): string {
+  const parsed = parseDate(value);
+  return parsed ? toOffsetIso(new Date(parsed.getTime() + hours * 3600000)) : value;
+}
+
+function formatDate(date: Date): string {
+  return formatDateInShanghai(date);
+}
+
+function int(value: unknown): number {
+  if (typeof value === "boolean") return 0;
+  if (typeof value === "number") return Math.round(value);
+  return 0;
+}
+
+function str(value: unknown): string {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
