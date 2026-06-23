@@ -792,6 +792,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -811,10 +817,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -1392,6 +1412,33 @@
               ],
               "type": "object"
             },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
+              ],
+              "type": "object"
+            },
             "period": {
               "fields": {
                 "account": {
@@ -1574,6 +1621,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -1877,6 +1925,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -1896,10 +1950,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -2811,6 +2879,33 @@
               ],
               "type": "object"
             },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
+              ],
+              "type": "object"
+            },
             "period": {
               "fields": {
                 "account": {
@@ -2993,6 +3088,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -3296,6 +3392,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -3315,10 +3417,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -4230,6 +4346,33 @@
               ],
               "type": "object"
             },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
+              ],
+              "type": "object"
+            },
             "period": {
               "fields": {
                 "account": {
@@ -4412,6 +4555,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -4715,6 +4859,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -4734,10 +4884,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -5649,6 +5813,33 @@
               ],
               "type": "object"
             },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
+              ],
+              "type": "object"
+            },
             "period": {
               "fields": {
                 "account": {
@@ -5831,6 +6022,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -6134,6 +6326,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -6153,10 +6351,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -6706,6 +6918,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -6725,10 +6943,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -7332,6 +7564,33 @@
               ],
               "type": "object"
             },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
+              ],
+              "type": "object"
+            },
             "period": {
               "fields": {
                 "account": {
@@ -7514,6 +7773,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -7871,6 +8131,33 @@
               ],
               "type": "object"
             },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "null"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
+              ],
+              "type": "object"
+            },
             "period": {
               "fields": {
                 "account": {
@@ -8053,6 +8340,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -8079,6 +8367,12 @@
         "kind": "json",
         "shape": {
           "fields": {
+            "backend_mode": {
+              "type": "str"
+            },
+            "canonical_store": {
+              "type": "str"
+            },
             "database": {
               "fields": {
                 "exists": {
@@ -8104,6 +8398,29 @@
             "generated_at": {
               "type": "str",
               "value": "<masked>"
+            },
+            "limits": {
+              "fields": {
+                "effective_window_count": {
+                  "type": "int"
+                },
+                "latest_observed_at": {
+                  "type": "null"
+                },
+                "raw_window_count": {
+                  "type": "int"
+                },
+                "stale_window_count": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "effective_window_count",
+                "latest_observed_at",
+                "raw_window_count",
+                "stale_window_count"
+              ],
+              "type": "object"
             },
             "snapshot": {
               "fields": {
@@ -8162,8 +8479,11 @@
             }
           },
           "keys": [
+            "backend_mode",
+            "canonical_store",
             "database",
             "generated_at",
+            "limits",
             "snapshot",
             "source_status",
             "status"
@@ -8702,6 +9022,12 @@
             },
             "metadata": {
               "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
                 "codex_hourly": {
                   "fields": {
                     "drift": {
@@ -8721,10 +9047,24 @@
                     "drift"
                   ],
                   "type": "object"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "str"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
                 }
               },
               "keys": [
-                "codex_hourly"
+                "backend_mode",
+                "canonical_store",
+                "codex_hourly",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -9624,69 +9964,8 @@
                   "type": "int"
                 },
                 "windows": {
-                  "items": [
-                    {
-                      "fields": {
-                        "confidence": {
-                          "type": "str",
-                          "value": "missing"
-                        },
-                        "observed_at": {
-                          "type": "str"
-                        },
-                        "official": {
-                          "type": "bool",
-                          "value": false
-                        },
-                        "provider": {
-                          "type": "str",
-                          "value": "claude"
-                        },
-                        "remaining_percent": {
-                          "type": "float"
-                        },
-                        "reset_at": {
-                          "type": "str"
-                        },
-                        "source_id": {
-                          "type": "str"
-                        },
-                        "source_type": {
-                          "type": "str"
-                        },
-                        "status": {
-                          "type": "str",
-                          "value": "provider_failed"
-                        },
-                        "used_percent": {
-                          "type": "float"
-                        },
-                        "window": {
-                          "type": "str",
-                          "value": "week"
-                        },
-                        "window_duration_minutes": {
-                          "type": "int"
-                        }
-                      },
-                      "keys": [
-                        "confidence",
-                        "observed_at",
-                        "official",
-                        "provider",
-                        "remaining_percent",
-                        "reset_at",
-                        "source_id",
-                        "source_type",
-                        "status",
-                        "used_percent",
-                        "window",
-                        "window_duration_minutes"
-                      ],
-                      "type": "object"
-                    }
-                  ],
-                  "length": 1,
+                  "items": [],
+                  "length": 0,
                   "type": "array"
                 }
               },
@@ -9694,6 +9973,33 @@
                 "observed_count",
                 "total_count",
                 "windows"
+              ],
+              "type": "object"
+            },
+            "metadata": {
+              "fields": {
+                "backend_mode": {
+                  "type": "str"
+                },
+                "canonical_store": {
+                  "type": "str"
+                },
+                "freshness_status": {
+                  "type": "str"
+                },
+                "limits_observed_at": {
+                  "type": "str"
+                },
+                "read_model_generated_at": {
+                  "type": "str"
+                }
+              },
+              "keys": [
+                "backend_mode",
+                "canonical_store",
+                "freshness_status",
+                "limits_observed_at",
+                "read_model_generated_at"
               ],
               "type": "object"
             },
@@ -9879,6 +10185,7 @@
             "client",
             "generated_at",
             "limits",
+            "metadata",
             "period",
             "schema_version",
             "sources",
@@ -9905,6 +10212,12 @@
         "kind": "json",
         "shape": {
           "fields": {
+            "backend_mode": {
+              "type": "str"
+            },
+            "canonical_store": {
+              "type": "str"
+            },
             "database": {
               "fields": {
                 "exists": {
@@ -9930,6 +10243,29 @@
             "generated_at": {
               "type": "str",
               "value": "<masked>"
+            },
+            "limits": {
+              "fields": {
+                "effective_window_count": {
+                  "type": "int"
+                },
+                "latest_observed_at": {
+                  "type": "str"
+                },
+                "raw_window_count": {
+                  "type": "int"
+                },
+                "stale_window_count": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "effective_window_count",
+                "latest_observed_at",
+                "raw_window_count",
+                "stale_window_count"
+              ],
+              "type": "object"
             },
             "snapshot": {
               "fields": {
@@ -9988,8 +10324,11 @@
             }
           },
           "keys": [
+            "backend_mode",
+            "canonical_store",
             "database",
             "generated_at",
+            "limits",
             "snapshot",
             "source_status",
             "status"

@@ -20,14 +20,39 @@ public enum MobileSummaryCache {
         _ summary: MobileSummary,
         groupID: String = appGroupID,
         fileManager: FileManager = .default
-    ) throws {
+    ) -> MobileSummaryCacheWriteResult {
         guard isCompanionEligible(summary) else {
-            return
+            return MobileSummaryCacheWriteResult(
+                status: "not_attempted",
+                writtenAt: nil,
+                summaryGeneratedAt: summary.generatedAt,
+                safeError: "not_today_summary"
+            )
         }
         guard let url = appGroupURL(groupID: groupID, fileManager: fileManager) else {
-            return
+            return MobileSummaryCacheWriteResult(
+                status: "failed",
+                writtenAt: nil,
+                summaryGeneratedAt: summary.generatedAt,
+                safeError: "app_group_container_unavailable"
+            )
         }
-        try write(summary, to: url, fileManager: fileManager)
+        do {
+            try write(summary, to: url, fileManager: fileManager)
+            return MobileSummaryCacheWriteResult(
+                status: "ok",
+                writtenAt: currentTimestamp(),
+                summaryGeneratedAt: summary.generatedAt,
+                safeError: nil
+            )
+        } catch {
+            return MobileSummaryCacheWriteResult(
+                status: "failed",
+                writtenAt: nil,
+                summaryGeneratedAt: summary.generatedAt,
+                safeError: safeCacheError(from: error)
+            )
+        }
     }
 
     public static func readCompanionSummary(from url: URL) -> MobileSummary? {
@@ -89,6 +114,19 @@ public enum MobileSummaryCache {
             .appendingPathComponent(fileName)
     }
 
+    private static func currentTimestamp() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
+    private static func safeCacheError(from error: Error) -> String {
+        switch error {
+        case EncodingError.invalidValue:
+            return "encode_failed"
+        default:
+            return "write_failed"
+        }
+    }
+
     private static func parseGeneratedAt(_ value: String) -> Date? {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
@@ -97,6 +135,20 @@ public enum MobileSummaryCache {
         }
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.date(from: value)
+    }
+}
+
+public struct MobileSummaryCacheWriteResult: Equatable, Sendable {
+    public let status: String
+    public let writtenAt: String?
+    public let summaryGeneratedAt: String?
+    public let safeError: String?
+
+    public init(status: String, writtenAt: String?, summaryGeneratedAt: String?, safeError: String?) {
+        self.status = status
+        self.writtenAt = writtenAt
+        self.summaryGeneratedAt = summaryGeneratedAt
+        self.safeError = safeError
     }
 }
 

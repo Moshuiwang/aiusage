@@ -6,7 +6,98 @@ from ai_usage_widget.mobile_summary import build_mobile_summary
 
 
 class TestMobileSummaryLimits(unittest.TestCase):
-    def test_observed_count_only_counts_official_observed_limit_windows(self) -> None:
+    def test_mobile_summary_only_returns_effective_quota_windows(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-06-02T10:45:00+08:00",
+            "summary": {"period": "today", "total_tokens": 1200},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [
+                {
+                    "source_id": "old-cache",
+                    "provider": "claude",
+                    "window": "session",
+                    "used_percent": 99,
+                    "remaining_percent": 1,
+                    "reset_at": "2026-06-02T15:45:00+08:00",
+                    "window_duration_minutes": 300,
+                    "observed_at": "2026-06-02T10:44:00+08:00",
+                    "source_type": "active_limits_cache",
+                    "confidence": "observed",
+                    "status": "ok",
+                    "official": False,
+                },
+                {
+                    "source_id": "runtime",
+                    "provider": "claude",
+                    "window": "session",
+                    "used_percent": 3,
+                    "remaining_percent": 97,
+                    "reset_at": "2026-06-02T15:45:00+08:00",
+                    "window_duration_minutes": 300,
+                    "observed_at": "2026-06-02T10:45:00+08:00",
+                    "source_type": "runtime_api",
+                    "confidence": "observed",
+                    "status": "ok",
+                    "official": True,
+                },
+                {
+                    "source_id": "failed",
+                    "provider": "codex",
+                    "window": "week",
+                    "used_percent": 0,
+                    "remaining_percent": 0,
+                    "reset_at": "2026-06-08T00:00:00+08:00",
+                    "window_duration_minutes": 10080,
+                    "observed_at": "2026-06-02T10:45:00+08:00",
+                    "source_type": "runtime_api",
+                    "confidence": "missing",
+                    "status": "provider_failed",
+                    "official": False,
+                },
+            ],
+        })
+
+        self.assertEqual(summary["limits"]["observed_count"], 1)
+        self.assertEqual(summary["limits"]["total_count"], 1)
+        self.assertEqual(
+            [(row["source_id"], row["provider"], row["window"]) for row in summary["limits"]["windows"]],
+            [("runtime", "claude", "session")],
+        )
+
+    def test_mobile_summary_exposes_safe_freshness_metadata(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-06-02T10:45:00+08:00",
+            "timezone": "Asia/Shanghai",
+            "summary": {"period": "today", "total_tokens": 1200},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "metadata": {
+                "backend_mode": "origin_direct",
+                "canonical_store": "origin_sqlite",
+                "read_model_generated_at": "2026-06-02T10:45:00+08:00",
+                "freshness_status": "ok",
+                "limits_observed_at": "2026-06-02T10:44:00+08:00",
+            },
+            "limits": [],
+        })
+
+        self.assertEqual(
+            summary["metadata"],
+            {
+                "backend_mode": "origin_direct",
+                "canonical_store": "origin_sqlite",
+                "read_model_generated_at": "2026-06-02T10:45:00+08:00",
+                "freshness_status": "ok",
+                "limits_observed_at": "2026-06-02T10:44:00+08:00",
+            },
+        )
+
+    def test_limits_windows_only_include_official_observed_ok_rows(self) -> None:
         summary = build_mobile_summary({
             "summary": {"period": "today", "total_tokens": 1200},
             "trend": {"points": []},
@@ -74,14 +165,11 @@ class TestMobileSummaryLimits(unittest.TestCase):
         })
 
         self.assertEqual(summary["limits"]["observed_count"], 1)
-        self.assertEqual(summary["limits"]["total_count"], 4)
+        self.assertEqual(summary["limits"]["total_count"], 1)
         self.assertEqual(
             [(row["source_id"], row["confidence"], row["official"]) for row in summary["limits"]["windows"]],
             [
                 ("codex-main", "observed", True),
-                ("local-estimate", "observed", False),
-                ("claude-weekly", "missing", False),
-                ("codex-stale", "observed", True),
             ],
         )
 

@@ -347,11 +347,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -964,24 +969,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -1031,6 +1020,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -1769,11 +1765,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -2238,24 +2239,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -2305,6 +2290,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -2914,11 +2906,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -3719,24 +3716,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -3786,6 +3767,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -4643,11 +4631,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -5159,24 +5152,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -5226,6 +5203,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -5592,11 +5576,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -5847,24 +5836,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -5914,6 +5887,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -6265,11 +6245,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -6520,24 +6505,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -6587,6 +6556,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": "bob",
@@ -7139,11 +7115,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -7608,24 +7589,8 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
-          "total_count": 4,
+          "total_count": 3,
           "windows": [
-            {
-              "account_label": "Claude Team",
-              "account_plan_label": "Pro",
-              "confidence": "missing",
-              "observed_at": "2026-06-03T11:02:00+08:00",
-              "official": false,
-              "provider": "claude",
-              "remaining_percent": 0.0,
-              "reset_at": "2026-06-03T15:00:00+08:00",
-              "source_id": "claude-main",
-              "source_type": "oauth_usage_api",
-              "status": "provider_failed",
-              "used_percent": 0.0,
-              "window": "5h",
-              "window_duration_minutes": 300
-            },
             {
               "account_label": "Claude Team",
               "account_plan_label": "Pro",
@@ -7675,6 +7640,13 @@
               "window_duration_minutes": 10080
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,

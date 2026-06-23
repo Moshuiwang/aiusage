@@ -490,10 +490,9 @@ class TestWebServerSummary(unittest.TestCase):
 
         limits = {row["source_id"]: row for row in data["limits"]["windows"]}
         self.assertEqual(data["limits"]["observed_count"], 1)
-        self.assertEqual(data["limits"]["total_count"], 2)
+        self.assertEqual(data["limits"]["total_count"], 1)
         self.assertEqual(limits["codex-main"]["confidence"], "observed")
-        self.assertEqual(limits["claude-weekly"]["confidence"], "missing")
-        self.assertFalse(limits["claude-weekly"]["official"])
+        self.assertNotIn("claude-weekly", limits)
 
     def test_mobile_summary_periods_return_distinct_live_windows(self) -> None:
         """验证移动端 today/week/month/all 不只是换 label，而是返回真实不同聚合窗口"""

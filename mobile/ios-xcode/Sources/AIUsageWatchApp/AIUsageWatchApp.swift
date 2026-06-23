@@ -65,13 +65,19 @@ final class WatchSummaryModel: NSObject, ObservableObject, WCSessionDelegate, @u
         guard decoded.period.id == "today" else {
             return
         }
-        WatchSummaryStore.write(decoded)
-        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageCodexQuotaRingComplication")
-        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageClaudeQuotaRingComplication")
-        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageTodayChartComplication")
+        let receipt = WatchSummaryStore.write(
+            decoded,
+            delivery: "watchconnectivity_application_context"
+        )
         DispatchQueue.main.async {
             self.summary = decoded
         }
+        guard receipt.cacheWriteStatus == "ok" else {
+            return
+        }
+        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageCodexQuotaRingComplication")
+        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageClaudeQuotaRingComplication")
+        WidgetCenter.shared.reloadTimelines(ofKind: "AIUsageTodayChartComplication")
     }
 }
 #endif

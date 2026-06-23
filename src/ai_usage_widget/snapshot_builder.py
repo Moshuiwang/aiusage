@@ -364,6 +364,10 @@ def build_snapshot(
     )
 
     # 6. 组装完整快照 (v1 schema)
+    metadata = _snapshot_metadata(ref_time, limits, "origin_direct", "origin_sqlite")
+    metadata["codex_hourly"] = {
+        "drift": codex_hourly_context_data["drift"],
+    }
     snapshot = {
         "schema_version": 1,
         "generated_at": ref_time.isoformat(),
@@ -390,11 +394,7 @@ def build_snapshot(
         "limits": limits,
         "account_hourly": account_hourly,
         "ai_accounts": ai_accounts,
-        "metadata": {
-            "codex_hourly": {
-                "drift": codex_hourly_context_data["drift"],
-            },
-        },
+        "metadata": metadata,
     }
     if machine_filter:
         snapshot["summary"]["machine"] = machine_filter
@@ -535,7 +535,7 @@ def _fetch_limit_windows(conn: sqlite3.Connection, ref_time: datetime | None = N
             limit for limit in limits
             if not _limit_window_expired(limit, ref_time)
         ]
-    return _best_limit_windows(limits)
+    return _without_superseded_active_cache(_best_limit_windows(limits))
 
 
 def _best_limit_windows(limits: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -557,6 +557,48 @@ def _best_limit_windows(limits: list[dict[str, Any]]) -> list[dict[str, Any]]:
             str(item.get("window") or ""),
         ),
     )
+
+
+def _without_superseded_active_cache(limits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    effective_keys = {
+        (str(limit.get("provider") or ""), str(limit.get("window") or ""))
+        for limit in limits
+        if _effective_limit_window(limit)
+    }
+    return [
+        limit for limit in limits
+        if str(limit.get("source_type") or "") != "active_limits_cache"
+        or (str(limit.get("provider") or ""), str(limit.get("window") or "")) not in effective_keys
+    ]
+
+
+def _effective_limit_window(limit: dict[str, Any]) -> bool:
+    return (
+        bool(limit.get("official"))
+        and limit.get("confidence") == "observed"
+        and limit.get("status") == "ok"
+        and str(limit.get("source_type") or "") != "active_limits_cache"
+    )
+
+
+def _snapshot_metadata(
+    ref_time: datetime,
+    limits: list[dict[str, Any]],
+    backend_mode: str,
+    canonical_store: str,
+) -> dict[str, Any]:
+    effective_limits = [limit for limit in limits if _effective_limit_window(limit)]
+    limits_observed_at = max(
+        (str(limit.get("observed_at") or "") for limit in effective_limits),
+        default=None,
+    )
+    return {
+        "backend_mode": backend_mode,
+        "canonical_store": canonical_store,
+        "read_model_generated_at": ref_time.isoformat(),
+        "freshness_status": "ok" if effective_limits else "unknown",
+        "limits_observed_at": limits_observed_at,
+    }
 
 
 def _limit_rank(limit: dict[str, Any]) -> tuple[int, int, str]:
@@ -880,6 +922,12 @@ def _empty_snapshot(
         "limits": [],
         "account_hourly": _empty_account_hourly_summary(),
         "ai_accounts": [],
+        "metadata": {
+            **_snapshot_metadata(ref_time, [], "origin_direct", "origin_sqlite"),
+            "codex_hourly": {
+                "drift": {"status": "comparison_unavailable"},
+            },
+        },
     }
     if machine_filter:
         snapshot["summary"]["machine"] = machine_filter

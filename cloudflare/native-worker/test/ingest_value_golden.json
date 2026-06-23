@@ -292,11 +292,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -935,6 +940,13 @@
             }
           ]
         },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
+        },
         "period": {
           "account": null,
           "cache_ratio": 9,
@@ -1532,11 +1544,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -1943,6 +1960,13 @@
               "window_duration_minutes": 300
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -2388,11 +2412,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -3099,6 +3128,13 @@
             }
           ]
         },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
+        },
         "period": {
           "account": null,
           "cache_ratio": 10,
@@ -3750,11 +3786,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -4097,6 +4138,13 @@
             }
           ]
         },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
+        },
         "period": {
           "account": null,
           "cache_ratio": 10,
@@ -4388,11 +4436,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -4678,6 +4731,13 @@
               "window_duration_minutes": 300
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": null,
@@ -4993,11 +5053,16 @@
           }
         ],
         "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
             }
-          }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "schema_version": 1,
         "source_status": [
@@ -5283,6 +5348,13 @@
               "window_duration_minutes": 300
             }
           ]
+        },
+        "metadata": {
+          "backend_mode": "origin_direct",
+          "canonical_store": "origin_sqlite",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
         },
         "period": {
           "account": "bob",

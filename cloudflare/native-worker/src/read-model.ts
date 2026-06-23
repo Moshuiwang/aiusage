@@ -75,6 +75,7 @@ type LimitRow = {
 };
 
 const localEstimateSourceTypes = new Set([
+  "active_limits_cache",
   "local_history_estimate",
   "ccusage_daily",
   "ccusage_blocks",
@@ -377,6 +378,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
+      ...summaryMetadata(refTime, limits, "native_d1_staging", "cloudflare_d1"),
       codex_hourly: {
         drift: codexContext.drift,
       },
@@ -475,7 +477,7 @@ async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<
   if (refTime) {
     limits = limits.filter((limit) => !limitWindowExpired(limit, refTime));
   }
-  return bestLimitWindows(limits);
+  return withoutSupersededActiveCache(bestLimitWindows(limits));
 }
 
 async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, endDate: string, timezone: string): Promise<Record<string, unknown>[]> {
@@ -906,6 +908,44 @@ function bestLimitWindows(limits: LimitRow[]): LimitRow[] {
   );
 }
 
+function withoutSupersededActiveCache(limits: LimitRow[]): LimitRow[] {
+  const effectiveKeys = new Set(
+    limits
+      .filter((limit) => effectiveLimitWindow(limit))
+      .map((limit) => `${limit.provider}:${limit.window}`),
+  );
+  return limits.filter((limit) =>
+    limit.source_type !== "active_limits_cache" || !effectiveKeys.has(`${limit.provider}:${limit.window}`),
+  );
+}
+
+function effectiveLimitWindow(limit: LimitRow): boolean {
+  return limit.official === true &&
+    limit.confidence === "observed" &&
+    limit.status === "ok" &&
+    limit.source_type !== "active_limits_cache";
+}
+
+function summaryMetadata(
+  refTime: Date,
+  limits: LimitRow[],
+  backendMode: string,
+  canonicalStore: string,
+): Record<string, unknown> {
+  const effective = limits.filter((limit) => effectiveLimitWindow(limit));
+  const observed = effective
+    .map((limit) => limit.observed_at || "")
+    .filter(Boolean)
+    .sort();
+  return {
+    backend_mode: backendMode,
+    canonical_store: canonicalStore,
+    read_model_generated_at: toOffsetIso(refTime),
+    freshness_status: effective.length ? "ok" : "unknown",
+    limits_observed_at: observed.length ? observed[observed.length - 1] : null,
+  };
+}
+
 function compareLimitRank(lhs: LimitRow, rhs: LimitRow): number {
   const left = limitRank(lhs);
   const right = limitRank(rhs);
@@ -1044,10 +1084,16 @@ function nowInTimezone(_timezone: string, currentTime?: string | null): Date {
 }
 
 function toOffsetIso(date: Date): string {
-  return formatDateInShanghai(date) + "T" +
-    `${String(Number(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", hour12: false, hour: "2-digit" }).format(date)) % 24).padStart(2, "0")}` +
-    `:${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", minute: "2-digit" }).format(date)}` +
-    `:${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Shanghai", second: "2-digit" }).format(date)}+08:00`;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const hour = String(Number(values.hour ?? "0") % 24).padStart(2, "0");
+  return `${formatDateInShanghai(date)}T${hour}:${values.minute ?? "00"}:${values.second ?? "00"}+08:00`;
 }
 
 function formatDateInShanghai(date: Date): string {
