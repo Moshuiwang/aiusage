@@ -158,7 +158,12 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
             totalTokens: 788697772,
             generatedAt: "2026-06-22T13:11:10+08:00",
             error: nil,
-            recordedAt: "2026-06-22T14:40:00Z"
+            recordedAt: "2026-06-22T14:40:00Z",
+            cacheWriteStatus: "ok",
+            cacheWrittenAt: "2026-06-22T14:40:01Z",
+            cacheSummaryGeneratedAt: "2026-06-22T13:11:10+08:00",
+            watchPushStatus: "queued",
+            safeCacheError: nil
         )
 
         try MobileRuntimeDiagnostics.write(diagnostic, to: url)
@@ -167,9 +172,41 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         XCTAssertTrue(raw.contains("788697772"))
         XCTAssertFalse(raw.contains("Bearer"))
         XCTAssertFalse(raw.contains("bundle-production-token"))
+        XCTAssertTrue(raw.contains("\"cacheWriteStatus\" : \"ok\""))
+        XCTAssertTrue(raw.contains("\"watchPushStatus\" : \"queued\""))
         let decoded = try XCTUnwrap(MobileRuntimeDiagnostics.read(from: url))
         XCTAssertEqual(decoded, diagnostic)
         XCTAssertEqual(decoded.requestURL, "https://aiusage.chunbai.com/api/mobile/summary?period=week")
+    }
+
+    func testRuntimeDiagnosticRecordsFailedCacheWriteWithoutLocalPathOrToken() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MobileRuntimeDiagnosticFailureTests-\(UUID().uuidString)")
+        let url = directory.appendingPathComponent(MobileRuntimeDiagnostics.fileName)
+        let diagnostic = MobileRuntimeDiagnostic(
+            status: "success",
+            requestURL: "https://aiusage.chunbai.com/api/mobile/summary?period=today",
+            period: "today",
+            totalTokens: 5000,
+            generatedAt: "2026-06-23T22:22:36+08:00",
+            error: nil,
+            recordedAt: "2026-06-23T14:23:00Z",
+            cacheWriteStatus: "failed",
+            cacheWrittenAt: nil,
+            cacheSummaryGeneratedAt: "2026-06-23T22:22:36+08:00",
+            watchPushStatus: "not_attempted",
+            safeCacheError: "app_group_container_unavailable"
+        )
+
+        try MobileRuntimeDiagnostics.write(diagnostic, to: url)
+
+        let raw = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(raw.contains("\"cacheWriteStatus\" : \"failed\""))
+        XCTAssertTrue(raw.contains("app_group_container_unavailable"))
+        XCTAssertFalse(raw.contains(directory.path))
+        XCTAssertFalse(raw.contains("Authorization"))
+        XCTAssertFalse(raw.contains("Bearer"))
+        XCTAssertFalse(raw.contains("Keychain"))
     }
 
     func testRejectsSaveWithoutToken() throws {

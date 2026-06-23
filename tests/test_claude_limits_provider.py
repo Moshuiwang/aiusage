@@ -82,7 +82,7 @@ class TestClaudeLimitsProvider(unittest.TestCase):
         self.assertEqual([window.window_duration_minutes for window in windows], [300, 10080])
         self.assertEqual([window.used_percent for window in windows], [10.0, 20.0])
         self.assertEqual([window.source_type for window in windows], ["active_limits_cache", "active_limits_cache"])
-        self.assertTrue(all(window.is_official for window in windows))
+        self.assertFalse(any(window.is_official for window in windows))
 
     def test_cli_limit_message_parses_session_window(self) -> None:
         windows = parse_claude_cli_usage(

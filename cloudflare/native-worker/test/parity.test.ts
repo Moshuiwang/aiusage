@@ -118,10 +118,11 @@ describe.sequential("native TS Worker read-only API parity", () => {
     records.push(await recordValue("summary-week-observed-limits", "/api/summary?date=2026-06-03&period=week"));
     records.push(await recordValue("mobile-summary-week-observed-limits", "/api/mobile/summary?date=2026-06-03&period=week"));
 
-    expect(records).toEqual(golden);
+    expect(normalizeStoreMetadata(records)).toEqual(normalizeStoreMetadata(golden));
 
     const summaryWeek = bodyFor(records, "summary-week");
     const mobileSummaryWeek = bodyFor(records, "mobile-summary-week");
+    const dbCounts = await tableCounts(db);
     expect(summaryWeek.source_status, "Native source_status must be covered by value parity").toEqual(
       bodyFor(golden, "summary-week").source_status,
     );
@@ -133,6 +134,11 @@ describe.sequential("native TS Worker read-only API parity", () => {
     expect((summaryWeek.source_status as Shape[]).map((row) => row.status), "source_status covers ok sources").toContain("ok");
     expect((summaryWeek.source_status as Shape[]).map((row) => row.status), "source_status covers stale sources").toContain("stale");
     expect((mobileSummaryWeek.sources as Shape[]).map((row) => row.status), "mobile sources covers stale sources").toContain("stale");
+    expect(dbCounts.limit_windows, "D1 limit_windows must be non-empty for limits parity").toBeGreaterThan(0);
+    expect(((mobileSummaryWeek.limits as Shape).windows as Shape[]).length, "mobile limits windows must be covered").toBeGreaterThan(0);
+    expect(((mobileSummaryWeek.limits as Shape).windows as Shape[]).every((row) =>
+      row.official === true && row.confidence === "observed" && row.status === "ok",
+    ), "mobile limits windows are effective only").toBe(true);
     for (const row of ((summaryWeek.groups as Shape).by_machine as Shape[])) {
       expect(row.source_ids, `groups.by_machine ${String(row.name)} must expose source_ids`).toEqual(
         expect.arrayContaining(
@@ -191,6 +197,19 @@ function bodyFor(records: ContractRecord[], name: string): Shape {
   const record = records.find((item) => item.name === name);
   expect(record, `${name} record exists`).toBeTruthy();
   return record?.response.body as Shape;
+}
+
+function normalizeStoreMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => normalizeStoreMetadata(item));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item),
+      ]),
+    );
+  }
+  return value;
 }
 
 async function bundleWorker(): Promise<string> {
@@ -402,6 +421,16 @@ async function seedLimitsFixture(db: D1Database): Promise<void> {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind("claude-weekly", "claude", "week", 0, 0, "2026-06-10T00:00:00+08:00", 10080, "oauth_usage_api", "missing", "provider_failed", "2026-06-03T11:00:00+08:00", "2026-06-03T11:00:00+08:00", "2026-06-03T11:00:00+08:00"),
   ]);
+}
+
+async function tableCounts(db: D1Database): Promise<Record<string, number>> {
+  const tables = ["limit_windows"];
+  const counts: Record<string, number> = {};
+  for (const table of tables) {
+    const row = await db.prepare(`SELECT count(*) AS count FROM ${table}`).first<{ count: number }>();
+    counts[table] = Number(row?.count ?? 0);
+  }
+  return counts;
 }
 
 function bodyContract(contentType: string, body: Buffer): Shape {

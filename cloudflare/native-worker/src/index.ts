@@ -18,6 +18,13 @@ const STATIC_CONTENT_TYPES: Record<string, string> = {
   ".js": "application/javascript; charset=utf-8",
   ".html": "text/html; charset=utf-8",
 };
+const LOCAL_ESTIMATE_SOURCE_TYPES = [
+  "active_limits_cache",
+  "local_history_estimate",
+  "ccusage_daily",
+  "ccusage_blocks",
+  "session_log_estimate",
+];
 
 function securityHeaders(): Record<string, string> {
   return {
@@ -240,10 +247,11 @@ function normalizeAssetName(assetName: string): string | null {
 }
 
 async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
-  const [sourceRows, latestCollectedAt, sizeBytes] = await Promise.all([
+  const [sourceRows, latestCollectedAt, sizeBytes, limitsReport] = await Promise.all([
     latestSourceStatuses(env.AIUSAGE_DB),
     latestMetadataTime(env.AIUSAGE_DB),
     databaseSizeProxy(env.AIUSAGE_DB),
+    buildLimitsHealth(env.AIUSAGE_DB),
   ]);
   const counts: Record<string, number> = {};
   const nonOk: Record<string, string>[] = [];
@@ -260,6 +268,8 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
   return {
     status: "ok",
     generated_at: env.AIUSAGE_NOW ?? new Date().toISOString(),
+    backend_mode: "native_d1_staging",
+    canonical_store: "cloudflare_d1",
     database: {
       path: "D1:AIUSAGE_DB",
       size_bytes: sizeBytes,
@@ -275,6 +285,7 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
       counts,
       non_ok: nonOk,
     },
+    limits: limitsReport,
   };
 }
 
@@ -302,6 +313,32 @@ async function latestMetadataTime(db: D1Database): Promise<string | null> {
   const row = await db.prepare("SELECT max(collected_at) AS updated_at FROM collection_runs")
     .first<{ updated_at: string | null }>();
   return row?.updated_at ?? null;
+}
+
+async function buildLimitsHealth(db: D1Database): Promise<Record<string, unknown>> {
+  const placeholders = LOCAL_ESTIMATE_SOURCE_TYPES.map(() => "?").join(", ");
+  const effective = `status = 'ok' AND confidence = 'observed' AND source_type NOT IN (${placeholders})`;
+  const row = await db.prepare(`
+    SELECT
+      count(*) AS raw_window_count,
+      sum(CASE WHEN ${effective} THEN 1 ELSE 0 END) AS effective_window_count,
+      sum(CASE WHEN ${effective} THEN 0 ELSE 1 END) AS stale_window_count,
+      max(CASE WHEN ${effective} THEN observed_at ELSE NULL END) AS latest_observed_at
+    FROM limit_windows
+  `)
+    .bind(...LOCAL_ESTIMATE_SOURCE_TYPES, ...LOCAL_ESTIMATE_SOURCE_TYPES, ...LOCAL_ESTIMATE_SOURCE_TYPES)
+    .first<{
+      raw_window_count: number | null;
+      effective_window_count: number | null;
+      stale_window_count: number | null;
+      latest_observed_at: string | null;
+    }>();
+  return {
+    latest_observed_at: row?.latest_observed_at ?? null,
+    effective_window_count: Number(row?.effective_window_count ?? 0),
+    raw_window_count: Number(row?.raw_window_count ?? 0),
+    stale_window_count: Number(row?.stale_window_count ?? 0),
+  };
 }
 
 async function databaseSizeProxy(db: D1Database): Promise<number> {

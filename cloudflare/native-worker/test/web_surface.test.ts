@@ -119,6 +119,8 @@ describe.sequential("native TS Worker web surface", () => {
     expect(payload).toMatchObject({
       status: "ok",
       generated_at: fixedNow,
+      backend_mode: "native_d1_staging",
+      canonical_store: "cloudflare_d1",
       database: {
         path: "D1:AIUSAGE_DB",
         exists: true,
@@ -133,8 +135,36 @@ describe.sequential("native TS Worker web surface", () => {
         counts: { ok: 1, provider_failed: 1 },
         non_ok: [{ source_id: "linux-dev-bob", status: "provider_failed" }],
       },
+      limits: {
+        latest_observed_at: null,
+        effective_window_count: 0,
+        raw_window_count: 0,
+        stale_window_count: 0,
+      },
     });
     expect(payload.database).toHaveProperty("size_bytes");
+  });
+
+  it("reports D1 limits freshness separately from collection health", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await seedLimitRows(db);
+
+    const response = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Cookie: await sessionCookieHeader() },
+    });
+    const payload = await response.json<Record<string, unknown>>();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      backend_mode: "native_d1_staging",
+      canonical_store: "cloudflare_d1",
+      limits: {
+        latest_observed_at: "2026-06-03T11:01:00+08:00",
+        effective_window_count: 2,
+        raw_window_count: 3,
+        stale_window_count: 1,
+      },
+    });
   });
 
   it("accepts the session cookie on read APIs", async () => {
@@ -294,5 +324,73 @@ async function seedHealthRows(db: D1Database): Promise<void> {
         first_period, last_period, error_type, error_message
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(2, 2, "linux-dev-bob", "limits", "HTTP Ingest", "provider_failed", null, null, null, "provider_failed", "provider down"),
+  ]);
+}
+
+async function seedLimitRows(db: D1Database): Promise<void> {
+  await db.batch([
+    db.prepare(`
+      INSERT INTO limit_windows (
+        source_id, provider, window, used_percent, remaining_percent, reset_at,
+        window_duration_minutes, source_type, confidence, status, observed_at,
+        first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "codex-main",
+      "codex",
+      "5h",
+      42.5,
+      57.5,
+      "2026-06-03T16:00:00+08:00",
+      300,
+      "runtime_api",
+      "observed",
+      "ok",
+      "2026-06-03T11:00:00+08:00",
+      "2026-06-03T11:00:00+08:00",
+      "2026-06-03T11:00:00+08:00",
+    ),
+    db.prepare(`
+      INSERT INTO limit_windows (
+        source_id, provider, window, used_percent, remaining_percent, reset_at,
+        window_duration_minutes, source_type, confidence, status, observed_at,
+        first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "codex-main",
+      "codex",
+      "week",
+      64.25,
+      35.75,
+      "2026-06-10T00:00:00+08:00",
+      10080,
+      "runtime_api",
+      "observed",
+      "ok",
+      "2026-06-03T11:01:00+08:00",
+      "2026-06-03T11:01:00+08:00",
+      "2026-06-03T11:01:00+08:00",
+    ),
+    db.prepare(`
+      INSERT INTO limit_windows (
+        source_id, provider, window, used_percent, remaining_percent, reset_at,
+        window_duration_minutes, source_type, confidence, status, observed_at,
+        first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "claude-main",
+      "claude",
+      "5h",
+      90,
+      10,
+      "2026-06-03T16:00:00+08:00",
+      300,
+      "active_limits_cache",
+      "observed",
+      "ok",
+      "2026-06-03T11:02:00+08:00",
+      "2026-06-03T11:02:00+08:00",
+      "2026-06-03T11:02:00+08:00",
+    ),
   ]);
 }

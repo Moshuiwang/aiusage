@@ -8,6 +8,11 @@ public struct MobileRuntimeDiagnostic: Codable, Equatable, Sendable {
     public let generatedAt: String?
     public let error: String?
     public let recordedAt: String
+    public let cacheWriteStatus: String?
+    public let cacheWrittenAt: String?
+    public let cacheSummaryGeneratedAt: String?
+    public let watchPushStatus: String?
+    public let safeCacheError: String?
 
     public init(
         status: String,
@@ -16,7 +21,12 @@ public struct MobileRuntimeDiagnostic: Codable, Equatable, Sendable {
         totalTokens: Int?,
         generatedAt: String?,
         error: String?,
-        recordedAt: String
+        recordedAt: String,
+        cacheWriteStatus: String? = nil,
+        cacheWrittenAt: String? = nil,
+        cacheSummaryGeneratedAt: String? = nil,
+        watchPushStatus: String? = nil,
+        safeCacheError: String? = nil
     ) {
         self.status = status
         self.requestURL = requestURL
@@ -25,13 +35,23 @@ public struct MobileRuntimeDiagnostic: Codable, Equatable, Sendable {
         self.generatedAt = generatedAt
         self.error = error
         self.recordedAt = recordedAt
+        self.cacheWriteStatus = cacheWriteStatus
+        self.cacheWrittenAt = cacheWrittenAt
+        self.cacheSummaryGeneratedAt = cacheSummaryGeneratedAt
+        self.watchPushStatus = watchPushStatus
+        self.safeCacheError = safeCacheError
     }
 }
 
 public enum MobileRuntimeDiagnostics {
     public static let fileName = "last-mobile-runtime-diagnostic.json"
 
-    public static func success(config: MobileSummaryAPIConfig, summary: MobileSummary) {
+    public static func success(
+        config: MobileSummaryAPIConfig,
+        summary: MobileSummary,
+        cacheWriteResult: MobileSummaryCacheWriteResult? = nil,
+        watchPushStatus: String? = nil
+    ) {
         write(
             MobileRuntimeDiagnostic(
                 status: "success",
@@ -40,7 +60,12 @@ public enum MobileRuntimeDiagnostics {
                 totalTokens: summary.period.totalTokens,
                 generatedAt: summary.generatedAt,
                 error: nil,
-                recordedAt: currentTimestamp()
+                recordedAt: currentTimestamp(),
+                cacheWriteStatus: cacheWriteResult?.status,
+                cacheWrittenAt: cacheWriteResult?.writtenAt,
+                cacheSummaryGeneratedAt: cacheWriteResult?.summaryGeneratedAt,
+                watchPushStatus: watchPushStatus,
+                safeCacheError: cacheWriteResult?.safeError
             )
         )
     }

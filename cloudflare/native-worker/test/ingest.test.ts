@@ -63,11 +63,14 @@ describe.sequential("native TS Worker write API parity", () => {
 
   it("writes ingest and limits payloads, then matches Python write-then-read value golden", async () => {
     await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
+    const counts = await tableCounts();
+    expect(counts.limit_windows, "D1 limit_windows must be non-empty after /ingest-limits").toBeGreaterThan(0);
 
     const records = await readRecords(fixture.date);
     const golden = JSON.parse(await readFile(ingestGoldenPath, "utf8")) as ContractRecord[];
     expectSourceHealth(records);
-    expect(records).toEqual(golden);
+    expectMobileLimitsWindows(records);
+    expect(normalizeStoreMetadata(records)).toEqual(normalizeStoreMetadata(golden));
   });
 
   it("keeps repeated ingest payload batches idempotent without token or source health drift", async () => {
@@ -106,7 +109,7 @@ describe.sequential("native TS Worker write API parity", () => {
     const records = await readRecords(fixture.date);
     const golden = JSON.parse(await readFile(ingestGoldenPath, "utf8")) as ContractRecord[];
     expectSourceHealth(records);
-    expect(records).toEqual(golden);
+    expect(normalizeStoreMetadata(records)).toEqual(normalizeStoreMetadata(golden));
 
     const restoredCounts = await tableCounts();
     expect(restoredCounts.collection_runs).toBeGreaterThan(0);
@@ -431,6 +434,30 @@ function expectSourceHealth(records: ContractRecord[]): void {
         expect(sources.some((row) => row.source_id === "linux-stale-eve" && row.status === "stale"), record.name).toBe(true);
       }
     }
+  }
+}
+
+function normalizeStoreMetadata(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => normalizeStoreMetadata(item));
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item),
+      ]),
+    );
+  }
+  return value;
+}
+
+function expectMobileLimitsWindows(records: ContractRecord[]): void {
+  for (const record of records.filter((item) => item.name.startsWith("mobile-summary-"))) {
+    const body = record.response.body as Record<string, unknown>;
+    const limits = body.limits as Record<string, unknown>;
+    const windows = limits.windows as Array<Record<string, unknown>>;
+    expect(Array.isArray(windows), record.name).toBe(true);
+    expect(windows.length, record.name).toBeGreaterThan(0);
+    expect(windows.every((row) => row.official === true && row.confidence === "observed" && row.status === "ok"), record.name).toBe(true);
   }
 }
 

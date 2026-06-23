@@ -344,6 +344,9 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("MobileSummaryCache.companionPeriodID", app_content)
         self.assertIn("MobileSummaryAPIClient(config: config).load()", app_content)
         self.assertIn("MobileSummaryCache.writeToAppGroup(loadedSummary)", app_content)
+        self.assertNotIn("try? MobileSummaryCache.writeToAppGroup", app_content)
+        self.assertIn("watchPushStatus:", app_content)
+        self.assertIn("cacheWriteResult", app_content)
         self.assertIn("WatchSummaryBridge.shared.push(loadedSummary)", app_content)
         self.assertIn("BGTaskSchedulerPermittedIdentifiers", plist_content)
         self.assertIn(task_id, plist_content)
@@ -417,6 +420,14 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             / "AIUsageWatchWidgetExtension"
             / "AIUsageWatchWidget.swift"
         )
+        watch_app = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "AIUsageWatchApp.swift"
+        )
 
         for path in [watch_entitlements, watch_widget_entitlements, watch_store, watch_widget]:
             with self.subTest(path=str(path)):
@@ -431,6 +442,18 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("static let appGroupIdentifier = \"group.com.wangzhipeng.aiusage.watch\"", store_content)
         self.assertIn("containerURL(forSecurityApplicationGroupIdentifier:", store_content)
         self.assertIn("last-watch-summary.json", store_content)
+        self.assertIn("last-watch-cache-receipt.json", store_content)
+        self.assertIn("cacheWriteStatus", store_content)
+        self.assertIn("summaryGeneratedAt", store_content)
+        self.assertIn("cacheWrittenAt", store_content)
+        self.assertIn("delivery", store_content)
+        watch_app_content = watch_app.read_text(encoding="utf-8")
+        self.assertIn("watchconnectivity_application_context", watch_app_content)
+        self.assertLess(
+            watch_app_content.index("self.summary = decoded"),
+            watch_app_content.index('guard receipt.cacheWriteStatus == "ok"'),
+        )
+        self.assertNotIn("try? data.write", store_content)
         self.assertNotIn(".cachesDirectory", store_content)
         self.assertNotIn("AIUsageAPIToken", store_content)
         self.assertNotIn("Bearer", store_content)

@@ -13,6 +13,7 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
   const accountContext = accountContextFrom(snapshot.account_hourly, snapshot.ai_accounts);
   const windows = limits
     .map((row) => limitWindow(row, accountContext))
+    .filter((window) => effectiveLimitWindow(window))
     .filter((window) => !expiredShortWindow(window, generatedAt));
   const byMachine = groupRows(list<AnyRecord>(groups.by_machine));
   const visibleSourceIds = new Set(byMachine.flatMap((row) => list<string>(row.source_ids).map(String)));
@@ -57,6 +58,7 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
       total_count: windows.length,
       windows,
     },
+    metadata: mobileMetadata(snapshot, windows),
   };
 }
 
@@ -126,6 +128,25 @@ function limitWindow(row: AnyRecord, accountContext: Record<string, AnyRecord>):
   if (accountLabel) result.account_label = accountLabel;
   if (planLabel) result.account_plan_label = planLabel;
   return result;
+}
+
+function effectiveLimitWindow(window: AnyRecord): boolean {
+  return window.official === true &&
+    window.confidence === "observed" &&
+    window.status === "ok" &&
+    window.source_type !== "active_limits_cache";
+}
+
+function mobileMetadata(snapshot: AnyRecord, windows: AnyRecord[]): AnyRecord {
+  const metadata = dict(snapshot.metadata);
+  const observed = windows.map((window) => str(window.observed_at)).filter(Boolean).sort();
+  return {
+    backend_mode: metadata.backend_mode || "native_d1_staging",
+    canonical_store: metadata.canonical_store || "cloudflare_d1",
+    read_model_generated_at: metadata.read_model_generated_at || snapshot.generated_at,
+    freshness_status: metadata.freshness_status || (windows.length ? "ok" : "unknown"),
+    limits_observed_at: metadata.limits_observed_at || (observed.length ? observed[observed.length - 1] : null),
+  };
 }
 
 function groupRows(rows: AnyRecord[]): AnyRecord[] {

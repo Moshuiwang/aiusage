@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 from datetime import datetime, timezone as dt_timezone
 from typing import Any, Dict, Optional
 
 from .auth import TokenAuthenticator
 from .ingest import IngestResponse, IngestValidationError, validate_ingest_payload
-from .limits import LimitContractError, parse_limit_window
+from .limits import LOCAL_ESTIMATE_SOURCE_TYPES, LimitContractError, parse_limit_window
 from .mobile_summary import build_mobile_summary
 from .normalize import (
     normalize_ingest_block_request,
@@ -223,6 +224,7 @@ def build_health_response(
         counts[status] = counts.get(status, 0) + 1
 
     db_size = os.path.getsize(db_path) if os.path.exists(db_path) else 0
+    limits_health = _limits_health(db_path)
     latest_mtime = (
         datetime.fromtimestamp(os.path.getmtime(latest_path), dt_timezone.utc).astimezone().isoformat()
         if os.path.exists(latest_path)
@@ -232,6 +234,8 @@ def build_health_response(
     return {
         "status": "ok",
         "generated_at": now(),
+        "backend_mode": "origin_direct",
+        "canonical_store": "origin_sqlite",
         "database": {
             "path": db_path,
             "size_bytes": db_size,
@@ -254,7 +258,51 @@ def build_health_response(
                 if isinstance(source, dict) and str(source.get("status") or "unknown") != "ok"
             ],
         },
+        "limits": limits_health,
     }
+
+
+def _limits_health(db_path: str) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "latest_observed_at": None,
+        "effective_window_count": 0,
+        "raw_window_count": 0,
+        "stale_window_count": 0,
+    }
+    if not os.path.exists(db_path):
+        return result
+    try:
+        with sqlite3.connect(db_path) as conn:
+            if not _sqlite_table_exists(conn, "limit_windows"):
+                return result
+            rows = conn.execute(
+                """
+                SELECT observed_at, source_type, confidence, status
+                FROM limit_windows
+                """
+            ).fetchall()
+    except sqlite3.Error:
+        return result
+    effective_observed = [
+        str(observed_at or "")
+        for observed_at, source_type, confidence, status in rows
+        if status == "ok"
+        and confidence == "observed"
+        and source_type not in LOCAL_ESTIMATE_SOURCE_TYPES
+    ]
+    result["raw_window_count"] = len(rows)
+    result["effective_window_count"] = len(effective_observed)
+    result["stale_window_count"] = len(rows) - len(effective_observed)
+    result["latest_observed_at"] = max(effective_observed, default=None)
+    return result
+
+
+def _sqlite_table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,),
+    ).fetchone()
+    return row is not None
 
 
 def validate_limits_ingest_payload(payload: Any):

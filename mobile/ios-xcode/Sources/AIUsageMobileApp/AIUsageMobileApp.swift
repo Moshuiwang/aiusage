@@ -52,9 +52,14 @@ enum WatchSummaryBackgroundRefresh {
         guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
             return
         }
-        MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
-        try? MobileSummaryCache.writeToAppGroup(loadedSummary)
-        WatchSummaryBridge.shared.push(loadedSummary)
+        let cacheWriteResult = MobileSummaryCache.writeToAppGroup(loadedSummary)
+        let watchPushStatus = WatchSummaryBridge.shared.push(loadedSummary)
+        MobileRuntimeDiagnostics.success(
+            config: config,
+            summary: loadedSummary,
+            cacheWriteResult: cacheWriteResult,
+            watchPushStatus: watchPushStatus
+        )
     }
 }
 
@@ -150,8 +155,13 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
-            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
-            shareWithCompanionIfNeeded(loadedSummary)
+            let companionEvidence = shareWithCompanionIfNeeded(loadedSummary)
+            MobileRuntimeDiagnostics.success(
+                config: config,
+                summary: loadedSummary,
+                cacheWriteResult: companionEvidence.cacheWriteResult,
+                watchPushStatus: companionEvidence.watchPushStatus
+            )
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
                 summary = loadedSummary
@@ -182,8 +192,13 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
-            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
-            shareWithCompanionIfNeeded(loadedSummary)
+            let companionEvidence = shareWithCompanionIfNeeded(loadedSummary)
+            MobileRuntimeDiagnostics.success(
+                config: config,
+                summary: loadedSummary,
+                cacheWriteResult: companionEvidence.cacheWriteResult,
+                watchPushStatus: companionEvidence.watchPushStatus
+            )
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
                 summary = loadedSummary
@@ -198,13 +213,14 @@ struct LiveSummaryContainerView: View {
         }
     }
 
-    private func shareWithCompanionIfNeeded(_ loadedSummary: MobileSummary) {
+    private func shareWithCompanionIfNeeded(_ loadedSummary: MobileSummary) -> CompanionShareEvidence {
         guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
-            return
+            return CompanionShareEvidence(cacheWriteResult: nil, watchPushStatus: nil)
         }
-        try? MobileSummaryCache.writeToAppGroup(loadedSummary)
-        WatchSummaryBridge.shared.push(loadedSummary)
+        let cacheWriteResult = MobileSummaryCache.writeToAppGroup(loadedSummary)
+        let watchPushStatus = WatchSummaryBridge.shared.push(loadedSummary)
         scheduleWatchSummaryBackgroundRefresh()
+        return CompanionShareEvidence(cacheWriteResult: cacheWriteResult, watchPushStatus: watchPushStatus)
     }
 
     private func scheduleWatchSummaryBackgroundRefresh() {
@@ -224,14 +240,24 @@ struct LiveSummaryContainerView: View {
         }
         do {
             let loadedSummary = try await MobileSummaryAPIClient(config: config).load()
-            MobileRuntimeDiagnostics.success(config: config, summary: loadedSummary)
-            shareWithCompanionIfNeeded(loadedSummary)
+            let companionEvidence = shareWithCompanionIfNeeded(loadedSummary)
+            MobileRuntimeDiagnostics.success(
+                config: config,
+                summary: loadedSummary,
+                cacheWriteResult: companionEvidence.cacheWriteResult,
+                watchPushStatus: companionEvidence.watchPushStatus
+            )
             cachedSummaries[loadedSummary.period.id] = loadedSummary
         } catch {
             MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
             return
         }
     }
+}
+
+private struct CompanionShareEvidence {
+    let cacheWriteResult: MobileSummaryCacheWriteResult?
+    let watchPushStatus: String?
 }
 
 enum LoadState: Equatable {
@@ -275,16 +301,24 @@ final class WatchSummaryBridge: NSObject, WCSessionDelegate, @unchecked Sendable
         session.activate()
     }
 
-    func push(_ summary: MobileSummary) {
+    func push(_ summary: MobileSummary) -> String {
         guard let session, session.activationState == .activated else {
-            return
+            return "session_unavailable"
         }
-        guard let data = try? JSONEncoder().encode(summary) else {
-            return
+        let data: Data
+        do {
+            data = try JSONEncoder().encode(summary)
+        } catch {
+            return "encode_failed"
         }
         let context = ["mobileSummary": data]
-        try? session.updateApplicationContext(context)
+        do {
+            try session.updateApplicationContext(context)
+        } catch {
+            return "failed"
+        }
         session.transferCurrentComplicationUserInfo(context)
+        return "queued"
     }
 
     func session(

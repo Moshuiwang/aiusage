@@ -13,6 +13,7 @@ REQUIRED_FIELDS = (
 )
 
 LOCAL_ESTIMATE_SOURCE_TYPES = {
+    "active_limits_cache",
     "local_history_estimate",
     "ccusage_daily",
     "ccusage_blocks",

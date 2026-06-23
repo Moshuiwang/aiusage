@@ -4,9 +4,12 @@ import Foundation
 enum WatchSummaryStore {
     static let appGroupIdentifier = "group.com.wangzhipeng.aiusage.watch"
     static let fileName = "last-watch-summary.json"
+    static let receiptFileName = "last-watch-cache-receipt.json"
 
     static func read(fileManager: FileManager = .default) -> WatchMobileSummary? {
-        guard let data = try? Data(contentsOf: url(fileManager: fileManager)) else {
+        guard let summaryURL = url(fileName: fileName, fileManager: fileManager),
+              let data = try? Data(contentsOf: summaryURL)
+        else {
             return nil
         }
         guard let summary = try? JSONDecoder().decode(WatchMobileSummary.self, from: data),
@@ -17,23 +20,144 @@ enum WatchSummaryStore {
         return summary
     }
 
-    static func write(_ summary: WatchMobileSummary, fileManager: FileManager = .default) {
-        guard summary.period.id == "today" else {
-            return
+    static func readReceipt(fileManager: FileManager = .default) -> WatchSummaryCacheReceipt? {
+        guard let receiptURL = url(fileName: receiptFileName, fileManager: fileManager),
+              let data = try? Data(contentsOf: receiptURL)
+        else {
+            return nil
         }
-        let target = url(fileManager: fileManager)
-        try? fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-        guard let data = try? JSONEncoder.watchSummaryCache.encode(summary) else {
-            return
-        }
-        try? data.write(to: target, options: [.atomic])
+        return try? JSONDecoder().decode(WatchSummaryCacheReceipt.self, from: data)
     }
 
-    private static func url(fileManager: FileManager) -> URL {
+    static func write(
+        _ summary: WatchMobileSummary,
+        delivery: String,
+        fileManager: FileManager = .default
+    ) -> WatchSummaryCacheReceipt {
+        guard summary.period.id == "today" else {
+            let receipt = WatchSummaryCacheReceipt(
+                period: summary.period.id,
+                summaryGeneratedAt: summary.generatedAt,
+                receivedAt: currentTimestamp(),
+                cacheWrittenAt: nil,
+                cacheFile: fileName,
+                cacheWriteStatus: "not_attempted",
+                delivery: delivery,
+                safeError: "not_today_summary"
+            )
+            writeReceipt(receipt, fileManager: fileManager)
+            return receipt
+        }
+        guard let target = url(fileName: fileName, fileManager: fileManager) else {
+            return WatchSummaryCacheReceipt(
+                period: summary.period.id,
+                summaryGeneratedAt: summary.generatedAt,
+                receivedAt: currentTimestamp(),
+                cacheWrittenAt: nil,
+                cacheFile: fileName,
+                cacheWriteStatus: "failed",
+                delivery: delivery,
+                safeError: "app_group_container_unavailable"
+            )
+        }
+        let receivedAt = currentTimestamp()
+        do {
+            try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try JSONEncoder.watchSummaryCache.encode(summary)
+            try data.write(to: target, options: [.atomic])
+            let receipt = WatchSummaryCacheReceipt(
+                period: summary.period.id,
+                summaryGeneratedAt: summary.generatedAt,
+                receivedAt: receivedAt,
+                cacheWrittenAt: currentTimestamp(),
+                cacheFile: fileName,
+                cacheWriteStatus: "ok",
+                delivery: delivery,
+                safeError: nil
+            )
+            writeReceipt(receipt, fileManager: fileManager)
+            return receipt
+        } catch {
+            let receipt = WatchSummaryCacheReceipt(
+                period: summary.period.id,
+                summaryGeneratedAt: summary.generatedAt,
+                receivedAt: receivedAt,
+                cacheWrittenAt: nil,
+                cacheFile: fileName,
+                cacheWriteStatus: "failed",
+                delivery: delivery,
+                safeError: safeCacheError(from: error)
+            )
+            writeReceipt(receipt, fileManager: fileManager)
+            return receipt
+        }
+    }
+
+    private static func writeReceipt(_ receipt: WatchSummaryCacheReceipt, fileManager: FileManager) {
+        guard let receiptURL = url(fileName: receiptFileName, fileManager: fileManager) else {
+            return
+        }
+        do {
+            try fileManager.createDirectory(at: receiptURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let data = try JSONEncoder.watchSummaryCache.encode(receipt)
+            try data.write(to: receiptURL, options: [.atomic])
+        } catch {
+            return
+        }
+    }
+
+    private static func url(fileName: String, fileManager: FileManager) -> URL? {
         if let directory = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
             return directory.appendingPathComponent(fileName)
         }
-        return fileManager.temporaryDirectory.appendingPathComponent(fileName)
+        return nil
+    }
+
+    private static func currentTimestamp() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
+    private static func safeCacheError(from error: Error) -> String {
+        switch error {
+        case EncodingError.invalidValue:
+            return "encode_failed"
+        default:
+            return "write_failed"
+        }
+    }
+}
+
+struct WatchSummaryCacheReceipt: Codable, Equatable {
+    let schemaVersion: Int
+    let period: String
+    let summaryGeneratedAt: String?
+    let receivedAt: String
+    let cacheWrittenAt: String?
+    let cacheFile: String
+    let cacheWriteStatus: String
+    let delivery: String
+    let safeError: String?
+
+    init(
+        schemaVersion: Int = 1,
+        period: String,
+        summaryGeneratedAt: String?,
+        receivedAt: String,
+        cacheWrittenAt: String?,
+        cacheFile: String,
+        cacheWriteStatus: String,
+        delivery: String,
+        safeError: String?
+    ) {
+        self.schemaVersion = schemaVersion
+        self.period = period
+        self.summaryGeneratedAt = summaryGeneratedAt
+        self.receivedAt = receivedAt
+        self.cacheWrittenAt = cacheWrittenAt
+        self.cacheFile = cacheFile
+        self.cacheWriteStatus = cacheWriteStatus
+        self.delivery = delivery
+        self.safeError = safeError
     }
 }
 

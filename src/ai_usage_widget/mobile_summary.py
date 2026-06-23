@@ -22,6 +22,7 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         for row in limits
         if isinstance(row, dict)
         for window in [_limit_window(row, account_context)]
+        if _effective_limit_window(window)
         if not _expired_short_window(window, generated_at)
     ]
     by_machine = _group_rows(_list(groups.get("by_machine")))
@@ -79,6 +80,7 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "total_count": len(windows),
             "windows": windows,
         },
+        "metadata": _mobile_metadata(snapshot, windows),
     }
 
 
@@ -165,6 +167,30 @@ def _limit_window(row: Dict[str, Any], account_context: Dict[str, Dict[str, Any]
     if plan_label:
         result["account_plan_label"] = plan_label
     return result
+
+
+def _effective_limit_window(window: Dict[str, Any]) -> bool:
+    return (
+        window.get("official") is True
+        and window.get("confidence") == "observed"
+        and window.get("status") == "ok"
+        and window.get("source_type") != "active_limits_cache"
+    )
+
+
+def _mobile_metadata(snapshot: Dict[str, Any], windows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    metadata = _dict(snapshot.get("metadata"))
+    limits_observed_at = metadata.get("limits_observed_at") or max(
+        (str(window.get("observed_at") or "") for window in windows),
+        default=None,
+    )
+    return {
+        "backend_mode": metadata.get("backend_mode") or "origin_direct",
+        "canonical_store": metadata.get("canonical_store") or "origin_sqlite",
+        "read_model_generated_at": metadata.get("read_model_generated_at") or snapshot.get("generated_at"),
+        "freshness_status": metadata.get("freshness_status") or ("ok" if windows else "unknown"),
+        "limits_observed_at": limits_observed_at,
+    }
 
 
 def _group_rows(rows: List[Any]) -> List[Dict[str, Any]]:

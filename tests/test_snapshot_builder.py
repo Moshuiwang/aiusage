@@ -601,6 +601,64 @@ class TestSnapshotBuilder(unittest.TestCase):
             ],
         )
 
+    def test_build_snapshot_filters_old_active_limits_cache_from_effective_windows(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=self.items,
+        )
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="old-cache",
+                    window="session",
+                    used_percent=99.0,
+                    remaining_percent=1.0,
+                    reset_at="2026-06-01T18:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:44:00+08:00",
+                    source_type="active_limits_cache",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="runtime",
+                    window="session",
+                    used_percent=3.0,
+                    remaining_percent=97.0,
+                    reset_at="2026-06-01T18:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="runtime_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str=self.date_str,
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-01T10:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(
+            [(row["source_id"], row["source_type"], row["remaining_percent"]) for row in snapshot["limits"]],
+            [("runtime", "runtime_api", 97.0)],
+        )
+
     def test_build_snapshot_excludes_expired_limit_windows(self) -> None:
         write_sqlite(
             path=self.db_path,
