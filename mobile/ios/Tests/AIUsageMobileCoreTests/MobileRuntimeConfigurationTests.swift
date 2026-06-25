@@ -159,10 +159,14 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
             generatedAt: "2026-06-22T13:11:10+08:00",
             error: nil,
             recordedAt: "2026-06-22T14:40:00Z",
+            refreshSource: "foreground_initial_load",
+            appVersion: "1.2.3",
+            buildNumber: "456",
             cacheWriteStatus: "ok",
             cacheWrittenAt: "2026-06-22T14:40:01Z",
             cacheSummaryGeneratedAt: "2026-06-22T13:11:10+08:00",
             watchPushStatus: "queued",
+            watchPushReason: "update_application_context_queued",
             safeCacheError: nil
         )
 
@@ -173,10 +177,18 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
         XCTAssertFalse(raw.contains("Bearer"))
         XCTAssertFalse(raw.contains("bundle-production-token"))
         XCTAssertTrue(raw.contains("\"cacheWriteStatus\" : \"ok\""))
+        XCTAssertTrue(raw.contains("\"refreshSource\" : \"foreground_initial_load\""))
+        XCTAssertTrue(raw.contains("\"appVersion\" : \"1.2.3\""))
+        XCTAssertTrue(raw.contains("\"buildNumber\" : \"456\""))
         XCTAssertTrue(raw.contains("\"watchPushStatus\" : \"queued\""))
+        XCTAssertTrue(raw.contains("\"watchPushReason\" : \"update_application_context_queued\""))
         let decoded = try XCTUnwrap(MobileRuntimeDiagnostics.read(from: url))
         XCTAssertEqual(decoded, diagnostic)
         XCTAssertEqual(decoded.requestURL, "https://aiusage.chunbai.com/api/mobile/summary?period=week")
+        XCTAssertEqual(decoded.refreshSource, "foreground_initial_load")
+        XCTAssertEqual(decoded.appVersion, "1.2.3")
+        XCTAssertEqual(decoded.buildNumber, "456")
+        XCTAssertEqual(decoded.watchPushReason, "update_application_context_queued")
     }
 
     func testRuntimeDiagnosticRecordsFailedCacheWriteWithoutLocalPathOrToken() throws {
@@ -191,10 +203,14 @@ final class MobileRuntimeConfigurationTests: XCTestCase {
             generatedAt: "2026-06-23T22:22:36+08:00",
             error: nil,
             recordedAt: "2026-06-23T14:23:00Z",
+            refreshSource: "background_app_refresh",
+            appVersion: "1.2.3",
+            buildNumber: "456",
             cacheWriteStatus: "failed",
             cacheWrittenAt: nil,
             cacheSummaryGeneratedAt: "2026-06-23T22:22:36+08:00",
             watchPushStatus: "not_attempted",
+            watchPushReason: nil,
             safeCacheError: "app_group_container_unavailable"
         )
 

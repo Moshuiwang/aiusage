@@ -2,7 +2,7 @@
 
 Version: V2
 ID: TP-V2-085
-Status: in_progress
+Status: done
 Type: implementation
 Depends on: TP-V2-084
 Parallel with: none
@@ -76,7 +76,8 @@ iPhone background/app refresh
 
 ## Acceptance Criteria
 
-- iPhone refresh can update Watch data without the user opening the iPhone App every time.
+- When iOS runs the background refresh task, it fetches the today summary, writes the iPhone companion cache, pushes WatchConnectivity, and reschedules the next refresh.
+- iPhone/Watch surfaces do not promise realtime refresh; if iOS does not wake the app, Watch keeps the last good data and shows stale state honestly.
 - Watch still shows stale state when no fresh summary has arrived.
 - Watch complications match the accepted double-ring and Today chart UI.
 - Watch does not own server credentials or direct data collection.

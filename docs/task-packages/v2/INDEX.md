@@ -34,6 +34,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 1. TP-V2-071 Multi Platform Data And Design Verification：用 API/DB/screenshot/Anti Gravity 验收 Web、iOS 073~080 线、iOS Widget、watchOS。
 2. TP-V2-072 Final Review PR Deploy：最终 AI Review、提交、Push、PR 和必要部署。
 3. TP-V2-098 Fact Check Board and Mac/D1 Accuracy：先修定时核查落板、D1 today tokens、Mac current 口径和 Mac 菜单栏缓存差异说明；不碰 iPhone/Watch。
+4. 后续 iPhone/Watch 真机验收：在 PR 合并或 TestFlight 分发前复核设备截图、Watch face complication 可见性和 read-only App Group 读取路径。
 
 ## 任务列表
 
@@ -122,7 +123,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-082 | [TP-V2-082-test-baseline-backlog-reconcile.md](../../archive/task-packages/v2/completed/TP-V2-082-test-baseline-backlog-reconcile.md) | done | Round 9 approval | none |
 | TP-V2-083 | [TP-V2-083-cloudflare-entrypoint-migration.md](TP-V2-083-cloudflare-entrypoint-migration.md) | in_progress | Cloudflare resources created | none |
 | TP-V2-084 | [TP-V2-084-watch-companion-testflight.md](TP-V2-084-watch-companion-testflight.md) | draft | TP-V2-070, PRD/architecture approval | none |
-| TP-V2-085 | [TP-V2-085-watch-refresh-best-practice.md](TP-V2-085-watch-refresh-best-practice.md) | in_progress | TP-V2-084 | none |
+| TP-V2-085 | [TP-V2-085-watch-refresh-best-practice.md](TP-V2-085-watch-refresh-best-practice.md) | done | TP-V2-084 | none |
 | TP-V2-086 | [TP-V2-086-m0-api-contract-tests.md](TP-V2-086-m0-api-contract-tests.md) | done | Cloudflare migration objective | none |
 | TP-V2-087 | [TP-V2-087-m1-d1-schema-and-quota.md](TP-V2-087-m1-d1-schema-and-quota.md) | done | TP-V2-086 | none |
 | TP-V2-088 | [TP-V2-088-m2-ts-worker-readonly-api.md](TP-V2-088-m2-ts-worker-readonly-api.md) | done | TP-V2-086, TP-V2-087 | none |
@@ -137,6 +138,8 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-097 | [TP-V2-097-data-freshness-accuracy-contract.md](TP-V2-097-data-freshness-accuracy-contract.md) | draft | TP-V2-085, TP-V2-090 | none |
 | TP-V2-098 | [TP-V2-098-fact-check-board-and-mac-d1-accuracy.md](TP-V2-098-fact-check-board-and-mac-d1-accuracy.md) | ready | none | TP-V2-097 |
 | TP-V2-099 | [TP-V2-099-macos-menu-bar-quota-window-slots.md](TP-V2-099-macos-menu-bar-quota-window-slots.md) | done | TP-V2-064, TP-V2-098 | none |
+| TP-V2-100 | [TP-V2-100-watch-sync-diagnostics-and-version-verification.md](TP-V2-100-watch-sync-diagnostics-and-version-verification.md) | done | TP-V2-085 | TP-V2-098 |
+| TP-V2-101 | [TP-V2-101-watch-circular-complication-reset-at-ui.md](TP-V2-101-watch-circular-complication-reset-at-ui.md) | done | TP-V2-084 | none |
 
 ## subagent 分配建议
 
@@ -175,6 +178,8 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 - Mobile App agent：执行 TP-V2-080，把 iOS 底部周期切换从自定义毛玻璃胶囊升级为苹果推荐的原生 Liquid Glass Tab Bar / TabView 体验；如果当前 SDK 不支持，必须明确报告 fallback。
 - Docs / QA agent：执行 TP-V2-081，做目录与文档治理，只收敛入口、索引、归档和文档漂移检查，不改产品代码、API、SQLite schema 或客户端物理目录。
 - Docs / QA agent：TP-V2-082 已完成测试基线和 backlog 对账，删除废弃方向测试，保留真实 backlog。
-- Watch agent：执行 TP-V2-085，按 Apple 推荐路径实现 iPhone 后台刷新、WatchConnectivity、Watch App Group cache 和 WidgetKit complication 刷新闭环，最终以 iPhone 和 Apple Watch 安装后数据正常为验收目标。
+- Watch agent：TP-V2-085 已完成，按 Apple 推荐路径实现 iPhone 后台刷新、WatchConnectivity、Watch App Group cache 和 WidgetKit complication 刷新闭环，并完成 iPhone/Watch 安装后数据同步验收。
 - Data Accuracy agent：先执行 TP-V2-098，把本轮可控的定时核查落板、D1 today tokens、Mac current 口径和 Mac 菜单栏缓存差异说明收口；不碰 iPhone/Watch。TP-V2-097 保留为后续更大的数据新鲜度合同。
 - macOS Client agent：TP-V2-099 已完成，menu bar 额度圆环槽位固定：5h 缺数据时不能挪用 7d，7d 仍显示在 7d 行。
+- Watch agent：TP-V2-100 已完成，补齐 iPhone/Watch freshness 诊断、WatchConnectivity 失败原因、刷新触发来源和安装版本对齐证据；保持 Watch 不直连服务端。
+- Watch agent：TP-V2-101 已完成，把 Watch 圆形小组件落到 Reset At 双圆环 UI；只改 `.accessoryCircular` 用户可见展示，不碰服务端数据口径。

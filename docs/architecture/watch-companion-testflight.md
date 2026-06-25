@@ -57,7 +57,7 @@ Watch App 只消费 iPhone 同步来的摘要：
 表盘组件不等同于 Watch App 首页。它只展示最少信息：
 
 - `.accessoryRectangular`：额度百分比 + reset time，作为首选承载。
-- `.accessoryCircular`：一个额度百分比或状态，作为紧凑承载。
+- `.accessoryCircular`：Reset At 双圆环紧凑承载，中心展示 5 小时窗口本地重置时间，外圈固定 5 小时窗口，内圈固定长窗口，并在 stale 时给出可见状态。
 - `.accessoryInline`：短文字额度或 stale 状态，作为文本承载。
 
 组件必须由独立 watchOS WidgetKit extension 提供，并嵌入 `AIUsageWatchApp`。Watch App 和 watchOS WidgetKit extension 必须声明同一个 watchOS App Group，用共享容器读写摘要缓存；不能依赖 Watch App 私有 `.cachesDirectory`。它可以 deep link 回 Watch App，但不能要求用户打开 App 才刷新一次。`.accessoryCorner` 可作为后续增强，不阻塞本轮。

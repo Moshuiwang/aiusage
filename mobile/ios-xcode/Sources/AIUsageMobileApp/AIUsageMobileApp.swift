@@ -39,26 +39,36 @@ enum WatchSummaryBackgroundRefresh {
             period: MobileSummaryCache.companionPeriodID,
             tokenStore: tokenStore
         ) else {
-            MobileRuntimeDiagnostics.configurationRequired(period: MobileSummaryCache.companionPeriodID)
+            MobileRuntimeDiagnostics.configurationRequired(
+                period: MobileSummaryCache.companionPeriodID,
+                refreshSource: .backgroundAppRefresh
+            )
             return
         }
         let loadedSummary: MobileSummary
         do {
             loadedSummary = try await MobileSummaryAPIClient(config: config).load()
         } catch {
-            MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
+            MobileRuntimeDiagnostics.failure(
+                period: MobileSummaryCache.companionPeriodID,
+                config: config,
+                error: error,
+                refreshSource: .backgroundAppRefresh
+            )
             return
         }
         guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
             return
         }
         let cacheWriteResult = MobileSummaryCache.writeToAppGroup(loadedSummary)
-        let watchPushStatus = WatchSummaryBridge.shared.push(loadedSummary)
+        let watchPushResult = WatchSummaryBridge.shared.push(loadedSummary)
         MobileRuntimeDiagnostics.success(
             config: config,
             summary: loadedSummary,
+            refreshSource: .backgroundAppRefresh,
             cacheWriteResult: cacheWriteResult,
-            watchPushStatus: watchPushStatus
+            watchPushStatus: watchPushResult.status.rawValue,
+            watchPushReason: watchPushResult.reason.rawValue
         )
     }
 }
@@ -88,13 +98,13 @@ struct LiveSummaryContainerView: View {
             initialTabID: initialTabID,
             refreshingPeriodID: loadState.refreshingPeriodID,
             onPeriodSelected: { period in
-                Task { await loadLiveSummary(period: period) }
+                Task { await loadLiveSummary(period: period, refreshSource: .foregroundInitialLoad) }
             },
             onRefresh: { period in
-                Task { await refreshLiveSummary(period: period) }
+                Task { await refreshLiveSummary(period: period, refreshSource: .pullToRefresh) }
             },
             onRefreshAsync: { period in
-                await refreshLiveSummary(period: period)
+                await refreshLiveSummary(period: period, refreshSource: .pullToRefresh)
                 // Pull-to-refresh failures are silent — don't leave the error banner on screen
                 if case .failed = loadState { loadState = .live }
             },
@@ -114,13 +124,13 @@ struct LiveSummaryContainerView: View {
                     tokenStore: tokenStore,
                     period: summary.period.id
                 ) {
-                    Task { await refreshLiveSummary(period: summary.period.id) }
+                    Task { await refreshLiveSummary(period: summary.period.id, refreshSource: .settingsTriggeredRefresh) }
                 }
             }
             .task {
                 scheduleWatchSummaryBackgroundRefresh()
                 let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
-                await loadLiveSummary(period: initialPeriod)
+                await loadLiveSummary(period: initialPeriod, refreshSource: .foregroundInitialLoad)
                 await ensureTodayCompanionSummary(visiblePeriod: initialPeriod)
                 hasCompletedInitialLoad = true
             }
@@ -129,13 +139,13 @@ struct LiveSummaryContainerView: View {
                     return
                 }
                 Task {
-                    await refreshLiveSummary(period: summary.period.id)
+                    await refreshLiveSummary(period: summary.period.id, refreshSource: .foregroundInitialLoad)
                     await ensureTodayCompanionSummary(visiblePeriod: summary.period.id)
                 }
             }
     }
 
-    private func loadLiveSummary(period: String) async {
+    private func loadLiveSummary(period: String, refreshSource: MobileRefreshSource) async {
         switch MobilePeriodSelection.decision(
             selectedPeriodID: period,
             visibleSummary: summary,
@@ -155,7 +165,7 @@ struct LiveSummaryContainerView: View {
         let requestID = UUID()
         latestRequestID = requestID
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
-            MobileRuntimeDiagnostics.configurationRequired(period: period)
+            MobileRuntimeDiagnostics.configurationRequired(period: period, refreshSource: refreshSource)
             loadState = .configurationRequired
             return
         }
@@ -171,8 +181,10 @@ struct LiveSummaryContainerView: View {
             MobileRuntimeDiagnostics.success(
                 config: config,
                 summary: loadedSummary,
+                refreshSource: refreshSource,
                 cacheWriteResult: companionEvidence.cacheWriteResult,
-                watchPushStatus: companionEvidence.watchPushStatus
+                watchPushStatus: companionEvidence.watchPushResult?.status.rawValue,
+                watchPushReason: companionEvidence.watchPushResult?.reason.rawValue
             )
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
@@ -183,16 +195,16 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
-            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error)
+            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error, refreshSource: refreshSource)
             loadState = .failed
         }
     }
 
-    private func refreshLiveSummary(period: String) async {
+    private func refreshLiveSummary(period: String, refreshSource: MobileRefreshSource) async {
         let requestID = UUID()
         latestRequestID = requestID
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
-            MobileRuntimeDiagnostics.configurationRequired(period: period)
+            MobileRuntimeDiagnostics.configurationRequired(period: period, refreshSource: refreshSource)
             loadState = .configurationRequired
             return
         }
@@ -208,8 +220,10 @@ struct LiveSummaryContainerView: View {
             MobileRuntimeDiagnostics.success(
                 config: config,
                 summary: loadedSummary,
+                refreshSource: refreshSource,
                 cacheWriteResult: companionEvidence.cacheWriteResult,
-                watchPushStatus: companionEvidence.watchPushStatus
+                watchPushStatus: companionEvidence.watchPushResult?.status.rawValue,
+                watchPushReason: companionEvidence.watchPushResult?.reason.rawValue
             )
             cachedSummaries[loadedSummary.period.id] = loadedSummary
             withAnimation(.snappy(duration: 0.45)) {
@@ -220,19 +234,19 @@ struct LiveSummaryContainerView: View {
             guard latestRequestID == requestID else {
                 return
             }
-            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error)
+            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error, refreshSource: refreshSource)
             loadState = .failed
         }
     }
 
     private func shareWithCompanionIfNeeded(_ loadedSummary: MobileSummary) -> CompanionShareEvidence {
         guard MobileSummaryCache.isCompanionEligible(loadedSummary) else {
-            return CompanionShareEvidence(cacheWriteResult: nil, watchPushStatus: nil)
+            return CompanionShareEvidence(cacheWriteResult: nil, watchPushResult: nil)
         }
         let cacheWriteResult = MobileSummaryCache.writeToAppGroup(loadedSummary)
-        let watchPushStatus = WatchSummaryBridge.shared.push(loadedSummary)
+        let watchPushResult = WatchSummaryBridge.shared.push(loadedSummary)
         scheduleWatchSummaryBackgroundRefresh()
-        return CompanionShareEvidence(cacheWriteResult: cacheWriteResult, watchPushStatus: watchPushStatus)
+        return CompanionShareEvidence(cacheWriteResult: cacheWriteResult, watchPushResult: watchPushResult)
     }
 
     private func scheduleWatchSummaryBackgroundRefresh() {
@@ -247,7 +261,10 @@ struct LiveSummaryContainerView: View {
             period: MobileSummaryCache.companionPeriodID,
             tokenStore: tokenStore
         ) else {
-            MobileRuntimeDiagnostics.configurationRequired(period: MobileSummaryCache.companionPeriodID)
+            MobileRuntimeDiagnostics.configurationRequired(
+                period: MobileSummaryCache.companionPeriodID,
+                refreshSource: .companionTodayEnsure
+            )
             return
         }
         do {
@@ -256,12 +273,19 @@ struct LiveSummaryContainerView: View {
             MobileRuntimeDiagnostics.success(
                 config: config,
                 summary: loadedSummary,
+                refreshSource: .companionTodayEnsure,
                 cacheWriteResult: companionEvidence.cacheWriteResult,
-                watchPushStatus: companionEvidence.watchPushStatus
+                watchPushStatus: companionEvidence.watchPushResult?.status.rawValue,
+                watchPushReason: companionEvidence.watchPushResult?.reason.rawValue
             )
             cachedSummaries[loadedSummary.period.id] = loadedSummary
         } catch {
-            MobileRuntimeDiagnostics.failure(period: MobileSummaryCache.companionPeriodID, config: config, error: error)
+            MobileRuntimeDiagnostics.failure(
+                period: MobileSummaryCache.companionPeriodID,
+                config: config,
+                error: error,
+                refreshSource: .companionTodayEnsure
+            )
             return
         }
     }
@@ -269,7 +293,26 @@ struct LiveSummaryContainerView: View {
 
 private struct CompanionShareEvidence {
     let cacheWriteResult: MobileSummaryCacheWriteResult?
-    let watchPushStatus: String?
+    let watchPushResult: WatchPushResult?
+}
+
+struct WatchPushResult: Equatable {
+    let status: WatchPushStatus
+    let reason: WatchPushReason
+}
+
+enum WatchPushStatus: String {
+    case queued
+    case failed
+}
+
+enum WatchPushReason: String {
+    case updateApplicationContextQueued = "update_application_context_queued"
+    case unsupported
+    case sessionUnavailable = "session_unavailable"
+    case inactiveActivationState = "inactive_activation_state"
+    case encodeFailed = "encode_failed"
+    case updateApplicationContextFailed = "update_application_context_failed"
 }
 
 enum LoadState: Equatable {
@@ -313,24 +356,30 @@ final class WatchSummaryBridge: NSObject, WCSessionDelegate, @unchecked Sendable
         session.activate()
     }
 
-    func push(_ summary: MobileSummary) -> String {
-        guard let session, session.activationState == .activated else {
-            return "session_unavailable"
+    func push(_ summary: MobileSummary) -> WatchPushResult {
+        guard WCSession.isSupported() else {
+            return WatchPushResult(status: .failed, reason: .unsupported)
+        }
+        guard let session else {
+            return WatchPushResult(status: .failed, reason: .sessionUnavailable)
+        }
+        guard session.activationState == .activated else {
+            return WatchPushResult(status: .failed, reason: .inactiveActivationState)
         }
         let data: Data
         do {
             data = try JSONEncoder().encode(summary)
         } catch {
-            return "encode_failed"
+            return WatchPushResult(status: .failed, reason: .encodeFailed)
         }
         let context = ["mobileSummary": data]
         do {
             try session.updateApplicationContext(context)
         } catch {
-            return "failed"
+            return WatchPushResult(status: .failed, reason: .updateApplicationContextFailed)
         }
         session.transferCurrentComplicationUserInfo(context)
-        return "queued"
+        return WatchPushResult(status: .queued, reason: .updateApplicationContextQueued)
     }
 
     func session(
