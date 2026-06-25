@@ -332,6 +332,11 @@ final class MobileSummaryTests: XCTestCase {
         XCTAssertEqual(cached.limits.observedCount, 1)
     }
 
+    func testCompanionCacheUsesDevicectlReadableAppGroupCachesPath() {
+        XCTAssertEqual(MobileSummaryCache.appGroupDirectoryPath, "Library/Caches")
+        XCTAssertEqual(MobileSummaryCache.fileName, "last-mobile-summary.json")
+    }
+
     private func loadFixture() throws -> MobileSummary {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
         let data = try Data(contentsOf: url)

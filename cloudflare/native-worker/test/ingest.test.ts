@@ -121,6 +121,49 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(repeatedCounts.source_reports).toBe(restoredCounts.source_reports);
   });
 
+  it("prunes audit tables older than seven days on the scheduled retention job", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.prepare(`
+      INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status)
+      VALUES
+        (9001, '2026-06-15T02:59:00+00:00', 'Asia/Shanghai', 'test', 'ok'),
+        (9002, '2026-06-22T02:59:00+00:00', 'Asia/Shanghai', 'test', 'ok')
+    `).run();
+    await db.prepare(`
+      INSERT INTO source_reports (run_id, source_id, report_type, command, status)
+      VALUES
+        (9001, 'old-source', 'daily', 'test', 'ok'),
+        (9002, 'fresh-source', 'daily', 'test', 'ok')
+    `).run();
+    await db.prepare(`
+      INSERT INTO usage_daily (
+        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
+      )
+      VALUES (
+        'old-source', '2026-06-15', 'claude', 1, 2, 3, 4, 10, 0,
+        '2026-06-15T02:59:00+00:00', '2026-06-15T02:59:00+00:00'
+      )
+    `).run();
+
+    const worker = await mf.getWorker();
+    const scheduled = await worker.scheduled({
+      cron: "0 3 * * *",
+      scheduledTime: new Date("2026-06-24T03:00:00+00:00"),
+    });
+    expect(scheduled.outcome).toBe("ok");
+
+    expect(await auditRowCount("collection_runs")).toBe(1);
+    expect(await auditRowCount("source_reports")).toBe(1);
+    const remainingRun = await db.prepare("SELECT collected_at FROM collection_runs").first<{ collected_at: string }>();
+    const remainingReport = await db.prepare("SELECT source_id FROM source_reports").first<{ source_id: string }>();
+    const usageRows = await db.prepare("SELECT count(*) AS count FROM usage_daily WHERE source_id = ?")
+      .bind("old-source").first<{ count: number }>();
+    expect(remainingRun?.collected_at).toBe("2026-06-22T02:59:00+00:00");
+    expect(remainingReport?.source_id).toBe("fresh-source");
+    expect(usageRows?.count).toBe(1);
+  });
+
   it("writes large historical ingest payloads through HTTP without dropping source health", async () => {
     const largePayloads = buildLargeIngestPayloads();
 
@@ -320,6 +363,12 @@ describe.sequential("native TS Worker write API parity", () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     await db.prepare("DELETE FROM source_reports").run();
     await db.prepare("DELETE FROM collection_runs").run();
+  }
+
+  async function auditRowCount(table: "collection_runs" | "source_reports"): Promise<number> {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const row = await db.prepare(`SELECT count(*) AS count FROM ${table}`).first<{ count: number }>();
+    return Number(row?.count ?? 0);
   }
 });
 

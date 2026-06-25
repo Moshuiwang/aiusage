@@ -65,6 +65,7 @@ enum WatchSummaryBackgroundRefresh {
 
 struct LiveSummaryContainerView: View {
     let initialTabID: String
+    @Environment(\.scenePhase) private var scenePhase
     // Widget runtime config sharing requires explicit App Group + Keychain access group design and is intentionally deferred.
     private let tokenStore = KeychainTokenStore()
     @State private var summary: MobileSummary
@@ -72,6 +73,7 @@ struct LiveSummaryContainerView: View {
     @State private var latestRequestID = UUID()
     @State private var cachedSummaries: [String: MobileSummary] = [:]
     @State private var isShowingSettings = false
+    @State private var hasCompletedInitialLoad = false
 
     init(initialTabID: String) {
         self.initialTabID = initialTabID
@@ -120,6 +122,16 @@ struct LiveSummaryContainerView: View {
                 let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
                 await loadLiveSummary(period: initialPeriod)
                 await ensureTodayCompanionSummary(visiblePeriod: initialPeriod)
+                hasCompletedInitialLoad = true
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active, hasCompletedInitialLoad else {
+                    return
+                }
+                Task {
+                    await refreshLiveSummary(period: summary.period.id)
+                    await ensureTodayCompanionSummary(visiblePeriod: summary.period.id)
+                }
             }
     }
 

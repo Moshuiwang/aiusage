@@ -36,7 +36,10 @@ struct AIUsageWatchSummaryView: View {
                     WatchMetricPill(title: "Output", value: outputText)
                 }
 
-                WatchMetricPill(title: "Codex", value: quotaText)
+                HStack(spacing: 6) {
+                    WatchMetricPill(title: "Codex", value: codexQuotaText)
+                    WatchMetricPill(title: "Claude", value: claudeQuotaText)
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(sourceRows) { row in
@@ -93,12 +96,21 @@ struct AIUsageWatchSummaryView: View {
         summary.map { WatchSummaryFreshness.updatedText($0) } ?? "--"
     }
 
-    private var quotaText: String {
+    private var codexQuotaText: String {
         guard let summary else {
             return "--"
         }
-        let quota = WatchSummaryDisplay.quotaText(from: summary)
-        let reset = WatchSummaryDisplay.resetText(from: summary)
+        let quota = WatchSummaryDisplay.quotaText(from: summary, provider: .codex)
+        let reset = WatchSummaryDisplay.resetText(from: summary, provider: .codex)
+        return "\(quota) · \(reset)"
+    }
+
+    private var claudeQuotaText: String {
+        guard let summary else {
+            return "--"
+        }
+        let quota = WatchSummaryDisplay.quotaText(from: summary, provider: .claude)
+        let reset = WatchSummaryDisplay.resetText(from: summary, provider: .claude)
         return "\(quota) · \(reset)"
     }
 

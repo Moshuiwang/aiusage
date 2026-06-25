@@ -25,6 +25,7 @@ const LOCAL_ESTIMATE_SOURCE_TYPES = [
   "ccusage_blocks",
   "session_log_estimate",
 ];
+const AUDIT_RETENTION_DAYS = 7;
 
 function securityHeaders(): Record<string, string> {
   return {
@@ -135,7 +136,29 @@ export default {
     }
     return json({ status: "error", error_type: "not_found", message: "Endpoint not found" }, 404);
   },
+
+  async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    const scheduledTime = Number(controller.scheduledTime || 0)
+      ? new Date(controller.scheduledTime)
+      : new Date();
+    await pruneAuditTables(env.AIUSAGE_DB, scheduledTime);
+  },
 };
+
+async function pruneAuditTables(db: D1Database, now: Date): Promise<void> {
+  const cutoff = new Date(now.getTime() - AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  await db.batch([
+    db.prepare(`
+      DELETE FROM source_reports
+      WHERE run_id IN (
+        SELECT id
+        FROM collection_runs
+        WHERE datetime(collected_at) < datetime(?)
+      )
+    `).bind(cutoff),
+    db.prepare("DELETE FROM collection_runs WHERE datetime(collected_at) < datetime(?)").bind(cutoff),
+  ]);
+}
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
   let token = "";

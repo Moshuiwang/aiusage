@@ -320,6 +320,32 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("ensureTodayCompanionSummary", app_content)
         self.assertIn("transferCurrentComplicationUserInfo", app_content)
 
+    def test_watch_app_shows_codex_and_claude_quota_pills_from_same_summary(self) -> None:
+        watch_view = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "AIUsageWatchSummaryView.swift"
+        ).read_text(encoding="utf-8")
+        watch_store = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageWatchApp"
+            / "WatchSummaryStore.swift"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('WatchMetricPill(title: "Codex", value: codexQuotaText)', watch_view)
+        self.assertIn('WatchMetricPill(title: "Claude", value: claudeQuotaText)', watch_view)
+        self.assertIn("WatchSummaryDisplay.quotaText(from: summary, provider: .codex)", watch_view)
+        self.assertIn("WatchSummaryDisplay.quotaText(from: summary, provider: .claude)", watch_view)
+        self.assertIn("enum WatchQuotaProvider", watch_store)
+        self.assertIn("preferredWindow(from summary: WatchMobileSummary, provider: WatchQuotaProvider)", watch_store)
+        self.assertIn("providerMatches($0.provider, provider: provider)", watch_store)
+
     def test_ios_background_refresh_updates_today_watch_summary(self) -> None:
         app_path = (
             ROOT
@@ -372,6 +398,24 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertNotIn("WatchSummaryBackgroundRefresh.schedule()", init_body)
         self.assertIn(".backgroundTask(.appRefresh(WatchSummaryBackgroundRefresh.taskIdentifier))", app_content)
         self.assertIn("scheduleWatchSummaryBackgroundRefresh()", app_content)
+
+    def test_ios_refreshes_visible_summary_when_returning_to_foreground(self) -> None:
+        app_path = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageMobileApp"
+            / "AIUsageMobileApp.swift"
+        )
+        app_content = app_path.read_text(encoding="utf-8")
+
+        self.assertIn("@Environment(\\.scenePhase)", app_content)
+        self.assertIn("hasCompletedInitialLoad", app_content)
+        self.assertIn(".onChange(of: scenePhase)", app_content)
+        self.assertIn("phase == .active", app_content)
+        self.assertIn("await refreshLiveSummary(period: summary.period.id)", app_content)
+        self.assertIn("await ensureTodayCompanionSummary(visiblePeriod: summary.period.id)", app_content)
 
     def test_watch_companion_and_widget_targets_are_embedded_for_testflight(self) -> None:
         project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
@@ -443,6 +487,7 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("containerURL(forSecurityApplicationGroupIdentifier:", store_content)
         self.assertIn("last-watch-summary.json", store_content)
         self.assertIn("last-watch-cache-receipt.json", store_content)
+        self.assertIn("Library/Caches", store_content)
         self.assertIn("cacheWriteStatus", store_content)
         self.assertIn("summaryGeneratedAt", store_content)
         self.assertIn("cacheWrittenAt", store_content)
