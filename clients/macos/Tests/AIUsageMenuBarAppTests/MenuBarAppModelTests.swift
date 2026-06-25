@@ -80,7 +80,7 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(model.summary.period.id, "week")
     }
 
-    func testKeepsCachedSummaryQuietlyWhenRefreshFails() async throws {
+    func testShowsCachedDataWarningWhenRefreshFails() async throws {
         let loader = ControlledSummaryLoader()
         let config = MenuBarRuntimeConfig(
             serverURL: "https://aiusage.chunbai.com",
@@ -103,8 +103,45 @@ final class MenuBarAppModelTests: XCTestCase {
             model.isLoading == false
         }
 
-        XCTAssertNil(model.errorMessage)
+        XCTAssertTrue(model.errorMessage?.hasPrefix("刷新失败，正在显示缓存：") == true)
+        XCTAssertTrue(model.errorMessage?.contains("-1001") == true)
         XCTAssertEqual(model.summary, cached)
+    }
+
+    func testRefreshUsesUpdatedRuntimeConfigWithoutRestart() async throws {
+        let loader = ControlledSummaryLoader()
+        let paths = try temporaryRuntimePaths()
+        try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
+        let updatedConfig = """
+        {
+          "dashboard_url": "https://aiusage.chunbai.com/dashboard",
+          "default_period": "today",
+          "refresh_interval_seconds": 600,
+          "server_url": "https://aiusage.chunbai.com",
+          "token": "new-token"
+        }
+        """
+        try updatedConfig.write(to: paths.configURL, atomically: true, encoding: .utf8)
+        let staleConfig = MenuBarRuntimeConfig(
+            serverURL: "https://vpn2.chunbai.com:8443",
+            token: "old-token",
+            dashboardURL: nil,
+            defaultPeriod: "today"
+        )
+        let model = MenuBarAppModel(
+            paths: paths,
+            config: staleConfig,
+            cachedSummary: MobileSummary.empty(periodID: "today"),
+            loadSummary: loader.load
+        )
+
+        model.refresh()
+        try await loader.waitForRequestCount(1)
+        let requestConfig = try await loader.config(for: "today")
+
+        XCTAssertEqual(requestConfig.baseURL.absoluteString, "https://aiusage.chunbai.com")
+        XCTAssertEqual(requestConfig.bearerToken, "new-token")
+        XCTAssertEqual(model.dashboardURL?.absoluteString, "https://aiusage.chunbai.com/dashboard")
     }
 
     private func waitUntil(
@@ -127,16 +164,27 @@ final class MenuBarAppModelTests: XCTestCase {
             await Task.yield()
         }
     }
+
+    private func temporaryRuntimePaths() throws -> RuntimePaths {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ai-usage-menu-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: root)
+        }
+        return RuntimePaths(root: root)
+    }
 }
 
 private actor ControlledSummaryLoader {
     private var continuations: [String: CheckedContinuation<MobileSummary, Error>] = [:]
+    private var configs: [String: MobileSummaryClientConfig] = [:]
     private var completedPeriods: Set<String> = []
 
     func load(config: MobileSummaryClientConfig) async throws -> MobileSummary {
         defer {
             completedPeriods.insert(config.period)
         }
+        configs[config.period] = config
         return try await withCheckedThrowingContinuation { continuation in
             continuations[config.period] = continuation
         }
@@ -168,5 +216,12 @@ private actor ControlledSummaryLoader {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("Timed out waiting for \(period) completion")
+    }
+
+    func config(for period: String) throws -> MobileSummaryClientConfig {
+        guard let config = configs[period] else {
+            throw XCTSkip("No request config recorded for \(period)")
+        }
+        return config
     }
 }
