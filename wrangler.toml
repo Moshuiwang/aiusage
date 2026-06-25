@@ -5,7 +5,7 @@ workers_dev = false
 
 [vars]
 ENVIRONMENT = "development"
-ORIGIN_BASE_URL = "https://vpn2.chunbai.com:8443"
+ORIGIN_BASE_URL = "https://aiusage-native-staging.chunbai.workers.dev"
 
 [[routes]]
 pattern = "aiusage.chunbai.com/*"

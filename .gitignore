@@ -43,3 +43,4 @@ clients/macos/.swiftpm/
 mobile/ios-xcode/**/xcuserdata/
 mobile/ios-xcode/**/*.xcuserstate
 reviews/*-request.md
+docs/usage-fact-check-board.md

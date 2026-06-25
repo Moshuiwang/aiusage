@@ -3,6 +3,7 @@ import Foundation
 public enum MobileSummaryCache {
     public static let appGroupID = "group.com.wangzhipeng.aiusage"
     public static let fileName = "last-mobile-summary.json"
+    public static let appGroupDirectoryPath = "Library/Caches"
     public static let companionPeriodID = "today"
     public static let companionFreshnessInterval: TimeInterval = 2 * 60 * 60
 
@@ -111,6 +112,7 @@ public enum MobileSummaryCache {
     private static func appGroupURL(groupID: String, fileManager: FileManager) -> URL? {
         fileManager
             .containerURL(forSecurityApplicationGroupIdentifier: groupID)?
+            .appendingPathComponent(appGroupDirectoryPath, isDirectory: true)
             .appendingPathComponent(fileName)
     }
 

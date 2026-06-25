@@ -31,12 +31,12 @@ _CLI_WINDOW_PATTERNS = (
 _CLI_NEW_WINDOW_PATTERNS = (
     ("session", 300, re.compile(
         r"Current\s+session:\s*([0-9]+(?:\.[0-9]+)?)%\s+used\s*[·•]\s*resets\s+"
-        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+:[0-9]+\s*[ap]m)\s*\([^)]+\)",
+        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+(?::[0-9]+)?\s*[ap]m)\s*\([^)]+\)",
         re.IGNORECASE,
     )),
     ("week", 10080, re.compile(
         r"Current\s+week(?:\s+\([^)]+\))?:\s*([0-9]+(?:\.[0-9]+)?)%\s+used\s*[·•]\s*resets\s+"
-        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+:[0-9]+\s*[ap]m)\s*\([^)]+\)",
+        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+(?::[0-9]+)?\s*[ap]m)\s*\([^)]+\)",
         re.IGNORECASE,
     )),
 )
@@ -148,7 +148,7 @@ def _parse_human_reset_at(time_text: str, *, observed_at: str) -> str:
         raise LimitContractError("claude_cli_schema_invalid", "observed_at must be ISO 8601") from exc
 
     m = re.match(
-        r"([A-Za-z]+)\s+([0-9]+)\s+at\s+([0-9]+):([0-9]+)\s*(am|pm)",
+        r"([A-Za-z]+)\s+([0-9]+)\s+at\s+([0-9]+)(?::([0-9]+))?\s*(am|pm)",
         time_text.strip(),
         re.IGNORECASE,
     )
@@ -160,7 +160,7 @@ def _parse_human_reset_at(time_text: str, *, observed_at: str) -> str:
         raise LimitContractError("claude_cli_schema_invalid", f"Unknown month: {m.group(1)!r}")
     day = int(m.group(2))
     hour = int(m.group(3))
-    minute = int(m.group(4))
+    minute = int(m.group(4) or "0")
     if m.group(5).lower() == "am":
         hour = 0 if hour == 12 else hour
     else:

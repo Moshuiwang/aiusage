@@ -5,6 +5,7 @@ enum WatchSummaryStore {
     static let appGroupIdentifier = "group.com.wangzhipeng.aiusage.watch"
     static let fileName = "last-watch-summary.json"
     static let receiptFileName = "last-watch-cache-receipt.json"
+    static let appGroupDirectoryPath = "Library/Caches"
 
     static func read(fileManager: FileManager = .default) -> WatchMobileSummary? {
         guard let summaryURL = url(fileName: fileName, fileManager: fileManager),
@@ -40,7 +41,7 @@ enum WatchSummaryStore {
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: currentTimestamp(),
                 cacheWrittenAt: nil,
-                cacheFile: fileName,
+                cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "not_attempted",
                 delivery: delivery,
                 safeError: "not_today_summary"
@@ -54,7 +55,7 @@ enum WatchSummaryStore {
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: currentTimestamp(),
                 cacheWrittenAt: nil,
-                cacheFile: fileName,
+                cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "failed",
                 delivery: delivery,
                 safeError: "app_group_container_unavailable"
@@ -70,7 +71,7 @@ enum WatchSummaryStore {
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: receivedAt,
                 cacheWrittenAt: currentTimestamp(),
-                cacheFile: fileName,
+                cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "ok",
                 delivery: delivery,
                 safeError: nil
@@ -83,7 +84,7 @@ enum WatchSummaryStore {
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: receivedAt,
                 cacheWrittenAt: nil,
-                cacheFile: fileName,
+                cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "failed",
                 delivery: delivery,
                 safeError: safeCacheError(from: error)
@@ -108,9 +109,15 @@ enum WatchSummaryStore {
 
     private static func url(fileName: String, fileManager: FileManager) -> URL? {
         if let directory = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) {
-            return directory.appendingPathComponent(fileName)
+            return directory
+                .appendingPathComponent(appGroupDirectoryPath, isDirectory: true)
+                .appendingPathComponent(fileName)
         }
         return nil
+    }
+
+    private static func cacheFilePath(_ fileName: String) -> String {
+        "\(appGroupDirectoryPath)/\(fileName)"
     }
 
     private static func currentTimestamp() -> String {
@@ -338,29 +345,51 @@ enum WatchSummaryFreshness {
     }
 }
 
+enum WatchQuotaProvider {
+    case codex
+    case claude
+}
+
 enum WatchSummaryDisplay {
     static func preferredCodexWindow(from summary: WatchMobileSummary) -> WatchLimitWindow? {
+        preferredWindow(from: summary, provider: .codex)
+    }
+
+    static func preferredWindow(from summary: WatchMobileSummary, provider: WatchQuotaProvider) -> WatchLimitWindow? {
         summary.limits.windows
-            .filter { $0.provider == "codex" && $0.isOfficialObserved }
-            .sorted { $0.usedPercent > $1.usedPercent }
+            .filter { providerMatches($0.provider, provider: provider) && $0.isOfficialObserved }
+            .sorted { lhs, rhs in
+                if isShortWindow(lhs) != isShortWindow(rhs) {
+                    return isShortWindow(lhs)
+                }
+                return lhs.usedPercent > rhs.usedPercent
+            }
             .first
     }
 
     static func quotaText(from summary: WatchMobileSummary?) -> String {
+        quotaText(from: summary, provider: .codex)
+    }
+
+    static func quotaText(from summary: WatchMobileSummary?, provider: WatchQuotaProvider) -> String {
         guard let summary else {
             return "--"
         }
-        guard let window = preferredCodexWindow(from: summary) else {
+        guard let window = preferredWindow(from: summary, provider: provider) else {
             return "\(TokenFormat.compact(summary.period.totalTokens)) today"
         }
-        return "\(window.usedPercent)% Codex"
+        return "\(window.usedPercent)% \(shortWindowLabel(window))"
     }
 
     static func resetText(from summary: WatchMobileSummary?) -> String {
+        resetText(from: summary, provider: .codex)
+    }
+
+    static func resetText(from summary: WatchMobileSummary?, provider: WatchQuotaProvider) -> String {
         guard let summary else {
             return "reset --"
         }
-        guard let window = preferredCodexWindow(from: summary) else {
+        guard let window = preferredWindow(from: summary, provider: provider) else {
             return "updated \(WatchSummaryFreshness.updatedText(summary))"
         }
         return WatchSummaryFreshness.resetText(window.resetAt)
@@ -374,6 +403,27 @@ enum WatchSummaryDisplay {
             return "--"
         }
         return "\(preferredCodexWindow(from: summary)?.usedPercent ?? 0)"
+    }
+
+    private static func isShortWindow(_ window: WatchLimitWindow) -> Bool {
+        let value = window.window.lowercased()
+        return value == "session"
+            || value.contains("5h")
+            || ((window.windowDurationMinutes ?? 0) > 0 && (window.windowDurationMinutes ?? 0) <= 360)
+    }
+
+    private static func shortWindowLabel(_ window: WatchLimitWindow) -> String {
+        isShortWindow(window) ? "5h" : "7d"
+    }
+
+    private static func providerMatches(_ provider: String, provider target: WatchQuotaProvider) -> Bool {
+        let value = provider.lowercased()
+        switch target {
+        case .codex:
+            return value.contains("codex") || value.contains("openai")
+        case .claude:
+            return value.contains("claude") || value.contains("anthropic")
+        }
     }
 }
 

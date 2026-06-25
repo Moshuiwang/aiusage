@@ -6,6 +6,10 @@ workers_dev = true
 [vars]
 AIUSAGE_TIMEZONE = "Asia/Shanghai"
 
+[triggers]
+# Cloudflare cron uses UTC; this runs at 03:17 Asia/Shanghai.
+crons = ["17 19 * * *"]
+
 [[d1_databases]]
 binding = "AIUSAGE_DB"
 database_name = "aiusage-prod-db"

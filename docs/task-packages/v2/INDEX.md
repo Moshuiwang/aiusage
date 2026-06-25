@@ -33,6 +33,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 
 1. TP-V2-071 Multi Platform Data And Design Verification：用 API/DB/screenshot/Anti Gravity 验收 Web、iOS 073~080 线、iOS Widget、watchOS。
 2. TP-V2-072 Final Review PR Deploy：最终 AI Review、提交、Push、PR 和必要部署。
+3. TP-V2-098 Fact Check Board and Mac/D1 Accuracy：先修定时核查落板、D1 today tokens、Mac current 口径和 Mac 菜单栏缓存差异说明；不碰 iPhone/Watch。
 
 ## 任务列表
 
@@ -134,7 +135,8 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-095 | [TP-V2-095-waf-ingest-block-fix.md](TP-V2-095-waf-ingest-block-fix.md) | done | none | none |
 | TP-V2-096 | [TP-V2-096-native-source-health-parity.md](TP-V2-096-native-source-health-parity.md) | done | TP-V2-088 | none |
 | TP-V2-097 | [TP-V2-097-data-freshness-accuracy-contract.md](TP-V2-097-data-freshness-accuracy-contract.md) | draft | TP-V2-085, TP-V2-090 | none |
-| TP-V2-099 | [TP-V2-099-macos-menu-bar-quota-window-slots.md](TP-V2-099-macos-menu-bar-quota-window-slots.md) | done | TP-V2-064 | none |
+| TP-V2-098 | [TP-V2-098-fact-check-board-and-mac-d1-accuracy.md](TP-V2-098-fact-check-board-and-mac-d1-accuracy.md) | ready | none | TP-V2-097 |
+| TP-V2-099 | [TP-V2-099-macos-menu-bar-quota-window-slots.md](TP-V2-099-macos-menu-bar-quota-window-slots.md) | done | TP-V2-064, TP-V2-098 | none |
 
 ## subagent 分配建议
 
@@ -174,5 +176,5 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 - Docs / QA agent：执行 TP-V2-081，做目录与文档治理，只收敛入口、索引、归档和文档漂移检查，不改产品代码、API、SQLite schema 或客户端物理目录。
 - Docs / QA agent：TP-V2-082 已完成测试基线和 backlog 对账，删除废弃方向测试，保留真实 backlog。
 - Watch agent：执行 TP-V2-085，按 Apple 推荐路径实现 iPhone 后台刷新、WatchConnectivity、Watch App Group cache 和 WidgetKit complication 刷新闭环，最终以 iPhone 和 Apple Watch 安装后数据正常为验收目标。
+- Data Accuracy agent：先执行 TP-V2-098，把本轮可控的定时核查落板、D1 today tokens、Mac current 口径和 Mac 菜单栏缓存差异说明收口；不碰 iPhone/Watch。TP-V2-097 保留为后续更大的数据新鲜度合同。
 - macOS Client agent：TP-V2-099 已完成，menu bar 额度圆环槽位固定：5h 缺数据时不能挪用 7d，7d 仍显示在 7d 行。
-- Data Accuracy agent：执行 TP-V2-097，把本轮事实核查暴露的数据及时性、缓存落盘、Watch cache 证据、origin/D1 limits parity 问题收口；不做 UI 改版。
