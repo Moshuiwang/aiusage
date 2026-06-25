@@ -55,12 +55,12 @@ public struct MenuDisplaySection: Equatable, Sendable, Identifiable {
 }
 
 public enum MenuBarViewModel {
-    public static func build(from summary: MobileSummary, selectedPeriodID: String) -> MenuBarState {
+    public static func build(from summary: MobileSummary, selectedPeriodID: String, now: Date = Date()) -> MenuBarState {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
-        let primaryLimit = summary.limits.windows
-            .filter(\.isOfficialObserved)
+        let currentLimits = currentLimitWindows(summary.limits.windows, now: now)
+        let primaryLimit = currentLimits
             .sorted { lhs, rhs in
                 if lhs.usedPercent == rhs.usedPercent {
                     return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
@@ -91,9 +91,9 @@ public enum MenuBarViewModel {
             trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
             trendMidText: maxTokens > 0 && midVal > 0 ? ceilingText(midVal) : "",
             sources: sourceRows(summary.sources, byMachine: summary.breakdown.byMachine, generatedAt: summary.generatedAt),
-            limitRows: sortedLimits(summary.limits.windows).map { limitRow($0, generatedAt: summary.generatedAt) },
+            limitRows: sortedLimits(currentLimits).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(from: summary.limits.windows)
+            quotaRings: quotaRings(from: currentLimits, now: now)
         )
     }
 
@@ -237,6 +237,30 @@ public enum MenuBarViewModel {
         }
     }
 
+    private static func currentLimitWindows(_ windows: [MobileLimitWindow], now: Date) -> [MobileLimitWindow] {
+        windows.filter { window in
+            window.isOfficialObserved &&
+            !isLocalEstimate(window.sourceType) &&
+            !isExpired(resetAt: window.resetAt, now: now)
+        }
+    }
+
+    private static func isLocalEstimate(_ sourceType: String?) -> Bool {
+        switch sourceType {
+        case "active_limits_cache", "local_history_estimate", "ccusage_daily", "ccusage_blocks", "session_log_estimate":
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isExpired(resetAt: String?, now: Date) -> Bool {
+        guard let resetDate = parseDate(resetAt) else {
+            return false
+        }
+        return resetDate <= now
+    }
+
     private static func bestWindowPerType(_ windows: [MobileLimitWindow]) -> [MobileLimitWindow] {
         var best: [String: MobileLimitWindow] = [:]
         for w in windows {
@@ -260,8 +284,8 @@ public enum MenuBarViewModel {
         return (candidate.observedAt ?? "") > (existing.observedAt ?? "")
     }
 
-    private static func quotaRings(from windows: [MobileLimitWindow]) -> [QuotaRingData] {
-        let observed = windows.filter(\.isOfficialObserved)
+    private static func quotaRings(from windows: [MobileLimitWindow], now: Date) -> [QuotaRingData] {
+        let observed = currentLimitWindows(windows, now: now)
         guard !observed.isEmpty else { return [] }
         let grouped = Dictionary(grouping: observed, by: \.provider)
         let order = ["anthropic", "claude", "openai", "codex", "gpt"]
@@ -269,9 +293,10 @@ public enum MenuBarViewModel {
                       grouped.keys.filter { !Set(order).contains($0) }.sorted()
         return ordered.prefix(2).compactMap { provider in
             guard let wins = grouped[provider] else { return nil }
-            let sorted = bestWindowPerType(wins).sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
-            let outer = sorted[0]
-            let inner = sorted.count > 1 ? sorted[1] : nil
+            let bestWindows = bestWindowPerType(wins)
+            let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
+            let weekWindow = bestWindows.first(where: isWeekLimitWindow)
+            guard sessionWindow != nil || weekWindow != nil else { return nil }
             let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
             switch provider {
             case "anthropic", "claude":
@@ -287,33 +312,52 @@ public enum MenuBarViewModel {
                 id: provider, displayName: name,
                 outerRed: oR, outerGreen: oG, outerBlue: oB,
                 innerRed: iR, innerGreen: iG, innerBlue: iB,
-                outerFraction: outer.usedPercent / 100.0,
-                innerFraction: (inner?.usedPercent ?? 0) / 100.0,
-                outerPctText: "\(Int(outer.usedPercent.rounded()))%",
-                innerPctText: inner.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
-                outerTimeText: timeRemainingText(outer.resetAt) ?? "--",
-                innerTimeText: inner.flatMap { timeRemainingText($0.resetAt) } ?? "--"
+                outerFraction: (sessionWindow?.usedPercent ?? 0) / 100.0,
+                innerFraction: (weekWindow?.usedPercent ?? 0) / 100.0,
+                outerPctText: sessionWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
+                innerPctText: weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
+                outerTimeText: sessionWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--"
             )
         }
     }
 
-    private static func timeRemainingText(_ resetAt: String?) -> String? {
-        guard let resetAt, resetAt.count >= 19 else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var date = formatter.date(from: resetAt)
-        if date == nil {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: resetAt)
+    private static func isSessionLimitWindow(_ window: MobileLimitWindow) -> Bool {
+        let name = window.window.lowercased()
+        if name == "session" || name.contains("5h") || name.contains("5-hour") {
+            return true
         }
-        guard let d = date else { return nil }
-        let secs = Int(d.timeIntervalSinceNow)
+        return window.windowDurationMinutes > 0 && window.windowDurationMinutes <= 360
+    }
+
+    private static func isWeekLimitWindow(_ window: MobileLimitWindow) -> Bool {
+        let name = window.window.lowercased()
+        if name == "week" || name.contains("7d") || name.contains("7-day") {
+            return true
+        }
+        return window.windowDurationMinutes >= 7 * 24 * 60
+    }
+
+    private static func timeRemainingText(_ resetAt: String?, now: Date) -> String? {
+        guard let d = parseDate(resetAt) else { return nil }
+        let secs = Int(d.timeIntervalSince(now))
         guard secs > 0 else { return "即将重置" }
         let hours = secs / 3600
         let mins = (secs % 3600) / 60
         if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }
         if hours > 0 { return "\(hours)h \(mins)min" }
         return "\(mins)min"
+    }
+
+    private static func parseDate(_ iso: String?) -> Date? {
+        guard let iso, iso.count >= 19 else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: iso)
     }
 
     private static func ceilingValue(_ maxTokens: Int) -> Int {

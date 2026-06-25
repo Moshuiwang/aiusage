@@ -5,7 +5,11 @@ final class MenuBarViewModelTests: XCTestCase {
     func testBuildsCompactStatusAndPopoverSections() throws {
         let summary = try loadFixture()
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(
+            from: summary,
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
 
         XCTAssertEqual(state.statusTitle, "5.0K")
         XCTAssertEqual(state.periodLabel, "本周")
@@ -57,7 +61,11 @@ final class MenuBarViewModelTests: XCTestCase {
             limits: summary.limits
         )
 
-        let state = MenuBarViewModel.build(from: today, selectedPeriodID: "today")
+        let state = MenuBarViewModel.build(
+            from: today,
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
 
         XCTAssertEqual(state.trendBars.count, 24)
         XCTAssertEqual(state.trendBars[0].label, "00:00")
@@ -94,7 +102,11 @@ final class MenuBarViewModelTests: XCTestCase {
             breakdown: summary.breakdown,
             limits: summary.limits
         )
-        let weekState = MenuBarViewModel.build(from: week, selectedPeriodID: "week")
+        let weekState = MenuBarViewModel.build(
+            from: week,
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
         XCTAssertEqual(weekState.trendBars.map(\.label), ["05-28", "", "", "05-31", "", "", "06-03"])
     }
 
@@ -174,7 +186,8 @@ final class MenuBarViewModelTests: XCTestCase {
                 breakdown: summary.breakdown,
                 limits: duplicateLimits
             ),
-            selectedPeriodID: "today"
+            selectedPeriodID: "today",
+            now: try date("2026-06-19T09:00:00+00:00")
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
@@ -187,9 +200,88 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(codex.outerFraction, 0.59, accuracy: 0.001)
     }
 
+    func testQuotaRingsIgnoreExpiredAndCacheOnlyWindows() throws {
+        let summary = try loadFixture()
+        let limits = MobileLimits(
+            observedCount: 3,
+            totalCount: 3,
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "claude-main",
+                    provider: "claude",
+                    window: "session",
+                    usedPercent: 71,
+                    remainingPercent: 29,
+                    resetAt: "2000-01-01T00:00:00+00:00",
+                    windowDurationMinutes: 300,
+                    observedAt: "2026-06-24T12:19:09+08:00",
+                    sourceType: "official_cli",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "claude-main",
+                    provider: "claude",
+                    window: "week",
+                    usedPercent: 52,
+                    remainingPercent: 48,
+                    resetAt: "2099-01-01T00:00:00+00:00",
+                    windowDurationMinutes: 10080,
+                    observedAt: "2026-06-24T15:30:26+08:00",
+                    sourceType: "official_cli",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "claude-main",
+                    provider: "claude",
+                    window: "session",
+                    usedPercent: 96,
+                    remainingPercent: 4,
+                    resetAt: "2099-01-01T00:00:00+00:00",
+                    windowDurationMinutes: 300,
+                    observedAt: "2026-06-24T15:30:26+08:00",
+                    sourceType: "active_limits_cache",
+                    confidence: "observed",
+                    status: "ok",
+                    official: true
+                ),
+            ]
+        )
+
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion,
+                client: summary.client,
+                generatedAt: summary.generatedAt,
+                timezone: summary.timezone,
+                period: summary.period,
+                trend: summary.trend,
+                sources: summary.sources,
+                breakdown: summary.breakdown,
+                limits: limits
+            ),
+            selectedPeriodID: "today"
+        )
+
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "--")
+        XCTAssertEqual(claude.innerPctText, "52%")
+        XCTAssertEqual(claude.outerFraction, 0, accuracy: 0.001)
+        XCTAssertEqual(claude.innerFraction, 0.52, accuracy: 0.001)
+        XCTAssertEqual(state.primaryLimitText, "Claude week · 52% 已用")
+        XCTAssertEqual(state.limitRows.map(\.title), ["Claude week"])
+    }
+
     func testTrendSelectionFollowsMouseLocation() throws {
         let summary = try loadFixture()
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(
+            from: summary,
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
 
         XCTAssertEqual(
             MenuTrendSelection.nearestBar(in: state.trendBars, xLocation: 1, width: 200)?.id,
@@ -221,5 +313,15 @@ final class MenuBarViewModelTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
         let data = try Data(contentsOf: url)
         return try JSONDecoder().decode(MobileSummary.self, from: data)
+    }
+
+    private func date(_ iso: String) throws -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let value = formatter.date(from: iso) {
+            return value
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return try XCTUnwrap(formatter.date(from: iso))
     }
 }
