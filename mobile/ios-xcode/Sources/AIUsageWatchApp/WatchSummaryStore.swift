@@ -35,11 +35,14 @@ enum WatchSummaryStore {
         delivery: String,
         fileManager: FileManager = .default
     ) -> WatchSummaryCacheReceipt {
+        let metadata = WatchAppBuildMetadata.current
         guard summary.period.id == "today" else {
             let receipt = WatchSummaryCacheReceipt(
                 period: summary.period.id,
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: currentTimestamp(),
+                appVersion: metadata.appVersion,
+                buildNumber: metadata.buildNumber,
                 cacheWrittenAt: nil,
                 cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "not_attempted",
@@ -54,6 +57,8 @@ enum WatchSummaryStore {
                 period: summary.period.id,
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: currentTimestamp(),
+                appVersion: metadata.appVersion,
+                buildNumber: metadata.buildNumber,
                 cacheWrittenAt: nil,
                 cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "failed",
@@ -70,6 +75,8 @@ enum WatchSummaryStore {
                 period: summary.period.id,
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: receivedAt,
+                appVersion: metadata.appVersion,
+                buildNumber: metadata.buildNumber,
                 cacheWrittenAt: currentTimestamp(),
                 cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "ok",
@@ -83,6 +90,8 @@ enum WatchSummaryStore {
                 period: summary.period.id,
                 summaryGeneratedAt: summary.generatedAt,
                 receivedAt: receivedAt,
+                appVersion: metadata.appVersion,
+                buildNumber: metadata.buildNumber,
                 cacheWrittenAt: nil,
                 cacheFile: cacheFilePath(fileName),
                 cacheWriteStatus: "failed",
@@ -134,22 +143,53 @@ enum WatchSummaryStore {
     }
 }
 
+struct WatchAppBuildMetadata: Equatable {
+    let appVersion: String
+    let buildNumber: String
+
+    static var current: WatchAppBuildMetadata {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return WatchAppBuildMetadata(
+            appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
+            buildNumber: info["CFBundleVersion"] as? String ?? "unknown"
+        )
+    }
+}
+
 struct WatchSummaryCacheReceipt: Codable, Equatable {
     let schemaVersion: Int
     let period: String
     let summaryGeneratedAt: String?
     let receivedAt: String
+    let appVersion: String
+    let buildNumber: String
     let cacheWrittenAt: String?
     let cacheFile: String
     let cacheWriteStatus: String
     let delivery: String
     let safeError: String?
 
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case period
+        case summaryGeneratedAt
+        case receivedAt
+        case appVersion
+        case buildNumber
+        case cacheWrittenAt
+        case cacheFile
+        case cacheWriteStatus
+        case delivery
+        case safeError
+    }
+
     init(
         schemaVersion: Int = 1,
         period: String,
         summaryGeneratedAt: String?,
         receivedAt: String,
+        appVersion: String = WatchAppBuildMetadata.current.appVersion,
+        buildNumber: String = WatchAppBuildMetadata.current.buildNumber,
         cacheWrittenAt: String?,
         cacheFile: String,
         cacheWriteStatus: String,
@@ -160,11 +200,28 @@ struct WatchSummaryCacheReceipt: Codable, Equatable {
         self.period = period
         self.summaryGeneratedAt = summaryGeneratedAt
         self.receivedAt = receivedAt
+        self.appVersion = appVersion
+        self.buildNumber = buildNumber
         self.cacheWrittenAt = cacheWrittenAt
         self.cacheFile = cacheFile
         self.cacheWriteStatus = cacheWriteStatus
         self.delivery = delivery
         self.safeError = safeError
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        self.period = try container.decode(String.self, forKey: .period)
+        self.summaryGeneratedAt = try container.decodeIfPresent(String.self, forKey: .summaryGeneratedAt)
+        self.receivedAt = try container.decode(String.self, forKey: .receivedAt)
+        self.appVersion = try container.decodeIfPresent(String.self, forKey: .appVersion) ?? "unknown"
+        self.buildNumber = try container.decodeIfPresent(String.self, forKey: .buildNumber) ?? "unknown"
+        self.cacheWrittenAt = try container.decodeIfPresent(String.self, forKey: .cacheWrittenAt)
+        self.cacheFile = try container.decode(String.self, forKey: .cacheFile)
+        self.cacheWriteStatus = try container.decode(String.self, forKey: .cacheWriteStatus)
+        self.delivery = try container.decode(String.self, forKey: .delivery)
+        self.safeError = try container.decodeIfPresent(String.self, forKey: .safeError)
     }
 }
 

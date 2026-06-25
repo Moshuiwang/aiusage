@@ -372,6 +372,9 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("MobileSummaryCache.writeToAppGroup(loadedSummary)", app_content)
         self.assertNotIn("try? MobileSummaryCache.writeToAppGroup", app_content)
         self.assertIn("watchPushStatus:", app_content)
+        self.assertIn("refreshSource: .backgroundAppRefresh", app_content)
+        self.assertIn("watchPushResult.status.rawValue", app_content)
+        self.assertIn("watchPushResult.reason.rawValue", app_content)
         self.assertIn("cacheWriteResult", app_content)
         self.assertIn("WatchSummaryBridge.shared.push(loadedSummary)", app_content)
         self.assertIn("BGTaskSchedulerPermittedIdentifiers", plist_content)
@@ -414,8 +417,69 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("hasCompletedInitialLoad", app_content)
         self.assertIn(".onChange(of: scenePhase)", app_content)
         self.assertIn("phase == .active", app_content)
-        self.assertIn("await refreshLiveSummary(period: summary.period.id)", app_content)
+        self.assertIn("await refreshLiveSummary(period: summary.period.id, refreshSource: .foregroundInitialLoad)", app_content)
         self.assertIn("await ensureTodayCompanionSummary(visiblePeriod: summary.period.id)", app_content)
+
+    def test_ios_runtime_diagnostics_record_refresh_source_version_and_safe_watch_reason(self) -> None:
+        app_content = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Sources"
+            / "AIUsageMobileApp"
+            / "AIUsageMobileApp.swift"
+        ).read_text(encoding="utf-8")
+        diagnostics_content = (
+            ROOT
+            / "mobile"
+            / "ios"
+            / "Sources"
+            / "AIUsageMobileCore"
+            / "MobileRuntimeDiagnostics.swift"
+        ).read_text(encoding="utf-8")
+
+        for token in [
+            "enum MobileRefreshSource",
+            "foreground_initial_load",
+            "pull_to_refresh",
+            "companion_today_ensure",
+            "background_app_refresh",
+            "settings_triggered_refresh",
+            "appVersion",
+            "buildNumber",
+            "watchPushReason",
+            "MobileAppBuildMetadata.current",
+        ]:
+            with self.subTest(token=token):
+                self.assertIn(token, diagnostics_content)
+
+        for token in [
+            "refreshSource: .foregroundInitialLoad",
+            "refreshSource: .pullToRefresh",
+            "refreshSource: .companionTodayEnsure",
+            "refreshSource: .settingsTriggeredRefresh",
+            "refreshSource: .backgroundAppRefresh",
+        ]:
+            with self.subTest(token=token):
+                self.assertIn(token, app_content)
+
+        for token in [
+            "WatchPushResult",
+            "WatchPushStatus",
+            "WatchPushReason",
+            ".unsupported",
+            ".sessionUnavailable",
+            ".inactiveActivationState",
+            ".encodeFailed",
+            ".updateApplicationContextFailed",
+            ".updateApplicationContextQueued",
+        ]:
+            with self.subTest(token=token):
+                self.assertIn(token, app_content)
+
+        for forbidden in ["Bearer", "Authorization", "AIUsageAPIToken"]:
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, diagnostics_content)
 
     def test_watch_companion_and_widget_targets_are_embedded_for_testflight(self) -> None:
         project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
@@ -492,6 +556,11 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("summaryGeneratedAt", store_content)
         self.assertIn("cacheWrittenAt", store_content)
         self.assertIn("delivery", store_content)
+        self.assertIn("appVersion", store_content)
+        self.assertIn("buildNumber", store_content)
+        self.assertIn("WatchAppBuildMetadata.current", store_content)
+        self.assertIn("decodeIfPresent(String.self, forKey: .appVersion) ?? \"unknown\"", store_content)
+        self.assertIn("decodeIfPresent(String.self, forKey: .buildNumber) ?? \"unknown\"", store_content)
         watch_app_content = watch_app.read_text(encoding="utf-8")
         self.assertIn("watchconnectivity_application_context", watch_app_content)
         self.assertLess(
@@ -524,16 +593,25 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("outerUsedPercent", widget_content)
         self.assertIn("innerUsedPercent", widget_content)
         self.assertIn("accountShortName", widget_content)
+        self.assertIn("resetAtText", widget_content)
+        self.assertIn("hasTrustedShortWindow", widget_content)
         self.assertIn("Circle().trim(from: 0, to: CGFloat(entry.state.outerUsedPercent)", widget_content)
         self.assertIn("Circle().trim(from: 0, to: CGFloat(entry.state.innerUsedPercent)", widget_content)
+        self.assertIn("Text(entry.state.resetAtText)", widget_content)
         self.assertIn("WatchSummaryFreshness.isStale(summary)", widget_content)
         self.assertIn("isStale: WatchSummaryFreshness.isStale(summary)", widget_content)
-        self.assertIn('Text("stale")', widget_content)
+        self.assertIn('Text("STALE")', widget_content)
+        self.assertIn('"--:--"', widget_content)
         self.assertIn("state.isStale", widget_content)
         self.assertIn("TodayChartState", widget_content)
         self.assertIn("isStale: WatchSummaryFreshness.isStale(summary)", widget_content)
         self.assertNotIn(".gaugeStyle(.accessoryCircularCapacity)", widget_content)
-        self.assertNotIn('Text("AI")', widget_content)
+        circular_start = widget_content.index("    private var circular: some View")
+        circular_end = widget_content.index("    private var inline: some View")
+        circular_content = widget_content[circular_start:circular_end]
+        for forbidden in ['Text("AI")', 'Text("Codex")', 'Text("Claude")', 'Text("Cloud")', 'Text("5H Reset")']:
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, circular_content)
         self.assertIn('return "--"', store_content)
         self.assertIn("TokenFormat.compact(summary.period.totalTokens)", store_content)
         self.assertNotIn(".cachesDirectory", widget_content)

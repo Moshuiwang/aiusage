@@ -22,8 +22,9 @@ struct QuotaRingState {
     let accountShortName: String
     let outerUsedPercent: Int
     let innerUsedPercent: Int
+    let hasTrustedShortWindow: Bool
     let remainingPercent: Int
-    let resetText: String
+    let resetAtText: String
     let outerColor: Color
     let innerColor: Color
     let isStale: Bool
@@ -48,16 +49,17 @@ struct QuotaRingState {
         }
         let providerWindows = windows.filter { providerMatches($0.provider, provider: primaryWindow.provider) }
 
-        let shortWindow = providerWindows.first(where: isShortWindow) ?? primaryWindow
-        let longWindow = providerWindows.first(where: { !isShortWindow($0) }) ?? shortWindow
+        let shortWindow = providerWindows.first(where: isShortWindow)
+        let longWindow = providerWindows.first(where: { !isShortWindow($0) })
 
         return QuotaRingState(
             title: providerLabel(primaryWindow.provider),
             accountShortName: accountShortName(primaryWindow),
-            outerUsedPercent: shortWindow.usedPercent,
-            innerUsedPercent: longWindow.usedPercent,
+            outerUsedPercent: shortWindow?.usedPercent ?? 0,
+            innerUsedPercent: longWindow?.usedPercent ?? 0,
+            hasTrustedShortWindow: shortWindow != nil,
             remainingPercent: max(0, min(100, Int(primaryWindow.remainingPercent.rounded()))),
-            resetText: isStale ? "stale" : resetLabel(primaryWindow.resetAt),
+            resetAtText: resetAtText(shortWindow?.resetAt),
             outerColor: providerOuterColor(primaryWindow.provider),
             innerColor: providerInnerColor(primaryWindow.provider),
             isStale: WatchSummaryFreshness.isStale(summary)
@@ -71,8 +73,9 @@ struct QuotaRingState {
             accountShortName: selection == .claude ? "CLAU" : "CODE",
             outerUsedPercent: 0,
             innerUsedPercent: 0,
+            hasTrustedShortWindow: false,
             remainingPercent: 0,
-            resetText: isStale ? "stale" : "--",
+            resetAtText: "--:--",
             outerColor: providerOuterColor(provider),
             innerColor: providerInnerColor(provider),
             isStale: isStale
@@ -122,11 +125,24 @@ struct QuotaRingState {
         return String(providerLabel(window.provider).prefix(4)).uppercased()
     }
 
-    private static func resetLabel(_ value: String?) -> String {
-        guard let value else {
-            return "--"
+    private static func resetAtText(_ value: String?) -> String {
+        guard let value, !value.isEmpty else {
+            return "--:--"
         }
-        return WatchSummaryFreshness.resetText(value).replacingOccurrences(of: "reset ", with: "")
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        var date = formatter.date(from: value)
+        if date == nil {
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            date = formatter.date(from: value)
+        }
+        guard let date else {
+            return "--:--"
+        }
+        let display = DateFormatter()
+        display.locale = Locale(identifier: "en_US_POSIX")
+        display.dateFormat = "HH:mm"
+        return display.string(from: date)
     }
 
     private static func providerOuterColor(_ provider: String) -> Color {
@@ -236,29 +252,39 @@ struct QuotaRingComplicationView: View {
                 .stroke(entry.state.outerColor, style: StrokeStyle(lineWidth: 5.6, lineCap: .round))
                 .rotationEffect(.degrees(-90))
                 .padding(2)
+                .opacity(entry.state.hasTrustedShortWindow ? (entry.state.isStale ? 0.44 : 1) : 0.18)
             Circle()
-                .stroke(Color.primary.opacity(0.08), lineWidth: 4.2)
-                .padding(11)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 3.4)
+                .padding(10)
             Circle().trim(from: 0, to: CGFloat(entry.state.innerUsedPercent) / 100)
-                .stroke(entry.state.innerColor, style: StrokeStyle(lineWidth: 4.2, lineCap: .round))
+                .stroke(entry.state.innerColor, style: StrokeStyle(lineWidth: 3.4, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .padding(11)
-            Text(entry.state.accountShortName)
-                .font(.system(size: 8, weight: .semibold, design: .rounded))
-                .foregroundStyle(.primary.opacity(0.88))
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .frame(width: 24)
-            if entry.state.isStale {
-                Text("stale")
-                    .font(.system(size: 7, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-                    .offset(y: 17)
+                .padding(10)
+                .opacity(entry.state.isStale ? 0.44 : 1)
+            VStack(spacing: -1) {
+                Text(entry.state.accountShortName)
+                    .font(.system(size: 6, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary.opacity(0.66))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .frame(width: 26)
+                Text(entry.state.resetAtText)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.58)
+                    .frame(width: 32)
+                if entry.state.isStale {
+                    Text("STALE")
+                        .font(.system(size: 5.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(width: 26)
+                }
             }
         }
         .widgetLabel {
-            Text("\(entry.state.title) \(entry.state.remainingPercent)% left · Reset \(entry.state.resetText)")
+            Text("\(entry.state.title) \(entry.state.remainingPercent)% left · Reset \(entry.state.resetAtText)")
         }
     }
 
@@ -266,7 +292,7 @@ struct QuotaRingComplicationView: View {
         if entry.state.isStale {
             Text("\(entry.state.title) \(entry.state.accountShortName) · stale")
         } else {
-            Text("\(entry.state.title) \(entry.state.accountShortName) · Reset \(entry.state.resetText)")
+            Text("\(entry.state.title) \(entry.state.accountShortName) · Reset \(entry.state.resetAtText)")
         }
     }
 
@@ -275,7 +301,7 @@ struct QuotaRingComplicationView: View {
             .font(.system(size: 13, weight: .semibold, design: .rounded))
             .widgetCurvesContent()
             .widgetLabel {
-                Text("\(entry.state.title) · Reset \(entry.state.resetText)")
+                Text("\(entry.state.title) · Reset \(entry.state.resetAtText)")
             }
     }
 }

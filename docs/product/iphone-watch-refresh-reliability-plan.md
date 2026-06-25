@@ -6,15 +6,19 @@ This document records the current refresh facts for the iPhone and Apple Watch e
 
 It is a planning document only. It does not mean the implementation has been started or completed.
 
-## Scope and Timing (Post-Migration)
+## Scope and Timing
 
-This is a deferred, post-migration initiative. Do not start implementation until the Cloudflare Worker Native migration is complete and VPN2 has been moved to cold backup.
+This plan has two delivery stages with different timing.
 
-Reason: the APNs silent-refresh trigger (Stage 2) must be built on the final Cloudflare Worker Native backend, not on the VPN2 Python server that is being retired. Building the server-side push trigger on VPN2 now would be throwaway work that has to be rebuilt after cutover.
+Stage 1, local freshness evidence and iPhone-to-Watch companion refresh, is client-side iOS work and is migration-independent. TP-V2-085 and TP-V2-100 intentionally pull this stage forward so device verification can explain where freshness stops.
+
+Stage 2, APNs silent refresh, remains deferred until the Cloudflare Worker Native migration is complete and VPN2 has been moved to cold backup.
+
+Reason: the APNs silent-refresh trigger must be built on the final Cloudflare Worker Native backend, not on the VPN2 Python server that is being retired. Building the server-side push trigger on VPN2 now would be throwaway work that has to be rebuilt after cutover.
 
 The two stages have different migration dependencies:
 
-- Stage 1 (local freshness evidence / observability) is client-side iOS work and is migration-independent. It could optionally be pulled earlier to aid device-refresh verification, but the default position is to do it as part of this post-migration delivery.
+- Stage 1 (local freshness evidence / observability) is client-side iOS work and is migration-independent. It is now being pulled earlier through TP-V2-085 and TP-V2-100 to aid device-refresh verification.
 - Stage 2 (APNs silent refresh trigger) has a hard dependency on the canonical backend and must target the Cloudflare Worker, after cutover.
 
 ## Current Verified Facts
@@ -196,7 +200,7 @@ Minimum acceptance:
 
 ## Product Decision
 
-This is a post-migration initiative (see Scope and Timing). Do not start until the Cloudflare Worker Native migration is complete and VPN2 is cold backup.
+This remains a staged initiative (see Scope and Timing). Stage 1 may proceed before Cloudflare cutover; Stage 2 must not start until the Cloudflare Worker Native migration is complete and VPN2 is cold backup.
 
 Deliver it in two migration-sequenced stages rather than one combined drop:
 
