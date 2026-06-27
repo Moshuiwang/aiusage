@@ -6,7 +6,8 @@ import re
 from collections.abc import Iterable
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
+
+from .timezones import get_timezone
 
 
 PROVENANCE = "mswusage_codex_token_count"
@@ -23,7 +24,7 @@ TOKEN_FIELDS = (
 
 
 def build_report(jsonl_lines: Iterable[str], timezone: str, now: datetime | None = None) -> dict:
-    tz = ZoneInfo(timezone)
+    tz = get_timezone(timezone)
     generated_at = _format_datetime(_coerce_now(now, tz))
     events = _parse_events(jsonl_lines, tz)
     fallback_session_id = _fallback_session_id(events)
@@ -91,7 +92,7 @@ def read_local_codex_jsonl_lines(root: Path | None = None) -> list[str]:
     return lines
 
 
-def _parse_events(jsonl_lines: Iterable[str], tz: ZoneInfo) -> list[dict]:
+def _parse_events(jsonl_lines: Iterable[str], tz) -> list[dict]:
     current_session_id: str | None = None
     events: list[dict] = []
 

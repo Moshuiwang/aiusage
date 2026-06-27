@@ -4,6 +4,7 @@ import json
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from ai_usage_widget.mswusage_codex import build_report
 
@@ -110,6 +111,25 @@ class TestMSWusageCodex(unittest.TestCase):
         self.assertEqual(len(report["sessions"]), 2)
         self.assertRegex(report["sessions"][0]["session_id"], r"^fallback:[0-9a-f]{12}$")
         self.assertEqual(report["sessions"][1]["session_id"], "session-a")
+
+    def test_shanghai_timezone_fallback_when_zoneinfo_is_unavailable(self) -> None:
+        from ai_usage_widget import timezones
+
+        lines = [
+            '{"type":"session_meta","payload":{"id":"session-a"}}',
+            '{"timestamp":"2026-06-04T16:30:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":1,"total_tokens":11}}}}',
+        ]
+
+        with patch.object(timezones, "_ZoneInfo", None):
+            report = build_report(
+                lines,
+                timezone="Asia/Shanghai",
+                now=datetime.fromisoformat("2026-06-05T09:00:00+08:00"),
+            )
+
+        self.assertEqual(report["generated_at"], "2026-06-05T09:00:00+08:00")
+        self.assertEqual(report["hourly"][0]["hour"], "2026-06-05T00:00:00+08:00")
+        self.assertEqual(report["daily"][0]["date"], "2026-06-05")
 
 
 if __name__ == "__main__":
