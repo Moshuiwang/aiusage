@@ -201,14 +201,11 @@ public enum MenuBarViewModel {
     }
 
     private static func sourceRows(_ sources: [MobileSource], byMachine: [MobileBreakdownRow], generatedAt: String?) -> [MenuDisplayRow] {
-        var machineTokens: [String: Int] = [:]
-        for row in byMachine where row.tokens > 0 {
-            machineTokens[row.label] = row.tokens
-        }
+        let sourceTokens = sourceTokensBySourceID(from: byMachine)
         return sources
             .compactMap { source -> (MenuDisplayRow, Int)? in
-                let tokens = source.machine.flatMap { machineTokens[$0] } ?? 0
-                if source.status != "ok" && tokens == 0 { return nil }
+                let tokens = sourceTokens[source.sourceID] ?? 0
+                if tokens == 0 { return nil }
                 let title = source.osUser ?? source.machine ?? source.sourceID
                 let timeStr = compactDateTime(source.lastObservedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
                 let machineStr = source.machine ?? ""
@@ -225,6 +222,20 @@ public enum MenuBarViewModel {
             }
             .sorted { $0.1 > $1.1 }
             .map { $0.0 }
+    }
+
+    private static func sourceTokensBySourceID(from rows: [MobileBreakdownRow]) -> [String: Int] {
+        var tokensBySourceID: [String: Int] = [:]
+        for row in rows where row.tokens > 0 {
+            if let contributions = row.contributions, !contributions.isEmpty {
+                for contribution in contributions where contribution.tokens > 0 {
+                    tokensBySourceID[contribution.sourceID, default: 0] += contribution.tokens
+                }
+            } else if let sourceIDs = row.sourceIDs, sourceIDs.count == 1, let sourceID = sourceIDs.first {
+                tokensBySourceID[sourceID, default: 0] += row.tokens
+            }
+        }
+        return tokensBySourceID
     }
 
     private static func sourceQuality(_ sourceType: String?) -> Int {

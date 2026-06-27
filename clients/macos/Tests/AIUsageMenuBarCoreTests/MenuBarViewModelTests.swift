@@ -30,6 +30,84 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.trendBars.last?.ratio, 1.0)
     }
 
+    func testSourceRowsUsePerSourceContributionForSharedMachine() throws {
+        let summary = try loadFixture()
+        let sharedSources = [
+            MobileSource(
+                sourceID: "linux-biai-wang",
+                machine: "ip-10-50-128-30.eu-west-1.compute.internal",
+                osUser: "wang",
+                platform: "linux",
+                displayName: nil,
+                status: "ok",
+                lastObservedAt: "2026-06-02T10:40:00+08:00",
+                lastPushedAt: "2026-06-02T10:40:00+08:00",
+                errorMessage: nil
+            ),
+            MobileSource(
+                sourceID: "linux-biai-wangDS",
+                machine: "ip-10-50-128-30.eu-west-1.compute.internal",
+                osUser: "wangDS",
+                platform: "linux",
+                displayName: nil,
+                status: "ok",
+                lastObservedAt: "2026-06-02T10:40:00+08:00",
+                lastPushedAt: "2026-06-02T10:40:00+08:00",
+                errorMessage: nil
+            ),
+            MobileSource(
+                sourceID: "linux-biai-wangANT",
+                machine: "ip-10-50-128-30.eu-west-1.compute.internal",
+                osUser: "wangANT",
+                platform: "linux",
+                displayName: nil,
+                status: "ok",
+                lastObservedAt: "2026-06-02T10:40:00+08:00",
+                lastPushedAt: "2026-06-02T10:40:00+08:00",
+                errorMessage: nil
+            ),
+        ]
+        let sharedBreakdown = MobileBreakdown(
+            byMachine: [
+                MobileBreakdownRow(
+                    id: "ip-10-50-128-30.eu-west-1.compute.internal",
+                    label: "ip-10-50-128-30.eu-west-1.compute.internal",
+                    tokens: 800_000,
+                    sourceIDs: ["linux-biai-wang", "linux-biai-wangDS", "linux-biai-wangANT"],
+                    contributions: [
+                        MobileBreakdownContribution(sourceID: "linux-biai-wang", tokens: 500_000),
+                        MobileBreakdownContribution(sourceID: "linux-biai-wangDS", tokens: 300_000),
+                        MobileBreakdownContribution(sourceID: "linux-biai-wangANT", tokens: 0),
+                    ]
+                )
+            ],
+            byOSUser: summary.breakdown.byOSUser,
+            byAgent: summary.breakdown.byAgent,
+            byModel: summary.breakdown.byModel,
+            byDate: summary.breakdown.byDate
+        )
+        let sharedMachineSummary = MobileSummary(
+            schemaVersion: summary.schemaVersion,
+            client: summary.client,
+            generatedAt: summary.generatedAt,
+            timezone: summary.timezone,
+            period: summary.period,
+            trend: summary.trend,
+            sources: sharedSources,
+            breakdown: sharedBreakdown,
+            limits: summary.limits
+        )
+
+        let state = MenuBarViewModel.build(
+            from: sharedMachineSummary,
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+
+        XCTAssertEqual(state.sources.map(\.title), ["wang", "wangDS"])
+        XCTAssertEqual(state.sources.map(\.value), ["500.0K", "300.0K"])
+    }
+
     func testTrendAxisUsesSparseFullRangeLabelsLikeMobileApp() throws {
         let summary = try loadFixture()
         let hourlyTrend = MobileTrend(
