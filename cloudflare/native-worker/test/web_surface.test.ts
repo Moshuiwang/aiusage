@@ -167,6 +167,14 @@ describe.sequential("native TS Worker web surface", () => {
     });
   });
 
+  it("does not use correlated source report scans for current source health", async () => {
+    const indexSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/index.ts"), "utf8");
+    const readModelSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/read-model.ts"), "utf8");
+
+    expect(indexSource).not.toContain("FROM source_reports r2");
+    expect(readModelSource).not.toContain("FROM source_reports r2");
+  });
+
   it("accepts the session cookie on read APIs", async () => {
     const rejected = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03");
     expect(rejected.status).toBe(401);

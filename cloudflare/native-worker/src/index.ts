@@ -314,20 +314,20 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
 
 async function latestSourceStatuses(db: D1Database): Promise<Array<{ source_id: string | null; status: string | null }>> {
   const result = await db.prepare(`
-    SELECT r.source_id, r.status
-    FROM source_reports r
-    JOIN collection_runs c ON r.run_id = c.id
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM source_reports r2
-      JOIN collection_runs c2 ON r2.run_id = c2.id
-      WHERE r2.source_id = r.source_id
-        AND (
-          c2.collected_at > c.collected_at
-          OR (c2.collected_at = c.collected_at AND r2.id > r.id)
-        )
+    SELECT source_id, status
+    FROM (
+      SELECT
+        r.source_id,
+        r.status,
+        ROW_NUMBER() OVER (
+          PARTITION BY r.source_id
+          ORDER BY c.collected_at DESC, r.id DESC
+        ) AS row_rank
+      FROM source_reports r
+      JOIN collection_runs c ON r.run_id = c.id
     )
-    ORDER BY r.source_id ASC
+    WHERE row_rank = 1
+    ORDER BY source_id ASC
   `).all<{ source_id: string | null; status: string | null }>();
   return result.results ?? [];
 }

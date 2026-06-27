@@ -115,20 +115,23 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const statusRows = await all<Record<string, string | null>>(
     db,
     `
-      SELECT r.source_id, r.status, c.collected_at, r.error_message
-      FROM source_reports r
-      JOIN collection_runs c ON r.run_id = c.id
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM source_reports r2
-        JOIN collection_runs c2 ON r2.run_id = c2.id
-        WHERE r2.source_id = r.source_id
-          AND (
-            c2.collected_at > c.collected_at
-            OR (c2.collected_at = c.collected_at AND r2.id > r.id)
-          )
+      SELECT source_id, status, collected_at, error_message
+      FROM (
+        SELECT
+          r.id,
+          r.source_id,
+          r.status,
+          c.collected_at,
+          r.error_message,
+          ROW_NUMBER() OVER (
+            PARTITION BY r.source_id
+            ORDER BY c.collected_at DESC, r.id DESC
+          ) AS row_rank
+        FROM source_reports r
+        JOIN collection_runs c ON r.run_id = c.id
       )
-      ORDER BY r.id ASC
+      WHERE row_rank = 1
+      ORDER BY id ASC
     `,
   );
   let hourlyRows: TimedRow[] = [];
