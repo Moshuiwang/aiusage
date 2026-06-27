@@ -140,6 +140,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-099 | [TP-V2-099-macos-menu-bar-quota-window-slots.md](TP-V2-099-macos-menu-bar-quota-window-slots.md) | done | TP-V2-064, TP-V2-098 | none |
 | TP-V2-100 | [TP-V2-100-watch-sync-diagnostics-and-version-verification.md](TP-V2-100-watch-sync-diagnostics-and-version-verification.md) | done | TP-V2-085 | TP-V2-098 |
 | TP-V2-101 | [TP-V2-101-watch-circular-complication-reset-at-ui.md](TP-V2-101-watch-circular-complication-reset-at-ui.md) | done | TP-V2-084 | none |
+| TP-V2-102 | [TP-V2-102-macos-period-cache-refresh.md](TP-V2-102-macos-period-cache-refresh.md) | done | TP-V2-064 | none |
 
 ## subagent 分配建议
 
@@ -181,5 +182,6 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 - Watch agent：TP-V2-085 已完成，按 Apple 推荐路径实现 iPhone 后台刷新、WatchConnectivity、Watch App Group cache 和 WidgetKit complication 刷新闭环，并完成 iPhone/Watch 安装后数据同步验收。
 - Data Accuracy agent：先执行 TP-V2-098，把本轮可控的定时核查落板、D1 today tokens、Mac current 口径和 Mac 菜单栏缓存差异说明收口；不碰 iPhone/Watch。TP-V2-097 保留为后续更大的数据新鲜度合同。
 - macOS Client agent：TP-V2-099 已完成，menu bar 额度圆环槽位固定：5h 缺数据时不能挪用 7d，7d 仍显示在 7d 行。
+- macOS Client agent：TP-V2-102 已完成，menu bar 周期切换先显示本地缓存，再按需后台刷新；只改 Mac 客户端，不改服务端 API。
 - Watch agent：TP-V2-100 已完成，补齐 iPhone/Watch freshness 诊断、WatchConnectivity 失败原因、刷新触发来源和安装版本对齐证据；保持 Watch 不直连服务端。
 - Watch agent：TP-V2-101 已完成，把 Watch 圆形小组件落到 Reset At 双圆环 UI；只改 `.accessoryCircular` 用户可见展示，不碰服务端数据口径。

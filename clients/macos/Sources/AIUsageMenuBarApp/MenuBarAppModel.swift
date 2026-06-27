@@ -3,6 +3,7 @@ import Foundation
 
 typealias MenuBarSummaryLoader = @Sendable (MobileSummaryClientConfig) async throws -> MobileSummary
 typealias MenuBarRuntimeConfigProvider = @MainActor (RuntimePaths) -> MenuBarRuntimeConfig?
+typealias MenuBarNowProvider = @MainActor () -> Date
 
 @MainActor
 final class MenuBarAppModel: ObservableObject {
@@ -15,13 +16,19 @@ final class MenuBarAppModel: ObservableObject {
     let paths: RuntimePaths
     private let loadSummary: MenuBarSummaryLoader
     private let loadRuntimeConfig: MenuBarRuntimeConfigProvider
+    private let now: MenuBarNowProvider
+    private let cacheFreshnessInterval: TimeInterval
     private var refreshSequence = 0
     private var hasLoadedUsableSummary: Bool
+    private var cachedSummaries: [String: CachedMenuSummary]
 
     init(
         paths: RuntimePaths,
         config: MenuBarRuntimeConfig?,
-        cachedSummary: MobileSummary?,
+        cachedSummary: MobileSummary? = nil,
+        cachedSummaries: [String: CachedMenuSummary] = [:],
+        cacheFreshnessInterval: TimeInterval = 300,
+        now: @escaping MenuBarNowProvider = { Date() },
         loadSummary: @escaping MenuBarSummaryLoader = { config in
             try await MobileSummaryClient(config: config).load()
         },
@@ -33,10 +40,17 @@ final class MenuBarAppModel: ObservableObject {
         self.config = config
         self.loadSummary = loadSummary
         self.loadRuntimeConfig = loadRuntimeConfig
+        self.now = now
+        self.cacheFreshnessInterval = max(cacheFreshnessInterval, 0)
+        var periodSummaries = cachedSummaries
+        if let cachedSummary, periodSummaries[cachedSummary.period.id] == nil {
+            periodSummaries[cachedSummary.period.id] = CachedMenuSummary(summary: cachedSummary, fetchedAt: Date.distantPast)
+        }
+        self.cachedSummaries = periodSummaries
         let initialPeriodID = config?.defaultPeriod ?? cachedSummary?.period.id ?? "today"
         self.selectedPeriodID = initialPeriodID
-        self.summary = cachedSummary ?? MobileSummary.empty(periodID: initialPeriodID)
-        self.hasLoadedUsableSummary = cachedSummary != nil
+        self.summary = periodSummaries[initialPeriodID]?.summary ?? cachedSummary ?? MobileSummary.empty(periodID: initialPeriodID)
+        self.hasLoadedUsableSummary = periodSummaries[initialPeriodID] != nil || cachedSummary != nil
     }
 
     var state: MenuBarState {
@@ -54,9 +68,19 @@ final class MenuBarAppModel: ObservableObject {
         return URL(string: value)
     }
 
-    func refresh(periodID: String? = nil) {
+    func refresh(periodID: String? = nil, force: Bool = false) {
         if let periodID {
             selectedPeriodID = periodID
+        }
+        let selected = selectedPeriodID
+        if let cached = cachedSummaries[selected] {
+            summary = cached.summary
+            hasLoadedUsableSummary = true
+            if !force && isFresh(cached) {
+                isLoading = false
+                errorMessage = nil
+                return
+            }
         }
         let runtimeConfig = loadRuntimeConfig(paths) ?? config
         config = runtimeConfig
@@ -69,7 +93,6 @@ final class MenuBarAppModel: ObservableObject {
         let sequence = refreshSequence
         isLoading = true
         errorMessage = nil
-        let selected = selectedPeriodID
         let paths = paths
         let token = runtimeConfig.token
         let loader = loadSummary
@@ -88,7 +111,8 @@ final class MenuBarAppModel: ObservableObject {
                 self.summary = loaded
                 self.hasLoadedUsableSummary = true
                 self.errorMessage = nil
-                try? SummaryCache.save(loaded, to: paths.cacheURL)
+                self.cachedSummaries[loaded.period.id] = CachedMenuSummary(summary: loaded, fetchedAt: self.now())
+                try? SummaryCache.save(loaded, paths: paths)
             } catch {
                 guard sequence == self.refreshSequence else {
                     return
@@ -100,6 +124,10 @@ final class MenuBarAppModel: ObservableObject {
                 self.isLoading = false
             }
         }
+    }
+
+    private func isFresh(_ cached: CachedMenuSummary) -> Bool {
+        now().timeIntervalSince(cached.fetchedAt) < cacheFreshnessInterval
     }
 
     private static func shortError(_ error: Error) -> String {

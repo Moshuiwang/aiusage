@@ -18,7 +18,8 @@ final class StatusBarController: NSObject {
         self.quitApplication = quitApplication
         let config = MenuBarRuntimeConfigLoader.load(paths: paths)
         let cached = SummaryCache.load(from: paths.cacheURL)
-        self.model = MenuBarAppModel(paths: paths, config: config, cachedSummary: cached)
+        let cachedSummaries = SummaryCache.loadSummaries(paths: paths)
+        self.model = MenuBarAppModel(paths: paths, config: config, cachedSummary: cached, cachedSummaries: cachedSummaries)
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         setupStatusItem()

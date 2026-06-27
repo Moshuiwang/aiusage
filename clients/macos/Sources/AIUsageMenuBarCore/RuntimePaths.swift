@@ -15,8 +15,16 @@ public struct RuntimePaths: Equatable, Sendable {
         root.appendingPathComponent("last-summary.json", isDirectory: false)
     }
 
+    public var periodCacheDirectoryURL: URL {
+        root.appendingPathComponent("summaries", isDirectory: true)
+    }
+
     public var logURL: URL {
         root.appendingPathComponent("menu-bar.log", isDirectory: false)
+    }
+
+    public func cacheURL(forPeriod periodID: String) -> URL {
+        periodCacheDirectoryURL.appendingPathComponent("\(safePeriodID(periodID)).json", isDirectory: false)
     }
 
     public static func defaultRoot(homeDirectory: URL? = nil) -> URL {
@@ -30,5 +38,15 @@ public struct RuntimePaths: Equatable, Sendable {
 
     public func ensureCreated() throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: periodCacheDirectoryURL, withIntermediateDirectories: true)
+    }
+
+    private func safePeriodID(_ periodID: String) -> String {
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-")
+        let scalars = periodID.unicodeScalars.map { scalar -> Character in
+            allowed.contains(scalar) ? Character(scalar) : "-"
+        }
+        let value = String(scalars)
+        return value.isEmpty ? "today" : value
     }
 }

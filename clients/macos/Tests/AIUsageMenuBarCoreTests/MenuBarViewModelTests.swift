@@ -384,6 +384,8 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertFalse(root.path.contains("/Documents/"))
         XCTAssertEqual(paths.configURL.lastPathComponent, "config.json")
         XCTAssertEqual(paths.cacheURL.lastPathComponent, "last-summary.json")
+        XCTAssertEqual(paths.periodCacheDirectoryURL.lastPathComponent, "summaries")
+        XCTAssertEqual(paths.cacheURL(forPeriod: "today").lastPathComponent, "today.json")
         XCTAssertEqual(paths.logURL.lastPathComponent, "menu-bar.log")
     }
 

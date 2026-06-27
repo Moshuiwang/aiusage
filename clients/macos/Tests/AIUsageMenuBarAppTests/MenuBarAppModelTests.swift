@@ -4,6 +4,93 @@ import XCTest
 
 @MainActor
 final class MenuBarAppModelTests: XCTestCase {
+    func testSwitchToFreshCachedPeriodDoesNotRequestNetwork() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "week": CachedMenuSummary(
+                    summary: try summary(periodID: "week", totalTokens: 700),
+                    fetchedAt: now.addingTimeInterval(-60)
+                )
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertEqual(model.selectedPeriodID, "week")
+        XCTAssertEqual(model.summary.period.id, "week")
+        XCTAssertEqual(model.summary.period.totalTokens, 700)
+        XCTAssertFalse(model.isLoading)
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testSwitchToExpiredCachedPeriodShowsCacheThenRefreshesInBackground() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "week": CachedMenuSummary(
+                    summary: try summary(periodID: "week", totalTokens: 700),
+                    fetchedAt: now.addingTimeInterval(-600)
+                )
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "week")
+        try await loader.waitForRequestCount(1)
+
+        XCTAssertEqual(model.summary.period.id, "week")
+        XCTAssertEqual(model.summary.period.totalTokens, 700)
+        XCTAssertTrue(model.isLoading)
+
+        await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 900))
+        await waitUntil {
+            model.summary.period.totalTokens == 900 && model.isLoading == false
+        }
+    }
+
+    func testExpiredCachedPeriodSurvivesBackgroundRefreshFailure() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "month": CachedMenuSummary(
+                    summary: try summary(periodID: "month", totalTokens: 1200),
+                    fetchedAt: now.addingTimeInterval(-600)
+                )
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "month")
+        try await loader.waitForRequestCount(1)
+        await loader.fail(period: "month")
+        await waitUntil {
+            model.isLoading == false
+        }
+
+        XCTAssertEqual(model.summary.period.id, "month")
+        XCTAssertEqual(model.summary.period.totalTokens, 1200)
+        XCTAssertTrue(model.errorMessage?.hasPrefix("刷新失败，正在显示缓存：") == true)
+    }
+
     func testPopoverQuitActionTerminatesApplication() {
         var didQuit = false
         let controller = StatusBarController(
@@ -173,6 +260,70 @@ final class MenuBarAppModelTests: XCTestCase {
         }
         return RuntimePaths(root: root)
     }
+
+    private func testConfig(defaultPeriod: String = "today") -> MenuBarRuntimeConfig {
+        MenuBarRuntimeConfig(
+            serverURL: "https://aiusage.chunbai.com",
+            token: "test-token",
+            dashboardURL: nil,
+            defaultPeriod: defaultPeriod
+        )
+    }
+
+    private func summary(periodID: String, totalTokens: Int) throws -> MobileSummary {
+        let json = """
+        {
+          "schema_version": 1,
+          "client": "macos",
+          "generated_at": "2026-06-25T12:00:00+08:00",
+          "timezone": "Asia/Shanghai",
+          "period": {
+            "id": "\(periodID)",
+            "date": "2026-06-25",
+            "start_date": "2026-06-25",
+            "end_date": "2026-06-25",
+            "total_tokens": \(totalTokens),
+            "input_tokens": \(totalTokens),
+            "output_tokens": 0,
+            "cache_tokens": 0,
+            "cache_ratio": 0,
+            "machine": null,
+            "account": null
+          },
+          "trend": {
+            "period": "\(periodID)",
+            "granularity": "\(periodID == "today" ? "hour" : "day")",
+            "start_date": "2026-06-25",
+            "end_date": "2026-06-25",
+            "points": []
+          },
+          "sources": [],
+          "breakdown": {
+            "by_machine": [],
+            "by_os_user": [],
+            "by_agent": [],
+            "by_model": [],
+            "by_date": []
+          },
+          "limits": {
+            "observed_count": 0,
+            "total_count": 0,
+            "windows": []
+          }
+        }
+        """
+        return try JSONDecoder().decode(MobileSummary.self, from: Data(json.utf8))
+    }
+
+    private func date(_ iso: String) throws -> Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let value = formatter.date(from: iso) {
+            return value
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return try XCTUnwrap(formatter.date(from: iso))
+    }
 }
 
 private actor ControlledSummaryLoader {
@@ -216,6 +367,10 @@ private actor ControlledSummaryLoader {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("Timed out waiting for \(period) completion")
+    }
+
+    func requestCount() -> Int {
+        configs.count
     }
 
     func config(for period: String) throws -> MobileSummaryClientConfig {

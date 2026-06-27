@@ -19,7 +19,8 @@
 - 菜单栏常驻显示 `AI <当前周期 token>`。
 - 点击后可切换今天、本周、本月、全部。
 - 弹窗内展示 token 汇总、趋势、可信额度、采集来源和机器/账户/Agent/模型/日期明细。
-- 默认 10 分钟低频刷新；用户打开弹窗或点击刷新会立即读取一次。
+- 今天、本周、本月、全部各自保留本地缓存；切换周期时先显示缓存，再按需后台刷新。
+- 默认 10 分钟低频刷新；右上角刷新按钮会强制读取线上数据。
 - 只请求 `/api/mobile/summary`，不执行采集、不读 SQLite、不读 legacy `data/latest.json`。
 
 ## 安装
@@ -45,5 +46,6 @@ python3 clients/macos/scripts/install_menu_bar_app.py \
 ```
 
 这条路径避开 `~/Documents`，所以菜单栏 App 运行时不会因为访问项目目录反复弹出“文稿”权限确认。
+周期缓存保存在该目录下的 `summaries/`，旧版 `last-summary.json` 仍保留为兼容缓存。
 
 Token 默认从 `AI_USAGE_INGEST_TOKEN` 读取，只写到用户本机的 `config.json`，不会写入仓库。

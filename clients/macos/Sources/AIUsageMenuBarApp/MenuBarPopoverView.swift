@@ -40,7 +40,7 @@ struct MenuBarPopoverView: View {
             if model.isLoading {
                 ProgressView().controlSize(.small)
             }
-            Button { model.refresh() } label: {
+            Button { model.refresh(force: true) } label: {
                 Image(systemName: "arrow.clockwise").frame(width: 26, height: 26)
             }
             .buttonStyle(.borderless)
