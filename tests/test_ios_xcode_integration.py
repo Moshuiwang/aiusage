@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import pathlib
 import struct
 import unittest
@@ -64,6 +65,74 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         icon_1024 = app_icon_dir / "AppIcon-1024.png"
         self.assertTrue(icon_1024.exists())
         self.assertEqual(self._png_size(icon_1024), (1024, 1024))
+
+    def test_watch_app_icon_assets_are_wired(self) -> None:
+        app_icon_dir = (
+            ROOT
+            / "mobile"
+            / "ios-xcode"
+            / "Resources"
+            / "Assets.xcassets"
+            / "AppIcon.appiconset"
+        )
+        contents = json.loads((app_icon_dir / "Contents.json").read_text(encoding="utf-8"))
+        watch_entries = [
+            image for image in contents["images"] if image.get("idiom") == "watch"
+        ]
+        expected = {
+            "AppIcon-watch-24@2x.png": (
+                (48, 48),
+                {"role": "notificationCenter", "scale": "2x", "size": "24x24", "subtype": "38mm"},
+            ),
+            "AppIcon-watch-27.5@2x.png": (
+                (55, 55),
+                {"role": "notificationCenter", "scale": "2x", "size": "27.5x27.5", "subtype": "42mm"},
+            ),
+            "AppIcon-watch-29@2x.png": (
+                (58, 58),
+                {"role": "companionSettings", "scale": "2x", "size": "29x29", "subtype": "38mm"},
+            ),
+            "AppIcon-watch-29@3x.png": (
+                (87, 87),
+                {"role": "companionSettings", "scale": "3x", "size": "29x29", "subtype": "42mm"},
+            ),
+            "AppIcon-watch-40@2x.png": (
+                (80, 80),
+                {"role": "appLauncher", "scale": "2x", "size": "40x40", "subtype": "38mm"},
+            ),
+            "AppIcon-watch-44@2x.png": (
+                (88, 88),
+                {"role": "appLauncher", "scale": "2x", "size": "44x44", "subtype": "40mm"},
+            ),
+            "AppIcon-watch-50@2x.png": (
+                (100, 100),
+                {"role": "appLauncher", "scale": "2x", "size": "50x50", "subtype": "44mm"},
+            ),
+            "AppIcon-watch-86@2x.png": (
+                (172, 172),
+                {"role": "quickLook", "scale": "2x", "size": "86x86", "subtype": "38mm"},
+            ),
+            "AppIcon-watch-98@2x.png": (
+                (196, 196),
+                {"role": "quickLook", "scale": "2x", "size": "98x98", "subtype": "42mm"},
+            ),
+            "AppIcon-watch-108@2x.png": (
+                (216, 216),
+                {"role": "quickLook", "scale": "2x", "size": "108x108", "subtype": "44mm"},
+            ),
+        }
+        watch_entries_by_filename = {
+            image["filename"]: image for image in watch_entries
+        }
+        self.assertEqual(
+            sorted(watch_entries_by_filename),
+            sorted(expected),
+        )
+        for filename, (pixel_size, metadata) in expected.items():
+            with self.subTest(filename=filename):
+                for key, value in metadata.items():
+                    self.assertEqual(watch_entries_by_filename[filename].get(key), value)
+                self.assertEqual(self._png_size(app_icon_dir / filename), pixel_size)
 
     def test_ios_app_icons_are_fully_opaque_square_artwork(self) -> None:
         app_icon_dir = (
