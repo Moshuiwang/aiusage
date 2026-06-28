@@ -148,13 +148,18 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const aiAccounts = await fetchAiAccounts(db);
 
   rows = rows.filter((row) => dailyRowMatchesFilter(row, request.machine, request.account));
-  const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
-  modelRows = modelRows.filter((row) => allowed.has(itemKey(row.source_id, row.date, row.agent)));
-  hourlyRows = hourlyRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
-  blockRows = blockRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
+  rows = applyLedgerDailyRows(rows, accountHourlyRowsToDailyRows(filteredAccountHourlyRows));
+  const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
+  modelRows = modelRows.filter((row) => allowed.has(itemKey(row.source_id, row.date, row.agent)));
+  hourlyRows = hourlyRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
+  hourlyRows = applyLedgerHourlyRows(
+    hourlyRows,
+    periodId === "today" ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows) : [],
+  );
+  blockRows = blockRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
   const accountHourly = accountHourlySummary(filteredAccountHourlyRows);
 
   const modelsByItem = new Map<string, Record<string, unknown>[]>();
@@ -576,6 +581,7 @@ function hourlyTrend(axis: string[], rows: TimedRow[], blockRows: TimedRow[]): R
   }]));
   const agentTotals = new Map<string, number>();
   const byAgent = new Map<string, Map<string, number>>();
+  blockRows = dedupeCumulativeBlockRows(blockRows);
   const blockSources = new Set(blockRows.map((row) => row.source_id));
 
   for (const row of rows) {
@@ -671,6 +677,43 @@ function addBlockToHourBuckets(
     }
     agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
     byAgent.get(row.agent)?.set(hour, (byAgent.get(row.agent)?.get(hour) ?? 0) + total);
+  }
+}
+
+function dedupeCumulativeBlockRows(rows: TimedRow[]): TimedRow[] {
+  const latestByKey = new Map<string, TimedRow>();
+  for (const row of rows) {
+    const key = blockDedupeKey(row);
+    const current = latestByKey.get(key);
+    if (!current || blockRowSortKey(row).localeCompare(blockRowSortKey(current)) >= 0) {
+      latestByKey.set(key, row);
+    }
+  }
+  return Array.from(latestByKey.values())
+    .sort((lhs, rhs) =>
+      `${lhs.start_time || ""}:${lhs.source_id}:${lhs.agent}:${lhs.end_time || ""}`
+        .localeCompare(`${rhs.start_time || ""}:${rhs.source_id}:${rhs.agent}:${rhs.end_time || ""}`),
+    );
+}
+
+function blockDedupeKey(row: TimedRow): string {
+  const rawBlock = metadataObject(row.metadata_json).ccusage_block_row;
+  const blockId = isRecord(rawBlock) ? str(rawBlock.id) : "";
+  if (blockId) return `${row.source_id}\u0000${row.agent}\u0000${blockId}`;
+  return `${row.source_id}\u0000${row.agent}\u0000${row.start_time || ""}\u0000${row.end_time || ""}`;
+}
+
+function blockRowSortKey(row: TimedRow): string {
+  return `${row.end_time || ""}\u0000${String(int(row.total_tokens)).padStart(16, "0")}`;
+}
+
+function metadataObject(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(str(raw));
+    return isRecord(parsed) ? parsed : {};
+  } catch {
+    return {};
   }
 }
 
@@ -885,6 +928,252 @@ function accountHourlySummary(rows: Record<string, unknown>[]): Record<string, u
     by_agent: Array.from(byAgent.entries()).sort((lhs, rhs) => rhs[1] - lhs[1]).map(([name, tokens]) => ({ name, total_tokens: tokens })),
     confidence_breakdown: Array.from(byConfidence.entries()).sort((lhs, rhs) => rhs[1] - lhs[1]).map(([confidence, tokens]) => ({ confidence, total_tokens: tokens })),
   };
+}
+
+function accountHourlyRowsToDailyRows(rows: Record<string, unknown>[]): DailyRow[] {
+  const buckets = new Map<string, {
+    source_id: string;
+    date: string;
+    agent: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_tokens: number;
+    cache_read_tokens: number;
+    total_tokens: number;
+    machine: string;
+    account: string;
+    provenances: Set<string>;
+  }>();
+  for (const row of rows) {
+    const date = localDateFromWindowStart(row.window_start);
+    if (!date) continue;
+    const sourceId = str(row.source_id);
+    const agent = str(row.agent);
+    const key = itemKey(sourceId, date, agent);
+    const bucket = buckets.get(key) ?? {
+      source_id: sourceId,
+      date,
+      agent,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 0,
+      machine: str(row.machine_name || row.machine_id || sourceId),
+      account: str(row.os_user || "unknown"),
+      provenances: new Set(),
+    };
+    bucket.input_tokens += int(row.input_tokens);
+    bucket.output_tokens += int(row.output_tokens);
+    bucket.cache_creation_tokens += int(row.cache_creation_tokens);
+    bucket.cache_read_tokens += int(row.cache_read_tokens);
+    bucket.total_tokens += int(row.total_tokens);
+    bucket.provenances.add(str(row.provenance || "usage_hourly_facts"));
+    buckets.set(key, bucket);
+  }
+  return Array.from(buckets.values())
+    .sort((lhs, rhs) => itemKey(lhs.source_id, lhs.date, lhs.agent).localeCompare(itemKey(rhs.source_id, rhs.date, rhs.agent)))
+    .map((bucket) => ({
+      source_id: bucket.source_id,
+      date: bucket.date,
+      agent: bucket.agent,
+      input_tokens: bucket.input_tokens,
+      output_tokens: bucket.output_tokens,
+      cache_creation_tokens: bucket.cache_creation_tokens,
+      cache_read_tokens: bucket.cache_read_tokens,
+      total_tokens: bucket.total_tokens,
+      total_cost: null,
+      metadata_json: JSON.stringify({
+        machine: bucket.machine,
+        account: bucket.account,
+        os_user: bucket.account,
+        provenance: "usage_ledger_hourly_facts",
+        source_provenances: Array.from(bucket.provenances).sort(),
+      }),
+    }));
+}
+
+function accountHourlyRowsToHourlyRows(rows: Record<string, unknown>[]): TimedRow[] {
+  const buckets = new Map<string, {
+    source_id: string;
+    hour: string;
+    agent: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_tokens: number;
+    cache_read_tokens: number;
+    total_tokens: number;
+    machine: string;
+    account: string;
+    provenances: Set<string>;
+  }>();
+  for (const row of rows) {
+    const hour = localHourFromWindowStart(row.window_start);
+    if (!hour) continue;
+    const sourceId = str(row.source_id);
+    const agent = str(row.agent);
+    const key = `${sourceId}\u0000${hour}\u0000${agent}`;
+    const bucket = buckets.get(key) ?? {
+      source_id: sourceId,
+      hour,
+      agent,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 0,
+      machine: str(row.machine_name || row.machine_id || sourceId),
+      account: str(row.os_user || "unknown"),
+      provenances: new Set(),
+    };
+    bucket.input_tokens += int(row.input_tokens);
+    bucket.output_tokens += int(row.output_tokens);
+    bucket.cache_creation_tokens += int(row.cache_creation_tokens);
+    bucket.cache_read_tokens += int(row.cache_read_tokens);
+    bucket.total_tokens += int(row.total_tokens);
+    bucket.provenances.add(str(row.provenance || "usage_hourly_facts"));
+    buckets.set(key, bucket);
+  }
+  return Array.from(buckets.values())
+    .sort((lhs, rhs) => `${lhs.hour}:${lhs.source_id}:${lhs.agent}`.localeCompare(`${rhs.hour}:${rhs.source_id}:${rhs.agent}`))
+    .map((bucket) => ({
+      source_id: bucket.source_id,
+      hour: bucket.hour,
+      agent: bucket.agent,
+      input_tokens: bucket.input_tokens,
+      output_tokens: bucket.output_tokens,
+      cache_creation_tokens: bucket.cache_creation_tokens,
+      cache_read_tokens: bucket.cache_read_tokens,
+      total_tokens: bucket.total_tokens,
+      total_cost: null,
+      metadata_json: JSON.stringify({
+        machine: bucket.machine,
+        account: bucket.account,
+        os_user: bucket.account,
+        provenance: "usage_ledger_hourly_facts",
+        source_provenances: Array.from(bucket.provenances).sort(),
+      }),
+    }));
+}
+
+function applyLedgerDailyRows(rows: DailyRow[], ledgerRows: DailyRow[]): DailyRow[] {
+  if (!ledgerRows.length) return rows;
+  const costByKey = new Map(rows.map((row) => [itemKey(row.source_id, row.date, row.agent), row.total_cost]));
+  const enrichedLedgerRows = ledgerRows.map((row) => ({
+    ...row,
+    total_cost: row.total_cost ?? costByKey.get(itemKey(row.source_id, row.date, row.agent)) ?? null,
+  }));
+  const ledgerKeys = new Set(ledgerRows.map((row) => itemKey(row.source_id, row.date, row.agent)));
+  const ledgerTotalsBySourceDate = new Map<string, {
+    input_tokens: number;
+    output_tokens: number;
+    cache_creation_tokens: number;
+    cache_read_tokens: number;
+    total_tokens: number;
+  }>();
+  for (const row of ledgerRows) {
+    const key = `${row.source_id}\u0000${row.date}`;
+    const totals = ledgerTotalsBySourceDate.get(key) ?? {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 0,
+    };
+    totals.input_tokens += int(row.input_tokens);
+    totals.output_tokens += int(row.output_tokens);
+    totals.cache_creation_tokens += int(row.cache_creation_tokens);
+    totals.cache_read_tokens += int(row.cache_read_tokens);
+    totals.total_tokens += int(row.total_tokens);
+    ledgerTotalsBySourceDate.set(key, totals);
+  }
+  const keptRows: DailyRow[] = [];
+  for (const row of rows) {
+    if (ledgerKeys.has(itemKey(row.source_id, row.date, row.agent))) continue;
+    const sourceDateKey = `${row.source_id}\u0000${row.date}`;
+    if (row.agent.toLowerCase() === "all" && ledgerTotalsBySourceDate.has(sourceDateKey)) {
+      const residual = dailyAllResidualRow(row, ledgerTotalsBySourceDate.get(sourceDateKey));
+      if (residual) keptRows.push(residual);
+      continue;
+    }
+    keptRows.push(row);
+  }
+  return [
+    ...keptRows,
+    ...enrichedLedgerRows,
+  ].sort((lhs, rhs) => `${lhs.date}:${lhs.source_id}:${lhs.agent}`.localeCompare(`${rhs.date}:${rhs.source_id}:${rhs.agent}`));
+}
+
+function dailyAllResidualRow(row: DailyRow, ledgerTotals?: {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  total_tokens: number;
+}): DailyRow | null {
+  if (!ledgerTotals) return null;
+  const oldTotal = int(row.total_tokens);
+  const residualTotal = Math.max(oldTotal - int(ledgerTotals.total_tokens), 0);
+  const residualInput = Math.max(int(row.input_tokens) - int(ledgerTotals.input_tokens), 0);
+  const residualOutput = Math.max(int(row.output_tokens) - int(ledgerTotals.output_tokens), 0);
+  const residualCacheCreation = Math.max(int(row.cache_creation_tokens) - int(ledgerTotals.cache_creation_tokens), 0);
+  const residualCacheRead = Math.max(int(row.cache_read_tokens) - int(ledgerTotals.cache_read_tokens), 0);
+  if (residualTotal <= 0 && !residualInput && !residualOutput && !residualCacheCreation && !residualCacheRead) {
+    return null;
+  }
+  const residualCost = row.total_cost == null || oldTotal <= 0
+    ? row.total_cost
+    : Number(row.total_cost) * (residualTotal / oldTotal);
+  return {
+    ...row,
+    input_tokens: residualInput,
+    output_tokens: residualOutput,
+    cache_creation_tokens: residualCacheCreation,
+    cache_read_tokens: residualCacheRead,
+    total_tokens: residualTotal,
+    total_cost: residualCost,
+    metadata_json: metadataJsonWithProvenance(row.metadata_json, "usage_daily_residual_after_ledger"),
+  };
+}
+
+function metadataJsonWithProvenance(raw: unknown, provenance: string): string {
+  let metadata: Record<string, unknown> = {};
+  if (raw) {
+    try {
+      const parsed = JSON.parse(str(raw));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        metadata = { ...parsed };
+      }
+    } catch {
+      metadata = {};
+    }
+  }
+  if (!metadata.provenance) metadata.provenance = provenance;
+  metadata.residual_provenance = provenance;
+  return JSON.stringify(metadata);
+}
+
+function applyLedgerHourlyRows(rows: TimedRow[], ledgerRows: TimedRow[]): TimedRow[] {
+  if (!ledgerRows.length) return rows;
+  const ledgerKeys = new Set(ledgerRows.map((row) => `${row.source_id}\u0000${row.hour}\u0000${row.agent}`));
+  return [
+    ...rows.filter((row) => !ledgerKeys.has(`${row.source_id}\u0000${row.hour}\u0000${row.agent}`)),
+    ...ledgerRows,
+  ].sort((lhs, rhs) =>
+    `${lhs.hour || ""}:${lhs.source_id}:${lhs.agent}`.localeCompare(`${rhs.hour || ""}:${rhs.source_id}:${rhs.agent}`),
+  );
+}
+
+function localDateFromWindowStart(value: unknown): string | null {
+  const parsed = parseDate(str(value));
+  return parsed ? formatDateInShanghai(parsed) : null;
+}
+
+function localHourFromWindowStart(value: unknown): string | null {
+  const parsed = parseDate(str(value));
+  if (!parsed) return null;
+  const local = toOffsetIso(parsed);
+  return `${local.slice(0, 13)}:00:00+08:00`;
 }
 
 function emptyAccountHourlySummary(): Record<string, unknown> {

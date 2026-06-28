@@ -9,24 +9,21 @@
 - 服务接口索引：[`interfaces.md`](interfaces.md)；接口以 `server.py`、`server_services.py`、`ingest.py`、`mobile_summary.py` 为准。
 - 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
-- Cloudflare 迁移长期目标（北极星，尚未执行）：[`cloudflare-migration-objective.md`](cloudflare-migration-objective.md)。
-- Cloudflare Worker Native 迁移规划（路线，尚未实施）：[`cloudflare-worker-native-migration-plan.md`](cloudflare-worker-native-migration-plan.md)。
+- Cloudflare/D1 当前生产事实：[`cloudflare-migration-remaining-work.md`](cloudflare-migration-remaining-work.md)。
 
 ## 当前真实架构
 
-当前主流程已经跑通：
+当前主流程已经跑通。生产读写入口是 `https://aiusage.chunbai.com`，由 Cloudflare Worker + D1 承载；VPN2 旧 AI Usage 后端已经下线，不再参与当前读写链路。
 
 ```mermaid
 flowchart LR
-    device["DevicePusher<br/>各设备本机账号"] --> collect["ccusage daily / session / blocks<br/>mswusage Codex hourly"]
-    collect --> ingest["POST /ingest<br/>server.py HTTP adapter"]
-    limits["push-limits / collect-limits"] --> ingestLimits["POST /ingest-limits<br/>server.py HTTP adapter"]
-    ingest --> services["server_services.py<br/>业务编排"]
-    ingestLimits --> services
-    services --> storage["storage_sqlite.py<br/>SQLite canonical store"]
-    storage --> snapshot["snapshot_builder.py<br/>Web summary read model"]
-    snapshot --> webApi["GET /api/summary"]
-    snapshot --> mobileApi["GET /api/mobile/summary<br/>mobile_summary.py DTO"]
+    device["DevicePusher<br/>各设备本机账号"] --> collect["Python pusher<br/>ccusage + Codex / Claude Usage Ledger"]
+    collect --> ingest["POST /ingest<br/>Cloudflare Worker"]
+    limits["push-limits"] --> ingestLimits["POST /ingest-limits<br/>Cloudflare Worker"]
+    ingest --> d1["Cloudflare D1<br/>SQLite-compatible canonical store"]
+    ingestLimits --> d1
+    d1 --> webApi["GET /api/summary"]
+    d1 --> mobileApi["GET /api/mobile/summary<br/>mobile_summary DTO"]
     webApi --> dashboard["clients/web<br/>Web dashboard"]
     mobileApi --> iphone["clients/ios<br/>iPhone App / iOS Widget / Watch companion"]
     mobileApi --> android["clients/android<br/>Android App / Widget"]
@@ -68,7 +65,7 @@ CLI / HTTP handler / clients
 | `server_services.py` | HTTP 入口背后的业务编排：ingest、limits ingest、summary/mobile summary、health。 | 不依赖 `BaseHTTPRequestHandler` 或 Web request 对象。 |
 | `ingest.py` | Ingest contract、payload 校验、敏感字段边界。 | 不写 SQLite，不构建展示快照。 |
 | `pusher.py` | 设备本机采集和 HTTP 上报。 | 不读取其他 OS 用户 home，不做 server-side 聚合。 |
-| `storage_sqlite.py` | SQLite schema、写入、upsert、WAL/busy timeout、错误脱敏。 | 不定义 Web/Mobile 展示文案。 |
+| `storage_sqlite.py` | 本地 SQLite adapter、schema、写入、upsert、WAL/busy timeout、错误脱敏；D1 schema 以此兼容迁移。 | 不定义 Web/Mobile 展示文案。 |
 | `snapshot_builder.py` | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。 | 不把口径分散到 Web、Mobile 或 server route。 |
 | `snapshot_periods.py` / `snapshot_filters.py` / `snapshot_trends.py` / `snapshot_source_health.py` | `snapshot_builder.py` 的内部 helper：period/date axis、machine/account filter、trend/hourly residual、source health。 | 不成为新的 API owner，不直接被 Web/Mobile 调用。 |
 | `mobile_summary.py` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
@@ -79,6 +76,8 @@ CLI / HTTP handler / clients
 
 - 每个 source 只能在自己的 OS 用户上下文运行采集；`wang` 不读取 `/home/ubuntu`，Mac 不读取远程 `.claude` / `.codex` 原始日志目录。
 - 汇聚端不通过 SSH 抓取 usage；V2 只接受终端主动 push 的结构化 payload。
+- 本机 pusher 可以读取当前 OS 用户自己的 Codex / Claude 本地日志，但只能上传结构化 usage fact；不得上传原始 session、prompt、response、tool output、原始路径或日志内容。
+- `ccusage` 只作为 daily fallback / reconciliation source；卸载或禁用 `ccusage` 时，Codex / Claude Usage Ledger 明细采集不应停更。
 - `observed` 只用于 provider/runtime/structured export 明确给出的事实；本地 history、`ccusage daily`、`ccusage blocks` 不能伪装成官方 quota。
 - `estimated`、`missing`、`unsupported` 必须在 UI 中降级展示，不得作为强结论。
 
@@ -97,6 +96,9 @@ CLI / HTTP handler / clients
 - `official observed quota`：只有 `official == true`、`confidence == "observed"`、`status == "ok"` 同时成立，才可在 Mobile / Widget / dashboard 中当作可信官方额度展示。本地 `ccusage daily` / `ccusage blocks` 即使有 observed 字段，也只能是本地估算，不能计入 observed quota。
 - `hourly residual`：today 趋势里，当小时级事实不足以覆盖 daily total 时，把差额补到当前可见小时，避免用户看到今日总量和趋势总量明显不一致。Codex 使用 `mswusage_codex_token_count` 时会避免把同一 Codex daily baseline 重复补入小时趋势。
 - `mobile summary`：由 `/api/summary` 的 snapshot 派生，只做 DTO 转换和字段裁剪，不重新计算 canonical usage；`limits.observed_count` 只统计 official observed quota。
+- `Usage Ledger hourly fact`：本机按最近窗口扫描并按记录时间切成小时桶；服务端按来源、agent、client、时间窗口、账号、归因状态和 provenance upsert，同一小时重复上报只更新最新值，不累加。
+- `实时上报`：macOS 本机当前通过 LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒运行 Python pusher。默认增量 lookback 为 48 小时，用于覆盖日志延迟和近期归档，不代表上传 48 小时内每个 session 明细。
+- `Cloudflare D1`：当前生产 canonical store。D1 是 Cloudflare 托管的 SQLite-compatible serverless SQL 数据库，不是 PostgreSQL。本地 SQLite 仅作为 legacy/local adapter 和测试/迁移参考。
 
 详细 SQLite 表和当前 snapshot 顶层字段见 [`database.md`](database.md) 与
 [`interfaces.md`](interfaces.md)。旧 `docs/architecture.md` 中的 `snapshot_builds`
@@ -124,6 +126,17 @@ CLI / HTTP handler / clients
 - 新增数据写入：通过 `storage_sqlite.py` 边界，不在 route handler 里直接散写 SQL。
 - 新增客户端平台：放入 `clients/<platform>/`；跨端数据合同放 `packages/client-contracts/`；状态色和视觉语义放 `packages/design-tokens/`。
 - 迁移现有 iOS / Web 路径：必须单独开任务包，先保证 SwiftPM、Xcode 或 Web 路由验证，再移动文件。
+
+## 历史规划文档
+
+以下文档是迁移期或设计期材料，不作为当前实现入口：
+
+- `cloudflare-migration-objective.md`
+- `cloudflare-worker-native-migration-plan.md`
+- `d1-schema-quota-import-plan.md`
+- `native-staging-deploy-runbook.md`
+
+后续判断当前生产状态时，只看本文、`database.md`、`interfaces.md`、`cloudflare-migration-remaining-work.md` 和 `docs/status.md`。
 
 ## 禁止事项
 

@@ -14,7 +14,7 @@ from typing import Any
 
 APP_NAME = "AI Usage Menu Bar"
 EXECUTABLE_NAME = "AIUsageMenuBar"
-DEFAULT_BUNDLE_ID = "com.chunbai.aiusage.menubar"
+DEFAULT_BUNDLE_ID = "com.chunbai.aiusage.menubar.numeric"
 DEFAULT_INSTALL_DIR = Path("/Applications")
 
 

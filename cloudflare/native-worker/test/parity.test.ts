@@ -149,6 +149,250 @@ describe.sequential("native TS Worker read-only API parity", () => {
     }
   });
 
+  it("uses usage_hourly_facts as the mobile summary period total when stale daily rows disagree", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    for (const table of [
+      "usage_hourly_models",
+      "usage_hourly_facts",
+      "usage_blocks",
+      "usage_hourly",
+      "usage_daily_models",
+      "usage_daily",
+      "ai_accounts",
+      "os_identities",
+      "machines",
+      "source_identities",
+    ]) {
+      await db.prepare(`DELETE FROM ${table}`).run();
+    }
+    await db.prepare(`
+      INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "macbook-pro.local", "MacBook Pro", "wangzhipeng", "darwin",
+      "2026-06-11T14:30:00+08:00", "2026-06-11T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO usage_daily (
+        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "2026-06-11", "codex", 10, 5, 0, 5, 20, null,
+      JSON.stringify({ machine: "MacBook Pro", account: "wangzhipeng" }),
+      "2026-06-11T14:30:00+08:00", "2026-06-11T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO machines (machine_id, machine_name, host, platform, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      "macbook-pro-local", "MacBook Pro", "macbook-pro.local", "darwin",
+      "2026-06-11T14:30:00+08:00", "2026-06-11T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO ai_accounts (provider, account_id, account_label, display_name, subscription, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "openai", "unconfirmed_local_source:mac-local:codex", "本机来源 / 未确认账号",
+      null, null, "2026-06-11T14:30:00+08:00", "2026-06-11T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
+        session_count, attribution_confidence, provenance, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "codex:codex:mac-local:2026-06-11T13:00:00+08:00:2026-06-11T14:00:00+08:00:unconfirmed_local_source:openai:unconfirmed_local_source:mac-local:codex:mswusage_codex_token_count",
+      "mac-local", "macbook-pro-local", "wangzhipeng", "openai", "unconfirmed_local_source:mac-local:codex",
+      "codex", "codex", "2026-06-11T13:00:00+08:00", "2026-06-11T14:00:00+08:00",
+      "Asia/Shanghai", 100, 20, 0, 30, 5, 155, null, 2, 1,
+      "unconfirmed_local_source", "mswusage_codex_token_count",
+      "2026-06-11T14:30:00+08:00", "2026-06-11T14:30:00+08:00",
+    ).run();
+
+    const mobile = bodyFor(
+      [await recordValue("mobile-summary-ledger-total", "/api/mobile/summary?date=2026-06-11&period=today")],
+      "mobile-summary-ledger-total",
+    );
+
+    expect((mobile.period as Shape).total_tokens).toBe(155);
+    expect(((mobile.breakdown as Shape).by_agent as Shape[])).toEqual([
+      expect.objectContaining({ id: "codex", tokens: 155 }),
+    ]);
+    const trendTotal = (((mobile.trend as Shape).points as Shape[]) ?? [])
+      .reduce((sum, point) => sum + Number(point.tokens ?? 0), 0);
+    expect(trendTotal).toBe(155);
+  });
+
+  it("keeps the all-agent daily residual when ledger only covers one agent", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    for (const table of [
+      "usage_hourly_models",
+      "usage_hourly_facts",
+      "usage_blocks",
+      "usage_hourly",
+      "usage_daily_models",
+      "usage_daily",
+      "ai_accounts",
+      "os_identities",
+      "machines",
+      "source_identities",
+    ]) {
+      await db.prepare(`DELETE FROM ${table}`).run();
+    }
+    await db.prepare(`
+      INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "macbook-pro.local", "MacBook Pro", "wangzhipeng", "darwin",
+      "2026-06-12T14:30:00+08:00", "2026-06-12T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO usage_daily (
+        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "2026-06-12", "all", 1000, 0, 0, 0, 1000, null,
+      JSON.stringify({ machine: "MacBook Pro", account: "wangzhipeng" }),
+      "2026-06-12T14:30:00+08:00", "2026-06-12T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO machines (machine_id, machine_name, host, platform, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      "macbook-pro-local", "MacBook Pro", "macbook-pro.local", "darwin",
+      "2026-06-12T14:30:00+08:00", "2026-06-12T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO ai_accounts (provider, account_id, account_label, display_name, subscription, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "openai", "unconfirmed_local_source:mac-local:codex", "本机来源 / 未确认账号",
+      null, null, "2026-06-12T14:30:00+08:00", "2026-06-12T14:30:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
+        session_count, attribution_confidence, provenance, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "codex:codex:mac-local:2026-06-12T13:00:00+08:00:2026-06-12T14:00:00+08:00:unconfirmed_local_source:openai:unconfirmed_local_source:mac-local:codex:mswusage_codex_token_count",
+      "mac-local", "macbook-pro-local", "wangzhipeng", "openai", "unconfirmed_local_source:mac-local:codex",
+      "codex", "codex", "2026-06-12T13:00:00+08:00", "2026-06-12T14:00:00+08:00",
+      "Asia/Shanghai", 400, 0, 0, 0, 0, 400, null, 1, 1,
+      "unconfirmed_local_source", "mswusage_codex_token_count",
+      "2026-06-12T14:30:00+08:00", "2026-06-12T14:30:00+08:00",
+    ).run();
+
+    const mobile = bodyFor(
+      [await recordValue("mobile-summary-ledger-residual", "/api/mobile/summary?date=2026-06-12&period=today")],
+      "mobile-summary-ledger-residual",
+    );
+
+    expect((mobile.period as Shape).total_tokens).toBe(1000);
+    expect(((mobile.breakdown as Shape).by_agent as Shape[])).toEqual([
+      expect.objectContaining({ id: "all", tokens: 600 }),
+      expect.objectContaining({ id: "codex", tokens: 400 }),
+    ]);
+  });
+
+  it("dedupes cumulative ccusage block snapshots before building today's hourly trend", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    for (const table of [
+      "usage_hourly_models",
+      "usage_hourly_facts",
+      "usage_blocks",
+      "usage_hourly",
+      "usage_daily_models",
+      "usage_daily",
+      "ai_accounts",
+      "os_identities",
+      "machines",
+      "source_identities",
+    ]) {
+      await db.prepare(`DELETE FROM ${table}`).run();
+    }
+    await db.prepare(`
+      INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "macbook-pro.local", "MacBook Pro", "wangzhipeng", "darwin",
+      "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO usage_daily (
+        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "2026-06-28", "all", 1000, 500, 0, 20000, 21500, null,
+      JSON.stringify({ machine: "MacBook Pro", account: "wangzhipeng" }),
+      "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
+    ).run();
+    await db.prepare(`
+      INSERT INTO usage_hourly (
+        source_id, hour, agent, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "mac-local", "2026-06-28T08:00:00+08:00", "codex", 100, 50, 0, 3350, 3500, null,
+      JSON.stringify({ machine: "MacBook Pro", account: "wangzhipeng" }),
+      "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
+    ).run();
+    for (const block of [
+      {
+        end: "2026-06-28T08:12:00+08:00",
+        total: 5000,
+        input: 200,
+        output: 100,
+        cache: 4700,
+        actualEndTime: "2026-06-28T00:12:00.000Z",
+      },
+      {
+        end: "2026-06-28T08:48:00+08:00",
+        total: 10000,
+        input: 300,
+        output: 200,
+        cache: 9500,
+        actualEndTime: "2026-06-28T00:48:00.000Z",
+      },
+    ]) {
+      await db.prepare(`
+        INSERT INTO usage_blocks (
+          source_id, start_time, end_time, agent, input_tokens, output_tokens,
+          cache_creation_tokens, cache_read_tokens, total_tokens, total_cost,
+          metadata_json, raw_json, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        "mac-local", "2026-06-28T08:00:00+08:00", block.end, "claude",
+        block.input, block.output, 0, block.cache, block.total, null,
+        JSON.stringify({
+          machine: "MacBook Pro",
+          account: "wangzhipeng",
+          ccusage_block_row: {
+            id: "2026-06-28T00:00:00.000Z",
+            actualEndTime: block.actualEndTime,
+          },
+        }),
+        null, "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
+      ).run();
+    }
+
+    const mobile = bodyFor(
+      [await recordValue("mobile-summary-deduped-block-trend", "/api/mobile/summary?date=2026-06-28&period=today")],
+      "mobile-summary-deduped-block-trend",
+    );
+
+    const points = ((mobile.trend as Shape).points as Shape[]) ?? [];
+    const eight = points.find((point) => point.label === "08:00");
+    expect(eight).toEqual(expect.objectContaining({ tokens: 13500 }));
+  });
+
   async function record(name: string, requestPath: string, auth: boolean): Promise<ContractRecord> {
     const headers = auth ? { Authorization: `Bearer ${token}` } : undefined;
     const response = await mf.dispatchFetch(`http://native.test${requestPath}`, { headers });

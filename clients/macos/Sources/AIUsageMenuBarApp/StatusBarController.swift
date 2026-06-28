@@ -4,6 +4,19 @@ import Combine
 import SwiftUI
 
 @MainActor
+enum MenuBarStatusItemPresentation {
+    static let autosaveName = "com.chunbai.aiusage.menubar.status.numeric.v3"
+
+    static func title(for state: MenuBarState) -> String {
+        state.statusTitle
+    }
+
+    static func tooltip(for state: MenuBarState) -> String {
+        "AI Usage · \(state.periodLabel) \(state.statusTitle)"
+    }
+}
+
+@MainActor
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
@@ -30,11 +43,12 @@ final class StatusBarController: NSObject {
     }
 
     private func setupStatusItem() {
-        statusItem.autosaveName = "com.chunbai.aiusage.menubar.status"
+        statusItem.autosaveName = MenuBarStatusItemPresentation.autosaveName
         guard let button = statusItem.button else {
             return
         }
         button.image = nil
+        button.imagePosition = .noImage
         button.title = "AI"
         button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         button.toolTip = "AI Usage"
@@ -63,16 +77,24 @@ final class StatusBarController: NSObject {
         model.$summary
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.statusItem.button?.title = " \(self?.model.state.statusTitle ?? "AI")"
+                self?.updateStatusItemPresentation()
             }
             .store(in: &cancellables)
 
         model.$selectedPeriodID
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.statusItem.button?.title = " \(self?.model.state.statusTitle ?? "AI")"
+                self?.updateStatusItemPresentation()
             }
             .store(in: &cancellables)
+    }
+
+    private func updateStatusItemPresentation() {
+        guard let button = statusItem.button else {
+            return
+        }
+        button.title = MenuBarStatusItemPresentation.title(for: model.state)
+        button.toolTip = MenuBarStatusItemPresentation.tooltip(for: model.state)
     }
 
     private func startRefreshTimer() {

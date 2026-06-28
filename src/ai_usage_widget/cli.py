@@ -5,7 +5,7 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 
 from .collector import collect
@@ -20,6 +20,7 @@ from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .limits_push import push_limits_payload
 from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
 from .mswusage_codex import build_report as build_mswusage_codex_report, read_local_codex_jsonl_lines
+from .mswusage_claude import build_report as build_mswusage_claude_report, read_local_claude_jsonl_lines
 from .pusher import DevicePusher
 from .server import run_server
 from .widget_sync import sync_latest_to_widget
@@ -38,6 +39,18 @@ def main(argv: list[str] | None = None) -> int:
     push_parser = subparsers.add_parser("push", help="Collect local ccusage daily report and push it to the ingest server")
     push_parser.add_argument("--config", default="config/sources.local.json")
     push_parser.add_argument("--lock-file", default=None, help="Optional single-instance lock file")
+    push_parser.add_argument(
+        "--ledger-mode",
+        choices=["incremental", "full-rescan"],
+        default="incremental",
+        help="Usage Ledger collection mode; daily schedulers should keep incremental",
+    )
+    push_parser.add_argument(
+        "--ledger-lookback-hours",
+        type=float,
+        default=48.0,
+        help="Incremental Usage Ledger lookback window",
+    )
 
     sync_parser = subparsers.add_parser("sync-widget", help="Copy latest.json into the local Widget container")
     sync_parser.add_argument("--input", default="data/latest.json")
@@ -112,6 +125,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     mswusage_codex_parser.add_argument("--json", action="store_true", help="Print the report as JSON")
     mswusage_codex_parser.add_argument("--timezone", default="Asia/Shanghai")
+    mswusage_codex_parser.add_argument("--mode", choices=["incremental", "full-rescan"], default="full-rescan")
+    mswusage_codex_parser.add_argument("--lookback-hours", type=float, default=48.0)
+    mswusage_codex_parser.add_argument("--no-include-archived", action="store_true", help="Skip archived Codex sessions")
+
+    mswusage_claude_parser = subparsers.add_parser(
+        "mswusage-claude",
+        help="Build a local Claude hourly usage report from assistant usage events",
+    )
+    mswusage_claude_parser.add_argument("--json", action="store_true", help="Print the report as JSON")
+    mswusage_claude_parser.add_argument("--timezone", default="Asia/Shanghai")
+    mswusage_claude_parser.add_argument("--mode", choices=["incremental", "full-rescan"], default="full-rescan")
+    mswusage_claude_parser.add_argument("--lookback-hours", type=float, default=48.0)
 
     args = parser.parse_args(argv)
     if args.command == "collect":
@@ -133,9 +158,17 @@ def main(argv: list[str] | None = None) -> int:
             device_config = validate_device_config(config_data)
             if args.lock_file:
                 with FileLock(args.lock_file):
-                    result = DevicePusher(device_config).push()
+                    result = DevicePusher(
+                        device_config,
+                        ledger_mode=args.ledger_mode,
+                        ledger_lookback_hours=args.ledger_lookback_hours,
+                    ).push()
             else:
-                result = DevicePusher(device_config).push()
+                result = DevicePusher(
+                    device_config,
+                    ledger_mode=args.ledger_mode,
+                    ledger_lookback_hours=args.ledger_lookback_hours,
+                ).push()
         except LockAlreadyHeld as exc:
             print(json.dumps({"success": False, "error_type": "lock_already_held", "error_message": str(exc)}), file=sys.stderr)
             return 1
@@ -286,8 +319,25 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "mswusage-codex":
         try:
-            lines = read_local_codex_jsonl_lines()
-            report = build_mswusage_codex_report(lines, timezone=args.timezone)
+            now = datetime.now(dt_timezone.utc).astimezone()
+            since = _usage_ledger_since(args.mode, args.lookback_hours, now)
+            lines = read_local_codex_jsonl_lines(
+                include_archived=not args.no_include_archived,
+                modified_since=since,
+            )
+            report = build_mswusage_codex_report(lines, timezone=args.timezone, now=now, since=since)
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.command == "mswusage-claude":
+        try:
+            now = datetime.now(dt_timezone.utc).astimezone()
+            since = _usage_ledger_since(args.mode, args.lookback_hours, now)
+            lines = read_local_claude_jsonl_lines(modified_since=since)
+            report = build_mswusage_claude_report(lines, timezone=args.timezone, now=now, since=since)
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -372,6 +422,12 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
             elif claude_cli_provider:
                 providers[runtime_key] = _tag_provider(claude_cli_provider, provider_name="claude", source_id=runtime_key)
     return providers
+
+
+def _usage_ledger_since(mode: str, lookback_hours: float, now: datetime) -> datetime | None:
+    if mode == "full-rescan":
+        return None
+    return now - timedelta(hours=max(float(lookback_hours), 1.0))
 
 
 def _provider_runtime_key(provider_config: LimitsProviderConfig) -> str:

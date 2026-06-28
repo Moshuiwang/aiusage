@@ -26,9 +26,9 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 ## 产品原则
 
 1. **可信优先**：只展示有来源、有时间、有可信度的数据；不能把估算包装成官方状态。
-2. **个人 HTTP 汇聚**：部署一个个人 HTTP server 作为汇聚中心，只服务本人设备，不做团队 SaaS。
+2. **个人 HTTP 汇聚**：生产入口由 Cloudflare Worker + D1 承载，只服务本人设备，不做团队 SaaS。
 3. **主动上报**：各终端主动 push 结构化 usage payload；汇聚端不通过 SSH 登录远端机器抓取。
-4. **账户隔离**：每个 OS 用户只在自己的账户上下文执行 `ccusage` 或读取明确设计过的结构化导出文件。
+4. **账户隔离**：每个 OS 用户只在自己的账户上下文执行本机采集；`ccusage` 只作为日级对账和历史兜底，不是 Usage Ledger 的前置依赖。
 5. **数据产品先于 UI**：先稳定采集、ingest、存储、快照契约和错误模型，再做展示升级。
 6. **展示只读**：Web dashboard、iPhone App、iOS Widget、Android、macOS 菜单栏、Windows 托盘和预览层只读 canonical store、Web API 或派生快照，不执行终端采集，不执行 SSH。
 7. **一套事实，多端外壳**：所有客户端共享 server read model 和移动端摘要合同，不在平台侧重新计算 usage / limits / source health。
@@ -43,19 +43,22 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 
 ## 产品能力域
 
-### D1 Usage Facts
+### D1 Usage Facts / Usage Ledger
 
 目标：
 
-- 采集 `ccusage daily --json --timezone <tz>` 的 daily usage。
-- 统一标准化 token 分项、total tokens、agent、source、日期。
+- 本机 Python pusher 从当前 OS 用户的 Codex / Claude 本地日志中提取用量事件，先去敏并转成结构化小时事实。
+- 上传字段只覆盖入账所需信息：source、机器、OS 用户、agent、账号归因状态、时间窗口、input/output/cache/reasoning/total tokens、事件数量和采集模式。
+- 服务端在 D1 中按同一来源、agent、账号、时间窗口和 provenance upsert；重复上报只更新同一小时桶，不累加成假用量。
+- `ccusage daily` 保留为日级对账和历史兜底，不能作为上线后 Codex / Claude 的主事实源。
 - 支持 Mac、Linux server、Windows desktop 终端侧本机采集后 HTTP push。
 - 支持手动文件导入作为调试和兜底路径。
 
 可信度：
 
-- 来自 `ccusage daily --json` 的字段视为 observed usage facts。
-- 如果 `ccusage` 无法区分 agent，记录为 `unknown`，不猜测。
+- 完整明细回填或增量账本可以作为用户可见总量来源。
+- 只有 `ccusage` 日汇总时，必须标记为兜底估算，不能生成精确小时分布。
+- 如果账号无法从本机证据确认，展示为“本机来源 / 未确认账号”，不猜测账号。
 
 ### D2 Source Health
 
@@ -80,18 +83,18 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 
 目标：
 
-- SQLite 是个人 HTTP server 的 canonical store。
-- `latest.json` 是面向展示层的派生快照，不是唯一事实来源。
-- 后续趋势、摘要、source 成功率都从 canonical store 或快照构建器派生。
+- 生产 canonical store 是 Cloudflare D1。D1 是 Cloudflare 托管的 SQLite-compatible serverless SQL 数据库，不是 PostgreSQL。
+- 本地 SQLite 仍作为 legacy/local compatibility、迁移参考和测试适配层保留。
+- Web、iPhone、Watch、macOS 菜单栏都只读 Cloudflare API 或派生摘要，不直接读数据库。
 
 ### D4 HTTP Ingest
 
 目标：
 
-- HTTP server 接收终端侧主动上报的结构化 daily usage payload。
-- ingest payload 必须包含 source id、host、OS 用户、timezone、observed_at、采集窗口和 `ccusage daily` 标准化数据。
+- Cloudflare Worker 接收终端侧主动上报的结构化 usage payload。
+- ingest payload 必须包含 source id、host、OS 用户、timezone、observed_at、采集窗口；Usage Ledger payload 还应包含小时事实。
 - server 校验 schema、认证信息、幂等 key 和时间戳，不接收原始日志目录。
-- 同一个 source/date/agent 的重复 push 使用稳定 key upsert。
+- 同一个 source/date/agent 的 daily fallback 使用稳定 key upsert；同一个小时事实按来源、agent、账号、窗口和 provenance upsert。
 
 ### D5 Display Snapshot
 

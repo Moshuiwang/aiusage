@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_usage_widget.mswusage_codex import build_report
+from ai_usage_widget.mswusage_codex import build_report, read_local_codex_jsonl_lines
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -130,6 +131,47 @@ class TestMSWusageCodex(unittest.TestCase):
         self.assertEqual(report["generated_at"], "2026-06-05T09:00:00+08:00")
         self.assertEqual(report["hourly"][0]["hour"], "2026-06-05T00:00:00+08:00")
         self.assertEqual(report["daily"][0]["date"], "2026-06-05")
+
+    def test_default_local_reader_includes_archived_sessions_without_double_counting_duplicates(self) -> None:
+        active_event = '{"timestamp":"2026-06-05T01:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":10,"cached_input_tokens":0,"output_tokens":1,"total_tokens":11}}}}'
+        archived_event = '{"timestamp":"2026-06-05T02:00:00Z","type":"event_msg","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":20,"cached_input_tokens":0,"output_tokens":2,"total_tokens":22}}}}'
+
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            sessions_dir = home / ".codex" / "sessions"
+            archived_dir = home / ".codex" / "archived_sessions"
+            sessions_dir.mkdir(parents=True)
+            archived_dir.mkdir(parents=True)
+            (sessions_dir / "active.jsonl").write_text(
+                "\n".join([
+                    '{"type":"session_meta","payload":{"id":"session-a"}}',
+                    active_event,
+                ]),
+                encoding="utf-8",
+            )
+            (archived_dir / "archived.jsonl").write_text(
+                "\n".join([
+                    '{"type":"session_meta","payload":{"id":"session-a"}}',
+                    active_event,
+                    archived_event,
+                ]),
+                encoding="utf-8",
+            )
+
+            with patch("pathlib.Path.home", return_value=home):
+                lines = read_local_codex_jsonl_lines()
+
+        report = build_report(
+            lines,
+            timezone="Asia/Shanghai",
+            now=datetime.fromisoformat("2026-06-05T12:00:00+08:00"),
+        )
+
+        self.assertEqual([row["total_tokens"] for row in report["hourly"]], [11, 22])
+        self.assertEqual(report["daily"][0]["total_tokens"], 33)
+        output = json.dumps(report, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("archived_sessions", output)
+        self.assertNotIn("active.jsonl", output)
 
 
 if __name__ == "__main__":

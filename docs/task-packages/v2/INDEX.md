@@ -25,6 +25,8 @@ macOS Widget 已退出后续产品路线；既有 TP-V2-015 只代表历史兼�
 
 Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `MSWusage` Codex raw JSONL parser 和 CLI 合约，从本机 `~/.codex/sessions/**/*.jsonl` 的 `token_count.timestamp + last_token_usage` 生成更可信的 Codex 小时用量，并保证不输出原始日志路径或内容。TP-V2-061 已把该合约接入 device push / ingest / storage / snapshot，明确 Codex 小时换源为 `mswusage_codex_token_count`，不再回退到 `ccusage session.lastActivity`；Claude 小时仍优先使用去重后的 `ccusage blocks`。
 
+Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI，而是让现有 `/api/mobile/summary` 背后的周期总量优先来自 `usage_hourly_facts`。Codex 扫描范围补齐 active + archived sessions，Claude 使用 assistant message usage 入账，日常增量和历史全量重算分开。
+
 移动端高保真改版 handoff 已归档到 `docs/archive/prototypes/ios-high-fidelity/HANDOFF.md`。TP-V2-062 已撤销：iOS 高保真实际由 TP-V2-073~080 完成，旧 handoff 路线不再执行，任务包归档到 `docs/archive/task-packages/v2/cancelled/`。
 
 最新多端设计包已形成产品、架构、数据库和接口文档，并完成两轮 AI Review。Round 9 已对该链路做 backlog 对账：TP-V2-065、TP-V2-066、TP-V2-069、TP-V2-070 按现有代码和测试收口为 done；TP-V2-067 macOS 菜单栏高保真已撤销，当前菜单栏 UI 被接受；TP-V2-068 旧 iOS 高保真方向已撤销，由 TP-V2-073 到 TP-V2-080 的 iOS 体验线取代。后续只保留 TP-V2-071 跨端验收和 TP-V2-072 最终 review / PR / deploy。
@@ -141,6 +143,7 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 | TP-V2-100 | [TP-V2-100-watch-sync-diagnostics-and-version-verification.md](TP-V2-100-watch-sync-diagnostics-and-version-verification.md) | done | TP-V2-085 | TP-V2-098 |
 | TP-V2-101 | [TP-V2-101-watch-circular-complication-reset-at-ui.md](TP-V2-101-watch-circular-complication-reset-at-ui.md) | done | TP-V2-084 | none |
 | TP-V2-102 | [TP-V2-102-macos-period-cache-refresh.md](TP-V2-102-macos-period-cache-refresh.md) | done | TP-V2-064 | none |
+| TP-V2-103 | [TP-V2-103-usage-ledger-menu-popover-mvp.md](TP-V2-103-usage-ledger-menu-popover-mvp.md) | done | TP-V2-060, TP-V2-061, TP-V2-064, TP-V2-089 | none |
 
 ## subagent 分配建议
 
@@ -183,5 +186,6 @@ Codex hourly usage 方向已完成 TP-V2-060 和 TP-V2-061。TP-V2-060 新增 `M
 - Data Accuracy agent：先执行 TP-V2-098，把本轮可控的定时核查落板、D1 today tokens、Mac current 口径和 Mac 菜单栏缓存差异说明收口；不碰 iPhone/Watch。TP-V2-097 保留为后续更大的数据新鲜度合同。
 - macOS Client agent：TP-V2-099 已完成，menu bar 额度圆环槽位固定：5h 缺数据时不能挪用 7d，7d 仍显示在 7d 行。
 - macOS Client agent：TP-V2-102 已完成，menu bar 周期切换先显示本地缓存，再按需后台刷新；只改 Mac 客户端，不改服务端 API。
+- Usage data agent：TP-V2-103 已完成，把 Usage Ledger 小时事实接到现有 `/api/mobile/summary`，让 macOS menu popover 看到新口径；本轮不改 popover 视觉。
 - Watch agent：TP-V2-100 已完成，补齐 iPhone/Watch freshness 诊断、WatchConnectivity 失败原因、刷新触发来源和安装版本对齐证据；保持 Watch 不直连服务端。
 - Watch agent：TP-V2-101 已完成，把 Watch 圆形小组件落到 Reset At 双圆环 UI；只改 `.accessoryCircular` 用户可见展示，不碰服务端数据口径。

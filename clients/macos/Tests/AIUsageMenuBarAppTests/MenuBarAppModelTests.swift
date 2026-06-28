@@ -4,6 +4,23 @@ import XCTest
 
 @MainActor
 final class MenuBarAppModelTests: XCTestCase {
+    func testStatusItemPresentationKeepsMenuBarEntryNumeric() throws {
+        let state = MenuBarViewModel.build(
+            from: try summary(periodID: "today", totalTokens: 366_442_154),
+            selectedPeriodID: "today"
+        )
+
+        XCTAssertEqual(MenuBarStatusItemPresentation.title(for: state), "366.4M")
+        XCTAssertEqual(MenuBarStatusItemPresentation.tooltip(for: state), "AI Usage · 今天 366.4M")
+    }
+
+    func testStatusItemPresentationUsesNewAutosaveNameForVisiblePlacement() {
+        XCTAssertEqual(
+            MenuBarStatusItemPresentation.autosaveName,
+            "com.chunbai.aiusage.menubar.status.numeric.v3"
+        )
+    }
+
     func testSwitchToFreshCachedPeriodDoesNotRequestNetwork() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")

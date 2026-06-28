@@ -31,8 +31,13 @@ class InstallMenuBarAppTests(unittest.TestCase):
         )
         self.assertNotIn("Documents", str(plan.runtime_dir))
         self.assertNotIn("Documents", str(plan.config_path))
+        self.assertEqual(plan.bundle_id, "com.chunbai.aiusage.menubar.numeric")
         self.assertIn("<key>LSUIElement</key>", installer.render_info_plist(plan))
         self.assertIn("<true/>", installer.render_info_plist(plan))
+        self.assertIn(
+            "<string>com.chunbai.aiusage.menubar.numeric</string>",
+            installer.render_info_plist(plan),
+        )
         self.assertIn("<key>CFBundleIconFile</key>", installer.render_info_plist(plan))
         self.assertIn("AIUsageMenuBar", installer.render_info_plist(plan))
 

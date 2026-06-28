@@ -4,9 +4,9 @@
 
 ## 0. 一句话现状
 
-生产入口 `https://aiusage.chunbai.com` 已**完全由 Cloudflare Native Worker + D1 提供服务**(读写都走 D1,D1 是权威库)。VPN2(`vpn2.chunbai.com:8443`,阿里云上的旧 Python 后端)已退出 live 路径,目前作**热备**:每笔 ingest 经入口 worker 影子镜像回 VPN2,所以 VPN2 保持当前、可一键顶回。
+生产入口 `https://aiusage.chunbai.com` 已**完全由 Cloudflare Native Worker + D1 提供服务**(读写都走 D1,D1 是权威库)。VPN2(`vpn2.chunbai.com:8443`,阿里云上的旧 Python 后端)的 **AI Usage 功能已下线**:入口 worker 已停止影子镜像写入 VPN2,VPN2 上的 `ai-usage-server.service` 已停止并禁用。VPN2 这台服务器可能仍承载其他功能,本次只下线 AI Usage 相关服务。
 
-最终目标:**完全不需要 VPN2** —— 观察期无异常后,停掉镜像并下线 VPN2。
+最终目标:**AI Usage 完全不需要 VPN2** —— 已完成。后续 `aiusage.chunbai.com` 的读写验收只看 Cloudflare/D1。
 
 ## 1. 不变量与底线(必须遵守)
 
@@ -36,12 +36,12 @@
 
 ## 4. 剩余工作(逐项:目标 / 步骤 / 验收)
 
-### A.【#7】VPN2 观察 → 下线  ★主线终点,需用户确认才下线
+### A.【#7】VPN2 观察 → 下线  ★已完成,仅下线 VPN2 的 AI Usage 功能
 - 目标:确认 D1/Native 在观察期稳定,然后正式停掉 VPN2。
 - 步骤:
   1. 观察 N 天(用户定,建议 3–7 天)。每天:① `GET aiusage.chunbai.com` 的 `/`、`/login`、`/api/health`、`/api/mobile/summary?period=all` 正常(health 应 `status:ok`、`database:D1`);② D1 vs VPN2 逐源 `usage_daily` 的 `SUM(total_tokens)` 仍相等(证明热备在同步);③ 读 `docs/usage-fact-check-board.md`。
   2. 观察期无异常 + 用户批准后:先确认 VPN2 有完整数据备份;再停掉影子镜像(`SHADOW_INGEST_URL` 置空或指回 D1);最后停 VPN2 上的 ingest/server 服务并下线服务器。
-- 验收:VPN2 完全关停后,`aiusage.chunbai.com` 一切照常、用户无感。这才是"完全不需要 VPN2"。
+- 验收:VPN2 的 AI Usage 后端停用后,`aiusage.chunbai.com` 一切照常、用户无感。这才是"AI Usage 完全不需要 VPN2"。注意:不要关停 VPN2 整机,该服务器还有其他功能。
 
 ### B.【#9】审计表保留策略
 - 现状:回填只导了最近 14 天的 `collection_runs`/`source_reports`,但它们只增不减、会持续长大(D1 Free 单库上限 500MB)。
@@ -114,3 +114,5 @@
 - 13:14 A 观察期复核: 生产 `/`、`/login`、带 Bearer `/api/health`、`/api/mobile/summary?period=all` 均为 200;`/api/health` 仍为 `canonical_store=cloudflare_d1`,mobile summary `period.total_tokens` 为 6,752,321,796。D1/VPN2 逐源 `SUM(total_tokens)` 仍一致,总量 6,752,321,796;`mac-local` 最新业务写入推进到 13:13 CST,证明新数据继续进入 D1 且热备同步。D1 审计表仍在 7 天窗口内,`collection_runs` 6,775 行、`source_reports` 6,774 行,两表 7 天外行数均为 0。VPN2 尚未获批下线。
 - 2026-06-25 12:48 A 观察期日巡检: 生产 `/`、`/login`、带 Bearer `/api/health`、`/api/mobile/summary?period=all` 均为 200;`/api/health` 仍为 `canonical_store=cloudflare_d1`,mobile summary `period.total_tokens` 为 6,764,292,193。D1/VPN2 逐源 `SUM(total_tokens)` 仍一致,总量 6,764,292,193;`mac-local` 最新业务写入推进到 12:46 CST,证明跨日新数据继续进入 D1 且热备同步。D1 审计表仍在 7 天窗口内,`collection_runs` 7,362 行、`source_reports` 7,361 行,两表 7 天外行数均为 0。看板 06:27 显示 Cloudflare 主站 API 与 D1 today tokens/额度主口径一致,Mac 菜单栏缓存仍有滞后但不阻塞迁移;VPN2 尚未获批下线。
 - 2026-06-26 12:48 A 观察期日巡检: 生产 `/`、`/login`、带 Bearer `/api/health`、`/api/mobile/summary?period=all` 均为 200;`/api/health` 仍为 `canonical_store=cloudflare_d1`,mobile summary `period.total_tokens` 为 6,599,374,103。D1/VPN2 逐源 `SUM(total_tokens)` 仍一致,总量 6,599,374,103;D1 `usage_daily.max(last_seen_at)` 为 12:11 CST,VPN2 热备心跳推进到 12:43 CST,热备仍同步。D1 审计表仍在 7 天窗口内,`collection_runs` 7,538 行、`source_reports` 7,537 行,两表 7 天外行数均为 0。看板最新仍为 2026-06-25 06:27,当时 Cloudflare 主站 API 与 D1 today tokens/额度主口径一致;VPN2 尚未获批下线。
+- 2026-06-27 12:48 A 观察期满 3 天日巡检: 生产 `/`、`/login`、带 Bearer `/api/health`、`/api/mobile/summary?period=all` 均为 200;`/api/health` 仍为 `canonical_store=cloudflare_d1`,mobile summary `period.total_tokens` 为 6,637,957,492。D1/VPN2 逐源 `SUM(total_tokens)` 仍一致,总量 6,637,957,492;D1 `usage_daily.max(last_seen_at)` 为 12:45 CST,VPN2 热备心跳推进到 12:47 CST,热备仍同步。D1 审计表仍在 7 天窗口内,`collection_runs` 7,708 行、`source_reports` 7,707 行,两表 7 天外行数均为 0。观察期从 2026-06-24 12:36 开始至今已满 3 天,期间生产入口、D1 业务写入、VPN2 热备同步、审计保留策略均无迁移阻断;下一步可向用户确认是否执行 VPN2 下线,未经确认不得停 VPN2。
+- 2026-06-27 13:23 A 下线执行完成: 用户明确确认只下线 VPN2 的 AI Usage 功能,不影响 VPN2 其他功能。执行前已备份 VPN2 AI Usage SQLite 和 systemd unit 到 `/root/aiusage-shutdown-20260627132113/`。入口 Worker `aiusage-api` 已删除 `SHADOW_INGEST_URL` secret,停止向 VPN2 影子写入;VPN2 `ai-usage-server.service` 已 `inactive/disabled`,`ai-usage-backup.service` 仍为 inactive/static。验收:生产 `/`、`/login`、带 Bearer `/api/health`、`/api/mobile/summary?period=all` 均为 200;`/api/health` 仍为 `canonical_store=cloudflare_d1`;mobile summary、D1 `usage_daily` 总量均为 6,648,448,807,D1 最新业务写入推进到 13:18 CST;D1 审计表 `collection_runs` 7,751 行、`source_reports` 7,750 行,两表 7 天外行数均为 0;直连 `https://vpn2.chunbai.com:8443/login` 返回 502,符合 AI Usage 后端已停用预期。

@@ -2,10 +2,11 @@
 
 个人使用的 AI coding usage 观测工具，用来汇总多台设备、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
 
-当前项目已经从 Widget-first 原型重设为个人 HTTP 汇聚数据产品，并开始进入跨端客户端分层阶段：
+当前项目已经从 Widget-first 原型重设为个人 HTTP 汇聚数据产品，并开始进入跨端客户端分层阶段。生产入口已经切到 Cloudflare Worker + D1，VPN2 旧后端不再承载 AI Usage 读写链路。
 
-- **Device push pipeline**：每台设备在自己的账户上下文运行 `ccusage daily --json`，把结构化用量主动 push 到个人 HTTP server。
-- **Server canonical store**：HTTP server 校验 ingest payload，写入 SQLite canonical store，并生成展示快照。
+- **Device push pipeline**：每台设备在自己的账户上下文运行本机 Python pusher，读取本机 Codex / Claude / `ccusage` 结构化用量并主动 push。
+- **Usage Ledger**：本机只上传去敏后的小时用量事实，不上传 `.codex` / `.claude` 原始日志、prompt、response、tool output 或原始路径；服务端负责去重、入账和聚合。
+- **Canonical store**：生产 canonical store 是 Cloudflare D1（SQLite-compatible serverless SQL）；本地 SQLite 只作为 legacy/local compatibility 和迁移参考。
 - **Web presentation**：Web dashboard 是当前完整查看入口；CLI report 只读派生快照。
 - **Client direction**：后续客户端按 `clients/` 分层，iPhone/iOS Widget 是已落地方向，macOS 走菜单栏或轻量桌面入口，Windows 走托盘或轻量桌面入口，Android 复用移动端摘要合同。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
@@ -55,7 +56,7 @@ limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-s
 
 硬规则：
 
-- 每个 OS 用户只在自己的账户上下文运行 `ccusage`。
+- 每个 OS 用户只在自己的账户上下文运行本机采集；`ccusage` 只作为日级对账和历史兜底，不应阻断 Codex / Claude Usage Ledger 明细上报。
 - `wang` 不读取 `/home/ubuntu`。
 - 不暴露 SSH 给汇聚端抓取 usage。
 - 汇聚端不主动登录远端机器。
@@ -87,8 +88,12 @@ HTTP push 终端侧命令：
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli push \
   --config config/sources.local.json \
+  --ledger-mode incremental \
+  --ledger-lookback-hours 48 \
   --lock-file /tmp/ai-usage-pusher.lock
 ```
+
+当前 macOS 本机生产上报由 LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒触发一次，实际运行 `/usr/bin/python3 -m ai_usage_widget.cli push`。它把最近窗口内有用量的 Codex / Claude 小时桶上报到 `https://aiusage.chunbai.com/ingest`，服务端按同一来源、账号、agent 和小时窗口 upsert；重复上报不会累加成假用量。
 
 服务端 SQLite 在线备份：
 
@@ -251,7 +256,7 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [project-map.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/project-map.md)：项目地图、文档索引、客户端当前/目标目录映射。
 - [status.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/status.md)：当前阶段、有效决策和下一步。
 - [architecture/architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/architecture.md)：当前真实架构、模块 owner 和禁止事项。
-- [architecture/database.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/database.md)：当前 SQLite 结构索引，代码为唯一事实源。
+- [architecture/database.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/database.md)：当前 Cloudflare D1 / 本地 SQLite 边界和表结构索引。
 - [architecture/interfaces.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/interfaces.md)：当前 HTTP / summary / mobile 接口索引。
 - [product-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
 - [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。
@@ -275,4 +280,4 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 }
 ```
 
-工程化目标是 versioned display snapshot，详见 `docs/architecture.md`。迁移期需要保留 `items` 和 `source_status`，避免立即破坏现有 legacy macOS Widget 和 CLI report；后续 iPhone App / iOS Widget 可以改读 Web API 或移动端专用摘要。
+`latest.json` 现在只属于 legacy/local compatibility。当前 Web、iPhone、Watch 和 macOS 菜单栏优先读取 Cloudflare API 或派生摘要，不再把本地快照文件作为生产事实源。

@@ -49,6 +49,18 @@ def _is_mswusage_codex_report(value: Any) -> bool:
     )
 
 
+def _is_mswusage_claude_report(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("schema_version") == 1
+        and value.get("source") == "mswusage_claude"
+        and value.get("provenance") == "mswusage_claude_assistant_usage"
+        and isinstance(value.get("hourly"), list)
+        and isinstance(value.get("daily"), list)
+        and isinstance(value.get("sessions"), list)
+    )
+
+
 def _codex_hourly_drift(ccusage_data: dict, mswusage_report: dict, threshold_percent: float = 5.0) -> dict:
     daily_by_date, baseline_agent = _ccusage_codex_totals_by_date(ccusage_data)
     mswusage_dates = _mswusage_codex_dates(mswusage_report)
@@ -189,12 +201,18 @@ class DevicePusher:
         http_client: IngestHTTPClient = IngestHTTPClient(),
         retry_attempts: int = 3,
         retry_sleep: Callable[[float], None] = time.sleep,
+        ledger_mode: str = "incremental",
+        ledger_lookback_hours: float = 48.0,
     ) -> None:
         self.config = config
         self.executor = executor
         self.http_client = http_client
         self.retry_attempts = max(1, int(retry_attempts))
         self.retry_sleep = retry_sleep
+        if ledger_mode not in {"incremental", "full-rescan"}:
+            raise ValueError("ledger_mode must be incremental or full-rescan")
+        self.ledger_mode = ledger_mode
+        self.ledger_lookback_hours = max(float(ledger_lookback_hours), 1.0)
 
     def push(self) -> Dict[str, Any]:
         """
@@ -270,7 +288,11 @@ class DevicePusher:
             "--json",
             "--timezone",
             self.config.timezone,
+            "--mode",
+            self.ledger_mode,
         ]
+        if self.ledger_mode == "incremental":
+            mswusage_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
         mswusage_res = self.executor(mswusage_argv, float(self.config.timeout_seconds))
         if mswusage_res.ok and mswusage_res.stdout:
             try:
@@ -290,6 +312,29 @@ class DevicePusher:
                 "status": "unavailable",
                 "error_type": mswusage_res.error_type or "command_failed",
             }
+
+        mswusage_claude_report = None
+        claude_argv = [
+            sys.executable,
+            "-m",
+            "ai_usage_widget.cli",
+            "mswusage-claude",
+            "--json",
+            "--timezone",
+            self.config.timezone,
+            "--mode",
+            self.ledger_mode,
+        ]
+        if self.ledger_mode == "incremental":
+            claude_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
+        claude_res = self.executor(claude_argv, float(self.config.timeout_seconds))
+        if claude_res.ok and claude_res.stdout:
+            try:
+                report = json.loads(claude_res.stdout)
+                if _is_mswusage_claude_report(report):
+                    mswusage_claude_report = report
+            except json.JSONDecodeError:
+                mswusage_claude_report = None
 
         # 3. 组织 Ingest Payload
         # ISO 8601 格式的 observed_at 时间戳
@@ -314,11 +359,29 @@ class DevicePusher:
             payload["ccusage_blocks_report"] = ccusage_blocks_report
         if mswusage_codex_hourly_report is not None:
             payload["mswusage_codex_hourly_report"] = mswusage_codex_hourly_report
-            hourly_facts = _usage_hourly_facts_from_mswusage(self.config, mswusage_codex_hourly_report)
+            hourly_facts = _usage_hourly_facts_from_mswusage(
+                self.config,
+                mswusage_codex_hourly_report,
+                provider_key="codex",
+                default_provider="openai",
+                default_agent="codex",
+                default_client="codex",
+            )
             if hourly_facts:
                 payload["usage_hourly_facts"] = hourly_facts
         elif codex_hourly_status is not None:
             payload["codex_hourly_status"] = codex_hourly_status
+        if mswusage_claude_report is not None:
+            hourly_facts = _usage_hourly_facts_from_mswusage(
+                self.config,
+                mswusage_claude_report,
+                provider_key="claude",
+                default_provider="claude",
+                default_agent="claude",
+                default_client="claude",
+            )
+            if hourly_facts:
+                payload.setdefault("usage_hourly_facts", []).extend(hourly_facts)
 
         # 4. 读取认证 Token 并准备 headers
         headers = {}
@@ -430,17 +493,35 @@ class DevicePusher:
         raise RuntimeError("HTTP request failed without an exception")
 
 
-def _usage_hourly_facts_from_mswusage(config: DeviceConfig, report: dict) -> list[dict[str, Any]]:
+def _usage_hourly_facts_from_mswusage(
+    config: DeviceConfig,
+    report: dict,
+    *,
+    provider_key: str = "codex",
+    default_provider: str = "openai",
+    default_agent: str = "codex",
+    default_client: str = "codex",
+) -> list[dict[str, Any]]:
     accounts = config.ai_accounts or {}
-    account = accounts.get("codex")
-    if not isinstance(account, dict):
-        return []
+    account = accounts.get(provider_key)
+    account_confirmed = isinstance(account, dict)
+    if not account_confirmed:
+        account = {}
     rows = report.get("hourly")
     if not isinstance(rows, list):
         return []
-    provider = str(account.get("provider") or "openai")
-    account_id = str(account.get("account_id") or account.get("label") or "unknown")
-    label = str(account.get("label") or account_id)
+    provider = str(account.get("provider") or default_provider)
+    account_id = str(
+        account.get("account_id")
+        or account.get("label")
+        or f"unconfirmed_local_source:{config.source_id}:{default_agent}"
+    )
+    label = str(account.get("label") or "本机来源 / 未确认账号")
+    confidence = str(
+        account.get("attribution_confidence")
+        or ("account_observed_usage_inferred" if account_confirmed else "unconfirmed_local_source")
+    )
+    provenance_default = str(report.get("provenance") or f"mswusage_{default_agent}_usage")
     facts = []
     for row in rows:
         if not isinstance(row, dict) or not row.get("hour"):
@@ -448,12 +529,11 @@ def _usage_hourly_facts_from_mswusage(config: DeviceConfig, report: dict) -> lis
         hour = str(row["hour"])
         window_start = hour
         window_end = str(row.get("window_end") or _next_hour_iso(hour) or hour)
-        confidence = str(account.get("attribution_confidence") or "account_observed_usage_inferred")
-        provenance = str(row.get("provenance") or report.get("provenance") or "mswusage_codex_token_count")
+        provenance = str(row.get("provenance") or provenance_default)
         facts.append({
-            "fact_id": f"codex:codex:{config.source_id}:{window_start}:{window_end}:{confidence}:{provider}:{account_id}:{provenance}",
-            "agent": "codex",
-            "client": "codex",
+            "fact_id": f"{provider_key}:{default_client}:{config.source_id}:{window_start}:{window_end}:{confidence}:{provider}:{account_id}:{provenance}",
+            "agent": default_agent,
+            "client": default_client,
             "window_start": window_start,
             "window_end": window_end,
             "ai_account": {
@@ -476,7 +556,7 @@ def _usage_hourly_facts_from_mswusage(config: DeviceConfig, report: dict) -> lis
             "attribution_confidence": confidence,
             "provenance": provenance,
             "account_evidence": {
-                "source": str(account.get("evidence_source") or "device_config"),
+                "source": str(account.get("evidence_source") or ("device_config" if account_confirmed else "local_usage_ledger")),
                 "observed_at": report.get("generated_at"),
                 "window": "collection_time",
             },

@@ -23,10 +23,16 @@ TOKEN_FIELDS = (
 )
 
 
-def build_report(jsonl_lines: Iterable[str], timezone: str, now: datetime | None = None) -> dict:
+def build_report(
+    jsonl_lines: Iterable[str],
+    timezone: str,
+    now: datetime | None = None,
+    since: datetime | None = None,
+) -> dict:
     tz = get_timezone(timezone)
     generated_at = _format_datetime(_coerce_now(now, tz))
-    events = _parse_events(jsonl_lines, tz)
+    since_at = _coerce_datetime(since, tz) if since is not None else None
+    events = _parse_events(jsonl_lines, tz, since=since_at)
     fallback_session_id = _fallback_session_id(events)
 
     hourly: dict[str, dict] = {}
@@ -75,26 +81,54 @@ def build_report(jsonl_lines: Iterable[str], timezone: str, now: datetime | None
     }
 
 
-def read_local_codex_jsonl_lines(root: Path | None = None) -> list[str]:
-    codex_root = root or (Path.home() / ".codex" / "sessions")
-    if not codex_root.exists():
-        return []
+def read_local_codex_jsonl_lines(
+    root: Path | None = None,
+    *,
+    include_archived: bool = True,
+    modified_since: datetime | None = None,
+) -> list[str]:
+    codex_roots = _codex_roots(root, include_archived=include_archived)
+    cutoff = modified_since.timestamp() if modified_since is not None else None
 
     lines: list[str] = []
-    for path in sorted(codex_root.glob("**/*.jsonl")):
-        if not path.is_file():
+    for codex_root in codex_roots:
+        if not codex_root.exists():
             continue
-        try:
-            lines.append(json.dumps({"type": "mswusage_file_boundary"}, separators=(",", ":")))
-            lines.extend(path.read_text(encoding="utf-8").splitlines())
-        except (OSError, UnicodeDecodeError):
-            continue
+        for path in sorted(codex_root.glob("**/*.jsonl")):
+            if not path.is_file():
+                continue
+            try:
+                if cutoff is not None and path.stat().st_mtime < cutoff:
+                    continue
+                lines.append(json.dumps({"type": "mswusage_file_boundary"}, separators=(",", ":")))
+                lines.extend(path.read_text(encoding="utf-8").splitlines())
+            except (OSError, UnicodeDecodeError):
+                continue
     return lines
 
 
-def _parse_events(jsonl_lines: Iterable[str], tz) -> list[dict]:
+def _codex_roots(root: Path | None, *, include_archived: bool) -> list[Path]:
+    if root is not None:
+        root = Path(root)
+        sessions = root / "sessions"
+        archived = root / "archived_sessions"
+        if sessions.exists() or archived.exists():
+            roots = [sessions]
+            if include_archived:
+                roots.append(archived)
+            return roots
+        return [root]
+    codex_home = Path.home() / ".codex"
+    roots = [codex_home / "sessions"]
+    if include_archived:
+        roots.append(codex_home / "archived_sessions")
+    return roots
+
+
+def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = None) -> list[dict]:
     current_session_id: str | None = None
     events: list[dict] = []
+    seen_event_keys: set[str] = set()
 
     for line in jsonl_lines:
         try:
@@ -125,10 +159,16 @@ def _parse_events(jsonl_lines: Iterable[str], tz) -> list[dict]:
         event_at = _parse_timestamp(row.get("timestamp"), tz)
         if event_at is None:
             continue
+        if since is not None and event_at < since:
+            continue
 
         normalized = _normalize_usage(usage)
         if normalized["total_tokens"] <= 0:
             continue
+        event_key = _event_key(current_session_id, row.get("timestamp"), usage)
+        if event_key in seen_event_keys:
+            continue
+        seen_event_keys.add(event_key)
         event = {
             **normalized,
             "session_id": current_session_id,
@@ -139,6 +179,20 @@ def _parse_events(jsonl_lines: Iterable[str], tz) -> list[dict]:
         events.append(event)
 
     return events
+
+
+def _event_key(session_id: str | None, timestamp: object, usage: dict) -> str:
+    payload = {
+        "session_id": session_id or "",
+        "timestamp": timestamp if isinstance(timestamp, str) else "",
+        "usage": {
+            key: usage.get(key)
+            for key in sorted(usage)
+            if key.endswith("_tokens") or key in {"total_tokens"}
+        },
+    }
+    fingerprint = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
 
 
 def _normalize_usage(usage: dict) -> dict[str, int]:
@@ -201,9 +255,13 @@ def _format_datetime(value: datetime) -> str:
 def _coerce_now(now: datetime | None, tz: ZoneInfo) -> datetime:
     if now is None:
         return datetime.now(dt_timezone.utc).astimezone(tz)
-    if now.tzinfo is None:
-        return now.replace(tzinfo=dt_timezone.utc).astimezone(tz)
-    return now.astimezone(tz)
+    return _coerce_datetime(now, tz)
+
+
+def _coerce_datetime(value: datetime, tz: ZoneInfo) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=dt_timezone.utc).astimezone(tz)
+    return value.astimezone(tz)
 
 
 def _fallback_session_id(events: list[dict]) -> str:

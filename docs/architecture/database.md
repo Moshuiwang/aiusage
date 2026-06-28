@@ -1,15 +1,28 @@
 # Database Architecture
 
 本文是当前数据库结构的索引，不是迁移设计稿。字段、主键和写入行为以
-`src/ai_usage_widget/storage_sqlite.py` 和 `src/ai_usage_widget/models.py`
-为唯一权威来源；本文只解释 AI Agent 应该先看哪里、哪些表是现状、哪些只是历史目标。
+`src/ai_usage_widget/storage_sqlite.py`、`src/ai_usage_widget/models.py`
+和生产 Cloudflare D1 schema 为事实来源；本文只解释 AI Agent 应该先看哪里、
+哪些表是现状、哪些只是历史目标。
 
-## 单一权威来源
+## 当前生产数据库
 
-- Schema owner：`src/ai_usage_widget/storage_sqlite.py` 的 `_ensure_schema()`。
+当前生产 canonical store 是 Cloudflare D1。D1 是 Cloudflare 托管的
+SQLite-compatible serverless SQL 数据库，不是 PostgreSQL。AI Usage 的
+Web、iPhone、Watch 和 macOS 菜单栏都通过 Cloudflare Worker API 读取派生摘要，
+不直接读取数据库。
+
+本地 SQLite 仍保留为 legacy/local compatibility、测试适配层和 D1 schema
+迁移参考。它不是当前生产用户体验的唯一事实源，也不应该再被描述成服务端唯一数据库。
+
+## Schema 权威来源
+
+- 本地 schema owner：`src/ai_usage_widget/storage_sqlite.py` 的 `_ensure_schema()`。
+- 生产 schema owner：Cloudflare D1 migration / Worker 侧 schema；字段应与本地 adapter 保持兼容。
 - 数据模型 owner：`src/ai_usage_widget/models.py`。
-- 写入入口：`write_sqlite()`、`write_limit_windows()`。
-- 读模型 owner：`src/ai_usage_widget/snapshot_builder.py`。
+- 本地写入入口：`write_sqlite()`、`write_limit_windows()`。
+- 生产写入入口：Cloudflare Worker `/ingest`、`/ingest-limits`。
+- 读模型 owner：Cloudflare Worker summary API；本地 legacy 读模型仍由 `src/ai_usage_widget/snapshot_builder.py` 承载。
 
 不要从历史设计稿反推字段；新增字段必须先改代码和测试，再更新本文。
 
@@ -32,6 +45,16 @@
 | `limit_windows` | 官方或结构化 provider 的额度窗口事实。 | `(source_id, provider, source_type, window)` |
 
 SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个写入入口中执行。
+
+生产 D1 中最影响用户体验的是 `usage_hourly_facts`：本机每次上报的是最近窗口内
+有用量的小时桶，不是每个 session 的完整原始明细。服务端按同一来源、agent、
+账号归因、时间窗口和 provenance 做 upsert；同一个小时桶重复上报时更新为最新事实，
+不会累加成重复用量。
+
+截至 2026-06-28 的一次生产核查，D1 数据库约 4.0 MB，属于很小的个人数据规模。
+`usage_hourly_facts` 当时为 524 行，`source_reports` 和 `collection_runs`
+约 8.6k 行。长期增长主要来自采集运行记录和 source report；如果未来体量明显增长，
+应优先对运行日志类表做保留周期或归档策略，而不是削弱用户可见的用量账本。
 
 ## 当前核心字段
 
@@ -79,6 +102,7 @@ SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个
 ## 约束与边界
 
 - daily baseline 是用户可见 token 总量的基础，不得被 limits/provider 失败阻塞。
+- Usage Ledger 明细上报不得被 `ccusage daily` 缺失阻塞；`ccusage` 只做日级对账或历史兜底。
 - 官方额度只有 `official == true`、`confidence == "observed"`、`status == "ok"` 才能作为强结论展示。
 - `.claude`、`.codex` 原始日志目录、token、cookie、完整 provider response 不进入 SQLite。
 - 任何改表都必须单独任务包，先写迁移方案和测试；本轮不做 SQLite 迁移。

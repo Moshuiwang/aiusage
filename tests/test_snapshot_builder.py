@@ -143,7 +143,7 @@ class TestSnapshotBuilder(unittest.TestCase):
         self.assertEqual(snapshot["limits"], [])
         self.assertEqual(snapshot["account_hourly"]["total_tokens"], 0)
 
-    def test_build_snapshot_includes_account_hourly_summary_without_changing_daily_total(self) -> None:
+    def test_build_snapshot_uses_account_hourly_ledger_for_user_visible_total(self) -> None:
         write_sqlite(
             path=self.db_path,
             collected_at="2026-06-11T14:30:00+08:00",
@@ -209,7 +209,12 @@ class TestSnapshotBuilder(unittest.TestCase):
         with open(self.out_path, "r", encoding="utf-8") as f:
             snapshot = json.load(f)
 
-        self.assertEqual(snapshot["summary"]["total_tokens"], 20)
+        self.assertEqual(snapshot["summary"]["total_tokens"], 155)
+        self.assertEqual(snapshot["summary"]["input_tokens"], 100)
+        self.assertEqual(snapshot["summary"]["output_tokens"], 20)
+        self.assertEqual(snapshot["summary"]["cache_read_tokens"], 30)
+        self.assertEqual(snapshot["items"][0]["agent"], "codex")
+        self.assertEqual(snapshot["items"][0]["total_tokens"], 155)
         account_hourly = snapshot["account_hourly"]
         self.assertEqual(account_hourly["total_tokens"], 155)
         self.assertEqual(account_hourly["facts"], 1)
@@ -222,6 +227,77 @@ class TestSnapshotBuilder(unittest.TestCase):
         )
         self.assertEqual(account_hourly["by_os_user"][0]["os_user"], "wangzhipeng")
         self.assertEqual(account_hourly["confidence_breakdown"][0]["confidence"], "account_observed_usage_inferred")
+
+    def test_ledger_partial_agent_keeps_all_daily_residual(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-12T14:30:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[
+                UsageItem(
+                    source_id="mac-local",
+                    machine="MacBook Pro",
+                    account="wangzhipeng",
+                    agent="all",
+                    date="2026-06-12",
+                    input_tokens=1000,
+                    output_tokens=0,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=0,
+                    total_tokens=1000,
+                    metadata={"machine": "MacBook Pro", "account": "wangzhipeng"},
+                )
+            ],
+            hourly_facts=[
+                UsageHourlyFact(
+                    fact_id="codex:codex:mac-local:2026-06-12T13:00:00+08:00:2026-06-12T14:00:00+08:00:unconfirmed_local_source:openai:unconfirmed_local_source:mac-local:codex:mswusage_codex_token_count",
+                    source_id="mac-local",
+                    machine_id="macbook-pro-local",
+                    machine_name="MacBook Pro",
+                    host="macbook-pro.local",
+                    os_user="wangzhipeng",
+                    platform="darwin",
+                    ai_provider="openai",
+                    ai_account_id="unconfirmed_local_source:mac-local:codex",
+                    ai_account_label="本机来源 / 未确认账号",
+                    ai_account_display_name=None,
+                    ai_account_subscription=None,
+                    agent="codex",
+                    client="codex",
+                    window_start="2026-06-12T13:00:00+08:00",
+                    window_end="2026-06-12T14:00:00+08:00",
+                    timezone="Asia/Shanghai",
+                    input_tokens=400,
+                    output_tokens=0,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=0,
+                    reasoning_output_tokens=0,
+                    total_tokens=400,
+                    event_count=1,
+                    session_count=1,
+                    attribution_confidence="unconfirmed_local_source",
+                    provenance="mswusage_codex_token_count",
+                )
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-12",
+            timezone_str=self.timezone_str,
+            current_time_str="2026-06-12T14:55:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 1000)
+        by_agent = {row["name"]: row["total_tokens"] for row in snapshot["groups"]["by_agent"]}
+        self.assertEqual(by_agent["codex"], 400)
+        self.assertEqual(by_agent["all"], 600)
 
     def test_build_snapshot_includes_known_ai_accounts_without_hourly_facts(self) -> None:
         write_sqlite(
@@ -1096,6 +1172,101 @@ class TestSnapshotBuilder(unittest.TestCase):
         by_agent = {row["agent"]: row["total_tokens"] for row in snapshot["trend"]["by_agent"]}
         self.assertEqual(by_agent["claude"], 500)
         self.assertEqual(by_agent["codex"], 100)
+
+    def test_today_period_dedupes_cumulative_ccusage_block_snapshots(self) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-28T09:45:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=[],
+            items=[
+                UsageItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="all",
+                    date="2026-06-28",
+                    input_tokens=1_000,
+                    output_tokens=500,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=20_000,
+                    total_tokens=21_500,
+                    metadata={"machine": "macbook", "account": "wang"},
+                ),
+            ],
+            hourly_items=[
+                UsageHourlyItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="codex",
+                    hour="2026-06-28T08:00:00+08:00",
+                    input_tokens=100,
+                    output_tokens=50,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=3_350,
+                    total_tokens=3_500,
+                    metadata={"machine": "macbook", "account": "wang"},
+                ),
+            ],
+            block_items=[
+                UsageBlockItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="claude",
+                    start_time="2026-06-28T08:00:00+08:00",
+                    end_time="2026-06-28T08:12:00+08:00",
+                    input_tokens=200,
+                    output_tokens=100,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=4_700,
+                    total_tokens=5_000,
+                    metadata={
+                        "machine": "macbook",
+                        "account": "wang",
+                        "ccusage_block_row": {"id": "2026-06-28T00:00:00.000Z", "actualEndTime": "2026-06-28T00:12:00.000Z"},
+                    },
+                ),
+                UsageBlockItem(
+                    source_id="mac-local",
+                    machine="macbook",
+                    account="wang",
+                    agent="claude",
+                    start_time="2026-06-28T08:00:00+08:00",
+                    end_time="2026-06-28T08:48:00+08:00",
+                    input_tokens=300,
+                    output_tokens=200,
+                    cache_creation_tokens=0,
+                    cache_read_tokens=9_500,
+                    total_tokens=10_000,
+                    metadata={
+                        "machine": "macbook",
+                        "account": "wang",
+                        "ccusage_block_row": {"id": "2026-06-28T00:00:00.000Z", "actualEndTime": "2026-06-28T00:48:00.000Z"},
+                    },
+                ),
+            ],
+        )
+
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str="2026-06-28",
+            timezone_str=self.timezone_str,
+            period="today",
+            current_time_str="2026-06-28T09:45:00+08:00",
+        )
+
+        with open(self.out_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+
+        points = {point["hour"]: point for point in snapshot["trend"]["points"]}
+        self.assertEqual(points["2026-06-28T08:00:00+08:00"]["total_tokens"], 13_500)
+        by_agent = {row["agent"]: row["total_tokens"] for row in snapshot["trend"]["by_agent"]}
+        self.assertEqual(by_agent["claude"], 10_000)
+        self.assertEqual(by_agent["codex"], 3_500)
 
     def test_codex_drift_does_not_create_current_hour_residual_spike(self) -> None:
         write_sqlite(

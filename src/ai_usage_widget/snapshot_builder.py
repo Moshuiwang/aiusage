@@ -125,6 +125,12 @@ def build_snapshot(
         row for row in account_hourly_rows
         if _account_hourly_row_matches_filter(row, machine_filter, account_filter)
     ]
+    ledger_daily_rows = _account_hourly_rows_to_daily_rows(account_hourly_rows, timezone_str)
+    rows = _apply_ledger_daily_rows(rows, ledger_daily_rows)
+    ledger_hourly_rows = _account_hourly_rows_to_hourly_rows(account_hourly_rows, timezone_str) if period_id == "today" else []
+    hourly_rows = _apply_ledger_hourly_rows(hourly_rows, ledger_hourly_rows)
+    allowed_item_keys = {(row[0], row[1], row[2]) for row in rows}
+    model_rows = [row for row in model_rows if (row[0], row[1], row[2]) in allowed_item_keys]
     codex_hourly_context_data = codex_hourly_context(rows, hourly_rows)
     account_hourly = _account_hourly_summary(account_hourly_rows)
 
@@ -754,6 +760,229 @@ def _account_hourly_row_matches_filter(row: Any, machine_filter: Optional[str], 
     if account_filter and os_user != account_filter:
         return False
     return True
+
+
+def _account_hourly_rows_to_daily_rows(rows: list[Any], timezone_str: str) -> list[Any]:
+    buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        (
+            _fact_id, source_id, _machine_id, machine_name, os_user, _ai_provider,
+            _ai_account_id, _account_label, _display_name, _subscription, agent, _client,
+            window_start, _window_end, inp, out, cc, cr, _reasoning, tot,
+            _event_count, _session_count, _confidence, provenance,
+        ) = row
+        local_date = _local_date(str(window_start or ""), timezone_str)
+        if local_date is None:
+            continue
+        key = (str(source_id), local_date, str(agent))
+        bucket = buckets.setdefault(key, {
+            "source_id": str(source_id),
+            "date": local_date,
+            "agent": str(agent),
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+            "total_tokens": 0,
+            "machine": str(machine_name or source_id),
+            "account": str(os_user or "unknown"),
+            "provenances": set(),
+        })
+        bucket["input_tokens"] += int(inp or 0)
+        bucket["output_tokens"] += int(out or 0)
+        bucket["cache_creation_tokens"] += int(cc or 0)
+        bucket["cache_read_tokens"] += int(cr or 0)
+        bucket["total_tokens"] += int(tot or 0)
+        bucket["provenances"].add(str(provenance or "usage_hourly_facts"))
+    result = []
+    for key in sorted(buckets):
+        bucket = buckets[key]
+        metadata = {
+            "machine": bucket["machine"],
+            "account": bucket["account"],
+            "os_user": bucket["account"],
+            "provenance": "usage_ledger_hourly_facts",
+            "source_provenances": sorted(bucket["provenances"]),
+        }
+        result.append((
+            bucket["source_id"],
+            bucket["date"],
+            bucket["agent"],
+            bucket["input_tokens"],
+            bucket["output_tokens"],
+            bucket["cache_creation_tokens"],
+            bucket["cache_read_tokens"],
+            bucket["total_tokens"],
+            None,
+            json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+        ))
+    return result
+
+
+def _account_hourly_rows_to_hourly_rows(rows: list[Any], timezone_str: str) -> list[Any]:
+    buckets: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        (
+            _fact_id, source_id, _machine_id, machine_name, os_user, _ai_provider,
+            _ai_account_id, _account_label, _display_name, _subscription, agent, _client,
+            window_start, _window_end, inp, out, cc, cr, _reasoning, tot,
+            _event_count, _session_count, _confidence, provenance,
+        ) = row
+        hour = _local_hour(str(window_start or ""), timezone_str)
+        if hour is None:
+            continue
+        key = (str(source_id), hour, str(agent))
+        bucket = buckets.setdefault(key, {
+            "source_id": str(source_id),
+            "hour": hour,
+            "agent": str(agent),
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 0,
+            "total_tokens": 0,
+            "machine": str(machine_name or source_id),
+            "account": str(os_user or "unknown"),
+            "provenances": set(),
+        })
+        bucket["input_tokens"] += int(inp or 0)
+        bucket["output_tokens"] += int(out or 0)
+        bucket["cache_creation_tokens"] += int(cc or 0)
+        bucket["cache_read_tokens"] += int(cr or 0)
+        bucket["total_tokens"] += int(tot or 0)
+        bucket["provenances"].add(str(provenance or "usage_hourly_facts"))
+    result = []
+    for key in sorted(buckets):
+        bucket = buckets[key]
+        metadata = {
+            "machine": bucket["machine"],
+            "account": bucket["account"],
+            "os_user": bucket["account"],
+            "provenance": "usage_ledger_hourly_facts",
+            "source_provenances": sorted(bucket["provenances"]),
+        }
+        result.append((
+            bucket["source_id"],
+            bucket["hour"],
+            bucket["agent"],
+            bucket["input_tokens"],
+            bucket["output_tokens"],
+            bucket["cache_creation_tokens"],
+            bucket["cache_read_tokens"],
+            bucket["total_tokens"],
+            None,
+            json.dumps(metadata, ensure_ascii=False, sort_keys=True),
+        ))
+    return result
+
+
+def _apply_ledger_daily_rows(rows: list[Any], ledger_rows: list[Any]) -> list[Any]:
+    if not ledger_rows:
+        return rows
+    cost_by_key = {(row[0], row[1], row[2]): row[8] for row in rows if row[8] is not None}
+    ledger_rows = [
+        (
+            *row[:8],
+            cost_by_key.get((row[0], row[1], row[2]), row[8]),
+            row[9],
+        )
+        for row in ledger_rows
+    ]
+    ledger_keys = {(row[0], row[1], row[2]) for row in ledger_rows}
+    ledger_totals_by_source_date: dict[tuple[Any, Any], dict[str, int]] = {}
+    for row in ledger_rows:
+        key = (row[0], row[1])
+        totals = ledger_totals_by_source_date.setdefault(
+            key,
+            {"input": 0, "output": 0, "cache_creation": 0, "cache_read": 0, "total": 0},
+        )
+        totals["input"] += int(row[3] or 0)
+        totals["output"] += int(row[4] or 0)
+        totals["cache_creation"] += int(row[5] or 0)
+        totals["cache_read"] += int(row[6] or 0)
+        totals["total"] += int(row[7] or 0)
+    kept = []
+    for row in rows:
+        key = (row[0], row[1], row[2])
+        if key in ledger_keys:
+            continue
+        source_date = (row[0], row[1])
+        if str(row[2] or "").lower() == "all" and source_date in ledger_totals_by_source_date:
+            residual = _daily_all_residual_row(row, ledger_totals_by_source_date[source_date])
+            if residual is not None:
+                kept.append(residual)
+            continue
+        kept.append(row)
+    return sorted([*kept, *ledger_rows], key=lambda row: (row[1], row[0], row[2]))
+
+
+def _daily_all_residual_row(row: Any, ledger_totals: dict[str, int]) -> Any | None:
+    old_total = int(row[7] or 0)
+    residual_total = max(old_total - int(ledger_totals.get("total") or 0), 0)
+    residual_input = max(int(row[3] or 0) - int(ledger_totals.get("input") or 0), 0)
+    residual_output = max(int(row[4] or 0) - int(ledger_totals.get("output") or 0), 0)
+    residual_cache_creation = max(int(row[5] or 0) - int(ledger_totals.get("cache_creation") or 0), 0)
+    residual_cache_read = max(int(row[6] or 0) - int(ledger_totals.get("cache_read") or 0), 0)
+    if residual_total <= 0 and not any([residual_input, residual_output, residual_cache_creation, residual_cache_read]):
+        return None
+    residual_cost = row[8]
+    if residual_cost is not None and old_total > 0:
+        residual_cost = float(residual_cost) * (residual_total / old_total)
+    metadata = _metadata_json_with_provenance(row[9], "usage_daily_residual_after_ledger")
+    return (
+        row[0],
+        row[1],
+        row[2],
+        residual_input,
+        residual_output,
+        residual_cache_creation,
+        residual_cache_read,
+        residual_total,
+        residual_cost,
+        metadata,
+    )
+
+
+def _metadata_json_with_provenance(raw: Any, provenance: str) -> str:
+    metadata: dict[str, Any] = {}
+    if raw:
+        try:
+            loaded = json.loads(raw)
+            if isinstance(loaded, dict):
+                metadata.update(loaded)
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+    metadata.setdefault("provenance", provenance)
+    metadata["residual_provenance"] = provenance
+    return json.dumps(metadata, ensure_ascii=False, sort_keys=True)
+
+
+def _apply_ledger_hourly_rows(rows: list[Any], ledger_rows: list[Any]) -> list[Any]:
+    if not ledger_rows:
+        return rows
+    ledger_keys = {(row[0], row[1], row[2]) for row in ledger_rows}
+    kept = [row for row in rows if (row[0], row[1], row[2]) not in ledger_keys]
+    return sorted([*kept, *ledger_rows], key=lambda row: (row[1], row[0], row[2]))
+
+
+def _local_date(value: str, timezone_str: str) -> str | None:
+    parsed = parse_datetime(value)
+    if parsed is None:
+        return None
+    tz = zoneinfo(timezone_str)
+    if tz and parsed.tzinfo:
+        parsed = parsed.astimezone(tz)
+    return parsed.date().isoformat()
+
+
+def _local_hour(value: str, timezone_str: str) -> str | None:
+    parsed = parse_datetime(value)
+    if parsed is None:
+        return None
+    tz = zoneinfo(timezone_str)
+    if tz and parsed.tzinfo:
+        parsed = parsed.astimezone(tz)
+    return parsed.replace(minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
 
 
 def _account_hourly_summary(rows: list[Any]) -> dict[str, Any]:

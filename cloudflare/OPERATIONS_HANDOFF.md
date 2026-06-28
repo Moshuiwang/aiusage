@@ -12,20 +12,22 @@ codex exec --cd /Users/wangzhipeng/Documents/cloud-flare --skip-git-repo-check "
 
 ## 应用侧输入
 
-- Worker：`/Users/wangzhipeng/Documents/ai-usage-widget/cloudflare/aiusage-api-worker.js`
-- Wrangler 配置：`/Users/wangzhipeng/Documents/ai-usage-widget/wrangler.toml`
-- 目标 Worker：`aiusage-api`
+- Native Worker：`/Users/wangzhipeng/Documents/ai-usage-widget/cloudflare/native-worker/`
+- 入口 Worker / 路由配置：`/Users/wangzhipeng/Documents/ai-usage-widget/wrangler.toml`
+- 目标入口 Worker：`aiusage-api`
+- 目标 Native Worker：`aiusage-native-staging`
+- D1：`aiusage-prod-db`
 - 目标域名：`aiusage.chunbai.com`
 - 当前 route：`aiusage.chunbai.com/*`
-- Origin：`https://vpn2.chunbai.com:8443`
+- 当前 canonical store：Cloudflare D1
+- VPN2：旧 AI Usage 后端已下线，只作为历史回退/审计对象，不参与当前读写。
 
 ## 运维 Agent 任务
 
-1. 使用 Cloudflare 凭据部署 `aiusage-api` Worker。
-2. 设置或确认 `ORIGIN_BASE_URL=https://vpn2.chunbai.com:8443`。
-3. 确认 `aiusage.chunbai.com/*` 由 Worker 接管，不被 Pages 占位入口抢走。
-4. 验证 Worker 到 `vpn2.chunbai.com:8443` 的 TLS 可用。
-5. 执行线上 smoke。
+1. 使用 Cloudflare 凭据部署或检查 Native Worker / 入口 Worker。
+2. 确认 `aiusage.chunbai.com/*` 由 Worker 接管，不被 Pages 占位入口抢走。
+3. 确认 API health 返回 D1 canonical store。
+4. 执行线上 smoke。
 
 ## Smoke Checklist
 
@@ -35,7 +37,7 @@ codex exec --cd /Users/wangzhipeng/Documents/cloud-flare --skip-git-repo-check "
 - 如果本机 DNS、代理或 VPN 行为可疑，临时加 `--resolve aiusage.chunbai.com:443:<Cloudflare IP>` 对比。
 - 业务 token 和 session cookie 只从运维目录安全读取，不输出。
 
-未登录 /static/* 预期可以是 401，因为当前 Python origin 把静态资源放在登录态后面；这不代表 Worker route 失败。带 session cookie 后 /static/dashboard.js 和 /static/dashboard.css 必须是 200。
+未登录 /static/* 预期可以是 401；这不代表 Worker route 失败。带 session cookie 后 /static/dashboard.js 和 /static/dashboard.css 必须是 200。
 
 ```bash
 curl -sS --max-time 12 -D - -o /dev/null \
@@ -60,8 +62,8 @@ curl -sS --max-time 12 -D - -o /dev/null \
 ```text
 Worker 部署：
 Route 读回：
-ORIGIN_BASE_URL：
-TLS 到 origin：
+Native Worker：
+D1：
 / smoke：
 /static smoke：
 /login smoke：

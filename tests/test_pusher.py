@@ -194,6 +194,117 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual(facts[0]["usage"]["total_tokens"], 155)
         self.assertEqual(facts[0]["window_end"], "2026-06-11T14:00:00+08:00")
 
+    def test_pusher_sends_usage_ledger_facts_with_unconfirmed_attribution_without_ai_accounts(self) -> None:
+        daily_stdout = '{"daily": []}'
+        codex_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [{"date": "2026-06-11", "agent": "codex", "total_tokens": 155}],
+            "hourly": [
+                {
+                    "hour": "2026-06-11T13:00:00+08:00",
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 30,
+                    "reasoning_output_tokens": 5,
+                    "total_tokens": 155,
+                    "event_count": 2,
+                    "session_count": 1,
+                }
+            ],
+            "sessions": [],
+        })
+        claude_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_claude",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_claude_assistant_usage",
+            "daily": [{"date": "2026-06-11", "agent": "claude", "total_tokens": 77}],
+            "hourly": [
+                {
+                    "hour": "2026-06-11T13:00:00+08:00",
+                    "input_tokens": 70,
+                    "output_tokens": 7,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 77,
+                    "event_count": 1,
+                    "session_count": 0,
+                }
+            ],
+            "sessions": [],
+        })
+        executor = FakeExecutor([
+            CommandResult(stdout=daily_stdout, exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout='{"blocks": []}', exit_code=0),
+            CommandResult(stdout=codex_stdout, exit_code=0),
+            CommandResult(stdout=claude_stdout, exit_code=0),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertTrue(result["success"])
+        facts = http_client.last_json["usage_hourly_facts"]
+        self.assertEqual([fact["agent"] for fact in facts], ["codex", "claude"])
+        self.assertEqual([fact["usage"]["total_tokens"] for fact in facts], [155, 77])
+        self.assertEqual({fact["attribution_confidence"] for fact in facts}, {"unconfirmed_local_source"})
+        self.assertEqual({fact["ai_account"]["label"] for fact in facts}, {"本机来源 / 未确认账号"})
+        self.assertIn("mswusage-claude", executor.calls[4])
+
+    def test_pusher_can_run_usage_ledger_full_rescan_explicitly(self) -> None:
+        daily_stdout = '{"daily": []}'
+        empty_codex_report = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [],
+            "hourly": [],
+            "sessions": [],
+        })
+        empty_claude_report = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_claude",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_claude_assistant_usage",
+            "daily": [],
+            "hourly": [],
+            "sessions": [],
+        })
+        executor = FakeExecutor([
+            CommandResult(stdout=daily_stdout, exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout='{"blocks": []}', exit_code=0),
+            CommandResult(stdout=empty_codex_report, exit_code=0),
+            CommandResult(stdout=empty_claude_report, exit_code=0),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
+
+        result = DevicePusher(
+            self.config,
+            executor=executor,
+            http_client=http_client,
+            ledger_mode="full-rescan",
+        ).push()
+
+        self.assertTrue(result["success"])
+        self.assertIn("mswusage-codex", executor.calls[3])
+        self.assertIn("mswusage-claude", executor.calls[4])
+        self.assertEqual(executor.calls[3][executor.calls[3].index("--mode") + 1], "full-rescan")
+        self.assertEqual(executor.calls[4][executor.calls[4].index("--mode") + 1], "full-rescan")
+        self.assertNotIn("--lookback-hours", executor.calls[3])
+        self.assertNotIn("--lookback-hours", executor.calls[4])
+
     def test_pusher_marks_drift_unavailable_without_matching_daily_codex_baseline(self) -> None:
         executor = FakeExecutor([
             CommandResult(stdout='{"daily": [{"period": "2026-06-05", "agent": "claude", "totalTokens": 150}]}', exit_code=0),

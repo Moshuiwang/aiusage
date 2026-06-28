@@ -29,11 +29,8 @@ AI Agent 默认不要读取本目录；只有用户要求查历史、回溯决�
 | `handoff/` | 历史交接文档。 |
 | `plans/` | 已被任务包吸收的旧计划。 |
 
-## 删除候选
+## 清理说明
 
-Round 8 不删除 tracked 文件。后续如要删除，需要用户单独确认。
+当前根部 `reviews/` 和 `docs/reviews/` 不作为文档入口保留；临时 review 请求和中间报告应在任务完成后删除。需要追溯历史评审时，只读本目录下的 `reviews/` 归档。
 
-当前仅保留观察项：
-
-- `reviews/*-request.md` 中仍有两个被 `.gitignore` 忽略的本地 request 草稿，未纳入本轮归档和版本跟踪。
-- `docs/prototypes/*` 在原位置保留 symlink 指针，用于兼容现有原型测试；真实内容在本归档区。
+`docs/prototypes/*` 在原位置保留 symlink 指针，用于兼容现有原型测试；真实内容在本归档区。

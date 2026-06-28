@@ -26,7 +26,7 @@ def hourly_trend(axis: list[str], rows: list[Any], block_rows: Optional[list[Any
     }
     agent_totals: Dict[str, float] = {}
     by_agent: Dict[str, Dict[str, float]] = {}
-    block_rows = block_rows or []
+    block_rows = dedupe_cumulative_block_rows(block_rows or [])
     block_sources = {row[0] for row in block_rows}
 
     for row in rows:
@@ -283,6 +283,30 @@ def add_block_to_hour_buckets(
         points[hour]["total_tokens"] = round(points[hour]["total_tokens"] + total_part)
         agent_totals[agent] = agent_totals.get(agent, 0) + total_part
         by_agent[agent][hour] += total_part
+
+
+def dedupe_cumulative_block_rows(rows: list[Any]) -> list[Any]:
+    latest_by_key: Dict[str, Any] = {}
+    for row in rows:
+        key = block_dedupe_key(row)
+        current = latest_by_key.get(key)
+        if current is None or block_row_sort_key(row) >= block_row_sort_key(current):
+            latest_by_key[key] = row
+    return sorted(latest_by_key.values(), key=lambda row: (str(row[1]), str(row[0]), str(row[3]), str(row[2])))
+
+
+def block_dedupe_key(row: Any) -> str:
+    source_id, start_time, end_time, agent = row[0], row[1], row[2], row[3]
+    metadata = metadata_from_str(row[10] if len(row) > 10 else None)
+    raw_block = metadata.get("ccusage_block_row") if isinstance(metadata, dict) else None
+    block_id = raw_block.get("id") if isinstance(raw_block, dict) else None
+    if block_id:
+        return f"{source_id}\0{agent}\0{block_id}"
+    return f"{source_id}\0{agent}\0{start_time}\0{end_time}"
+
+
+def block_row_sort_key(row: Any) -> tuple[str, int]:
+    return (str(row[2] or ""), int(row[8] or 0))
 
 
 def is_codex_agent(agent: str) -> bool:
