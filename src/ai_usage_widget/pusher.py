@@ -223,60 +223,69 @@ class DevicePusher:
         argv = ["ccusage", "daily", "--json", "--timezone", self.config.timezone]
         res = self.executor(argv, float(self.config.timeout_seconds))
 
-        if not res.ok:
-            return self._push_source_status(
-                status=res.error_type or "command_failed",
-                error_type=res.error_type or "command_failed",
-                error_message=res.error_message or "ccusage command failed",
-            )
+        ccusage_data: dict[str, Any] = {}
+        usage_daily: list[dict[str, Any]] = []
+        ccusage_daily_status = None
+        ccusage_daily_available = False
 
         # 2. 解析 ccusage 的数据并规范化 (TP-V2-006)
-        try:
-            ccusage_data = json.loads(res.stdout) if res.stdout else {}
-            if not isinstance(ccusage_data, dict):
-                return {
-                    "success": False,
-                    "error_type": "unsupported_shape",
-                    "error_message": "ccusage JSON must be an object",
+        if res.ok:
+            try:
+                parsed_ccusage = json.loads(res.stdout) if res.stdout else {}
+                if not isinstance(parsed_ccusage, dict):
+                    ccusage_daily_status = {
+                        "status": "unsupported_shape",
+                        "error_type": "unsupported_shape",
+                        "error_message": "ccusage JSON must be an object",
+                    }
+                else:
+                    ccusage_data = parsed_ccusage
+                    ccusage_daily_available = True
+                    raw_daily = ccusage_data.get("daily", [])
+                    if not isinstance(raw_daily, list):
+                        raw_daily = []
+                    for row in raw_daily:
+                        if isinstance(row, dict):
+                            normalized_row = row.copy()
+                            if not normalized_row.get("agent"):
+                                normalized_row["agent"] = "unknown"
+                            usage_daily.append(normalized_row)
+            except json.JSONDecodeError as exc:
+                ccusage_daily_status = {
+                    "status": "invalid_json",
+                    "error_type": "invalid_json",
+                    "error_message": f"Failed to decode ccusage JSON: {exc}",
                 }
-            raw_daily = ccusage_data.get("daily", [])
-            if not isinstance(raw_daily, list):
-                raw_daily = []
-            usage_daily = []
-            for row in raw_daily:
-                if isinstance(row, dict):
-                    normalized_row = row.copy()
-                    if not normalized_row.get("agent"):
-                        normalized_row["agent"] = "unknown"
-                    usage_daily.append(normalized_row)
-        except json.JSONDecodeError as exc:
-            return {
-                "success": False,
-                "error_type": "invalid_json",
-                "error_message": f"Failed to decode ccusage JSON: {exc}",
+        else:
+            ccusage_daily_status = {
+                "status": res.error_type or "command_failed",
+                "error_type": res.error_type or "command_failed",
+                "error_message": res.error_message or "ccusage command failed",
             }
 
         ccusage_session_report = None
-        session_argv = ["ccusage", "session", "--json", "--timezone", self.config.timezone]
-        session_res = self.executor(session_argv, float(self.config.timeout_seconds))
-        if session_res.ok and session_res.stdout:
-            try:
-                session_data = json.loads(session_res.stdout)
-                if isinstance(session_data, dict) and isinstance(session_data.get("session"), list):
-                    ccusage_session_report = session_data
-            except json.JSONDecodeError:
-                ccusage_session_report = None
+        if ccusage_daily_available:
+            session_argv = ["ccusage", "session", "--json", "--timezone", self.config.timezone]
+            session_res = self.executor(session_argv, float(self.config.timeout_seconds))
+            if session_res.ok and session_res.stdout:
+                try:
+                    session_data = json.loads(session_res.stdout)
+                    if isinstance(session_data, dict) and isinstance(session_data.get("session"), list):
+                        ccusage_session_report = session_data
+                except json.JSONDecodeError:
+                    ccusage_session_report = None
 
         ccusage_blocks_report = None
-        blocks_argv = ["ccusage", "blocks", "--json", "--timezone", self.config.timezone]
-        blocks_res = self.executor(blocks_argv, float(self.config.timeout_seconds))
-        if blocks_res.ok and blocks_res.stdout:
-            try:
-                blocks_data = json.loads(blocks_res.stdout)
-                if isinstance(blocks_data, dict) and isinstance(blocks_data.get("blocks"), list):
-                    ccusage_blocks_report = blocks_data
-            except json.JSONDecodeError:
-                ccusage_blocks_report = None
+        if ccusage_daily_available:
+            blocks_argv = ["ccusage", "blocks", "--json", "--timezone", self.config.timezone]
+            blocks_res = self.executor(blocks_argv, float(self.config.timeout_seconds))
+            if blocks_res.ok and blocks_res.stdout:
+                try:
+                    blocks_data = json.loads(blocks_res.stdout)
+                    if isinstance(blocks_data, dict) and isinstance(blocks_data.get("blocks"), list):
+                        ccusage_blocks_report = blocks_data
+                except json.JSONDecodeError:
+                    ccusage_blocks_report = None
 
         mswusage_codex_hourly_report = None
         codex_hourly_status = None
@@ -336,6 +345,17 @@ class DevicePusher:
             except json.JSONDecodeError:
                 mswusage_claude_report = None
 
+        ledger_collection_available = (
+            mswusage_codex_hourly_report is not None
+            or mswusage_claude_report is not None
+        )
+        if ccusage_daily_status is not None and not ledger_collection_available:
+            return self._push_source_status(
+                status=str(ccusage_daily_status["status"]),
+                error_type=str(ccusage_daily_status["error_type"]),
+                error_message=str(ccusage_daily_status["error_message"]),
+            )
+
         # 3. 组织 Ingest Payload
         # ISO 8601 格式的 observed_at 时间戳
         observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
@@ -350,9 +370,12 @@ class DevicePusher:
             "observed_at": observed_at,
             "collection_window": "daily",
             "collection_status": "ok",
-            "ccusage_daily_report": ccusage_data,
             "usage_daily": usage_daily,
         }
+        if ccusage_daily_available:
+            payload["ccusage_daily_report"] = ccusage_data
+        if ccusage_daily_status is not None:
+            payload["ccusage_daily_status"] = ccusage_daily_status
         if ccusage_session_report is not None:
             payload["ccusage_session_report"] = ccusage_session_report
         if ccusage_blocks_report is not None:

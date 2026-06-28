@@ -144,6 +144,7 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-101 | [TP-V2-101-watch-circular-complication-reset-at-ui.md](TP-V2-101-watch-circular-complication-reset-at-ui.md) | done | TP-V2-084 | none |
 | TP-V2-102 | [TP-V2-102-macos-period-cache-refresh.md](TP-V2-102-macos-period-cache-refresh.md) | done | TP-V2-064 | none |
 | TP-V2-103 | [TP-V2-103-usage-ledger-menu-popover-mvp.md](TP-V2-103-usage-ledger-menu-popover-mvp.md) | done | TP-V2-060, TP-V2-061, TP-V2-064, TP-V2-089 | none |
+| TP-V2-104 | [TP-V2-104-ccusage-optional-device-push.md](TP-V2-104-ccusage-optional-device-push.md) | done | TP-V2-103 | none |
 
 ## subagent 分配建议
 
@@ -187,5 +188,6 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 - macOS Client agent：TP-V2-099 已完成，menu bar 额度圆环槽位固定：5h 缺数据时不能挪用 7d，7d 仍显示在 7d 行。
 - macOS Client agent：TP-V2-102 已完成，menu bar 周期切换先显示本地缓存，再按需后台刷新；只改 Mac 客户端，不改服务端 API。
 - Usage data agent：TP-V2-103 已完成，把 Usage Ledger 小时事实接到现有 `/api/mobile/summary`，让 macOS menu popover 看到新口径；本轮不改 popover 视觉。
+- Device pusher agent：执行 TP-V2-104，让 `ccusage` 从硬依赖降级为可选 daily baseline，支持卸载 CC Usage 后继续上传 Usage Ledger 小时事实。
 - Watch agent：TP-V2-100 已完成，补齐 iPhone/Watch freshness 诊断、WatchConnectivity 失败原因、刷新触发来源和安装版本对齐证据；保持 Watch 不直连服务端。
 - Watch agent：TP-V2-101 已完成，把 Watch 圆形小组件落到 Reset At 双圆环 UI；只改 `.accessoryCircular` 用户可见展示，不碰服务端数据口径。

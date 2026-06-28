@@ -166,6 +166,40 @@ class TestIngestContract(unittest.TestCase):
         self.assertEqual(len(req.usage_hourly_facts), 1)
         self.assertEqual(req.usage_hourly_facts[0]["ai_account"]["label"], "start@example.com")
 
+    def test_accepts_optional_ccusage_daily_status(self) -> None:
+        data = self.valid_data.copy()
+        data["usage_daily"] = []
+        data["ccusage_daily_status"] = {
+            "status": "missing_tool",
+            "error_type": "missing_tool",
+            "error_message": "ccusage not found",
+        }
+
+        req = validate_ingest_payload(data)
+
+        self.assertEqual(req.ccusage_daily_status["status"], "missing_tool")
+
+    def test_rejects_invalid_ccusage_daily_status_shape(self) -> None:
+        data = self.valid_data.copy()
+        data["ccusage_daily_status"] = []
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertIn("ccusage_daily_status", str(context.exception))
+
+    def test_rejects_incomplete_ccusage_daily_status(self) -> None:
+        data = self.valid_data.copy()
+        data["ccusage_daily_status"] = {
+            "status": "missing_tool",
+            "error_type": "missing_tool",
+        }
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertIn("ccusage_daily_status.error_message", str(context.exception))
+
     def test_rejects_usage_hourly_facts_missing_required_field(self) -> None:
         data = self.valid_data.copy()
         data["usage_hourly_facts"] = [{"fact_id": "bad"}]
