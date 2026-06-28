@@ -56,6 +56,13 @@ def handle_ingest_payload(
     block_items = normalize_ingest_block_request(req)
 
     collected_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
+    ccusage_daily_status = req.ccusage_daily_status or {}
+    report_error_type = req.error_type
+    report_error_message = req.error_message
+    if req.collection_status == "ok" and isinstance(ccusage_daily_status, dict):
+        report_error_type = report_error_type or ccusage_daily_status.get("error_type")
+        report_error_message = report_error_message or ccusage_daily_status.get("error_message")
+
     report = {
         "source_id": req.source_id,
         "report_type": "daily",
@@ -64,8 +71,8 @@ def handle_ingest_payload(
         "ccusage_version": None,
         "first_period": None,
         "last_period": None,
-        "error_type": req.error_type,
-        "error_message": req.error_message,
+        "error_type": report_error_type,
+        "error_message": report_error_message,
     }
     periods = [item.date for item in items]
     if periods:

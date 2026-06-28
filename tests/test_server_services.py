@@ -77,6 +77,66 @@ class TestServerServices(unittest.TestCase):
         self.assertEqual(summary_data["summary"]["total_tokens"], 2000)
         self.assertEqual(summary_data["source_status"][0]["status"], "ok")
 
+    def test_ingest_with_optional_ccusage_daily_status_keeps_source_health_ok(self) -> None:
+        payload = dict(self.valid_payload)
+        payload["usage_daily"] = []
+        payload["ccusage_daily_status"] = {
+            "status": "missing_tool",
+            "error_type": "missing_tool",
+            "error_message": "ccusage not found",
+        }
+        payload["usage_hourly_facts"] = [
+            {
+                "fact_id": "codex:codex:mac-local:2026-06-01T10:00:00+08:00:2026-06-01T11:00:00+08:00:unconfirmed_local_source:openai:acct-main:mswusage_codex_token_count",
+                "agent": "codex",
+                "client": "codex",
+                "window_start": "2026-06-01T10:00:00+08:00",
+                "window_end": "2026-06-01T11:00:00+08:00",
+                "ai_account": {
+                    "provider": "openai",
+                    "account_id": "acct-main",
+                    "label": "Codex Main",
+                },
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 30,
+                    "reasoning_output_tokens": 5,
+                    "total_tokens": 155,
+                },
+                "event_count": 2,
+                "session_count": 1,
+                "attribution_confidence": "unconfirmed_local_source",
+                "provenance": "mswusage_codex_token_count",
+            }
+        ]
+
+        response = handle_ingest_payload(
+            payload,
+            token=self.token,
+            authenticator=self.authenticator,
+            db_path=self.db_path,
+            latest_path=self.out_path,
+            timezone=self.timezone,
+        )
+
+        self.assertEqual(response["status"], "accepted")
+        summary_data = json.loads(
+            build_summary_response(
+                db_path=self.db_path,
+                latest_path=self.out_path,
+                timezone=self.timezone,
+                date_str="2026-06-01",
+                period="today",
+                machine_filter=None,
+                account_filter=None,
+            )
+        )
+        self.assertEqual(summary_data["summary"]["total_tokens"], 155)
+        self.assertEqual(summary_data["source_status"][0]["status"], "ok")
+        self.assertEqual(summary_data["source_status"][0]["error_message"], "ccusage not found")
+
     def test_mobile_summary_service_reuses_summary_snapshot(self) -> None:
         handle_ingest_payload(
             self.valid_payload,

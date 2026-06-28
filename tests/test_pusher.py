@@ -259,6 +259,74 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual({fact["ai_account"]["label"] for fact in facts}, {"本机来源 / 未确认账号"})
         self.assertIn("mswusage-claude", executor.calls[4])
 
+    def test_pusher_keeps_usage_ledger_push_when_ccusage_is_missing(self) -> None:
+        codex_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [{"date": "2026-06-11", "agent": "codex", "total_tokens": 155}],
+            "hourly": [
+                {
+                    "hour": "2026-06-11T13:00:00+08:00",
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 30,
+                    "reasoning_output_tokens": 5,
+                    "total_tokens": 155,
+                    "event_count": 2,
+                    "session_count": 1,
+                }
+            ],
+            "sessions": [],
+        })
+        claude_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_claude",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_claude_assistant_usage",
+            "daily": [{"date": "2026-06-11", "agent": "claude", "total_tokens": 77}],
+            "hourly": [
+                {
+                    "hour": "2026-06-11T13:00:00+08:00",
+                    "input_tokens": 70,
+                    "output_tokens": 7,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 77,
+                    "event_count": 1,
+                    "session_count": 0,
+                }
+            ],
+            "sessions": [],
+        })
+        executor = FakeExecutor([
+            CommandResult(error_type="missing_tool", error_message="ccusage not found"),
+            CommandResult(stdout=codex_stdout, exit_code=0),
+            CommandResult(stdout=claude_stdout, exit_code=0),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(http_client.last_json["collection_status"], "ok")
+        self.assertEqual(http_client.last_json["usage_daily"], [])
+        self.assertEqual(http_client.last_json["ccusage_daily_status"]["status"], "missing_tool")
+        self.assertNotIn("ccusage_daily_report", http_client.last_json)
+        self.assertNotIn("ccusage_session_report", http_client.last_json)
+        self.assertNotIn("ccusage_blocks_report", http_client.last_json)
+        self.assertIn("mswusage-codex", executor.calls[1])
+        self.assertIn("mswusage-claude", executor.calls[2])
+        self.assertEqual([fact["agent"] for fact in http_client.last_json["usage_hourly_facts"]], ["codex", "claude"])
+        drift = http_client.last_json["mswusage_codex_hourly_report"]["drift"]
+        self.assertEqual(drift["status"], "comparison_unavailable")
+        self.assertEqual(drift["baseline_agent"], None)
+
     def test_pusher_can_run_usage_ledger_full_rescan_explicitly(self) -> None:
         daily_stdout = '{"daily": []}'
         empty_codex_report = json.dumps({
@@ -500,13 +568,18 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual(sent_daily[0]["agent"], "unknown")
 
     def test_pusher_invalid_json(self) -> None:
-        """测试当 ccusage 输出非合法 JSON 时，Pusher 返回 'invalid_json'"""
+        """测试当 ccusage 输出非合法 JSON 且 ledger 不可用时会上报 source 失败状态"""
         ccusage_stdout = "{malformed-json"
-        executor = FakeExecutor(CommandResult(stdout=ccusage_stdout, exit_code=0))
-        http_client = FakeHTTPClient(status_code=200, response_data={})
+        executor = FakeExecutor([
+            CommandResult(stdout=ccusage_stdout, exit_code=0),
+            CommandResult(error_type="command_failed", error_message="mswusage codex failed"),
+            CommandResult(error_type="command_failed", error_message="mswusage claude failed"),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted", "source_id": "mac-local"})
 
         pusher = DevicePusher(self.config, executor=executor, http_client=http_client)
         result = pusher.push()
 
-        self.assertFalse(result["success"])
-        self.assertEqual(result["error_type"], "invalid_json")
+        self.assertTrue(result["success"])
+        self.assertEqual(result["collection_status"], "invalid_json")
+        self.assertEqual(http_client.last_json["collection_status"], "invalid_json")

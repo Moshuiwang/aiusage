@@ -26,6 +26,7 @@ class IngestRequest:
     collection_window: str
     usage_daily: List[Dict[str, Any]]
     ccusage_daily_report: Optional[Dict[str, Any]] = None
+    ccusage_daily_status: Optional[Dict[str, Any]] = None
     ccusage_session_report: Optional[Dict[str, Any]] = None
     ccusage_blocks_report: Optional[Dict[str, Any]] = None
     mswusage_codex_hourly_report: Optional[Dict[str, Any]] = None
@@ -119,6 +120,16 @@ def validate_ingest_payload(
     ccusage_daily_report = payload.get("ccusage_daily_report")
     if ccusage_daily_report is not None and not isinstance(ccusage_daily_report, dict):
         raise IngestValidationError("ccusage_daily_report must be an object", error_type="http_schema_invalid")
+    ccusage_daily_status = payload.get("ccusage_daily_status")
+    if ccusage_daily_status is not None and not isinstance(ccusage_daily_status, dict):
+        raise IngestValidationError("ccusage_daily_status must be an object", error_type="http_schema_invalid")
+    if isinstance(ccusage_daily_status, dict):
+        for key in ["status", "error_type", "error_message"]:
+            if key not in ccusage_daily_status:
+                raise IngestValidationError(
+                    f"ccusage_daily_status.{key} is required",
+                    error_type="http_schema_invalid",
+                )
     ccusage_session_report = payload.get("ccusage_session_report")
     if ccusage_session_report is not None and not isinstance(ccusage_session_report, dict):
         raise IngestValidationError("ccusage_session_report must be an object", error_type="http_schema_invalid")
@@ -171,6 +182,7 @@ def validate_ingest_payload(
         collection_window=str(payload.get("collection_window", "daily")),
         usage_daily=list(payload.get("usage_daily", [])),
         ccusage_daily_report=ccusage_daily_report,
+        ccusage_daily_status=ccusage_daily_status,
         ccusage_session_report=ccusage_session_report,
         ccusage_blocks_report=ccusage_blocks_report,
         mswusage_codex_hourly_report=mswusage_codex_hourly_report,
