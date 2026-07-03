@@ -57,6 +57,7 @@ After implementation and verification, the user wants AI Review, commit, push, P
 ```bash
 git status --short
 git diff --check
+glab auth status --hostname gitlab.com
 glab mr view
 ```
 

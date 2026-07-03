@@ -88,4 +88,4 @@ npm run cf:worker:deploy   # wrangler deploy
 
 ## 仓库身份
 
-GitLab remote 是 `https://gitlab.com/wangzhipeng2010/ai-usage.git`，默认 GitLab 身份 `wangzhipeng2010`。旧 GitHub 仓库 `https://github.com/Moshuiwang/aiusage.git` 不再作为开发、同步或发布入口；如需处理旧仓库，只做迁移提示或归档，不要恢复为默认 remote。
+GitLab remote 是 `https://gitlab.com/wangzhipeng2010/ai-usage.git`，默认 GitLab 身份 `wangzhipeng2010`。本项目只属于 `gitlab.com`，不要把 `gitlab.startimes.me` 的认证、网络或权限状态当成本项目异常；GitLab CLI 验证优先显式使用 `glab auth status --hostname gitlab.com`。旧 GitHub 仓库 `https://github.com/Moshuiwang/aiusage.git` 不再作为开发、同步或发布入口；如需处理旧仓库，只做迁移提示或归档，不要恢复为默认 remote。
