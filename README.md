@@ -1,5 +1,7 @@
 # AI Usage Widget
 
+> 代码平台已迁移到 GitLab 私有仓库：[AI Usage](https://gitlab.com/wangzhipeng2010/ai-usage)。旧 GitHub 仓库 `Moshuiwang/aiusage` 不再作为开发、同步或发布入口；如仍可见，仅保留历史归档和迁移提示用途。
+
 个人使用的 AI coding usage 观测工具，用来汇总多台设备、多 OS 用户、多 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态。
 
 当前项目已经从 Widget-first 原型重设为个人 HTTP 汇聚数据产品，并开始进入跨端客户端分层阶段。生产入口已经切到 Cloudflare Worker + D1，VPN2 旧后端不再承载 AI Usage 读写链路。
