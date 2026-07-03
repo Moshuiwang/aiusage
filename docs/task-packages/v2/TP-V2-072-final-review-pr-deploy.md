@@ -57,9 +57,9 @@ After implementation and verification, the user wants AI Review, commit, push, P
 ```bash
 git status --short
 git diff --check
-gh pr view --json state,url,headRefName
+glab mr view
 ```
 
 ## Handoff
 
-- Report commit SHA, PR URL, test evidence, deployment evidence, and any user action still required.
+- Report commit SHA, GitLab MR URL, test evidence, deployment evidence, and any user action still required.

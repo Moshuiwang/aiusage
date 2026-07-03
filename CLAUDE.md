@@ -88,4 +88,4 @@ npm run cf:worker:deploy   # wrangler deploy
 
 ## 仓库身份
 
-GitHub remote 是 `https://github.com/Moshuiwang/aiusage.git`，默认 `gh` 身份 `Moshuiwang`。本机 SSH 可能被识别为另一账号；若工具必须走 SSH，先报告账号不一致风险，不要擅自切换仓库身份。
+GitLab remote 是 `https://gitlab.com/wangzhipeng2010/ai-usage.git`，默认 GitLab 身份 `wangzhipeng2010`。旧 GitHub 仓库 `https://github.com/Moshuiwang/aiusage.git` 不再作为开发、同步或发布入口；如需处理旧仓库，只做迁移提示或归档，不要恢复为默认 remote。
