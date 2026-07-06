@@ -427,7 +427,8 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
 def _usage_ledger_since(mode: str, lookback_hours: float, now: datetime) -> datetime | None:
     if mode == "full-rescan":
         return None
-    return now - timedelta(hours=max(float(lookback_hours), 1.0))
+    since = now - timedelta(hours=max(float(lookback_hours), 1.0))
+    return since.replace(minute=0, second=0, microsecond=0)
 
 
 def _provider_runtime_key(provider_config: LimitsProviderConfig) -> str:

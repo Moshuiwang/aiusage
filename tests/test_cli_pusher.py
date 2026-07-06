@@ -4,12 +4,20 @@ import json
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from ai_usage_widget import cli
 
 
 class TestCliPusher(unittest.TestCase):
+    def test_incremental_usage_ledger_since_starts_at_full_hour(self) -> None:
+        now = datetime.fromisoformat("2026-07-06T16:29:05+08:00")
+
+        since = cli._usage_ledger_since("incremental", 48, now)
+
+        self.assertEqual(since, datetime.fromisoformat("2026-07-04T16:00:00+08:00"))
+
     def test_push_command_loads_device_config_and_runs_pusher(self) -> None:
         config_data = {
             "schema_version": 1,
@@ -31,7 +39,7 @@ class TestCliPusher(unittest.TestCase):
             class FakePusher:
                 last_config = None
 
-                def __init__(self, config) -> None:
+                def __init__(self, config, **kwargs) -> None:
                     FakePusher.last_config = config
 
                 def push(self) -> dict:
