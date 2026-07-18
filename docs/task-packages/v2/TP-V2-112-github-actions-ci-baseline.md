@@ -31,6 +31,9 @@ Review 和 PR 自身 Actions 完成 bootstrap。CI 合并后，Epic #29 与 #30 
 - Worker job 使用锁文件安装依赖并运行 Native Worker 测试。
 - macOS Swift job 运行 `clients/macos` 测试。
 - iOS Swift job 运行 `mobile/ios` 与 Xcode integration 测试。
+- 若相同 Swift 测试在本机通过、仅因 GitHub Runner 时区或缺少 WindowServer 失败，允许做最小
+  可移植性修复：来源时间按输入中的时区展示；只在 `CI=true` 时跳过确实需要 WindowServer 的
+  AppKit 退出测试，产品逻辑与其余测试不得跳过。
 
 ## Out of Scope
 
@@ -38,7 +41,7 @@ Review 和 PR 自身 Actions 完成 bootstrap。CI 合并后，Epic #29 与 #30 
 - 不访问生产 API、D1、BIAI 或真实额度来源。
 - 不部署生产，不安装 Mac/iPhone App。
 - 不直接 push `main`，不创建 branch protection，不绕过条件合并门禁。
-- 不顺带修复 TP-V2-114、TP-V2-115 之外的既有测试失败；如有失败，记录准确证据并停止。
+- 不修复与 GitHub Runner 可移植性无关的既有测试失败；如有失败，记录准确证据并停止。
 
 ## Red Test
 

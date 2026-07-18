@@ -69,8 +69,8 @@ PYTHONPATH=src python3 -m unittest tests.test_loop_merge_gate -v
 ```bash
 PYTHONPATH=src python3 -m unittest tests.test_loop_engineering_contract -v
 PYTHONPATH=src python3 -m unittest tests.test_loop_merge_gate -v
-python3 /Users/wangzhipeng/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/loop-executor
-python3 /Users/wangzhipeng/.codex/skills/.system/skill-creator/scripts/quick_validate.py .agents/skills/loop-planner
+python3 "${CODEX_HOME:?set CODEX_HOME}/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/loop-executor
+python3 "${CODEX_HOME:?set CODEX_HOME}/skills/.system/skill-creator/scripts/quick_validate.py" .agents/skills/loop-planner
 git diff --check
 ```
 
