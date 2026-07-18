@@ -63,10 +63,28 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
 }
 
 function mobileTrend(trend: AnyRecord): AnyRecord {
-  const points = list<AnyRecord>(trend.points).map((row) => {
+  const sourcePoints = list<AnyRecord>(trend.points);
+  const claudeValues = sourcePoints.map(() => 0);
+  const codexValues = sourcePoints.map(() => 0);
+  for (const agentRow of list<AnyRecord>(trend.by_agent)) {
+    const agent = str(agentRow.agent).toLowerCase();
+    const target = agent.includes("claude")
+      ? claudeValues
+      : (agent.includes("codex") || agent.includes("openai")) ? codexValues : null;
+    if (!target) continue;
+    list<unknown>(agentRow.values).slice(0, sourcePoints.length).forEach((value, index) => {
+      target[index] += Math.max(int(value), 0);
+    });
+  }
+  const points = sourcePoints.map((row, index) => {
     const bucket = row.hour || row.date;
     const totalTokens = int(row.total_tokens);
     const cacheTokens = int(row.cache_tokens);
+    const [claudeTokens, codexTokens] = fitKnownAgentTokens(
+      totalTokens,
+      claudeValues[index],
+      codexValues[index],
+    );
     return {
       bucket,
       label: trendLabel(bucket, trend.granularity),
@@ -75,6 +93,9 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
       output_tokens: int(row.output_tokens),
       cache_tokens: cacheTokens,
       cache_ratio: ratio(cacheTokens, totalTokens),
+      claude_tokens: claudeTokens,
+      codex_tokens: codexTokens,
+      unknown_tokens: Math.max(totalTokens - claudeTokens - codexTokens, 0),
     };
   });
   return {
@@ -84,6 +105,17 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
     end_date: trend.end_date,
     points,
   };
+}
+
+function fitKnownAgentTokens(total: number, claude: number, codex: number): [number, number] {
+  total = Math.max(int(total), 0);
+  claude = Math.max(int(claude), 0);
+  codex = Math.max(int(codex), 0);
+  const known = claude + codex;
+  if (known <= total) return [claude, codex];
+  if (known === 0) return [0, 0];
+  const fittedClaude = Math.floor(total * claude / known);
+  return [fittedClaude, total - fittedClaude];
 }
 
 function mobileSource(row: AnyRecord): AnyRecord {

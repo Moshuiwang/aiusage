@@ -75,6 +75,7 @@ enum WatchSummaryBackgroundRefresh {
 
 struct LiveSummaryContainerView: View {
     let initialTabID: String
+    private let usesDeterministicFixture: Bool
     @Environment(\.scenePhase) private var scenePhase
     // Widget runtime config sharing requires explicit App Group + Keychain access group design and is intentionally deferred.
     private let tokenStore = KeychainTokenStore()
@@ -88,8 +89,16 @@ struct LiveSummaryContainerView: View {
     init(initialTabID: String) {
         self.initialTabID = initialTabID
         let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
-        self._summary = State(initialValue: .empty(periodID: initialPeriod))
-        self._loadState = State(initialValue: .loading(period: initialPeriod))
+        #if DEBUG
+        let fixtureEnabled = ProcessInfo.processInfo.environment["AI_USAGE_DETERMINISTIC_FIXTURE"] == "1"
+        #else
+        let fixtureEnabled = false
+        #endif
+        self.usesDeterministicFixture = fixtureEnabled
+        self._summary = State(initialValue: fixtureEnabled
+            ? MobileSummary.deterministicTrendFixture(periodID: initialPeriod)
+            : .empty(periodID: initialPeriod))
+        self._loadState = State(initialValue: fixtureEnabled ? .live : .loading(period: initialPeriod))
     }
 
     var body: some View {
@@ -98,12 +107,17 @@ struct LiveSummaryContainerView: View {
             initialTabID: initialTabID,
             refreshingPeriodID: loadState.refreshingPeriodID,
             onPeriodSelected: { period in
-                Task { await loadLiveSummary(period: period, refreshSource: .foregroundInitialLoad) }
+                if usesDeterministicFixture {
+                    summary = MobileSummary.deterministicTrendFixture(periodID: period)
+                } else {
+                    Task { await loadLiveSummary(period: period, refreshSource: .foregroundInitialLoad) }
+                }
             },
             onRefresh: { period in
                 Task { await refreshLiveSummary(period: period, refreshSource: .pullToRefresh) }
             },
             onRefreshAsync: { period in
+                guard !usesDeterministicFixture else { return }
                 await refreshLiveSummary(period: period, refreshSource: .pullToRefresh)
                 // Pull-to-refresh failures are silent — don't leave the error banner on screen
                 if case .failed = loadState { loadState = .live }
@@ -128,6 +142,10 @@ struct LiveSummaryContainerView: View {
                 }
             }
             .task {
+                guard !usesDeterministicFixture else {
+                    hasCompletedInitialLoad = true
+                    return
+                }
                 scheduleWatchSummaryBackgroundRefresh()
                 let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
                 await loadLiveSummary(period: initialPeriod, refreshSource: .foregroundInitialLoad)
@@ -135,7 +153,7 @@ struct LiveSummaryContainerView: View {
                 hasCompletedInitialLoad = true
             }
             .onChange(of: scenePhase) { _, phase in
-                guard phase == .active, hasCompletedInitialLoad else {
+                guard !usesDeterministicFixture, phase == .active, hasCompletedInitialLoad else {
                     return
                 }
                 Task {

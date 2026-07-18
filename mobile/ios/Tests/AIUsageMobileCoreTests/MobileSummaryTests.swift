@@ -289,6 +289,69 @@ final class MobileSummaryTests: XCTestCase {
         )
     }
 
+    func testTrendChartPresentationKeepsCompleteWeekMonthAndAllRanges() {
+        for count in [7, 30, 76] {
+            let points = (0..<count).map { index in
+                trendPoint(bucket: String(format: "2026-%03d", index + 1), tokens: index + 1)
+            }
+            let visible = TrendChartPresentation.points(from: points)
+
+            XCTAssertEqual(visible.count, count)
+            XCTAssertEqual(visible.first?.bucket, points.first?.bucket)
+            XCTAssertEqual(visible.last?.bucket, points.last?.bucket)
+            XCTAssertEqual(visible.map(\.tokens).reduce(0, +), points.map(\.tokens).reduce(0, +))
+        }
+    }
+
+    func testTrendTooltipShowsExactTotalAndAgentSegments() {
+        let point = MobileTrendPoint(
+            bucket: "2026-06-02",
+            label: "06-02",
+            tokens: 403_524_234,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheTokens: 0,
+            cacheRatio: 0,
+            claudeTokens: 300_000_000,
+            codexTokens: 100_000_000,
+            unknownTokens: 3_524_234
+        )
+
+        let lines = TrendChartPresentation.tooltipLines(for: point)
+
+        XCTAssertEqual(lines.label, "06-02")
+        XCTAssertEqual(lines.total, "403.5M · 403,524,234")
+        XCTAssertEqual(lines.claude, "Claude 300,000,000")
+        XCTAssertEqual(lines.codex, "Codex 100,000,000")
+        XCTAssertEqual(lines.unknown, "未知 3,524,234")
+    }
+
+    func testTrendPointDecodesMissingSegmentsAsUnknownForOldCacheCompatibility() throws {
+        let data = """
+        {"bucket":"2026-06-02","label":"06-02","tokens":42,"input_tokens":42,"output_tokens":0,"cache_tokens":0,"cache_ratio":0}
+        """.data(using: .utf8)!
+
+        let point = try JSONDecoder().decode(MobileTrendPoint.self, from: data)
+
+        XCTAssertEqual(point.claudeTokens, 0)
+        XCTAssertEqual(point.codexTokens, 0)
+        XCTAssertEqual(point.unknownTokens, 42)
+    }
+
+    func testDeterministicTrendFixtureCoversWeekMonthAndAllForSimulatorAcceptance() {
+        for (period, count) in [("week", 7), ("month", 30), ("all", 76)] {
+            let summary = MobileSummary.deterministicTrendFixture(periodID: period)
+
+            XCTAssertEqual(summary.period.id, period)
+            XCTAssertEqual(summary.trend.points.count, count)
+            XCTAssertGreaterThan(summary.period.totalTokens, 0)
+            XCTAssertEqual(summary.trend.points.map(\.tokens).reduce(0, +), summary.period.totalTokens)
+            XCTAssertTrue(summary.trend.points.allSatisfy {
+                $0.claudeTokens + $0.codexTokens + $0.unknownTokens == $0.tokens
+            })
+        }
+    }
+
     func testMachineBreakdownBuildsUsefulDrilldownSections() throws {
         let summary = try loadFixture()
         let machine = try XCTUnwrap(summary.breakdown.byMachine.first { $0.label == "linux-dev" })

@@ -1612,6 +1612,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -1623,16 +1629,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }
@@ -3117,6 +3129,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -3128,16 +3146,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }
@@ -4622,6 +4646,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -4633,16 +4663,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }
@@ -6127,6 +6163,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -6138,16 +6180,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }
@@ -7935,6 +7983,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -7946,16 +8000,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }
@@ -8521,6 +8581,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -8532,16 +8598,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }
@@ -10404,6 +10476,12 @@
                         "cache_tokens": {
                           "type": "int"
                         },
+                        "claude_tokens": {
+                          "type": "int"
+                        },
+                        "codex_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -10415,16 +10493,22 @@
                         },
                         "tokens": {
                           "type": "int"
+                        },
+                        "unknown_tokens": {
+                          "type": "int"
                         }
                       },
                       "keys": [
                         "bucket",
                         "cache_ratio",
                         "cache_tokens",
+                        "claude_tokens",
+                        "codex_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
-                        "tokens"
+                        "tokens",
+                        "unknown_tokens"
                       ],
                       "type": "object"
                     }

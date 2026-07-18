@@ -46,6 +46,26 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
             with self.subTest(path=str(path)):
                 self.assertTrue(path.exists())
 
+    def test_ios_simulator_acceptance_uses_explicit_nonempty_fixture_mode(self) -> None:
+        app_source = (
+            ROOT / "mobile" / "ios-xcode" / "Sources" / "AIUsageMobileApp" / "AIUsageMobileApp.swift"
+        ).read_text(encoding="utf-8")
+        core_source = (
+            ROOT / "mobile" / "ios" / "Sources" / "AIUsageMobileCore" / "MobileSummary.swift"
+        ).read_text(encoding="utf-8")
+        root_view_source = (
+            ROOT / "mobile" / "ios" / "Sources" / "AIUsageMobileCore" / "AIUsageMobileRootView.swift"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('AI_USAGE_DETERMINISTIC_FIXTURE', app_source)
+        self.assertIn('#if DEBUG', app_source)
+        self.assertIn('MobileSummary.deterministicTrendFixture(periodID:', app_source)
+        self.assertIn('guard !usesDeterministicFixture else', app_source)
+        self.assertIn('guard !usesDeterministicFixture, phase == .active', app_source)
+        self.assertIn('AI_USAGE_DETERMINISTIC_TOOLTIP', root_view_source)
+        self.assertIn('#if DEBUG', root_view_source)
+        self.assertIn('deterministicTrendFixture(periodID:', core_source)
+
     def test_app_target_declares_real_app_icon_asset(self) -> None:
         project_yml = ROOT / "mobile" / "ios-xcode" / "project.yml"
         content = project_yml.read_text(encoding="utf-8")

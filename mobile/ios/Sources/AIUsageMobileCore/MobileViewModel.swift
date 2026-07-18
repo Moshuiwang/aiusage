@@ -367,6 +367,30 @@ public enum TrendPointSelection {
     }
 }
 
+public struct TrendTooltipLines: Equatable, Sendable {
+    public let label: String
+    public let total: String
+    public let claude: String
+    public let codex: String
+    public let unknown: String
+}
+
+public enum TrendChartPresentation {
+    public static func points(from points: [MobileTrendPoint]) -> [MobileTrendPoint] {
+        points
+    }
+
+    public static func tooltipLines(for point: MobileTrendPoint) -> TrendTooltipLines {
+        TrendTooltipLines(
+            label: point.label.isEmpty ? point.bucket : point.label,
+            total: "\(TokenFormat.compact(point.tokens)) · \(TokenFormat.full(point.tokens))",
+            claude: "Claude \(TokenFormat.full(point.claudeTokens))",
+            codex: "Codex \(TokenFormat.full(point.codexTokens))",
+            unknown: "未知 \(TokenFormat.full(point.unknownTokens))"
+        )
+    }
+}
+
 struct BreakdownDrilldownSection: Equatable, Sendable, Identifiable {
     var id: String { title }
     let title: String

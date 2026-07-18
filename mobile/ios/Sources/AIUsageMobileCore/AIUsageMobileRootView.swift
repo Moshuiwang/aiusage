@@ -271,7 +271,7 @@ struct PeriodHeroCard: View {
                 .lineLimit(1)
 
             InteractiveBarChart(points: state.trendPoints)
-                .frame(height: 76)
+                .frame(height: 172)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -286,7 +286,17 @@ struct InteractiveBarChart: View {
     @State private var selectedIndex: Int? = nil
     @State private var dismissTask: Task<Void, Never>? = nil
 
-    private var chartPoints: [MobileTrendPoint] { Array(points.suffix(24)) }
+    init(points: [MobileTrendPoint]) {
+        self.points = points
+        #if DEBUG
+        let showsDeterministicTooltip = ProcessInfo.processInfo.environment["AI_USAGE_DETERMINISTIC_TOOLTIP"] == "1"
+        #else
+        let showsDeterministicTooltip = false
+        #endif
+        self._selectedIndex = State(initialValue: showsDeterministicTooltip ? points.indices.last : nil)
+    }
+
+    private var chartPoints: [MobileTrendPoint] { TrendChartPresentation.points(from: points) }
     private var maxTokens: Int { max(chartPoints.map(\.tokens).max() ?? 1, 1) }
     private var maxLabel: String { TokenFormat.compact(maxTokens) }
 
@@ -300,19 +310,9 @@ struct InteractiveBarChart: View {
         max(point.tokens == 0 ? 3 : 5, CGFloat(point.tokens) / CGFloat(maxTokens) * 52)
     }
 
-    private var normalGrad: LinearGradient {
-        LinearGradient(
-            colors: [Color(red: 0.039, green: 0.518, blue: 1), Color(red: 0.353, green: 0.784, blue: 0.980)],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
-
-    private var selectedGrad: LinearGradient {
-        LinearGradient(
-            colors: [Color(red: 0.218, green: 0.118, blue: 0.337).opacity(0), BrandColor.claudeOrange],
-            startPoint: .top, endPoint: .bottom
-        )
-    }
+    private let claudeColor = BrandColor.claudeOrange
+    private let codexColor = Color(red: 0.039, green: 0.518, blue: 1)
+    private let unknownColor = Color.secondary.opacity(0.45)
 
     var body: some View {
         VStack(spacing: 6) {
@@ -329,21 +329,25 @@ struct InteractiveBarChart: View {
                     // Bars
                     HStack(alignment: .bottom, spacing: 3) {
                         ForEach(Array(chartPoints.enumerated()), id: \.element.id) { idx, point in
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(selectedIndex == idx ? selectedGrad : normalGrad)
-                                .frame(height: barHeight(for: point))
+                            stackedBar(point)
                                 .frame(maxWidth: .infinity, alignment: .bottom)
                                 .opacity(point.tokens == 0 ? 0.28 : 1)
                                 .scaleEffect(y: selectedIndex == idx ? 1.06 : 1, anchor: .bottom)
+                                .overlay {
+                                    if selectedIndex == idx {
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .stroke(Color.primary.opacity(0.45), lineWidth: 1)
+                                    }
+                                }
                         }
                     }
                     .frame(height: 52, alignment: .bottom)
-                    .padding(.top, 12)
+                    .padding(.top, 66)
 
                     // Tooltip
                     if let idx = selectedIndex, idx < chartPoints.count {
                         let pt = chartPoints[idx]
-                        ChartTooltip(label: pt.label, value: TokenFormat.compact(pt.tokens))
+                        ChartTooltip(lines: TrendChartPresentation.tooltipLines(for: pt))
                             .offset(x: tooltipX(idx: idx, width: proxy.size.width))
                             .offset(y: -2)
                             .zIndex(10)
@@ -375,7 +379,7 @@ struct InteractiveBarChart: View {
                         }
                 )
             }
-            .frame(height: 64)
+            .frame(height: 122)
 
             // Axis labels
             HStack {
@@ -386,6 +390,53 @@ struct InteractiveBarChart: View {
                     if label != axisLabels.last { Spacer(minLength: 0) }
                 }
             }
+
+            HStack(spacing: 12) {
+                chartLegend("Claude", color: claudeColor)
+                chartLegend("Codex", color: codexColor)
+                chartLegend("未知", color: unknownColor)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    @ViewBuilder
+    private func stackedBar(_ point: MobileTrendPoint) -> some View {
+        if point.tokens == 0 {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(unknownColor)
+                .frame(height: 3)
+        } else {
+            VStack(spacing: 0) {
+                if point.unknownTokens > 0 {
+                    Rectangle()
+                        .fill(unknownColor)
+                        .frame(height: segmentHeight(point.unknownTokens))
+                }
+                if point.claudeTokens > 0 {
+                    Rectangle()
+                        .fill(claudeColor)
+                        .frame(height: segmentHeight(point.claudeTokens))
+                }
+                if point.codexTokens > 0 {
+                    Rectangle()
+                        .fill(codexColor)
+                        .frame(height: segmentHeight(point.codexTokens))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .frame(height: barHeight(for: point), alignment: .bottom)
+        }
+    }
+
+    private func segmentHeight(_ tokens: Int) -> CGFloat {
+        CGFloat(tokens) / CGFloat(maxTokens) * 52
+    }
+
+    private func chartLegend(_ label: String, color: Color) -> some View {
+        HStack(spacing: 4) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(label).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
         }
     }
 
@@ -394,30 +445,35 @@ struct InteractiveBarChart: View {
         guard n > 0 else { return 0 }
         let step = width / CGFloat(n)
         let centerX = CGFloat(idx) * step + step / 2
-        let tipW: CGFloat = 88
+        let tipW: CGFloat = 196
         let clamped = max(tipW / 2, min(centerX, width - tipW / 2))
         return clamped - width / 2
     }
 }
 
 struct ChartTooltip: View {
-    let label: String
-    let value: String
+    let lines: TrendTooltipLines
 
     var body: some View {
-        VStack(spacing: 2) {
-            Text(value)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(lines.total)
                 .font(.system(size: 12, weight: .bold))
                 .monospacedDigit()
-            if !label.isEmpty {
-                Text(label)
+            Text(lines.label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text("\(lines.claude) · \(lines.codex)")
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+            if !lines.unknown.hasSuffix(" 0") {
+                Text(lines.unknown)
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .frame(width: 88)
+        .frame(width: 196, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.primary.opacity(0.08), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.14), radius: 6, y: 3)
