@@ -785,6 +785,11 @@
               "length": 1,
               "type": "array"
             },
+            "limit_status": {
+              "items": [],
+              "length": 0,
+              "type": "array"
+            },
             "limits": {
               "items": [],
               "length": 0,
@@ -1072,6 +1077,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -1415,6 +1421,11 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [],
+                  "length": 0,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -1426,6 +1437,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],
@@ -1968,6 +1980,11 @@
               "length": 3,
               "type": "array"
             },
+            "limit_status": {
+              "items": [],
+              "length": 0,
+              "type": "array"
+            },
             "limits": {
               "items": [],
               "length": 0,
@@ -2277,6 +2294,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -2932,6 +2950,11 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [],
+                  "length": 0,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -2943,6 +2966,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],
@@ -3485,6 +3509,11 @@
               "length": 3,
               "type": "array"
             },
+            "limit_status": {
+              "items": [],
+              "length": 0,
+              "type": "array"
+            },
             "limits": {
               "items": [],
               "length": 0,
@@ -3794,6 +3823,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -4449,6 +4479,11 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [],
+                  "length": 0,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -4460,6 +4495,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],
@@ -5002,6 +5038,11 @@
               "length": 3,
               "type": "array"
             },
+            "limit_status": {
+              "items": [],
+              "length": 0,
+              "type": "array"
+            },
             "limits": {
               "items": [],
               "length": 0,
@@ -5311,6 +5352,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -5966,6 +6008,11 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [],
+                  "length": 0,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -5977,6 +6024,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],
@@ -6519,6 +6567,11 @@
               "length": 2,
               "type": "array"
             },
+            "limit_status": {
+              "items": [],
+              "length": 0,
+              "type": "array"
+            },
             "limits": {
               "items": [],
               "length": 0,
@@ -6832,6 +6885,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -7128,6 +7182,11 @@
                 }
               ],
               "length": 2,
+              "type": "array"
+            },
+            "limit_status": {
+              "items": [],
+              "length": 0,
               "type": "array"
             },
             "limits": {
@@ -7443,6 +7502,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -7786,6 +7846,11 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [],
+                  "length": 0,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -7797,6 +7862,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],
@@ -8384,6 +8450,11 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [],
+                  "length": 0,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -8395,6 +8466,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],
@@ -9194,6 +9266,41 @@
               "length": 3,
               "type": "array"
             },
+            "limit_status": {
+              "items": [
+                {
+                  "fields": {
+                    "observed_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "source_id": {
+                      "type": "str"
+                    },
+                    "source_type": {
+                      "type": "str"
+                    },
+                    "status": {
+                      "type": "str",
+                      "value": "stale"
+                    }
+                  },
+                  "keys": [
+                    "observed_at",
+                    "provider",
+                    "source_id",
+                    "source_type",
+                    "status"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 1,
+              "type": "array"
+            },
             "limits": {
               "items": [
                 {
@@ -9624,6 +9731,7 @@
             "generated_at",
             "groups",
             "items",
+            "limit_status",
             "limits",
             "metadata",
             "schema_version",
@@ -10279,6 +10387,41 @@
                 "observed_count": {
                   "type": "int"
                 },
+                "providers": {
+                  "items": [
+                    {
+                      "fields": {
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "codex"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "stale"
+                        }
+                      },
+                      "keys": [
+                        "observed_at",
+                        "provider",
+                        "source_id",
+                        "source_type",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
                 "total_count": {
                   "type": "int"
                 },
@@ -10290,6 +10433,7 @@
               },
               "keys": [
                 "observed_count",
+                "providers",
                 "total_count",
                 "windows"
               ],

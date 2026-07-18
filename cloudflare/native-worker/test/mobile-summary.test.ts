@@ -33,6 +33,30 @@ describe("mobile trend agent classification", () => {
 });
 
 describe("mobile official limits freshness", () => {
+  it("keeps safe stale provider identity without exposing old percentages", () => {
+    const mobile = buildMobileSummary({
+      generated_at: "2026-07-18T12:30:00+08:00", summary: { period: "today", total_tokens: 0 },
+      trend: { points: [] }, source_status: [], groups: {}, items: [], limits: [],
+      limit_status: [{ provider: "claude", source_id: "linux-biai-wangzhipeng", observed_at: "2026-07-18T10:00:00+08:00", source_type: "oauth_usage_api", status: "stale" }],
+    }) as Record<string, any>;
+    expect(mobile.limits.windows).toEqual([]);
+    expect(mobile.limits.providers).toEqual([{ provider: "claude", source_id: "linux-biai-wangzhipeng", observed_at: "2026-07-18T10:00:00+08:00", source_type: "oauth_usage_api", status: "stale" }]);
+  });
+
+  it("never combines quota windows from different sources", () => {
+    const common = { provider: "claude", remaining_percent: 80, reset_at: "2026-07-20T00:00:00+08:00", source_type: "oauth_usage_api", confidence: "observed", status: "ok", official: true };
+    const mobile = buildMobileSummary({
+      generated_at: "2026-07-18T10:30:00+08:00", summary: { period: "today", total_tokens: 0 },
+      trend: { points: [] }, source_status: [], groups: {}, items: [],
+      limit_status: [{ provider: "claude", source_id: "source-b", observed_at: "2026-07-18T10:20:00+08:00", source_type: "oauth_usage_api", status: "ok" }],
+      limits: [
+        { ...common, source_id: "source-a", window: "session", used_percent: 10, window_duration_minutes: 300, observed_at: "2026-07-18T10:10:00+08:00" },
+        { ...common, source_id: "source-b", window: "week", used_percent: 20, window_duration_minutes: 10080, observed_at: "2026-07-18T10:20:00+08:00" },
+      ],
+    }) as Record<string, any>;
+    expect(new Set(mobile.limits.windows.map((row: any) => row.source_id))).toEqual(new Set(["source-b"]));
+  });
+
   it("hides stale remote windows while preserving the last trusted update", () => {
     const mobile = buildMobileSummary({
       generated_at: "2026-07-18T12:30:00+08:00",

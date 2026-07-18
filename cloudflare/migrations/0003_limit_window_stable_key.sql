@@ -24,7 +24,7 @@ SELECT source_id, provider, window, used_percent, remaining_percent, reset_at,
        window_duration_minutes, source_type, confidence, status, observed_at,
        first_seen_at, last_seen_at
 FROM limit_windows
-ORDER BY observed_at ASC;
+ORDER BY julianday(observed_at) ASC, observed_at ASC;
 
 DROP TABLE limit_windows;
 ALTER TABLE limit_windows_v3 RENAME TO limit_windows;

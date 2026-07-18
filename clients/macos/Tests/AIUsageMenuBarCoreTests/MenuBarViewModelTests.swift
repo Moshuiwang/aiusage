@@ -409,6 +409,79 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(codex.availabilityText, "暂不可用")
     }
 
+    func testQuotaRingKeepsStaleProviderSourceAndUpdateWhenValuesAreHidden() throws {
+        let summary = try loadFixture()
+        let limits = MobileLimits(
+            observedCount: 0,
+            totalCount: 0,
+            windows: [],
+            providers: [
+                MobileLimitProviderStatus(
+                    provider: "claude", sourceID: "linux-biai-wangzhipeng",
+                    observedAt: "2026-07-18T10:00:00+08:00",
+                    sourceType: "oauth_usage_api", status: "stale"
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: "2026-07-18T12:30:00+08:00", timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: limits
+            ),
+            selectedPeriodID: "today", now: try date("2026-07-18T12:30:00+08:00")
+        )
+
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "--")
+        XCTAssertEqual(claude.sourceText, "BIAI · wangzhipeng")
+        XCTAssertEqual(claude.updatedText, "10:00 更新")
+        XCTAssertEqual(claude.availabilityText, "暂不可用")
+    }
+
+    func testQuotaRingNeverCombinesWindowsFromDifferentSources() throws {
+        let summary = try loadFixture()
+        let commonReset = "2026-07-20T00:00:00+08:00"
+        let limits = MobileLimits(
+            observedCount: 2, totalCount: 2,
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "source-a", provider: "claude", window: "session",
+                    usedPercent: 10, remainingPercent: 90, resetAt: commonReset,
+                    windowDurationMinutes: 300, observedAt: "2026-07-18T10:10:00+08:00",
+                    sourceType: "oauth_usage_api", confidence: "observed", status: "ok", official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "source-b", provider: "claude", window: "week",
+                    usedPercent: 20, remainingPercent: 80, resetAt: commonReset,
+                    windowDurationMinutes: 10080, observedAt: "2026-07-18T10:20:00+08:00",
+                    sourceType: "oauth_usage_api", confidence: "observed", status: "ok", official: true
+                ),
+            ],
+            providers: [
+                MobileLimitProviderStatus(
+                    provider: "claude", sourceID: "source-b", observedAt: "2026-07-18T10:20:00+08:00",
+                    sourceType: "oauth_usage_api", status: "ok"
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: "2026-07-18T10:30:00+08:00", timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: limits
+            ),
+            selectedPeriodID: "today", now: try date("2026-07-18T10:30:00+08:00")
+        )
+
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "--")
+        XCTAssertEqual(claude.innerPctText, "20%")
+        XCTAssertEqual(claude.sourceText, "Claude 官方")
+    }
+
     func testTrendSelectionFollowsMouseLocation() throws {
         let summary = try loadFixture()
         let state = MenuBarViewModel.build(

@@ -14,18 +14,25 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     groups = _dict(snapshot.get("groups"))
     items = _list(snapshot.get("items"))
     limits = _list(snapshot.get("limits"))
+    limit_providers = _mobile_limit_providers(_list(snapshot.get("limit_status")))
     generated_at = _parse_datetime(snapshot.get("generated_at"))
 
     cache_tokens = _int(summary.get("cache_creation_tokens")) + _int(summary.get("cache_read_tokens"))
     total_tokens = _int(summary.get("total_tokens"))
 
     account_context = _account_context(snapshot.get("account_hourly"), snapshot.get("ai_accounts"))
-    candidate_windows = [
+    normalized_windows = [
         window
         for row in limits
         if isinstance(row, dict)
         for window in [_limit_window(row, account_context)]
         if _effective_limit_window(window)
+    ]
+    selected_sources = _selected_limit_sources(normalized_windows, limit_providers)
+    candidate_windows = [
+        window
+        for window in normalized_windows
+        if selected_sources.get(str(window.get("provider") or "").lower()) == str(window.get("source_id") or "")
         if not _expired_short_window(window, generated_at)
     ]
     windows = [window for window in candidate_windows if not _stale_limit_window(window, generated_at)]
@@ -83,9 +90,41 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             ),
             "total_count": len(windows),
             "windows": windows,
+            "providers": limit_providers,
         },
         "metadata": _mobile_metadata(snapshot, windows, candidate_windows, generated_at),
     }
+
+
+def _mobile_limit_providers(rows: List[Any]) -> List[Dict[str, Any]]:
+    fields = ("provider", "source_id", "observed_at", "source_type", "status")
+    return [
+        {field: row.get(field) for field in fields}
+        for row in rows
+        if isinstance(row, dict) and row.get("provider") and row.get("source_id")
+    ]
+
+
+def _selected_limit_sources(
+    windows: List[Dict[str, Any]],
+    providers: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    selected = {
+        str(row.get("provider") or "").lower(): str(row.get("source_id") or "")
+        for row in providers
+    }
+    newest: Dict[str, tuple[float, str]] = {}
+    for window in windows:
+        provider = str(window.get("provider") or "").lower()
+        if provider in selected:
+            continue
+        observed = _parse_datetime(window.get("observed_at"))
+        rank = observed.timestamp() if observed is not None else float("-inf")
+        source_id = str(window.get("source_id") or "")
+        if provider not in newest or (rank, source_id) > newest[provider]:
+            newest[provider] = (rank, source_id)
+    selected.update({provider: value[1] for provider, value in newest.items()})
+    return selected
 
 
 def _mobile_trend(trend: Dict[str, Any]) -> Dict[str, Any]:

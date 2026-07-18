@@ -792,6 +792,13 @@ class TestSnapshotBuilder(unittest.TestCase):
             [(row["provider"], row["window"], row["remaining_percent"]) for row in snapshot["limits"]],
             [("claude", "week", 53.0)],
         )
+        self.assertEqual(snapshot["limit_status"], [{
+            "provider": "claude",
+            "source_id": "claude-main",
+            "observed_at": "2026-06-01T10:46:00+08:00",
+            "source_type": "official_cli",
+            "status": "ok",
+        }])
 
     def test_failed_limits_do_not_break_usage_summary(self) -> None:
         write_sqlite(

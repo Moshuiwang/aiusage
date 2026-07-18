@@ -98,6 +98,7 @@ def build_snapshot(
                 conn,
                 ref_time if period_id == "today" and end_date == ref_time.date().isoformat() else None,
             )
+            all_limits = _fetch_limit_windows(conn)
             account_hourly_rows = _fetch_account_hourly_rows(conn, start_date, end_date, timezone_str)
             ai_accounts = _fetch_ai_accounts(conn)
     except sqlite3.OperationalError as exc:
@@ -400,6 +401,7 @@ def build_snapshot(
         "trend": trend,
         "source_status": source_status,
         "limits": limits,
+        "limit_status": _build_limit_status(all_limits, ref_time),
         "account_hourly": account_hourly,
         "ai_accounts": ai_accounts,
         "metadata": metadata,
@@ -619,6 +621,42 @@ def _effective_limit_window(limit: dict[str, Any]) -> bool:
         and limit.get("status") == "ok"
         and str(limit.get("source_type") or "") != "active_limits_cache"
     )
+
+
+def _build_limit_status(limits: list[dict[str, Any]], ref_time: datetime) -> list[dict[str, Any]]:
+    by_source: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for limit in limits:
+        if not _effective_limit_window(limit):
+            continue
+        key = (str(limit.get("provider") or "").lower(), str(limit.get("source_id") or ""))
+        by_source.setdefault(key, []).append(limit)
+
+    selected: dict[str, tuple[float, str, list[dict[str, Any]]]] = {}
+    for (provider, source_id), rows in by_source.items():
+        newest = max((_limit_timestamp(row.get("observed_at")) for row in rows), default=float("-inf"))
+        candidate = (newest, source_id, rows)
+        if provider not in selected or candidate[:2] > selected[provider][:2]:
+            selected[provider] = candidate
+
+    result = []
+    for provider, (_, source_id, rows) in sorted(selected.items()):
+        freshest = max(rows, key=lambda row: (_limit_timestamp(row.get("observed_at")), str(row.get("source_type") or "")))
+        observed = parse_datetime(str(freshest.get("observed_at") or ""))
+        stale = observed is None or (ref_time - observed.astimezone(ref_time.tzinfo)).total_seconds() > 120 * 60
+        unexpired = any(not _limit_window_expired(row, ref_time) for row in rows)
+        result.append({
+            "provider": provider,
+            "source_id": source_id,
+            "observed_at": freshest.get("observed_at"),
+            "source_type": freshest.get("source_type"),
+            "status": "stale" if stale else ("ok" if unexpired else "expired"),
+        })
+    return result
+
+
+def _limit_timestamp(value: Any) -> float:
+    parsed = parse_datetime(str(value or ""))
+    return parsed.timestamp() if parsed is not None else float("-inf")
 
 
 def _snapshot_metadata(
@@ -1183,6 +1221,7 @@ def _empty_snapshot(
         },
         "source_status": [],
         "limits": [],
+        "limit_status": [],
         "account_hourly": _empty_account_hourly_summary(),
         "ai_accounts": [],
         "metadata": {

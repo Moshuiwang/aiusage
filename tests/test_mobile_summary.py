@@ -43,6 +43,50 @@ class TestMobileSummaryTrend(unittest.TestCase):
 
 
 class TestMobileSummaryLimits(unittest.TestCase):
+    def test_stale_provider_keeps_safe_source_and_update_without_percentages(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T12:30:00+08:00",
+            "summary": {"period": "today", "total_tokens": 0},
+            "trend": {"points": []}, "source_status": [], "groups": {}, "items": [],
+            "limits": [],
+            "limit_status": [{
+                "provider": "claude", "source_id": "linux-biai-wangzhipeng",
+                "observed_at": "2026-07-18T10:00:00+08:00",
+                "source_type": "oauth_usage_api", "status": "stale",
+            }],
+        })
+
+        self.assertEqual(summary["limits"]["windows"], [])
+        self.assertEqual(summary["limits"]["providers"], [{
+            "provider": "claude", "source_id": "linux-biai-wangzhipeng",
+            "observed_at": "2026-07-18T10:00:00+08:00",
+            "source_type": "oauth_usage_api", "status": "stale",
+        }])
+
+    def test_provider_windows_never_mix_sources(self) -> None:
+        base = {
+            "confidence": "observed", "status": "ok", "official": True,
+            "remaining_percent": 80, "reset_at": "2026-07-20T00:00:00+08:00",
+            "source_type": "oauth_usage_api",
+        }
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T10:30:00+08:00",
+            "summary": {"period": "today", "total_tokens": 0},
+            "trend": {"points": []}, "source_status": [], "groups": {}, "items": [],
+            "limit_status": [{
+                "provider": "claude", "source_id": "source-b", "observed_at": "2026-07-18T10:20:00+08:00",
+                "source_type": "oauth_usage_api", "status": "ok",
+            }],
+            "limits": [
+                {**base, "source_id": "source-a", "provider": "claude", "window": "session",
+                 "used_percent": 10, "window_duration_minutes": 300, "observed_at": "2026-07-18T10:10:00+08:00"},
+                {**base, "source_id": "source-b", "provider": "claude", "window": "week",
+                 "used_percent": 20, "window_duration_minutes": 10080, "observed_at": "2026-07-18T10:20:00+08:00"},
+            ],
+        })
+
+        self.assertEqual({row["source_id"] for row in summary["limits"]["windows"]}, {"source-b"})
+
     def test_mobile_summary_only_returns_effective_quota_windows(self) -> None:
         summary = build_mobile_summary({
             "generated_at": "2026-06-02T10:45:00+08:00",

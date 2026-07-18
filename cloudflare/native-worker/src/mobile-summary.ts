@@ -8,13 +8,17 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
   const groups = dict(snapshot.groups);
   const items = list<AnyRecord>(snapshot.items);
   const limits = list<AnyRecord>(snapshot.limits);
+  const limitProviders = mobileLimitProviders(list<AnyRecord>(snapshot.limit_status));
   const generatedAt = parseDate(str(snapshot.generated_at));
   const cacheTokens = int(summary.cache_creation_tokens) + int(summary.cache_read_tokens);
   const totalTokens = int(summary.total_tokens);
   const accountContext = accountContextFrom(snapshot.account_hourly, snapshot.ai_accounts);
-  const candidateWindows = limits
+  const normalizedWindows = limits
     .map((row) => limitWindow(row, accountContext))
-    .filter((window) => effectiveLimitWindow(window))
+    .filter((window) => effectiveLimitWindow(window));
+  const selectedSources = selectedLimitSources(normalizedWindows, limitProviders);
+  const candidateWindows = normalizedWindows
+    .filter((window) => selectedSources.get(str(window.provider).toLowerCase()) === str(window.source_id))
     .filter((window) => !expiredShortWindow(window, generatedAt));
   const windows = candidateWindows.filter((window) => !staleLimitWindow(window, generatedAt));
   const byMachine = groupRows(list<AnyRecord>(groups.by_machine));
@@ -59,9 +63,40 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
       observed_count: windows.filter((row) => row.confidence === "observed" && row.official === true && row.status === "ok").length,
       total_count: windows.length,
       windows,
+      providers: limitProviders,
     },
     metadata: mobileMetadata(snapshot, windows, candidateWindows, generatedAt),
   };
+}
+
+function mobileLimitProviders(rows: AnyRecord[]): AnyRecord[] {
+  return rows
+    .filter((row) => Boolean(row.provider) && Boolean(row.source_id))
+    .map((row) => ({
+      provider: row.provider,
+      source_id: row.source_id,
+      observed_at: row.observed_at ?? null,
+      source_type: row.source_type ?? null,
+      status: row.status ?? "unavailable",
+    }));
+}
+
+function selectedLimitSources(windows: AnyRecord[], providers: AnyRecord[]): Map<string, string> {
+  const selected = new Map(providers.map((row) => [str(row.provider).toLowerCase(), str(row.source_id)]));
+  const newest = new Map<string, { time: number; source: string }>();
+  for (const window of windows) {
+    const provider = str(window.provider).toLowerCase();
+    if (selected.has(provider)) continue;
+    const parsed = parseDate(str(window.observed_at));
+    const time = parsed ? parsed.getTime() : Number.NEGATIVE_INFINITY;
+    const source = str(window.source_id);
+    const current = newest.get(provider);
+    if (!current || time > current.time || (time === current.time && source > current.source)) {
+      newest.set(provider, { time, source });
+    }
+  }
+  for (const [provider, value] of newest) selected.set(provider, value.source);
+  return selected;
 }
 
 function mobileTrend(trend: AnyRecord): AnyRecord {

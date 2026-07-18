@@ -98,7 +98,7 @@ public enum MenuBarViewModel {
             sources: sourceRows(summary.sources, byMachine: summary.breakdown.byMachine, generatedAt: summary.generatedAt),
             limitRows: sortedLimits(currentLimits).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(from: summary.limits.windows, now: now)
+            quotaRings: quotaRings(from: summary.limits.windows, providers: summary.limits.providers, now: now)
         )
     }
 
@@ -307,13 +307,25 @@ public enum MenuBarViewModel {
         return (candidate.observedAt ?? "") > (existing.observedAt ?? "")
     }
 
-    private static func quotaRings(from windows: [MobileLimitWindow], now: Date) -> [QuotaRingData] {
-        let observed = currentLimitWindows(windows, now: now)
-        let grouped = Dictionary(grouping: observed, by: { canonicalProvider($0.provider) })
+    private static func quotaRings(
+        from windows: [MobileLimitWindow],
+        providers: [MobileLimitProviderStatus],
+        now: Date
+    ) -> [QuotaRingData] {
         let rawGrouped = Dictionary(grouping: windows, by: { canonicalProvider($0.provider) })
+        let providerStatus = Dictionary(
+            providers.map { (canonicalProvider($0.provider), $0) },
+            uniquingKeysWith: { _, latest in latest }
+        )
         return ["claude", "codex"].map { provider in
-            let wins = grouped[provider] ?? []
-            let rawWins = rawGrouped[provider] ?? []
+            let status = providerStatus[provider]
+            let allRawWins = rawGrouped[provider] ?? []
+            let fallbackSource = allRawWins.max {
+                (parseDate($0.observedAt) ?? .distantPast) < (parseDate($1.observedAt) ?? .distantPast)
+            }?.sourceID
+            let selectedSource = status?.sourceID ?? fallbackSource
+            let rawWins = allRawWins.filter { selectedSource == nil || $0.sourceID == selectedSource }
+            let wins = currentLimitWindows(rawWins, now: now)
             let bestWindows = bestWindowPerType(wins)
             let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
             let weekWindow = bestWindows.first(where: isWeekLimitWindow)
@@ -322,7 +334,9 @@ public enum MenuBarViewModel {
                 .sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
                 .first
             let outerWindow = sessionWindow ?? otherWindow
-            let freshest = rawWins.max { ($0.observedAt ?? "") < ($1.observedAt ?? "") }
+            let freshest = rawWins.max {
+                (parseDate($0.observedAt) ?? .distantPast) < (parseDate($1.observedAt) ?? .distantPast)
+            }
             let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
             switch provider {
             case "claude":
@@ -346,8 +360,12 @@ public enum MenuBarViewModel {
                 innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 outerLabel: outerWindow.map(windowLabel) ?? "额度",
                 innerLabel: weekWindow.map(windowLabel) ?? "长期",
-                sourceText: sourceText(provider: provider, sourceID: freshest?.sourceID),
-                updatedText: compactDateTime(freshest?.observedAt, reference: freshest?.observedAt, suffix: "更新") ?? "未更新",
+                sourceText: sourceText(provider: provider, sourceID: status?.sourceID ?? freshest?.sourceID),
+                updatedText: compactDateTime(
+                    status?.observedAt ?? freshest?.observedAt,
+                    reference: status?.observedAt ?? freshest?.observedAt,
+                    suffix: "更新"
+                ) ?? "未更新",
                 availabilityText: outerWindow != nil || weekWindow != nil ? "官方额度" : "暂不可用"
             )
         }

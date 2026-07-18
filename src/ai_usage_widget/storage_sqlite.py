@@ -722,7 +722,7 @@ def _ensure_limit_windows_schema(conn: sqlite3.Connection) -> None:
                used_percent, remaining_percent, reset_at, window_duration_minutes,
                source_type, confidence, status, observed_at, first_seen_at, last_seen_at
         FROM limit_windows_old
-        ORDER BY observed_at ASC
+        ORDER BY julianday(observed_at) ASC, observed_at ASC
         """
     )
     conn.execute("DROP TABLE limit_windows_old")
@@ -1036,6 +1036,7 @@ def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at:
           status=excluded.status,
           observed_at=excluded.observed_at,
           last_seen_at=excluded.last_seen_at
+        WHERE julianday(excluded.observed_at) >= julianday(limit_windows.observed_at)
         """,
         (
             source_id,

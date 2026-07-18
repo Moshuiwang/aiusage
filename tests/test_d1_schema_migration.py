@@ -87,9 +87,9 @@ class TestD1SchemaMigration(unittest.TestCase):
             ))
             rows = [
                 ("linux-biai-wang", "claude", "week", 20, 80, "2026-07-20T00:00:00+08:00", 10080,
-                 "official_cli", "observed", "ok", "2026-07-18T09:00:00+08:00", "a", "a"),
+                 "official_cli", "observed", "ok", "2026-07-18T10:00:00+08:00", "a", "a"),
                 ("linux-biai-wang", "claude", "week", 21, 79, "2026-07-20T00:00:00+08:00", 10080,
-                 "oauth_usage_api", "observed", "ok", "2026-07-18T09:05:00+08:00", "b", "b"),
+                 "oauth_usage_api", "observed", "ok", "2026-07-18T03:00:00+00:00", "b", "b"),
             ]
             conn.executemany("INSERT INTO limit_windows VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
             conn.executescript(LIMIT_STABLE_KEY_MIGRATION_SQL.read_text(encoding="utf-8"))

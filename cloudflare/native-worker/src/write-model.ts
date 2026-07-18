@@ -635,14 +635,15 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
       status = excluded.status,
       observed_at = excluded.observed_at,
       last_seen_at = excluded.last_seen_at
-    WHERE limit_windows.used_percent IS NOT excluded.used_percent
+    WHERE julianday(excluded.observed_at) >= julianday(limit_windows.observed_at)
+      AND (limit_windows.used_percent IS NOT excluded.used_percent
        OR limit_windows.remaining_percent IS NOT excluded.remaining_percent
        OR limit_windows.reset_at IS NOT excluded.reset_at
        OR limit_windows.window_duration_minutes IS NOT excluded.window_duration_minutes
        OR limit_windows.source_type IS NOT excluded.source_type
        OR limit_windows.confidence IS NOT excluded.confidence
        OR limit_windows.status IS NOT excluded.status
-       OR limit_windows.observed_at IS NOT excluded.observed_at
+       OR limit_windows.observed_at IS NOT excluded.observed_at)
   `).bind(
     window.source_id, window.provider, window.window, window.used_percent, window.remaining_percent,
     window.reset_at, window.window_duration_minutes, window.source_type, window.confidence,
@@ -1681,6 +1682,14 @@ async function syncHourlyFactModels(db: D1Database, fact: UsageHourlyFact, exist
 }
 
 async function upsertLimitWindow(db: D1Database, window: LimitWindow, seenAt: string): Promise<number> {
+  const existingWindow = await db.prepare(`
+    SELECT observed_at
+    FROM limit_windows
+    WHERE source_id = ? AND provider = ? AND window = ?
+  `).bind(window.source_id, window.provider, window.window).first<{ observed_at: string }>();
+  if (existingWindow && !newerOrSameIso(window.observed_at, String(existingWindow.observed_at ?? ""))) {
+    return 0;
+  }
   let written = 0;
   if (window.status !== "provider_failed") {
     const rows = await db.prepare(`
