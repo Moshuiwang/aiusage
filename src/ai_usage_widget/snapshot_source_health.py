@@ -14,6 +14,7 @@ def build_source_status(
     ref_time: datetime,
     machine_filter: Optional[str] = None,
     account_filter: Optional[str] = None,
+    source_accuracy: Optional[dict[str, list[dict[str, Any]]]] = None,
 ) -> list[dict[str, Any]]:
     db_status = {sr[0]: {"status": sr[1], "collected_at": sr[2], "error_message": sr[3]} for sr in status_rows}
     if machine_filter or account_filter:
@@ -29,7 +30,7 @@ def build_source_status(
             source_id = source_config["source_id"]
             stale_threshold = int(source_config.get("stale_after_minutes", 120))
             if source_id not in db_status:
-                source_status.append(_source_status_entry(
+                entry = _source_status_entry(
                     {
                         "source_id": source_id,
                         "status": "never_seen",
@@ -38,7 +39,10 @@ def build_source_status(
                     },
                     source_identities.get(source_id),
                     source_config,
-                ))
+                )
+                if source_accuracy is not None:
+                    entry["accuracy"] = _accuracy_summary(source_accuracy.get(source_id, []))
+                source_status.append(entry)
                 continue
 
             last_report = db_status[source_id]
@@ -48,7 +52,7 @@ def build_source_status(
                 ref_time,
                 stale_threshold,
             )
-            source_status.append(_source_status_entry(
+            entry = _source_status_entry(
                 {
                     "source_id": source_id,
                     "status": status_value,
@@ -57,7 +61,10 @@ def build_source_status(
                 },
                 source_identities.get(source_id),
                 source_config,
-            ))
+            )
+            if source_accuracy is not None:
+                entry["accuracy"] = _accuracy_summary(source_accuracy.get(source_id, []))
+            source_status.append(entry)
         return source_status
 
     for source_id, last_report in db_status.items():
@@ -67,7 +74,7 @@ def build_source_status(
             ref_time,
             120,
         )
-        source_status.append(_source_status_entry(
+        entry = _source_status_entry(
             {
                 "source_id": source_id,
                 "status": status_value,
@@ -75,8 +82,25 @@ def build_source_status(
                 "error_message": last_report.get("error_message"),
             },
             source_identities.get(source_id),
-        ))
+        )
+        if source_accuracy is not None:
+            entry["accuracy"] = _accuracy_summary(source_accuracy.get(source_id, []))
+        source_status.append(entry)
     return source_status
+
+
+def _accuracy_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {"status": "unknown", "agents": []}
+    status = "verified" if all(row.get("status") == "verified" for row in rows) else "unverified"
+    primary = rows[0] if len(rows) == 1 else None
+    return {
+        "status": status,
+        "collector_version": primary.get("collector_version") if primary else None,
+        "matching_full_scans": primary.get("matching_full_scans") if primary else min(int(row.get("matching_full_scans") or 0) for row in rows),
+        "verified_at": primary.get("verified_at") if primary else None,
+        "agents": rows,
+    }
 
 
 def _status_with_staleness(

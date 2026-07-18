@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -20,6 +21,9 @@ def write_sqlite(
     hourly_facts: Optional[Iterable[UsageHourlyFact]] = None,
     block_items: Optional[Iterable[UsageBlockItem]] = None,
     source_identities: Optional[Iterable[Dict[str, Any]]] = None,
+    usage_ledger_runs: Optional[List[Dict[str, Any]]] = None,
+    usage_hourly_fact_payloads: Optional[List[Dict[str, Any]]] = None,
+    accuracy_source_id: Optional[str] = None,
 ) -> None:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,10 +42,24 @@ def write_sqlite(
         _delete_replaced_codex_hourly_rows(conn, hourly_list)
         for item in hourly_list:
             _upsert_hourly_item(conn, item, collected_at)
-        for fact in hourly_facts or []:
+        fact_payloads = list(usage_hourly_fact_payloads or [])
+        allowed_fact_ids = _ledger_coverage_fact_ids(fact_payloads, usage_ledger_runs or [])
+        hourly_fact_list = list(hourly_facts or [])
+        if allowed_fact_ids is not None:
+            hourly_fact_list = [fact for fact in hourly_fact_list if fact.fact_id in allowed_fact_ids]
+            fact_payloads = [fact for fact in fact_payloads if str(fact.get("fact_id") or "") in allowed_fact_ids]
+        for fact in hourly_fact_list:
             _upsert_hourly_fact(conn, fact, collected_at)
         for item in block_items or []:
             _upsert_block_item(conn, item, collected_at)
+        if accuracy_source_id is not None:
+            _update_source_accuracy(
+                conn,
+                source_id=accuracy_source_id,
+                runs=usage_ledger_runs or [],
+                facts=fact_payloads,
+                observed_at=collected_at,
+            )
 
 
 def write_limit_windows(path: str, windows: Iterable[LimitWindow], seen_at: str) -> None:
@@ -67,6 +85,204 @@ def build_source_report(source: Dict[str, Any], result: CommandResult, status: s
         "error_type": result.error_type,
         "error_message": _safe_error(result.error_message or result.stderr),
     }
+
+
+def _update_source_accuracy(
+    conn: sqlite3.Connection,
+    *,
+    source_id: str,
+    runs: List[Dict[str, Any]],
+    facts: List[Dict[str, Any]],
+    observed_at: str,
+) -> None:
+    reported_agents = [str(run.get("agent")) for run in runs if isinstance(run, dict) and run.get("agent")]
+    if reported_agents:
+        placeholders = ",".join("?" for _ in reported_agents)
+        conn.execute(
+            f"""
+            UPDATE source_accuracy
+            SET accuracy_status='unknown', mode='legacy', matching_full_scans=0,
+                scan_complete=0, observed_at=?, last_seen_at=?
+            WHERE source_id=? AND agent NOT IN ({placeholders})
+            """,
+            (observed_at, observed_at, source_id, *reported_agents),
+        )
+    else:
+        conn.execute(
+            """
+            UPDATE source_accuracy
+            SET accuracy_status='unknown', mode='legacy', matching_full_scans=0,
+                scan_complete=0, observed_at=?, last_seen_at=?
+            WHERE source_id=?
+            """,
+            (observed_at, observed_at, source_id),
+        )
+
+    for run in runs:
+        if not isinstance(run, dict) or not isinstance(run.get("collector"), dict):
+            continue
+        collector = run["collector"]
+        counts = collector.get("counts") if isinstance(collector.get("counts"), dict) else {}
+        coverage = collector.get("coverage") if isinstance(collector.get("coverage"), dict) else {}
+        agent = str(run.get("agent") or "unknown")
+        provenance = str(run.get("provenance") or "unknown")
+        coverage_start = str(coverage.get("start")) if coverage.get("start") else None
+        coverage_end = str(coverage.get("end")) if coverage.get("end") else None
+        report_digest = str(collector.get("report_digest") or "")
+        facts_digest = str(run.get("facts_digest") or "")
+        computed_digest = _safe_facts_digest(facts, agent, provenance, coverage_start, coverage_end)
+        version = str(collector.get("version") or "")
+        parser_schema = int(collector.get("parser_schema_version") or 0)
+        read_errors = int(counts.get("read_errors") or 0)
+        unresolved = int(counts.get("unresolved_mismatch") or 0)
+        scan_complete = collector.get("scan_complete") is True
+        mode = str(collector.get("mode") or "unknown")
+        complete = (
+            mode == "full-rescan"
+            and scan_complete
+            and read_errors == 0
+            and unresolved == 0
+            and bool(version)
+            and parser_schema > 0
+            and bool(report_digest)
+            and bool(facts_digest)
+            and facts_digest == computed_digest
+        )
+        previous_row = conn.execute(
+            """
+            SELECT provenance, collector_version, parser_schema_version, coverage_start, coverage_end,
+                   report_digest, facts_digest, scan_complete, read_errors, unresolved_mismatch,
+                   matching_full_scans, accuracy_status, verified_at
+            FROM source_accuracy WHERE source_id=? AND agent=?
+            """,
+            (source_id, agent),
+        ).fetchone()
+        same = bool(previous_row) and complete and (
+            str(previous_row[0] or "") == provenance
+            and str(previous_row[1] or "") == version
+            and int(previous_row[2] or 0) == parser_schema
+            and previous_row[3] == coverage_start
+            and previous_row[4] == coverage_end
+            and str(previous_row[5] or "") == report_digest
+            and str(previous_row[6] or "") == facts_digest
+            and int(previous_row[7] or 0) == 1
+            and int(previous_row[8] or 0) == 0
+            and int(previous_row[9] or 0) == 0
+        )
+        matching = min(int(previous_row[10] or 0) + 1, 2) if same else (1 if complete else 0)
+        has_coverage = bool(coverage_start and coverage_end and coverage_start < coverage_end)
+        status = "verified" if matching >= 2 and has_coverage else "unverified"
+        verified_at = (previous_row[12] if previous_row and previous_row[12] else observed_at) if status == "verified" else None
+        if mode == "incremental" and previous_row and previous_row[11] == "verified" and str(previous_row[0] or "") == provenance and str(previous_row[1] or "") == version and int(previous_row[2] or 0) == parser_schema:
+            matching = int(previous_row[10] or 2)
+            status = "verified"
+            verified_at = previous_row[12] or observed_at
+        metadata_json = json.dumps(collector, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        conn.execute(
+            """
+            INSERT INTO source_accuracy (
+              source_id, agent, provenance, collector_version, parser_schema_version, mode,
+              lookback_hours, coverage_start, coverage_end, report_digest, facts_digest,
+              scan_complete, read_errors, unresolved_mismatch, matching_full_scans,
+              accuracy_status, verified_at, metadata_json, observed_at, first_seen_at, last_seen_at
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(source_id, agent) DO UPDATE SET
+              provenance=excluded.provenance, collector_version=excluded.collector_version,
+              parser_schema_version=excluded.parser_schema_version, mode=excluded.mode,
+              lookback_hours=excluded.lookback_hours, coverage_start=excluded.coverage_start,
+              coverage_end=excluded.coverage_end, report_digest=excluded.report_digest,
+              facts_digest=excluded.facts_digest, scan_complete=excluded.scan_complete,
+              read_errors=excluded.read_errors, unresolved_mismatch=excluded.unresolved_mismatch,
+              matching_full_scans=excluded.matching_full_scans, accuracy_status=excluded.accuracy_status,
+              verified_at=excluded.verified_at, metadata_json=excluded.metadata_json,
+              observed_at=excluded.observed_at, last_seen_at=excluded.last_seen_at
+            """,
+            (
+                source_id, agent, provenance, version, parser_schema, mode,
+                float(collector["lookback_hours"]) if collector.get("lookback_hours") is not None else None,
+                coverage_start, coverage_end, report_digest, facts_digest, int(scan_complete),
+                read_errors, unresolved, matching, status, verified_at, metadata_json,
+                observed_at, observed_at, observed_at,
+            ),
+        )
+        if complete and matching >= 2 and has_coverage:
+            matching_ids = [
+                str(fact.get("fact_id"))
+                for fact in facts
+                if str(fact.get("agent") or "") == agent
+                and str(fact.get("provenance") or "") == provenance
+                and coverage_start <= str(fact.get("window_start") or "") < coverage_end
+            ]
+            for fact_id in matching_ids:
+                conn.execute("UPDATE usage_hourly_facts SET last_seen_at=? WHERE fact_id=?", (observed_at, fact_id))
+            conn.execute(
+                """
+                DELETE FROM usage_hourly_models WHERE fact_id IN (
+                  SELECT fact_id FROM usage_hourly_facts
+                  WHERE source_id=? AND agent=? AND provenance=?
+                    AND window_start>=? AND window_start<? AND last_seen_at IS NOT ?
+                )
+                """,
+                (source_id, agent, provenance, coverage_start, coverage_end, observed_at),
+            )
+            conn.execute(
+                """
+                DELETE FROM usage_hourly_facts
+                WHERE source_id=? AND agent=? AND provenance=?
+                  AND window_start>=? AND window_start<? AND last_seen_at IS NOT ?
+                """,
+                (source_id, agent, provenance, coverage_start, coverage_end, observed_at),
+            )
+
+
+def _safe_facts_digest(
+    facts: List[Dict[str, Any]],
+    agent: str,
+    provenance: str,
+    coverage_start: str | None,
+    coverage_end: str | None,
+) -> str:
+    keys = (
+        "fact_id", "agent", "client", "window_start", "window_end", "usage",
+        "event_count", "session_count", "attribution_confidence", "provenance",
+    )
+    canonical = [
+        {key: fact.get(key) for key in keys}
+        for fact in facts
+        if str(fact.get("agent") or "") == agent
+        and str(fact.get("provenance") or "") == provenance
+        and (not coverage_start or str(fact.get("window_start") or "") >= coverage_start)
+        and (not coverage_end or str(fact.get("window_start") or "") < coverage_end)
+    ]
+    canonical.sort(key=lambda row: str(row.get("fact_id") or ""))
+    encoded = json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _ledger_coverage_fact_ids(
+    facts: List[Dict[str, Any]],
+    runs: List[Dict[str, Any]],
+) -> set[str] | None:
+    authoritative: dict[tuple[str, str], tuple[str, str]] = {}
+    for run in runs:
+        if not isinstance(run, dict) or not isinstance(run.get("collector"), dict):
+            continue
+        collector = run["collector"]
+        coverage = collector.get("coverage") if isinstance(collector.get("coverage"), dict) else {}
+        start = str(coverage.get("start")) if coverage.get("start") else ""
+        end = str(coverage.get("end")) if coverage.get("end") else ""
+        if collector.get("mode") == "full-rescan" and start and end and start < end:
+            authoritative[(str(run.get("agent") or ""), str(run.get("provenance") or ""))] = (start, end)
+    if not authoritative:
+        return None
+    allowed: set[str] = set()
+    for fact in facts:
+        key = (str(fact.get("agent") or ""), str(fact.get("provenance") or ""))
+        coverage = authoritative.get(key)
+        window_start = str(fact.get("window_start") or "")
+        if coverage is None or coverage[0] <= window_start < coverage[1]:
+            allowed.add(str(fact.get("fact_id") or ""))
+    return allowed
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -248,6 +464,31 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           PRIMARY KEY(fact_id, model)
         );
 
+        CREATE TABLE IF NOT EXISTS source_accuracy (
+          source_id TEXT NOT NULL,
+          agent TEXT NOT NULL,
+          provenance TEXT NOT NULL,
+          collector_version TEXT,
+          parser_schema_version INTEGER,
+          mode TEXT NOT NULL,
+          lookback_hours REAL,
+          coverage_start TEXT,
+          coverage_end TEXT,
+          report_digest TEXT,
+          facts_digest TEXT,
+          scan_complete INTEGER NOT NULL DEFAULT 0,
+          read_errors INTEGER NOT NULL DEFAULT 0,
+          unresolved_mismatch INTEGER NOT NULL DEFAULT 0,
+          matching_full_scans INTEGER NOT NULL DEFAULT 0,
+          accuracy_status TEXT NOT NULL,
+          verified_at TEXT,
+          metadata_json TEXT,
+          observed_at TEXT NOT NULL,
+          first_seen_at TEXT NOT NULL,
+          last_seen_at TEXT NOT NULL,
+          PRIMARY KEY(source_id, agent)
+        );
+
         CREATE TABLE IF NOT EXISTS limit_windows (
           source_id TEXT NOT NULL,
           provider TEXT NOT NULL,
@@ -264,6 +505,9 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           last_seen_at TEXT NOT NULL,
           PRIMARY KEY(source_id, provider, source_type, window)
         );
+
+        CREATE INDEX IF NOT EXISTS idx_source_accuracy_status
+          ON source_accuracy(accuracy_status, source_id, agent);
         """
     )
     _ensure_column(conn, "usage_daily", "raw_json", "TEXT")

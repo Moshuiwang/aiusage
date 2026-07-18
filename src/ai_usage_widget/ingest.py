@@ -32,6 +32,7 @@ class IngestRequest:
     mswusage_codex_hourly_report: Optional[Dict[str, Any]] = None
     codex_hourly_status: Optional[Dict[str, Any]] = None
     usage_hourly_facts: Optional[List[Dict[str, Any]]] = None
+    usage_ledger_runs: Optional[List[Dict[str, Any]]] = None
     machine: Optional[str] = None
     collection_status: str = "ok"
     error_type: Optional[str] = None
@@ -168,6 +169,16 @@ def validate_ingest_payload(
                     f"usage_hourly_facts[{index}].ai_account must be an object",
                     error_type="http_schema_invalid",
                 )
+    usage_ledger_runs = payload.get("usage_ledger_runs")
+    if usage_ledger_runs is not None:
+        if not isinstance(usage_ledger_runs, list):
+            raise IngestValidationError("usage_ledger_runs must be a list", error_type="http_schema_invalid")
+        for index, run in enumerate(usage_ledger_runs):
+            if not isinstance(run, dict) or not run.get("agent") or not run.get("provenance") or not isinstance(run.get("collector"), dict) or not isinstance(run.get("facts_digest"), str):
+                raise IngestValidationError(
+                    f"usage_ledger_runs[{index}] is incomplete",
+                    error_type="http_schema_invalid",
+                )
 
     # 6. 构建并返回 IngestRequest
     return IngestRequest(
@@ -188,6 +199,7 @@ def validate_ingest_payload(
         mswusage_codex_hourly_report=mswusage_codex_hourly_report,
         codex_hourly_status=codex_hourly_status,
         usage_hourly_facts=usage_hourly_facts,
+        usage_ledger_runs=usage_ledger_runs,
         collection_status=str(payload.get("collection_status") or "ok"),
         error_type=str(payload["error_type"]) if payload.get("error_type") else None,
         error_message=str(payload["error_message"]) if payload.get("error_message") else None,

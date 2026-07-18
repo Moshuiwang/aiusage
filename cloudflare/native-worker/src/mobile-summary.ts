@@ -100,6 +100,7 @@ function mobileSource(row: AnyRecord): AnyRecord {
     last_observed_at: observedAt,
     last_pushed_at: observedAt,
     error_message: row.error_message,
+    accuracy: row.accuracy || { status: "unknown", agents: [] },
   };
 }
 

@@ -263,6 +263,131 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(await limitsResponse.json()).toMatchObject({ status: "error", error_type: "limit_schema_invalid" });
   });
 
+  it("requires two complete matching scans before verification and authoritative deletion", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const fact = (hour: string, total: number) => ({
+      fact_id: `codex:codex:linux-test:${hour}:${total}`,
+      agent: "codex",
+      client: "codex",
+      window_start: hour,
+      window_end: hour.replace(":00:00+08:00", ":59:59+08:00"),
+      usage: { input_tokens: total, output_tokens: 0, cache_creation_tokens: 0, cache_read_tokens: 0, total_tokens: total },
+      event_count: 0,
+      session_count: 0,
+      attribution_confidence: "unconfirmed_local_source",
+      provenance: "mswusage_codex_token_count",
+    });
+    const payload = (
+      observedAt: string,
+      facts: Record<string, unknown>[],
+      collector?: Record<string, unknown>,
+      factsDigestOverride?: string,
+    ) => ({
+      schema_version: 1,
+      source_id: "linux-test",
+      host: "linux-test",
+      machine: "linux-test",
+      os_user: "tester",
+      platform: "linux",
+      timezone: "Asia/Shanghai",
+      observed_at: observedAt,
+      collection_status: "ok",
+      usage_daily: [],
+      usage_hourly_facts: facts,
+      ...(collector ? { usage_ledger_runs: [{
+        agent: "codex",
+        provenance: "mswusage_codex_token_count",
+        collector,
+        facts_digest: factsDigestOverride ?? (facts.length === 1
+          ? "d9c627d7edbe00fbc52a01c7fd7354314a398605145c27d4042c730c05875bf6"
+          : "16178fac046144750b52d17aee362c8ed3684d8af4d12112cc2f8c5833008f38"),
+      }] } : {}),
+    });
+    const completeCollector = {
+      version: "0.1.0",
+      parser_schema_version: 2,
+      mode: "full-rescan",
+      coverage: { start: "2026-07-12T00:00:00+08:00", end: "2026-07-13T00:00:00+08:00" },
+      counts: { read_errors: 0, unresolved_mismatch: 0 },
+      scan_complete: true,
+      report_digest: "reduced-safe-digest",
+    };
+
+    await postIngest(payload("2026-07-18T01:00:00+00:00", [
+      fact("2026-07-12T08:00:00+08:00", 100),
+      fact("2026-07-12T09:00:00+08:00", 200),
+    ]));
+    await postIngest(payload("2026-07-18T01:00:30+00:00", [
+      fact("2026-07-12T08:00:00+08:00", 100),
+      fact("2026-07-12T09:00:00+08:00", 200),
+    ], completeCollector));
+    await postIngest(payload(
+      "2026-07-18T01:00:40+00:00",
+      [fact("2026-07-12T08:00:00+08:00", 100)],
+      completeCollector,
+      "16178fac046144750b52d17aee362c8ed3684d8af4d12112cc2f8c5833008f38",
+    ));
+    expect(await factCount(db, "linux-test")).toBe(2);
+    for (const observedAt of ["2026-07-18T01:01:00+00:00", "2026-07-18T01:02:00+00:00"]) {
+      await postIngest(payload(observedAt, [fact("2026-07-12T08:00:00+08:00", 100)], {
+        ...completeCollector,
+        scan_complete: false,
+        counts: { read_errors: 1, unresolved_mismatch: 0 },
+      }));
+    }
+
+    let row: { accuracy_status: string; matching_full_scans?: number } | null = await db.prepare("SELECT accuracy_status, matching_full_scans FROM source_accuracy WHERE source_id = ? AND agent = ?")
+      .bind("linux-test", "codex").first<{ accuracy_status: string; matching_full_scans: number }>();
+    expect(row).toMatchObject({ accuracy_status: "unverified" });
+    expect(await factCount(db, "linux-test")).toBe(2);
+
+    await postIngest(payload(
+      "2026-07-18T01:03:00+00:00",
+      [fact("2026-07-12T08:00:00+08:00", 100), fact("2026-07-11T08:00:00+08:00", 999)],
+      completeCollector,
+      "d9c627d7edbe00fbc52a01c7fd7354314a398605145c27d4042c730c05875bf6",
+    ));
+    expect(await factCount(db, "linux-test")).toBe(2);
+    await postIngest(payload("2026-07-18T01:04:00+00:00", [fact("2026-07-12T08:00:00+08:00", 100)], completeCollector));
+
+    row = await db.prepare("SELECT accuracy_status, matching_full_scans FROM source_accuracy WHERE source_id = ? AND agent = ?")
+      .bind("linux-test", "codex").first<{ accuracy_status: string; matching_full_scans: number }>();
+    expect(row).toMatchObject({ accuracy_status: "verified", matching_full_scans: 2 });
+    expect(await factCount(db, "linux-test")).toBe(1);
+    const summaryResponse = await mf.dispatchFetch("http://native.test/api/summary?date=2026-07-12&period=today", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const summary = await summaryResponse.json() as Record<string, unknown>;
+    const status = (summary.source_status as Record<string, unknown>[]).find((item) => item.source_id === "linux-test");
+    expect(status?.accuracy).toMatchObject({ status: "verified", collector_version: "0.1.0", matching_full_scans: 2 });
+
+    await postIngest(payload("2026-07-18T01:05:00+00:00", [fact("2026-07-12T08:00:00+08:00", 100)]));
+    row = await db.prepare("SELECT accuracy_status FROM source_accuracy WHERE source_id = ? AND agent = ?")
+      .bind("linux-test", "codex").first<{ accuracy_status: string }>();
+    expect(row?.accuracy_status).toBe("unknown");
+
+    const zeroCollector = { ...completeCollector, report_digest: "zero-safe-digest" };
+    const emptyDigest = "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945";
+    await postIngest(payload("2026-07-18T01:06:00+00:00", [], zeroCollector, emptyDigest));
+    await postIngest(payload("2026-07-18T01:07:00+00:00", [], zeroCollector, emptyDigest));
+    row = await db.prepare("SELECT accuracy_status FROM source_accuracy WHERE source_id = ? AND agent = ?")
+      .bind("linux-test", "codex").first<{ accuracy_status: string }>();
+    expect(row?.accuracy_status).toBe("verified");
+    expect(await factCount(db, "linux-test")).toBe(0);
+
+    const provenanceSource = "linux-provenance";
+    const firstProvenance = payload("2026-07-18T01:08:00+00:00", [], completeCollector, emptyDigest);
+    firstProvenance.source_id = provenanceSource;
+    await postIngest(firstProvenance);
+    const secondProvenance = payload("2026-07-18T01:09:00+00:00", [], completeCollector, emptyDigest);
+    secondProvenance.source_id = provenanceSource;
+    (secondProvenance.usage_ledger_runs as Record<string, unknown>[])[0].provenance = "different_provenance";
+    await postIngest(secondProvenance);
+    const provenanceRow = await db.prepare("SELECT accuracy_status, matching_full_scans FROM source_accuracy WHERE source_id = ? AND agent = ?")
+      .bind(provenanceSource, "codex").first<{ accuracy_status: string; matching_full_scans: number }>();
+    expect(provenanceRow).toMatchObject({ accuracy_status: "unverified", matching_full_scans: 1 });
+  });
+
   async function applyAllPayloads(
     ingestPayloads: Record<string, unknown>[],
     limitsPayloads: Record<string, unknown>[],
@@ -349,6 +474,7 @@ describe.sequential("native TS Worker write API parity", () => {
       "ai_accounts",
       "usage_hourly_facts",
       "usage_hourly_models",
+      "source_accuracy",
       "limit_windows",
     ];
     const counts: Record<string, number> = {};
@@ -368,6 +494,12 @@ describe.sequential("native TS Worker write API parity", () => {
   async function auditRowCount(table: "collection_runs" | "source_reports"): Promise<number> {
     const db = await mf.getD1Database("AIUSAGE_DB");
     const row = await db.prepare(`SELECT count(*) AS count FROM ${table}`).first<{ count: number }>();
+    return Number(row?.count ?? 0);
+  }
+
+  async function factCount(db: D1Database, sourceId: string): Promise<number> {
+    const row = await db.prepare("SELECT count(*) AS count FROM usage_hourly_facts WHERE source_id = ?")
+      .bind(sourceId).first<{ count: number }>();
     return Number(row?.count ?? 0);
   }
 });
@@ -425,6 +557,7 @@ async function resetDatabase(db: D1Database): Promise<void> {
   const tables = [
     "usage_hourly_models",
     "usage_hourly_facts",
+    "source_accuracy",
     "ai_accounts",
     "os_identities",
     "machines",

@@ -306,6 +306,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -316,6 +320,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -326,6 +334,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "host": "linux-stale",
@@ -963,6 +975,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -974,6 +990,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -985,6 +1005,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "last_observed_at": "<masked>",
@@ -1558,6 +1582,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -1568,6 +1596,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -1578,6 +1610,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "host": "linux-stale",
@@ -1984,6 +2020,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -1995,6 +2035,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -2006,6 +2050,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "last_observed_at": "<masked>",
@@ -2426,6 +2474,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -2436,6 +2488,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -2446,6 +2502,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "host": "linux-stale",
@@ -3151,6 +3211,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -3162,6 +3226,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -3173,6 +3241,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "last_observed_at": "<masked>",
@@ -3800,6 +3872,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -3810,6 +3886,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -3820,6 +3900,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "host": "linux-stale",
@@ -4161,6 +4245,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -4172,6 +4260,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -4183,6 +4275,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-stale \u00b7 eve",
             "error_message": "Codex hourly collector timed out",
             "last_observed_at": "<masked>",
@@ -4450,6 +4546,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -4755,6 +4855,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "<masked>",
@@ -5067,6 +5171,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -5372,6 +5480,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "<masked>",

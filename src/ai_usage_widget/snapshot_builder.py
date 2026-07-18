@@ -91,6 +91,7 @@ def build_snapshot(
             )
             status_rows = cursor.fetchall()
             source_identities = _fetch_source_identities(conn)
+            source_accuracy = _fetch_source_accuracy(conn)
             hourly_rows = _fetch_hourly_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
             block_rows = _fetch_block_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
             limits = _fetch_limit_windows(
@@ -367,6 +368,7 @@ def build_snapshot(
         ref_time=ref_time,
         machine_filter=machine_filter,
         account_filter=account_filter,
+        source_accuracy=source_accuracy,
     )
 
     # 6. 组装完整快照 (v1 schema)
@@ -504,6 +506,38 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
         (table,),
     ).fetchone()
     return row is not None
+
+
+def _fetch_source_accuracy(conn: sqlite3.Connection) -> dict[str, list[dict[str, Any]]]:
+    if not _table_exists(conn, "source_accuracy"):
+        return {}
+    result: dict[str, list[dict[str, Any]]] = {}
+    rows = conn.execute(
+        """
+        SELECT source_id, agent, accuracy_status, collector_version, parser_schema_version,
+               mode, lookback_hours, coverage_start, coverage_end, matching_full_scans,
+               scan_complete, read_errors, unresolved_mismatch, verified_at, observed_at
+        FROM source_accuracy
+        ORDER BY source_id, agent
+        """
+    ).fetchall()
+    for row in rows:
+        result.setdefault(str(row[0]), []).append({
+            "agent": row[1],
+            "status": row[2],
+            "collector_version": row[3],
+            "parser_schema_version": int(row[4] or 0),
+            "mode": row[5],
+            "lookback_hours": row[6],
+            "coverage": {"start": row[7], "end": row[8]},
+            "matching_full_scans": int(row[9] or 0),
+            "scan_complete": bool(row[10]),
+            "read_errors": int(row[11] or 0),
+            "unresolved_mismatch": int(row[12] or 0),
+            "verified_at": row[13],
+            "observed_at": row[14],
+        })
+    return result
 
 
 def _fetch_limit_windows(conn: sqlite3.Connection, ref_time: datetime | None = None) -> list[dict[str, Any]]:
