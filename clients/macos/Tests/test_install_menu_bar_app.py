@@ -31,11 +31,11 @@ class InstallMenuBarAppTests(unittest.TestCase):
         )
         self.assertNotIn("Documents", str(plan.runtime_dir))
         self.assertNotIn("Documents", str(plan.config_path))
-        self.assertEqual(plan.bundle_id, "com.chunbai.aiusage.menubar.numeric")
+        self.assertEqual(plan.bundle_id, "com.chunbai.aiusage.menubar.app")
         self.assertIn("<key>LSUIElement</key>", installer.render_info_plist(plan))
         self.assertIn("<true/>", installer.render_info_plist(plan))
         self.assertIn(
-            "<string>com.chunbai.aiusage.menubar.numeric</string>",
+            "<string>com.chunbai.aiusage.menubar.app</string>",
             installer.render_info_plist(plan),
         )
         self.assertIn("<key>CFBundleIconFile</key>", installer.render_info_plist(plan))
@@ -66,6 +66,40 @@ class InstallMenuBarAppTests(unittest.TestCase):
         self.assertEqual(
             installer.default_repo_dir(),
             Path(__file__).resolve().parents[3],
+        )
+
+    def test_sign_app_bundle_binds_the_stable_bundle_identity(self):
+        installer = load_installer_module()
+        plan = installer.InstallPlan.default(
+            repo_dir=Path("/Users/product/Documents/ai-usage-widget"),
+            home=Path("/Users/product"),
+            install_dir=None,
+            runtime_dir=None,
+        )
+        commands = []
+        original_run = installer.subprocess.run
+        installer.subprocess.run = lambda command, check: commands.append((command, check))
+        try:
+            installer.sign_app_bundle(plan)
+        finally:
+            installer.subprocess.run = original_run
+
+        self.assertEqual(
+            commands,
+            [
+                (
+                    [
+                        "codesign",
+                        "--force",
+                        "--sign",
+                        "-",
+                        "--identifier",
+                        "com.chunbai.aiusage.menubar.app",
+                        "/Applications/AI Usage Menu Bar.app",
+                    ],
+                    True,
+                )
+            ],
         )
 
 

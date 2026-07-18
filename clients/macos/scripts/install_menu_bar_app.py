@@ -14,7 +14,7 @@ from typing import Any
 
 APP_NAME = "AI Usage Menu Bar"
 EXECUTABLE_NAME = "AIUsageMenuBar"
-DEFAULT_BUNDLE_ID = "com.chunbai.aiusage.menubar.numeric"
+DEFAULT_BUNDLE_ID = "com.chunbai.aiusage.menubar.app"
 DEFAULT_INSTALL_DIR = Path("/Applications")
 
 
@@ -96,6 +96,22 @@ def render_info_plist(plan: InstallPlan) -> str:
 """
 
 
+def sign_app_bundle(plan: InstallPlan) -> None:
+    """Bind the installed app to the same stable identity used by macOS settings."""
+    subprocess.run(
+        [
+            "codesign",
+            "--force",
+            "--sign",
+            "-",
+            "--identifier",
+            plan.bundle_id,
+            str(plan.app_path),
+        ],
+        check=True,
+    )
+
+
 def install(plan: InstallPlan, *, server_url: str | None, token: str | None, dashboard_url: str | None, dry_run: bool) -> dict[str, Any]:
     result = {
         "dry_run": dry_run,
@@ -121,6 +137,7 @@ def install(plan: InstallPlan, *, server_url: str | None, token: str | None, das
     if plan.source_icon_path.exists():
         shutil.copy2(plan.source_icon_path, plan.bundle_icon_path)
     (plan.app_path / "Contents" / "Info.plist").write_text(render_info_plist(plan), encoding="utf-8")
+    sign_app_bundle(plan)
 
     plan.runtime_dir.mkdir(parents=True, exist_ok=True)
     if server_url or token or dashboard_url:

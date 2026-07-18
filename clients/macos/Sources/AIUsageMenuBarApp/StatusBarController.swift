@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 enum MenuBarStatusItemPresentation {
     static let autosaveName = "com.chunbai.aiusage.menubar.status.numeric.v3"
+    static let behavior: NSStatusItem.Behavior = .removalAllowed
 
     static func title(for state: MenuBarState) -> String {
         state.statusTitle
@@ -44,11 +45,12 @@ final class StatusBarController: NSObject {
 
     private func setupStatusItem() {
         statusItem.autosaveName = MenuBarStatusItemPresentation.autosaveName
+        statusItem.behavior = MenuBarStatusItemPresentation.behavior
+        statusItem.isVisible = true
         guard let button = statusItem.button else {
             return
         }
         button.image = nil
-        button.imagePosition = .noImage
         button.title = "AI"
         button.font = NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         button.toolTip = "AI Usage"
@@ -93,6 +95,7 @@ final class StatusBarController: NSObject {
         guard let button = statusItem.button else {
             return
         }
+        button.imagePosition = .noImage
         button.title = MenuBarStatusItemPresentation.title(for: model.state)
         button.toolTip = MenuBarStatusItemPresentation.tooltip(for: model.state)
     }
