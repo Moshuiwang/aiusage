@@ -9275,6 +9275,35 @@
                     },
                     "provider": {
                       "type": "str",
+                      "value": "claude"
+                    },
+                    "source_id": {
+                      "type": "str"
+                    },
+                    "source_type": {
+                      "type": "str"
+                    },
+                    "status": {
+                      "type": "str",
+                      "value": "unavailable"
+                    }
+                  },
+                  "keys": [
+                    "observed_at",
+                    "provider",
+                    "source_id",
+                    "source_type",
+                    "status"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "observed_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
                       "value": "codex"
                     },
                     "source_id": {
@@ -9298,7 +9327,7 @@
                   "type": "object"
                 }
               ],
-              "length": 1,
+              "length": 2,
               "type": "array"
             },
             "limits": {
@@ -10396,6 +10425,35 @@
                         },
                         "provider": {
                           "type": "str",
+                          "value": "claude"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unavailable"
+                        }
+                      },
+                      "keys": [
+                        "observed_at",
+                        "provider",
+                        "source_id",
+                        "source_type",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "provider": {
+                          "type": "str",
                           "value": "codex"
                         },
                         "source_id": {
@@ -10419,7 +10477,7 @@
                       "type": "object"
                     }
                   ],
-                  "length": 1,
+                  "length": 2,
                   "type": "array"
                 },
                 "total_count": {

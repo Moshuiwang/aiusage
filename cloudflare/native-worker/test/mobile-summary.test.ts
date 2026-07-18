@@ -57,6 +57,16 @@ describe("mobile official limits freshness", () => {
     expect(new Set(mobile.limits.windows.map((row: any) => row.source_id))).toEqual(new Set(["source-b"]));
   });
 
+  it("hides previous percentages immediately after an explicit provider failure", () => {
+    const mobile = buildMobileSummary({
+      generated_at: "2026-07-18T10:31:00+08:00", summary: { period: "today", total_tokens: 0 },
+      trend: { points: [] }, source_status: [], groups: {}, items: [],
+      limit_status: [{ provider: "claude", source_id: "linux-biai-wangzhipeng", observed_at: "2026-07-18T10:00:00+08:00", source_type: "oauth_usage_api", status: "unavailable" }],
+      limits: [{ source_id: "linux-biai-wangzhipeng", provider: "claude", window: "session", used_percent: 76, remaining_percent: 24, reset_at: "2026-07-18T15:00:00+08:00", window_duration_minutes: 300, observed_at: "2026-07-18T10:00:00+08:00", source_type: "oauth_usage_api", confidence: "observed", status: "ok", official: true }],
+    }) as Record<string, any>;
+    expect(mobile.limits.windows).toEqual([]);
+  });
+
   it("hides stale remote windows while preserving the last trusted update", () => {
     const mobile = buildMobileSummary({
       generated_at: "2026-07-18T12:30:00+08:00",

@@ -626,13 +626,13 @@ def _effective_limit_window(limit: dict[str, Any]) -> bool:
 def _build_limit_status(limits: list[dict[str, Any]], ref_time: datetime) -> list[dict[str, Any]]:
     by_source: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for limit in limits:
-        if not _effective_limit_window(limit):
-            continue
         key = (str(limit.get("provider") or "").lower(), str(limit.get("source_id") or ""))
         by_source.setdefault(key, []).append(limit)
 
     selected: dict[str, tuple[float, str, list[dict[str, Any]]]] = {}
     for (provider, source_id), rows in by_source.items():
+        if not any(_effective_limit_window(row) or row.get("status") == "provider_failed" for row in rows):
+            continue
         newest = max((_limit_timestamp(row.get("observed_at")) for row in rows), default=float("-inf"))
         candidate = (newest, source_id, rows)
         if provider not in selected or candidate[:2] > selected[provider][:2]:
@@ -640,16 +640,22 @@ def _build_limit_status(limits: list[dict[str, Any]], ref_time: datetime) -> lis
 
     result = []
     for provider, (_, source_id, rows) in sorted(selected.items()):
-        freshest = max(rows, key=lambda row: (_limit_timestamp(row.get("observed_at")), str(row.get("source_type") or "")))
+        successful = [row for row in rows if _effective_limit_window(row)]
+        failures = [row for row in rows if row.get("status") == "provider_failed"]
+        trusted_rows = successful or failures
+        freshest = max(trusted_rows, key=lambda row: (_limit_timestamp(row.get("observed_at")), str(row.get("source_type") or "")))
+        latest_success = max((_limit_timestamp(row.get("observed_at")) for row in successful), default=float("-inf"))
+        latest_failure = max((_limit_timestamp(row.get("observed_at")) for row in failures), default=float("-inf"))
         observed = parse_datetime(str(freshest.get("observed_at") or ""))
         stale = observed is None or (ref_time - observed.astimezone(ref_time.tzinfo)).total_seconds() > 120 * 60
-        unexpired = any(not _limit_window_expired(row, ref_time) for row in rows)
+        unexpired = any(not _limit_window_expired(row, ref_time) for row in successful)
+        status = "unavailable" if latest_failure > latest_success else ("stale" if stale else ("ok" if unexpired else "expired"))
         result.append({
             "provider": provider,
             "source_id": source_id,
             "observed_at": freshest.get("observed_at"),
             "source_type": freshest.get("source_type"),
-            "status": "stale" if stale else ("ok" if unexpired else "expired"),
+            "status": status,
         })
     return result
 

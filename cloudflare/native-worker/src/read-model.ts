@@ -1322,12 +1322,13 @@ function limitWindowExpired(limit: LimitRow, refTime: Date): boolean {
 
 function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unknown>[] {
   const bySource = new Map<string, LimitRow[]>();
-  for (const limit of limits.filter(effectiveLimitWindow)) {
+  for (const limit of limits) {
     const key = `${limit.provider.toLowerCase()}\u0000${limit.source_id}`;
     bySource.set(key, [...(bySource.get(key) ?? []), limit]);
   }
   const selected = new Map<string, { newest: number; source: string; rows: LimitRow[] }>();
   for (const [key, rows] of bySource) {
+    if (!rows.some((row) => effectiveLimitWindow(row) || row.status === "provider_failed")) continue;
     const [provider, source] = key.split("\u0000");
     const newest = Math.max(...rows.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
     const existing = selected.get(provider);
@@ -1336,20 +1337,25 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
     }
   }
   return [...selected.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([provider, value]) => {
-    const freshest = [...value.rows].sort((left, right) => {
+    const successful = value.rows.filter(effectiveLimitWindow);
+    const failures = value.rows.filter((row) => row.status === "provider_failed");
+    const trustedRows = successful.length ? successful : failures;
+    const freshest = [...trustedRows].sort((left, right) => {
       const time = (parseDate(right.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY)
         - (parseDate(left.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY);
       return time || right.source_type.localeCompare(left.source_type);
     })[0];
+    const latestSuccess = Math.max(...successful.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
+    const latestFailure = Math.max(...failures.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
     const observed = parseDate(freshest.observed_at);
     const stale = !observed || refTime.getTime() - observed.getTime() > 120 * 60 * 1000;
-    const unexpired = value.rows.some((row) => !limitWindowExpired(row, refTime));
+    const unexpired = successful.some((row) => !limitWindowExpired(row, refTime));
     return {
       provider,
       source_id: value.source,
       observed_at: freshest.observed_at,
       source_type: freshest.source_type,
-      status: stale ? "stale" : (unexpired ? "ok" : "expired"),
+      status: latestFailure > latestSuccess ? "unavailable" : (stale ? "stale" : (unexpired ? "ok" : "expired")),
     };
   });
 }

@@ -17,8 +17,10 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
     .map((row) => limitWindow(row, accountContext))
     .filter((window) => effectiveLimitWindow(window));
   const selectedSources = selectedLimitSources(normalizedWindows, limitProviders);
+  const providerStatus = new Map(limitProviders.map((row) => [str(row.provider).toLowerCase(), str(row.status)]));
   const candidateWindows = normalizedWindows
     .filter((window) => selectedSources.get(str(window.provider).toLowerCase()) === str(window.source_id))
+    .filter((window) => (providerStatus.get(str(window.provider).toLowerCase()) ?? "ok") === "ok")
     .filter((window) => !expiredShortWindow(window, generatedAt));
   const windows = candidateWindows.filter((window) => !staleLimitWindow(window, generatedAt));
   const byMachine = groupRows(list<AnyRecord>(groups.by_machine));

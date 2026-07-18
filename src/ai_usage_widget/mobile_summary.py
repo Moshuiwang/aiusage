@@ -29,10 +29,15 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         if _effective_limit_window(window)
     ]
     selected_sources = _selected_limit_sources(normalized_windows, limit_providers)
+    provider_status = {
+        str(row.get("provider") or "").lower(): str(row.get("status") or "unavailable")
+        for row in limit_providers
+    }
     candidate_windows = [
         window
         for window in normalized_windows
         if selected_sources.get(str(window.get("provider") or "").lower()) == str(window.get("source_id") or "")
+        if provider_status.get(str(window.get("provider") or "").lower(), "ok") == "ok"
         if not _expired_short_window(window, generated_at)
     ]
     windows = [window for window in candidate_windows if not _stale_limit_window(window, generated_at)]
