@@ -224,6 +224,13 @@ describe.sequential("native TS Worker read-only API parity", () => {
     const trendTotal = (((mobile.trend as Shape).points as Shape[]) ?? [])
       .reduce((sum, point) => sum + Number(point.tokens ?? 0), 0);
     expect(trendTotal).toBe(155);
+    for (const point of (((mobile.trend as Shape).points as Shape[]) ?? [])) {
+      expect(
+        Number(point.claude_tokens ?? 0) +
+        Number(point.codex_tokens ?? 0) +
+        Number(point.unknown_tokens ?? 0),
+      ).toBe(Number(point.tokens ?? 0));
+    }
   });
 
   it("keeps the all-agent daily residual when ledger only covers one agent", async () => {

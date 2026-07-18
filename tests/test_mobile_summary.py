@@ -5,6 +5,43 @@ import unittest
 from ai_usage_widget.mobile_summary import build_mobile_summary
 
 
+class TestMobileSummaryTrend(unittest.TestCase):
+    def test_mobile_trend_points_preserve_agent_segments_and_unknown_conservation(self) -> None:
+        summary = build_mobile_summary({
+            "summary": {"period": "week", "total_tokens": 1000},
+            "trend": {
+                "period": "week",
+                "granularity": "day",
+                "points": [
+                    {"date": "2026-06-01", "total_tokens": 600},
+                    {"date": "2026-06-02", "total_tokens": 400},
+                ],
+                "by_agent": [
+                    {"agent": "claude", "values": [300, 0]},
+                    {"agent": "gpt-5", "values": [200, 400]},
+                    {"agent": "other-agent", "values": [100, 0]},
+                ],
+            },
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [],
+        })
+
+        points = summary["trend"]["points"]
+        self.assertEqual(
+            [
+                (row["claude_tokens"], row["codex_tokens"], row["unknown_tokens"], row["tokens"])
+                for row in points
+            ],
+            [(300, 200, 100, 600), (0, 400, 0, 400)],
+        )
+        self.assertTrue(all(
+            row["claude_tokens"] + row["codex_tokens"] + row["unknown_tokens"] == row["tokens"]
+            for row in points
+        ))
+
+
 class TestMobileSummaryLimits(unittest.TestCase):
     def test_mobile_summary_only_returns_effective_quota_windows(self) -> None:
         summary = build_mobile_summary({

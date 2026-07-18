@@ -93,6 +93,104 @@ public extension MobileSummary {
             )
         )
     }
+
+    static func deterministicTrendFixture(periodID: String) -> MobileSummary {
+        let count: Int
+        switch periodID {
+        case "today": count = 24
+        case "month": count = 30
+        case "all": count = 76
+        default: count = 7
+        }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = TimeZone(secondsFromGMT: 8 * 3600)
+        formatter.dateFormat = "yyyy-MM-dd"
+        let endDate = formatter.date(from: "2026-07-18")!
+        let calendar = formatter.calendar!
+        let points = (0..<count).map { index -> MobileTrendPoint in
+            let tokens = (index % 7 + 2) * 1_000_000
+            let claude = tokens * 55 / 100
+            let codex = tokens * 40 / 100
+            let bucket: String
+            let label: String
+            if periodID == "today" {
+                bucket = String(format: "2026-07-18T%02d:00:00+08:00", index)
+                label = String(format: "%02d:00", index)
+            } else {
+                let date = calendar.date(byAdding: .day, value: index - count + 1, to: endDate)!
+                bucket = formatter.string(from: date)
+                label = String(bucket.suffix(5))
+            }
+            return MobileTrendPoint(
+                bucket: bucket,
+                label: label,
+                tokens: tokens,
+                inputTokens: tokens * 50 / 100,
+                outputTokens: tokens * 20 / 100,
+                cacheTokens: tokens * 30 / 100,
+                cacheRatio: 30,
+                claudeTokens: claude,
+                codexTokens: codex,
+                unknownTokens: tokens - claude - codex
+            )
+        }
+        let total = points.reduce(0) { $0 + $1.tokens }
+        let claudeTotal = points.reduce(0) { $0 + $1.claudeTokens }
+        let codexTotal = points.reduce(0) { $0 + $1.codexTokens }
+        let rangeStart = periodID == "today" ? "2026-07-18" : points.first?.bucket
+        return MobileSummary(
+            schemaVersion: 1,
+            client: "ios-fixture",
+            generatedAt: "2026-07-18T10:30:00+08:00",
+            timezone: "Asia/Shanghai",
+            period: MobilePeriod(
+                id: periodID,
+                date: "2026-07-18",
+                startDate: rangeStart,
+                endDate: "2026-07-18",
+                totalTokens: total,
+                inputTokens: total * 50 / 100,
+                outputTokens: total * 20 / 100,
+                cacheTokens: total * 30 / 100,
+                cacheRatio: 30,
+                machine: nil,
+                account: nil
+            ),
+            trend: MobileTrend(
+                period: periodID,
+                granularity: periodID == "today" ? "hour" : "day",
+                startDate: points.first?.bucket,
+                endDate: points.last?.bucket,
+                points: points
+            ),
+            sources: [
+                MobileSource(
+                    sourceID: "fixture-mac",
+                    machine: "Simulator Mac",
+                    osUser: "fixture",
+                    platform: "darwin",
+                    displayName: "Simulator Mac · fixture",
+                    status: "ok",
+                    lastObservedAt: "2026-07-18T10:30:00+08:00",
+                    lastPushedAt: "2026-07-18T10:30:00+08:00",
+                    errorMessage: nil
+                )
+            ],
+            breakdown: MobileBreakdown(
+                byMachine: [MobileBreakdownRow(id: "fixture-mac", label: "Simulator Mac", tokens: total, sourceIDs: ["fixture-mac"], contributions: nil)],
+                byOSUser: [MobileBreakdownRow(id: "fixture", label: "fixture", tokens: total, sourceIDs: ["fixture-mac"], contributions: nil)],
+                byAgent: [
+                    MobileBreakdownRow(id: "claude", label: "claude", tokens: claudeTotal, sourceIDs: ["fixture-mac"], contributions: nil),
+                    MobileBreakdownRow(id: "codex", label: "codex", tokens: codexTotal, sourceIDs: ["fixture-mac"], contributions: nil),
+                ],
+                byModel: [],
+                byDate: points.map { MobileBreakdownRow(id: $0.bucket, label: $0.label, tokens: $0.tokens, sourceIDs: ["fixture-mac"], contributions: nil) }
+            ),
+            limits: MobileLimits(observedCount: 0, totalCount: 0, windows: [])
+        )
+    }
 }
 
 public struct MobilePeriod: Codable, Equatable, Sendable {
@@ -189,6 +287,9 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
     public let outputTokens: Int
     public let cacheTokens: Int
     public let cacheRatio: Int
+    public let claudeTokens: Int
+    public let codexTokens: Int
+    public let unknownTokens: Int
 
     enum CodingKeys: String, CodingKey {
         case bucket
@@ -198,6 +299,52 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
         case outputTokens = "output_tokens"
         case cacheTokens = "cache_tokens"
         case cacheRatio = "cache_ratio"
+        case claudeTokens = "claude_tokens"
+        case codexTokens = "codex_tokens"
+        case unknownTokens = "unknown_tokens"
+    }
+
+    public init(
+        bucket: String,
+        label: String,
+        tokens: Int,
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheTokens: Int,
+        cacheRatio: Int,
+        claudeTokens: Int = 0,
+        codexTokens: Int = 0,
+        unknownTokens: Int? = nil
+    ) {
+        self.bucket = bucket
+        self.label = label
+        self.tokens = tokens
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheTokens = cacheTokens
+        self.cacheRatio = cacheRatio
+        self.claudeTokens = max(claudeTokens, 0)
+        self.codexTokens = max(codexTokens, 0)
+        self.unknownTokens = max(unknownTokens ?? (tokens - claudeTokens - codexTokens), 0)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let bucket = try values.decode(String.self, forKey: .bucket)
+        let label = try values.decode(String.self, forKey: .label)
+        let tokens = try values.decode(Int.self, forKey: .tokens)
+        self.init(
+            bucket: bucket,
+            label: label,
+            tokens: tokens,
+            inputTokens: try values.decode(Int.self, forKey: .inputTokens),
+            outputTokens: try values.decode(Int.self, forKey: .outputTokens),
+            cacheTokens: try values.decode(Int.self, forKey: .cacheTokens),
+            cacheRatio: try values.decode(Int.self, forKey: .cacheRatio),
+            claudeTokens: try values.decodeIfPresent(Int.self, forKey: .claudeTokens) ?? 0,
+            codexTokens: try values.decodeIfPresent(Int.self, forKey: .codexTokens) ?? 0,
+            unknownTokens: try values.decodeIfPresent(Int.self, forKey: .unknownTokens)
+        )
     }
 }
 

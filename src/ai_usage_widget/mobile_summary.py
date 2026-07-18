@@ -85,13 +85,29 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _mobile_trend(trend: Dict[str, Any]) -> Dict[str, Any]:
-    points = []
-    for row in _list(trend.get("points")):
-        if not isinstance(row, dict):
+    source_points = [row for row in _list(trend.get("points")) if isinstance(row, dict)]
+    claude_values = [0 for _ in source_points]
+    codex_values = [0 for _ in source_points]
+    for agent_row in _list(trend.get("by_agent")):
+        if not isinstance(agent_row, dict):
             continue
+        agent = str(agent_row.get("agent") or "").lower()
+        target = claude_values if "claude" in agent else codex_values if ("codex" in agent or "openai" in agent or "gpt" in agent) else None
+        if target is None:
+            continue
+        for index, value in enumerate(_list(agent_row.get("values"))[:len(source_points)]):
+            target[index] += max(_int(value), 0)
+
+    points = []
+    for index, row in enumerate(source_points):
         bucket = row.get("hour") or row.get("date")
         total_tokens = _int(row.get("total_tokens"))
         cache_tokens = _int(row.get("cache_tokens"))
+        claude_tokens, codex_tokens = _fit_known_agent_tokens(
+            total_tokens,
+            claude_values[index],
+            codex_values[index],
+        )
         points.append({
             "bucket": bucket,
             "label": _trend_label(bucket, trend.get("granularity")),
@@ -100,6 +116,9 @@ def _mobile_trend(trend: Dict[str, Any]) -> Dict[str, Any]:
             "output_tokens": _int(row.get("output_tokens")),
             "cache_tokens": cache_tokens,
             "cache_ratio": _ratio(cache_tokens, total_tokens),
+            "claude_tokens": claude_tokens,
+            "codex_tokens": codex_tokens,
+            "unknown_tokens": max(total_tokens - claude_tokens - codex_tokens, 0),
         })
     return {
         "period": trend.get("period"),
@@ -108,6 +127,19 @@ def _mobile_trend(trend: Dict[str, Any]) -> Dict[str, Any]:
         "end_date": trend.get("end_date"),
         "points": points,
     }
+
+
+def _fit_known_agent_tokens(total: int, claude: int, codex: int) -> tuple[int, int]:
+    total = max(total, 0)
+    claude = max(claude, 0)
+    codex = max(codex, 0)
+    known = claude + codex
+    if known <= total:
+        return claude, codex
+    if known == 0:
+        return 0, 0
+    fitted_claude = total * claude // known
+    return fitted_claude, total - fitted_claude
 
 
 def _mobile_source(row: Dict[str, Any]) -> Dict[str, Any]:
