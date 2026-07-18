@@ -18,7 +18,7 @@ class TestMobileSummaryTrend(unittest.TestCase):
                 ],
                 "by_agent": [
                     {"agent": "claude", "values": [300, 0]},
-                    {"agent": "codex", "values": [200, 400]},
+                    {"agent": "gpt-5", "values": [200, 400]},
                     {"agent": "other-agent", "values": [100, 0]},
                 ],
             },

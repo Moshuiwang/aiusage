@@ -70,7 +70,7 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
     const agent = str(agentRow.agent).toLowerCase();
     const target = agent.includes("claude")
       ? claudeValues
-      : (agent.includes("codex") || agent.includes("openai")) ? codexValues : null;
+      : (agent.includes("codex") || agent.includes("openai") || agent.includes("gpt")) ? codexValues : null;
     if (!target) continue;
     list<unknown>(agentRow.values).slice(0, sourcePoints.length).forEach((value, index) => {
       target[index] += Math.max(int(value), 0);

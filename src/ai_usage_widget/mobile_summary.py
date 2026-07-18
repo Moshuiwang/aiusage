@@ -92,7 +92,7 @@ def _mobile_trend(trend: Dict[str, Any]) -> Dict[str, Any]:
         if not isinstance(agent_row, dict):
             continue
         agent = str(agent_row.get("agent") or "").lower()
-        target = claude_values if "claude" in agent else codex_values if ("codex" in agent or "openai" in agent) else None
+        target = claude_values if "claude" in agent else codex_values if ("codex" in agent or "openai" in agent or "gpt" in agent) else None
         if target is None:
             continue
         for index, value in enumerate(_list(agent_row.get("values"))[:len(source_points)]):
