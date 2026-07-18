@@ -54,6 +54,34 @@ def parse_claude_oauth_usage(payload: Dict[str, Any]) -> List[LimitWindow]:
     if not isinstance(payload, dict):
         raise LimitContractError("claude_oauth_schema_invalid", "Claude OAuth usage payload must be an object")
 
+    if "five_hour" in payload or "seven_day" in payload:
+        observed_at = payload.get("observed_at") or _missing_observed_at()
+        if not isinstance(observed_at, str) or not observed_at.strip():
+            raise LimitContractError("limit_schema_invalid", "observed_at must be a non-empty string")
+        windows: List[LimitWindow] = []
+        for field, window, duration in (("five_hour", "session", 300), ("seven_day", "week", 10080)):
+            window_payload = payload.get(field)
+            if window_payload is None:
+                continue
+            if not isinstance(window_payload, dict):
+                raise LimitContractError("limit_schema_invalid", f"{field} must be an object")
+            used_percent = _number_field(window_payload, "utilization")
+            windows.append(parse_limit_window({
+                "provider": "claude",
+                "window": window,
+                "used_percent": used_percent,
+                "remaining_percent": 100.0 - used_percent,
+                "reset_at": _string_field(window_payload, "resets_at"),
+                "window_duration_minutes": duration,
+                "observed_at": observed_at.strip(),
+                "source_type": "oauth_usage_api",
+                "confidence": "observed",
+                "status": "ok",
+            }))
+        if not windows:
+            raise LimitContractError("limit_schema_invalid", "Claude OAuth response contains no verifiable windows")
+        return windows
+
     observed_at = _string_field(payload, "observed_at")
     return [
         _parse_window(
@@ -457,6 +485,8 @@ def load_claude_access_token(auth_file: str) -> str:
         raise ClaudeProviderError("missing_credentials", "Claude auth file has unsupported shape")
 
     token = _nested_string(payload, ("oauth", "access_token"))
+    if token is None:
+        token = _nested_string(payload, ("claudeAiOauth", "accessToken"))
     if token is None:
         token = _nested_string(payload, ("tokens", "access_token"))
     if token is None:

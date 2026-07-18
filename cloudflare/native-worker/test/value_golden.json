@@ -288,6 +288,22 @@
             "total_tokens": 3100
           }
         ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
         "limits": [
           {
             "confidence": "missing",
@@ -985,6 +1001,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {
@@ -1810,6 +1842,22 @@
             "total_tokens": 3100
           }
         ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
         "limits": [
           {
             "confidence": "missing",
@@ -2359,6 +2407,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {
@@ -3002,6 +3066,22 @@
             "source_id": "mac-local",
             "total_cost": 1.23,
             "total_tokens": 3100
+          }
+        ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
           }
         ],
         "limits": [
@@ -3889,6 +3969,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {
@@ -4851,6 +4947,22 @@
             "total_tokens": 3100
           }
         ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
         "limits": [
           {
             "confidence": "missing",
@@ -5447,6 +5559,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {
@@ -5843,6 +5971,22 @@
             "total_tokens": 3100
           }
         ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
         "limits": [
           {
             "confidence": "missing",
@@ -6166,6 +6310,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {
@@ -6541,6 +6701,22 @@
             "total_tokens": 3100
           }
         ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
         "limits": [
           {
             "confidence": "missing",
@@ -6864,6 +7040,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {
@@ -7440,6 +7632,22 @@
             "total_tokens": 3100
           }
         ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
         "limits": [
           {
             "confidence": "missing",
@@ -7989,6 +8197,22 @@
         "generated_at": "<masked>",
         "limits": {
           "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
           "total_count": 3,
           "windows": [
             {

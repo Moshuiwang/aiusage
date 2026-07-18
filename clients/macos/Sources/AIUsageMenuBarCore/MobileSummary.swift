@@ -202,11 +202,57 @@ public struct MobileLimits: Codable, Equatable, Sendable {
     public let observedCount: Int
     public let totalCount: Int
     public let windows: [MobileLimitWindow]
+    public let providers: [MobileLimitProviderStatus]
+
+    public init(
+        observedCount: Int,
+        totalCount: Int,
+        windows: [MobileLimitWindow],
+        providers: [MobileLimitProviderStatus] = []
+    ) {
+        self.observedCount = observedCount
+        self.totalCount = totalCount
+        self.windows = windows
+        self.providers = providers
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        observedCount = try container.decode(Int.self, forKey: .observedCount)
+        totalCount = try container.decode(Int.self, forKey: .totalCount)
+        windows = try container.decode([MobileLimitWindow].self, forKey: .windows)
+        providers = try container.decodeIfPresent([MobileLimitProviderStatus].self, forKey: .providers) ?? []
+    }
 
     enum CodingKeys: String, CodingKey {
         case observedCount = "observed_count"
         case totalCount = "total_count"
         case windows
+        case providers
+    }
+}
+
+public struct MobileLimitProviderStatus: Codable, Equatable, Sendable {
+    public let provider: String
+    public let sourceID: String
+    public let observedAt: String?
+    public let sourceType: String?
+    public let status: String
+
+    public init(provider: String, sourceID: String, observedAt: String?, sourceType: String?, status: String) {
+        self.provider = provider
+        self.sourceID = sourceID
+        self.observedAt = observedAt
+        self.sourceType = sourceType
+        self.status = status
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case sourceID = "source_id"
+        case observedAt = "observed_at"
+        case sourceType = "source_type"
+        case status
     }
 }
 

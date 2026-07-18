@@ -91,6 +91,89 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(afterCounts).toEqual(beforeCounts);
   });
 
+  it("reconciles a limits source type change by source provider and window", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const window = { ...base.windows[0], source_id: "linux-biai-wang", provider: "claude", window: "week" };
+    for (const [sourceType, usedPercent] of [["official_cli", 20], ["oauth_usage_api", 21]] as const) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          windows: [{ ...window, source_type: sourceType, used_percent: usedPercent, remaining_percent: 100 - usedPercent }],
+        }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const rows = await db.prepare(`
+      SELECT source_type, used_percent FROM limit_windows
+      WHERE source_id = ? AND provider = ? AND window = ?
+    `).bind("linux-biai-wang", "claude", "week").all<{ source_type: string; used_percent: number }>();
+    expect(rows.results).toEqual([{ source_type: "oauth_usage_api", used_percent: 21 }]);
+  });
+
+  it("does not let an older cross-timezone limits retry overwrite the latest window", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const window = { ...base.windows[0], source_id: "linux-biai-wang", provider: "claude", window: "week" };
+    for (const [observedAt, sourceType, usedPercent] of [
+      ["2026-07-18T03:00:00+00:00", "oauth_usage_api", 21],
+      ["2026-07-18T10:00:00+08:00", "official_cli", 20],
+    ] as const) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          observed_at: observedAt,
+          windows: [{ ...window, observed_at: observedAt, source_type: sourceType, used_percent: usedPercent, remaining_percent: 100 - usedPercent }],
+        }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const row = await db.prepare(`
+      SELECT source_type, used_percent, observed_at FROM limit_windows
+      WHERE source_id = ? AND provider = ? AND window = ?
+    `).bind("linux-biai-wang", "claude", "week").first();
+    expect(row).toEqual({
+      source_type: "oauth_usage_api",
+      used_percent: 21,
+      observed_at: "2026-07-18T03:00:00+00:00",
+    });
+  });
+
+  it("does not let an older success retry clear a newer provider failure", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const success = {
+      ...base.windows[0], source_id: "linux-biai-wang", provider: "claude", window: "session",
+      observed_at: "2026-07-18T10:00:00+08:00", reset_at: "2026-07-18T15:00:00+08:00",
+      source_type: "oauth_usage_api", confidence: "observed", status: "ok",
+    };
+    const failure = {
+      ...success, window: "unknown", used_percent: 0, remaining_percent: 0,
+      observed_at: "2026-07-18T10:30:00+08:00", reset_at: "2026-07-18T10:30:00+08:00",
+      window_duration_minutes: 0, source_type: "provider_runtime", confidence: "missing", status: "provider_failed",
+    };
+    for (const window of [success, failure, success]) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...base, observed_at: window.observed_at, windows: [window] }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const rows = await db.prepare(`
+      SELECT window, status, observed_at FROM limit_windows
+      WHERE source_id = ? AND provider = ? ORDER BY window
+    `).bind("linux-biai-wang", "claude").all();
+    expect(rows.results).toEqual([
+      { window: "session", status: "ok", observed_at: "2026-07-18T10:00:00+08:00" },
+      { window: "unknown", status: "provider_failed", observed_at: "2026-07-18T10:30:00+08:00" },
+    ]);
+  });
+
   it("recovers source health through HTTP ingest when report tables start empty", async () => {
     await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
     await clearSourceHealthTables();

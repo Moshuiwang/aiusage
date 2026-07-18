@@ -149,6 +149,42 @@ describe.sequential("native TS Worker read-only API parity", () => {
     }
   });
 
+  it("fails closed immediately when a provider failure follows a successful quota read", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: "2026-06-03T10:31:00+08:00" });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await seedUsageFixture(db);
+    await db.batch([
+      db.prepare(`
+        INSERT INTO limit_windows (
+          source_id, provider, window, used_percent, remaining_percent, reset_at,
+          window_duration_minutes, source_type, confidence, status, observed_at, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("linux-biai-wangzhipeng", "claude", "session", 76, 24, "2026-06-03T15:00:00+08:00", 300, "oauth_usage_api", "observed", "ok", "2026-06-03T10:00:00+08:00", "2026-06-03T10:00:00+08:00", "2026-06-03T10:00:00+08:00"),
+      db.prepare(`
+        INSERT INTO limit_windows (
+          source_id, provider, window, used_percent, remaining_percent, reset_at,
+          window_duration_minutes, source_type, confidence, status, observed_at, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("linux-biai-wangzhipeng", "claude", "unknown", 0, 0, "2026-06-03T10:30:00+08:00", 0, "provider_runtime", "missing", "provider_failed", "2026-06-03T10:30:00+08:00", "2026-06-03T10:30:00+08:00", "2026-06-03T10:30:00+08:00"),
+    ]);
+
+    const summary = bodyFor(
+      [await recordValue("summary-after-provider-failure", "/api/summary?date=2026-06-03&period=today")],
+      "summary-after-provider-failure",
+    );
+    const mobile = bodyFor(
+      [await recordValue("mobile-after-provider-failure", "/api/mobile/summary?date=2026-06-03&period=today")],
+      "mobile-after-provider-failure",
+    );
+    expect(summary.limit_status).toEqual([{
+      provider: "claude", source_id: "linux-biai-wangzhipeng",
+      observed_at: "2026-06-03T10:00:00+08:00", source_type: "oauth_usage_api", status: "unavailable",
+    }]);
+    expect((mobile.limits as Shape).windows).toEqual([]);
+  });
+
   it("uses usage_hourly_facts as the mobile summary period total when stale daily rows disagree", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     for (const table of [

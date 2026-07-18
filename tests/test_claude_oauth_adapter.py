@@ -32,6 +32,15 @@ class TestClaudeOAuthAdapter(unittest.TestCase):
 
         self.assertEqual(token, "claude-test-access-token")
 
+    def test_load_claude_access_token_from_current_claude_code_shape(self) -> None:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json") as handle:
+            json.dump({"claudeAiOauth": {"accessToken": "current-test-access-token"}}, handle)
+            handle.flush()
+
+            token = load_claude_access_token(handle.name)
+
+        self.assertEqual(token, "current-test-access-token")
+
     def test_missing_auth_file_maps_to_missing_credentials_without_secret_text(self) -> None:
         with self.assertRaises(ClaudeProviderError) as caught:
             load_claude_access_token("/tmp/not-a-real-claude-token-secret.json")

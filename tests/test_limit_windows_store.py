@@ -88,6 +88,79 @@ class TestLimitWindowsStore(unittest.TestCase):
 
         self.assertEqual(row, ("claude-main", "claude", "session", "official_cli", "observed", "ok"))
 
+    def test_stable_key_reconciles_source_type_change_without_duplicate_window(self) -> None:
+        old = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="week",
+            used_percent=20, remaining_percent=80,
+            reset_at="2026-07-20T00:00:00+08:00", window_duration_minutes=10080,
+            observed_at="2026-07-18T09:00:00+08:00", source_type="official_cli",
+            confidence="observed", status="ok",
+        )
+        current = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="week",
+            used_percent=21, remaining_percent=79,
+            reset_at="2026-07-20T00:00:00+08:00", window_duration_minutes=10080,
+            observed_at="2026-07-18T09:05:00+08:00", source_type="oauth_usage_api",
+            confidence="observed", status="ok",
+        )
+
+        write_limit_windows(self.db_path, [old], seen_at=old.observed_at)
+        write_limit_windows(self.db_path, [current], seen_at=current.observed_at)
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT source_id, provider, window, source_type, used_percent FROM limit_windows"
+            ).fetchall()
+        self.assertEqual(rows, [("linux-biai-wang", "claude", "week", "oauth_usage_api", 21.0)])
+
+    def test_stable_key_rejects_older_retry_across_timezone_offsets(self) -> None:
+        newer = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="week",
+            used_percent=21, remaining_percent=79,
+            reset_at="2026-07-20T00:00:00+08:00", window_duration_minutes=10080,
+            observed_at="2026-07-18T03:00:00+00:00", source_type="oauth_usage_api",
+            confidence="observed", status="ok",
+        )
+        older_retry = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="week",
+            used_percent=20, remaining_percent=80,
+            reset_at="2026-07-20T00:00:00+08:00", window_duration_minutes=10080,
+            observed_at="2026-07-18T10:00:00+08:00", source_type="official_cli",
+            confidence="observed", status="ok",
+        )
+
+        write_limit_windows(self.db_path, [newer], seen_at=newer.observed_at)
+        write_limit_windows(self.db_path, [older_retry], seen_at=older_retry.observed_at)
+
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("SELECT source_type, used_percent, observed_at FROM limit_windows").fetchone()
+        self.assertEqual(row, ("oauth_usage_api", 21.0, "2026-07-18T03:00:00+00:00"))
+
+    def test_older_success_retry_does_not_clear_newer_provider_failure(self) -> None:
+        success = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="session",
+            used_percent=21, remaining_percent=79, reset_at="2026-07-18T15:00:00+08:00",
+            window_duration_minutes=300, observed_at="2026-07-18T10:00:00+08:00",
+            source_type="oauth_usage_api", confidence="observed", status="ok",
+        )
+        failure = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="unknown",
+            used_percent=0, remaining_percent=0, reset_at="2026-07-18T10:30:00+08:00",
+            window_duration_minutes=0, observed_at="2026-07-18T10:30:00+08:00",
+            source_type="provider_runtime", confidence="missing", status="provider_failed",
+        )
+
+        write_limit_windows(self.db_path, [success], seen_at=success.observed_at)
+        write_limit_windows(self.db_path, [failure], seen_at=failure.observed_at)
+        write_limit_windows(self.db_path, [success], seen_at="2026-07-18T10:31:00+08:00")
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute("SELECT window, status, observed_at FROM limit_windows ORDER BY window").fetchall()
+        self.assertEqual(rows, [
+            ("session", "ok", "2026-07-18T10:00:00+08:00"),
+            ("unknown", "provider_failed", "2026-07-18T10:30:00+08:00"),
+        ])
+
     def test_limit_windows_keep_multiple_accounts_for_same_provider(self) -> None:
         first = LimitWindow(
             provider="claude",

@@ -73,6 +73,22 @@ class TestCodexAppServerRPCAdapter(unittest.TestCase):
         self.assertIsNone(request["params"])
         self.assertEqual([window.source_type for window in windows], ["cli_rpc", "cli_rpc"])
 
+    def test_rpc_missing_primary_keeps_only_verified_secondary_window(self) -> None:
+        windows = parse_codex_rpc_rate_limits(
+            {
+                "rateLimits": {
+                    "secondary": {
+                        "usedPercent": 25,
+                        "resetsAt": 1784556000,
+                        "windowDurationMins": 10080,
+                    },
+                }
+            },
+            observed_at="2026-07-18T10:00:00+08:00",
+        )
+
+        self.assertEqual([window.window for window in windows], ["week"])
+
     def test_rpc_provider_maps_nonzero_exit_to_provider_failed(self) -> None:
         runner = RecordingRunner(CodexCommandResult(returncode=1, stdout="", stderr="socket unavailable"))
 

@@ -216,7 +216,7 @@ CREATE TABLE IF NOT EXISTS limit_windows (
   observed_at TEXT NOT NULL,
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
-  PRIMARY KEY(source_id, provider, source_type, window)
+  PRIMARY KEY(source_id, provider, window)
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_window

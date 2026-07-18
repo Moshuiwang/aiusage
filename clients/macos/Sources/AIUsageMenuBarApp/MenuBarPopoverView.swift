@@ -440,10 +440,17 @@ struct QuotaRingItem: View {
             .frame(width: 110, height: 110)
 
             VStack(spacing: 3) {
-                ringRow(key: "5h", pct: data.outerPctText, time: data.outerTimeText,
+                ringRow(key: data.outerLabel, pct: data.outerPctText, time: data.outerTimeText,
                         color: Color(red: data.outerRed, green: data.outerGreen, blue: data.outerBlue))
-                ringRow(key: "7d", pct: data.innerPctText, time: data.innerTimeText,
+                ringRow(key: data.innerLabel, pct: data.innerPctText, time: data.innerTimeText,
                         color: Color(red: data.innerRed, green: data.innerGreen, blue: data.innerBlue))
+                Text("\(data.sourceText) · \(data.updatedText)")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(data.availabilityText)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(data.availabilityText == "官方额度" ? Color.secondary : Color.orange)
             }
             .padding(.horizontal, 4)
         }
@@ -454,7 +461,7 @@ struct QuotaRingItem: View {
             Text(key)
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(color)
-                .frame(width: 16, alignment: .leading)
+                .frame(minWidth: 22, alignment: .leading)
             Text(pct)
                 .font(.system(size: 12, weight: .bold).monospacedDigit())
                 .foregroundStyle(color)

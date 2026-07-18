@@ -148,6 +148,8 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-105 | [TP-V2-105-codex-cumulative-delta-dedupe.md](TP-V2-105-codex-cumulative-delta-dedupe.md) | done | TP-V2-103 | none |
 | TP-V2-106 | [TP-V2-106-collector-accuracy-coverage-contract.md](TP-V2-106-collector-accuracy-coverage-contract.md) | done | TP-V2-105 | none |
 | TP-V2-107 | [TP-V2-107-biai-collector-upgrade-history-reconcile.md](TP-V2-107-biai-collector-upgrade-history-reconcile.md) | done | TP-V2-105, TP-V2-106 | none |
+| TP-V2-108 | [TP-V2-108-codex-current-limit-windows.md](TP-V2-108-codex-current-limit-windows.md) | in_progress | TP-V2-107 | none |
+| TP-V2-109 | [TP-V2-109-biai-claude-limit-source.md](TP-V2-109-biai-claude-limit-source.md) | in_progress | TP-V2-108 | none |
 | TP-V2-110 | [TP-V2-110-ios-complete-period-trend.md](TP-V2-110-ios-complete-period-trend.md) | done | TP-V2-112 | none |
 | TP-V2-111 | [TP-V2-111-ios-agent-stacked-trend.md](TP-V2-111-ios-agent-stacked-trend.md) | done | TP-V2-110 | none |
 | TP-V2-112 | [TP-V2-112-github-actions-ci-baseline.md](TP-V2-112-github-actions-ci-baseline.md) | done | TP-V2-114, TP-V2-115 | none |

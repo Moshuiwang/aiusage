@@ -43,6 +43,70 @@ class TestMobileSummaryTrend(unittest.TestCase):
 
 
 class TestMobileSummaryLimits(unittest.TestCase):
+    def test_stale_provider_keeps_safe_source_and_update_without_percentages(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T12:30:00+08:00",
+            "summary": {"period": "today", "total_tokens": 0},
+            "trend": {"points": []}, "source_status": [], "groups": {}, "items": [],
+            "limits": [],
+            "limit_status": [{
+                "provider": "claude", "source_id": "linux-biai-wangzhipeng",
+                "observed_at": "2026-07-18T10:00:00+08:00",
+                "source_type": "oauth_usage_api", "status": "stale",
+            }],
+        })
+
+        self.assertEqual(summary["limits"]["windows"], [])
+        self.assertEqual(summary["limits"]["providers"], [{
+            "provider": "claude", "source_id": "linux-biai-wangzhipeng",
+            "observed_at": "2026-07-18T10:00:00+08:00",
+            "source_type": "oauth_usage_api", "status": "stale",
+        }])
+
+    def test_provider_windows_never_mix_sources(self) -> None:
+        base = {
+            "confidence": "observed", "status": "ok", "official": True,
+            "remaining_percent": 80, "reset_at": "2026-07-20T00:00:00+08:00",
+            "source_type": "oauth_usage_api",
+        }
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T10:30:00+08:00",
+            "summary": {"period": "today", "total_tokens": 0},
+            "trend": {"points": []}, "source_status": [], "groups": {}, "items": [],
+            "limit_status": [{
+                "provider": "claude", "source_id": "source-b", "observed_at": "2026-07-18T10:20:00+08:00",
+                "source_type": "oauth_usage_api", "status": "ok",
+            }],
+            "limits": [
+                {**base, "source_id": "source-a", "provider": "claude", "window": "session",
+                 "used_percent": 10, "window_duration_minutes": 300, "observed_at": "2026-07-18T10:10:00+08:00"},
+                {**base, "source_id": "source-b", "provider": "claude", "window": "week",
+                 "used_percent": 20, "window_duration_minutes": 10080, "observed_at": "2026-07-18T10:20:00+08:00"},
+            ],
+        })
+
+        self.assertEqual({row["source_id"] for row in summary["limits"]["windows"]}, {"source-b"})
+
+    def test_explicit_provider_failure_hides_previous_current_percentages(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T10:31:00+08:00",
+            "summary": {"period": "today", "total_tokens": 0},
+            "trend": {"points": []}, "source_status": [], "groups": {}, "items": [],
+            "limit_status": [{
+                "provider": "claude", "source_id": "linux-biai-wangzhipeng",
+                "observed_at": "2026-07-18T10:00:00+08:00",
+                "source_type": "oauth_usage_api", "status": "unavailable",
+            }],
+            "limits": [{
+                "source_id": "linux-biai-wangzhipeng", "provider": "claude", "window": "session",
+                "used_percent": 76, "remaining_percent": 24, "reset_at": "2026-07-18T15:00:00+08:00",
+                "window_duration_minutes": 300, "observed_at": "2026-07-18T10:00:00+08:00",
+                "source_type": "oauth_usage_api", "confidence": "observed", "status": "ok", "official": True,
+            }],
+        })
+        self.assertEqual(summary["limits"]["windows"], [])
+
+
     def test_mobile_summary_only_returns_effective_quota_windows(self) -> None:
         summary = build_mobile_summary({
             "generated_at": "2026-06-02T10:45:00+08:00",
@@ -285,6 +349,34 @@ class TestMobileSummaryLimits(unittest.TestCase):
                 })
 
                 self.assertEqual([(w["provider"], w["window"]) for w in summary["limits"]["windows"]], [("claude", "session")])
+
+    def test_filters_stale_official_window_even_when_reset_is_still_in_future(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T12:30:00+08:00",
+            "summary": {"period": "today", "total_tokens": 1200},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [{
+                "source_id": "linux-biai-wang",
+                "provider": "claude",
+                "window": "week",
+                "used_percent": 41,
+                "remaining_percent": 59,
+                "reset_at": "2026-07-20T00:00:00+08:00",
+                "window_duration_minutes": 10080,
+                "observed_at": "2026-07-18T10:00:00+08:00",
+                "source_type": "official_cli",
+                "confidence": "observed",
+                "status": "ok",
+                "official": True,
+            }],
+        })
+
+        self.assertEqual(summary["limits"]["windows"], [])
+        self.assertEqual(summary["metadata"]["freshness_status"], "stale")
+        self.assertEqual(summary["metadata"]["limits_observed_at"], "2026-07-18T10:00:00+08:00")
 
     def test_naive_short_quota_reset_does_not_crash_period_summary(self) -> None:
         summary = build_mobile_summary({

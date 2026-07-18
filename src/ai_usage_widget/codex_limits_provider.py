@@ -30,20 +30,12 @@ def parse_codex_wham_usage(payload: Dict[str, Any]) -> List[LimitWindow]:
 
     observed_at = _optional_observed_at(payload)
     windows_payload = payload.get("rate_limit") if isinstance(payload.get("rate_limit"), dict) else payload
-    return [
-        _parse_window(
-            window_payload=_object_field(windows_payload, "primary_window"),
-            window="session",
-            observed_at=observed_at,
-            source_type="runtime_api",
-        ),
-        _parse_window(
-            window_payload=_object_field(windows_payload, "secondary_window"),
-            window="week",
-            observed_at=observed_at,
-            source_type="runtime_api",
-        ),
-    ]
+    return _parse_optional_windows(
+        windows_payload,
+        (("primary_window", "session"), ("secondary_window", "week")),
+        observed_at=observed_at,
+        source_type="runtime_api",
+    )
 
 
 def parse_codex_rpc_rate_limits(payload: Dict[str, Any], *, observed_at: str | None = None) -> List[LimitWindow]:
@@ -53,20 +45,12 @@ def parse_codex_rpc_rate_limits(payload: Dict[str, Any], *, observed_at: str | N
     payload = _unwrap_rpc_result(payload)
     observed_at = observed_at or _string_field(payload, "observed_at")
     rate_limits = _object_field(payload, "rate_limits", "rateLimits")
-    return [
-        _parse_window(
-            window_payload=_object_field(rate_limits, "primary"),
-            window="session",
-            observed_at=observed_at,
-            source_type="cli_rpc",
-        ),
-        _parse_window(
-            window_payload=_object_field(rate_limits, "secondary"),
-            window="week",
-            observed_at=observed_at,
-            source_type="cli_rpc",
-        ),
-    ]
+    return _parse_optional_windows(
+        rate_limits,
+        (("primary", "session"), ("secondary", "week")),
+        observed_at=observed_at,
+        source_type="cli_rpc",
+    )
 
 
 class CodexLimitsProvider:
@@ -262,6 +246,33 @@ def _parse_window(
             "status": _optional_string_field(window_payload, "status", default="ok"),
         }
     )
+
+
+def _parse_optional_windows(
+    payload: Dict[str, Any],
+    fields: tuple[tuple[str, str], ...],
+    *,
+    observed_at: str,
+    source_type: str,
+) -> List[LimitWindow]:
+    windows: List[LimitWindow] = []
+    for field, window in fields:
+        if field not in payload or payload.get(field) is None:
+            continue
+        value = payload.get(field)
+        if not isinstance(value, dict):
+            raise LimitContractError("limit_schema_invalid", f"{field} must be an object")
+        windows.append(
+            _parse_window(
+                window_payload=value,
+                window=window,
+                observed_at=observed_at,
+                source_type=source_type,
+            )
+        )
+    if not windows:
+        raise LimitContractError("limit_schema_invalid", "Codex response contains no verifiable limit windows")
+    return windows
 
 
 def _object_field(payload: Dict[str, Any], *names: str) -> Dict[str, Any]:

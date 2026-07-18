@@ -154,6 +154,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     db,
     periodId === "today" && endDate === formatDate(refTime) ? refTime : null,
   );
+  const allLimits = await fetchLimitWindows(db, null);
   const accountHourlyRows = await fetchAccountHourlyRows(db, startDate, endDate, request.timezone);
   const aiAccounts = await fetchAiAccounts(db);
 
@@ -393,6 +394,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     trend,
     source_status: buildSourceStatus(statusRows, accuracyRows, identities, refTime, request.machine, request.account),
     limits,
+    limit_status: buildLimitStatus(allLimits, refTime),
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
@@ -1316,6 +1318,46 @@ function limitSourceQuality(sourceType: string): number {
 function limitWindowExpired(limit: LimitRow, refTime: Date): boolean {
   const reset = parseDate(limit.reset_at);
   return !!reset && reset.getTime() <= refTime.getTime();
+}
+
+function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unknown>[] {
+  const bySource = new Map<string, LimitRow[]>();
+  for (const limit of limits) {
+    const key = `${limit.provider.toLowerCase()}\u0000${limit.source_id}`;
+    bySource.set(key, [...(bySource.get(key) ?? []), limit]);
+  }
+  const selected = new Map<string, { newest: number; source: string; rows: LimitRow[] }>();
+  for (const [key, rows] of bySource) {
+    if (!rows.some((row) => effectiveLimitWindow(row) || row.status === "provider_failed")) continue;
+    const [provider, source] = key.split("\u0000");
+    const newest = Math.max(...rows.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
+    const existing = selected.get(provider);
+    if (!existing || newest > existing.newest || (newest === existing.newest && source > existing.source)) {
+      selected.set(provider, { newest, source, rows });
+    }
+  }
+  return [...selected.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([provider, value]) => {
+    const successful = value.rows.filter(effectiveLimitWindow);
+    const failures = value.rows.filter((row) => row.status === "provider_failed");
+    const trustedRows = successful.length ? successful : failures;
+    const freshest = [...trustedRows].sort((left, right) => {
+      const time = (parseDate(right.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY)
+        - (parseDate(left.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY);
+      return time || right.source_type.localeCompare(left.source_type);
+    })[0];
+    const latestSuccess = Math.max(...successful.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
+    const latestFailure = Math.max(...failures.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
+    const observed = parseDate(freshest.observed_at);
+    const stale = !observed || refTime.getTime() - observed.getTime() > 120 * 60 * 1000;
+    const unexpired = successful.some((row) => !limitWindowExpired(row, refTime));
+    return {
+      provider,
+      source_id: value.source,
+      observed_at: freshest.observed_at,
+      source_type: freshest.source_type,
+      status: latestFailure > latestSuccess ? "unavailable" : (stale ? "stale" : (unexpired ? "ok" : "expired")),
+    };
+  });
 }
 
 function periodBounds(date: string, period: string): [Period, string | null, string] {

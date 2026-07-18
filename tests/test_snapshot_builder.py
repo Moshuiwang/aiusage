@@ -792,6 +792,13 @@ class TestSnapshotBuilder(unittest.TestCase):
             [(row["provider"], row["window"], row["remaining_percent"]) for row in snapshot["limits"]],
             [("claude", "week", 53.0)],
         )
+        self.assertEqual(snapshot["limit_status"], [{
+            "provider": "claude",
+            "source_id": "claude-main",
+            "observed_at": "2026-06-01T10:46:00+08:00",
+            "source_type": "official_cli",
+            "status": "ok",
+        }])
 
     def test_failed_limits_do_not_break_usage_summary(self) -> None:
         write_sqlite(
@@ -834,6 +841,41 @@ class TestSnapshotBuilder(unittest.TestCase):
 
         self.assertEqual(snapshot["summary"]["total_tokens"], 4800)
         self.assertEqual(snapshot["limits"], [])
+
+    def test_latest_provider_failure_immediately_marks_previous_success_unavailable(self) -> None:
+        write_sqlite(
+            path=self.db_path, collected_at="2026-06-01T10:30:00+08:00",
+            timezone=self.timezone_str, run_status="success",
+            source_reports=self.source_reports, items=self.items,
+        )
+        write_limit_windows(self.db_path, [
+            LimitWindow(
+                provider="claude", source_id="linux-biai-wangzhipeng", window="session",
+                used_percent=76, remaining_percent=24, reset_at="2026-06-01T15:00:00+08:00",
+                window_duration_minutes=300, observed_at="2026-06-01T10:00:00+08:00",
+                source_type="oauth_usage_api", confidence="observed", status="ok",
+            ),
+            LimitWindow(
+                provider="claude", source_id="linux-biai-wangzhipeng", window="unknown",
+                used_percent=0, remaining_percent=0, reset_at="2026-06-01T10:30:00+08:00",
+                window_duration_minutes=0, observed_at="2026-06-01T10:30:00+08:00",
+                source_type="provider_runtime", confidence="missing", status="provider_failed",
+            ),
+        ], seen_at="2026-06-01T10:30:00+08:00")
+
+        build_snapshot(
+            db_path=self.db_path, output_path=self.out_path, date_str=self.date_str,
+            timezone_str=self.timezone_str, current_time_str="2026-06-01T10:31:00+08:00",
+        )
+        with open(self.out_path, "r", encoding="utf-8") as handle:
+            snapshot = json.load(handle)
+
+        self.assertEqual(snapshot["limit_status"], [{
+            "provider": "claude", "source_id": "linux-biai-wangzhipeng",
+            "observed_at": "2026-06-01T10:00:00+08:00",
+            "source_type": "oauth_usage_api", "status": "unavailable",
+        }])
+
 
     def test_source_health_staleness_and_never_seen(self) -> None:
         """验证 Source 离线变 Stale、未上报变 Never Seen 以及今日 0 用量但在线的区别"""
