@@ -148,7 +148,7 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-105 | [TP-V2-105-codex-cumulative-delta-dedupe.md](TP-V2-105-codex-cumulative-delta-dedupe.md) | done | TP-V2-103 | none |
 | TP-V2-106 | [TP-V2-106-collector-accuracy-coverage-contract.md](TP-V2-106-collector-accuracy-coverage-contract.md) | done | TP-V2-105 | none |
 | TP-V2-107 | [TP-V2-107-biai-collector-upgrade-history-reconcile.md](TP-V2-107-biai-collector-upgrade-history-reconcile.md) | done | TP-V2-105, TP-V2-106 | none |
-| TP-V2-112 | [TP-V2-112-github-actions-ci-baseline.md](TP-V2-112-github-actions-ci-baseline.md) | in_progress | TP-V2-114, TP-V2-115 | none |
+| TP-V2-112 | [TP-V2-112-github-actions-ci-baseline.md](TP-V2-112-github-actions-ci-baseline.md) | done | TP-V2-114, TP-V2-115 | none |
 | TP-V2-113 | [TP-V2-113-loop-conditional-pr-merge.md](TP-V2-113-loop-conditional-pr-merge.md) | done | none | TP-V2-112 |
 | TP-V2-114 | [TP-V2-114-hermetic-fact-check-tests.md](TP-V2-114-hermetic-fact-check-tests.md) | done | none | TP-V2-115 |
 | TP-V2-115 | [TP-V2-115-cloudflare-current-contract-tests.md](TP-V2-115-cloudflare-current-contract-tests.md) | done | none | TP-V2-114 |
