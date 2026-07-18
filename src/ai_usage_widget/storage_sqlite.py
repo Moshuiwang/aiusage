@@ -24,6 +24,7 @@ def write_sqlite(
     usage_ledger_runs: Optional[List[Dict[str, Any]]] = None,
     usage_hourly_fact_payloads: Optional[List[Dict[str, Any]]] = None,
     accuracy_source_id: Optional[str] = None,
+    accuracy_observed_at: Optional[str] = None,
 ) -> None:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +59,7 @@ def write_sqlite(
                 source_id=accuracy_source_id,
                 runs=usage_ledger_runs or [],
                 facts=fact_payloads,
-                observed_at=collected_at,
+                observed_at=accuracy_observed_at or collected_at,
             )
 
 

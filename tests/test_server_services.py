@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import tempfile
 import unittest
 
 from ai_usage_widget.auth import TokenAuthenticator
+from ai_usage_widget.pusher import _facts_digest
 from ai_usage_widget.server_services import (
     build_health_response,
     build_mobile_summary_response,
@@ -136,6 +138,76 @@ class TestServerServices(unittest.TestCase):
         self.assertEqual(summary_data["summary"]["total_tokens"], 155)
         self.assertEqual(summary_data["source_status"][0]["status"], "ok")
         self.assertEqual(summary_data["source_status"][0]["error_message"], "ccusage not found")
+
+    def test_ingest_retry_does_not_count_as_a_second_full_scan(self) -> None:
+        payload = dict(self.valid_payload)
+        payload["usage_daily"] = []
+        payload["usage_hourly_facts"] = [
+            {
+                "fact_id": "codex:retry-safe-fact",
+                "agent": "codex",
+                "client": "codex",
+                "window_start": "2026-06-01T10:00:00+08:00",
+                "window_end": "2026-06-01T11:00:00+08:00",
+                "ai_account": {
+                    "provider": "openai",
+                    "account_id": "acct-main",
+                    "label": "Codex Main",
+                },
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 20,
+                    "cache_creation_tokens": 0,
+                    "cache_read_tokens": 30,
+                    "reasoning_output_tokens": 5,
+                    "total_tokens": 155,
+                },
+                "event_count": 2,
+                "session_count": 1,
+                "attribution_confidence": "unconfirmed_local_source",
+                "provenance": "mswusage_codex_token_count",
+            }
+        ]
+        collector = {
+            "version": "0.1.0",
+            "parser_schema_version": 2,
+            "mode": "full-rescan",
+            "coverage": {
+                "start": "2026-06-01T00:00:00+08:00",
+                "end": "2026-06-02T00:00:00+08:00",
+            },
+            "counts": {"read_errors": 0, "unresolved_mismatch": 0},
+            "scan_complete": True,
+            "report_digest": "same-report-digest",
+        }
+        payload["usage_ledger_runs"] = [
+            {
+                "agent": "codex",
+                "provenance": "mswusage_codex_token_count",
+                "facts_digest": _facts_digest(payload["usage_hourly_facts"], collector),
+                "collector": collector,
+            }
+        ]
+
+        for _ in range(2):
+            handle_ingest_payload(
+                payload,
+                token=self.token,
+                authenticator=self.authenticator,
+                db_path=self.db_path,
+                latest_path=self.out_path,
+                timezone=self.timezone,
+            )
+
+        with sqlite3.connect(self.db_path) as conn:
+            self.assertEqual(
+                conn.execute(
+                    "SELECT accuracy_status, matching_full_scans, observed_at "
+                    "FROM source_accuracy WHERE source_id=? AND agent=?",
+                    ("mac-local", "codex"),
+                ).fetchone(),
+                ("unverified", 1, payload["observed_at"]),
+            )
 
     def test_mobile_summary_service_reuses_summary_snapshot(self) -> None:
         handle_ingest_payload(
