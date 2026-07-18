@@ -773,7 +773,7 @@ async function buildAccuracyPlans(db: D1Database, req: IngestRequest, acceptedAt
     const previous = await db.prepare(`
       SELECT provenance, collector_version, parser_schema_version, mode, coverage_start, coverage_end,
              report_digest, facts_digest, scan_complete, read_errors, unresolved_mismatch,
-             matching_full_scans, accuracy_status, verified_at
+             matching_full_scans, accuracy_status, verified_at, observed_at
       FROM source_accuracy
       WHERE source_id = ? AND agent = ?
     `).bind(sourceId, agent).first<AnyRecord>();
@@ -788,9 +788,16 @@ async function buildAccuracyPlans(db: D1Database, req: IngestRequest, acceptedAt
       Number(previous.scan_complete ?? 0) === 1 &&
       Number(previous.read_errors ?? 0) === 0 &&
       Number(previous.unresolved_mismatch ?? 0) === 0;
-    let matching = completeFullScan ? (sameCompleteScan ? Math.min(Number(previous?.matching_full_scans ?? 0) + 1, 2) : 1) : 0;
+    const replayedScan = sameCompleteScan && String(previous?.observed_at ?? "") === acceptedAt;
+    let matching = replayedScan
+      ? Number(previous?.matching_full_scans ?? 0)
+      : completeFullScan
+        ? (sameCompleteScan ? Math.min(Number(previous?.matching_full_scans ?? 0) + 1, 2) : 1)
+        : 0;
     const hasAuthoritativeCoverage = !!coverageStart && !!coverageEnd && coverageStart < coverageEnd;
-    let accuracyStatus: "unverified" | "verified" = matching >= 2 && hasAuthoritativeCoverage ? "verified" : "unverified";
+    let accuracyStatus: "unverified" | "verified" = replayedScan
+      ? (previous?.accuracy_status === "verified" ? "verified" : "unverified")
+      : matching >= 2 && hasAuthoritativeCoverage ? "verified" : "unverified";
     let verifiedAt = accuracyStatus === "verified" ? String(previous?.verified_at ?? acceptedAt) : null;
     if (mode === "incremental" && previous?.accuracy_status === "verified" &&
         String(previous.provenance ?? "") === provenance &&

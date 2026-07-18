@@ -152,7 +152,7 @@ def _update_source_accuracy(
             """
             SELECT provenance, collector_version, parser_schema_version, coverage_start, coverage_end,
                    report_digest, facts_digest, scan_complete, read_errors, unresolved_mismatch,
-                   matching_full_scans, accuracy_status, verified_at
+                   matching_full_scans, accuracy_status, verified_at, observed_at
             FROM source_accuracy WHERE source_id=? AND agent=?
             """,
             (source_id, agent),
@@ -169,10 +169,18 @@ def _update_source_accuracy(
             and int(previous_row[8] or 0) == 0
             and int(previous_row[9] or 0) == 0
         )
-        matching = min(int(previous_row[10] or 0) + 1, 2) if same else (1 if complete else 0)
+        replayed_scan = same and str(previous_row[13] or "") == observed_at
+        if replayed_scan:
+            matching = int(previous_row[10] or 0)
+        else:
+            matching = min(int(previous_row[10] or 0) + 1, 2) if same else (1 if complete else 0)
         has_coverage = bool(coverage_start and coverage_end and coverage_start < coverage_end)
-        status = "verified" if matching >= 2 and has_coverage else "unverified"
-        verified_at = (previous_row[12] if previous_row and previous_row[12] else observed_at) if status == "verified" else None
+        if replayed_scan:
+            status = str(previous_row[11] or "unverified")
+            verified_at = previous_row[12]
+        else:
+            status = "verified" if matching >= 2 and has_coverage else "unverified"
+            verified_at = (previous_row[12] if previous_row and previous_row[12] else observed_at) if status == "verified" else None
         if mode == "incremental" and previous_row and previous_row[11] == "verified" and str(previous_row[0] or "") == provenance and str(previous_row[1] or "") == version and int(previous_row[2] or 0) == parser_schema:
             matching = int(previous_row[10] or 2)
             status = "verified"

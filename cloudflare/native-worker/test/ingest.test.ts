@@ -321,6 +321,14 @@ describe.sequential("native TS Worker write API parity", () => {
       fact("2026-07-12T08:00:00+08:00", 100),
       fact("2026-07-12T09:00:00+08:00", 200),
     ], completeCollector));
+    await postIngest(payload("2026-07-18T01:00:30+00:00", [
+      fact("2026-07-12T08:00:00+08:00", 100),
+      fact("2026-07-12T09:00:00+08:00", 200),
+    ], completeCollector));
+    let replayRow = await db.prepare("SELECT accuracy_status, matching_full_scans FROM source_accuracy WHERE source_id = ? AND agent = ?")
+      .bind("linux-test", "codex").first<{ accuracy_status: string; matching_full_scans: number }>();
+    expect(replayRow).toMatchObject({ accuracy_status: "unverified", matching_full_scans: 1 });
+    expect(await factCount(db, "linux-test")).toBe(2);
     await postIngest(payload(
       "2026-07-18T01:00:40+00:00",
       [fact("2026-07-12T08:00:00+08:00", 100)],

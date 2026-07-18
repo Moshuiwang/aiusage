@@ -60,12 +60,24 @@ class TestStorageSQLiteWAL(unittest.TestCase):
             "error_type": None, "error_message": None,
         }
 
-        for observed_at in ["2026-07-18T10:50:00+08:00", "2026-07-18T10:51:00+08:00"]:
+        for observed_at in ["2026-07-18T10:50:00+08:00", "2026-07-18T10:50:00+08:00"]:
             write_sqlite(
                 self.db_path, observed_at, self.timezone, "ok", [report], [],
                 hourly_facts=[fact], usage_ledger_runs=[run], usage_hourly_fact_payloads=[raw_fact],
                 accuracy_source_id="linux-test",
             )
+
+        with sqlite3.connect(self.db_path) as conn:
+            self.assertEqual(
+                conn.execute("SELECT accuracy_status, matching_full_scans FROM source_accuracy").fetchone(),
+                ("unverified", 1),
+            )
+
+        write_sqlite(
+            self.db_path, "2026-07-18T10:51:00+08:00", self.timezone, "ok", [report], [],
+            hourly_facts=[fact], usage_ledger_runs=[run], usage_hourly_fact_payloads=[raw_fact],
+            accuracy_source_id="linux-test",
+        )
 
         with sqlite3.connect(self.db_path) as conn:
             self.assertEqual(conn.execute("SELECT accuracy_status FROM source_accuracy").fetchone()[0], "verified")
