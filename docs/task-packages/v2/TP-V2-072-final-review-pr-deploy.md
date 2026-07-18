@@ -57,10 +57,10 @@ After implementation and verification, the user wants AI Review, commit, push, P
 ```bash
 git status --short
 git diff --check
-glab auth status --hostname gitlab.com
-glab mr view
+gh auth status
+gh pr view
 ```
 
 ## Handoff
 
-- Report commit SHA, GitLab MR URL, test evidence, deployment evidence, and any user action still required.
+- Report commit SHA, GitHub PR URL, test evidence, deployment evidence, and any user action still required.

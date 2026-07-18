@@ -16,7 +16,7 @@
 - 不要直接修改生产账户文件。
 - 不要提交 SSH key、token、原始 usage 日志、`config/sources.local.json` 或生成数据。
 - 不能把 `ccusage daily`、`ccusage blocks` 或本地估算伪装成官方额度状态。
-- 本仓库 GitLab remote 使用 `https://gitlab.com/wangzhipeng2010/ai-usage.git`，默认 GitLab 身份是 `wangzhipeng2010`。本项目只属于 `gitlab.com`，不要把 `gitlab.startimes.me` 的认证、网络或权限状态当成本项目异常；GitLab CLI 验证优先显式使用 `glab auth status --hostname gitlab.com`。旧 GitHub 仓库 `https://github.com/Moshuiwang/aiusage.git` 不再作为开发、同步或发布入口；如需处理旧仓库，只做迁移提示或归档，不要恢复为默认 remote。
+- 本仓库 GitHub remote 使用 `https://github.com/Moshuiwang/aiusage.git`，默认 GitHub 身份是 `Moshuiwang`。本项目的开发、Issue、PR、同步和发布入口均以该 GitHub 仓库为准；GitHub CLI 验证使用 `gh auth status`。GitLab 仓库不再作为默认入口，不要向其新建 Issue、MR 或发布内容。
 - iPhone / Apple Watch 交付不能只以 build、预检或安装成功为完成；必须有用户可见启动和非空真实数据证据，设备不可用时明确验收缺口。
 - 首次安装验收使用本地 skill：`ai-usage-first-install`（`/Users/wangzhipeng/.codex/skills/ai-usage-first-install`），不要把模拟器、真机、Watch 安装细节继续塞回本文件。升级路径验收只有在用户明确要求时再单独设计和报告。
 
