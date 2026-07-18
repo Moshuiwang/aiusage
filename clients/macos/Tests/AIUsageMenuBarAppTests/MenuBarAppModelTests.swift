@@ -22,6 +22,13 @@ final class MenuBarAppModelTests: XCTestCase {
         )
     }
 
+    func testStatusItemPresentationAllowsUserRecoveryFromMenuBarRemoval() {
+        XCTAssertEqual(
+            MenuBarStatusItemPresentation.behavior,
+            .removalAllowed
+        )
+    }
+
     func testSwitchToFreshCachedPeriodDoesNotRequestNetwork() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
