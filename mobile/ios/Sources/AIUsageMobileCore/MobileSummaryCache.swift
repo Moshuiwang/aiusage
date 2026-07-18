@@ -88,8 +88,34 @@ public enum MobileSummaryCache {
         }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = encodedTimeZone(in: value) ?? TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "MM/dd HH:mm"
         return formatter.string(from: date)
+    }
+
+    private static func encodedTimeZone(in value: String) -> TimeZone? {
+        if value.hasSuffix("Z") {
+            return TimeZone(secondsFromGMT: 0)
+        }
+        guard value.count >= 6 else {
+            return nil
+        }
+        let suffix = value.suffix(6)
+        guard (suffix.first == "+" || suffix.first == "-"), suffix[suffix.index(suffix.startIndex, offsetBy: 3)] == ":" else {
+            return nil
+        }
+        let hourStart = suffix.index(after: suffix.startIndex)
+        let hourEnd = suffix.index(hourStart, offsetBy: 2)
+        let minuteStart = suffix.index(after: suffix.index(suffix.startIndex, offsetBy: 3))
+        guard let hours = Int(suffix[hourStart..<hourEnd]),
+              let minutes = Int(suffix[minuteStart...]),
+              hours <= 23,
+              minutes <= 59
+        else {
+            return nil
+        }
+        let sign = suffix.first == "-" ? -1 : 1
+        return TimeZone(secondsFromGMT: sign * ((hours * 60 + minutes) * 60))
     }
 
     public static func read(from url: URL) -> MobileSummary? {
