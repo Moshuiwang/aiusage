@@ -143,6 +143,37 @@ describe.sequential("native TS Worker write API parity", () => {
     });
   });
 
+  it("does not let an older success retry clear a newer provider failure", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const success = {
+      ...base.windows[0], source_id: "linux-biai-wang", provider: "claude", window: "session",
+      observed_at: "2026-07-18T10:00:00+08:00", reset_at: "2026-07-18T15:00:00+08:00",
+      source_type: "oauth_usage_api", confidence: "observed", status: "ok",
+    };
+    const failure = {
+      ...success, window: "unknown", used_percent: 0, remaining_percent: 0,
+      observed_at: "2026-07-18T10:30:00+08:00", reset_at: "2026-07-18T10:30:00+08:00",
+      window_duration_minutes: 0, source_type: "provider_runtime", confidence: "missing", status: "provider_failed",
+    };
+    for (const window of [success, failure, success]) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...base, observed_at: window.observed_at, windows: [window] }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const rows = await db.prepare(`
+      SELECT window, status, observed_at FROM limit_windows
+      WHERE source_id = ? AND provider = ? ORDER BY window
+    `).bind("linux-biai-wang", "claude").all();
+    expect(rows.results).toEqual([
+      { window: "session", status: "ok", observed_at: "2026-07-18T10:00:00+08:00" },
+      { window: "unknown", status: "provider_failed", observed_at: "2026-07-18T10:30:00+08:00" },
+    ]);
+  });
+
   it("recovers source health through HTTP ingest when report tables start empty", async () => {
     await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
     await clearSourceHealthTables();

@@ -136,6 +136,31 @@ class TestLimitWindowsStore(unittest.TestCase):
             row = conn.execute("SELECT source_type, used_percent, observed_at FROM limit_windows").fetchone()
         self.assertEqual(row, ("oauth_usage_api", 21.0, "2026-07-18T03:00:00+00:00"))
 
+    def test_older_success_retry_does_not_clear_newer_provider_failure(self) -> None:
+        success = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="session",
+            used_percent=21, remaining_percent=79, reset_at="2026-07-18T15:00:00+08:00",
+            window_duration_minutes=300, observed_at="2026-07-18T10:00:00+08:00",
+            source_type="oauth_usage_api", confidence="observed", status="ok",
+        )
+        failure = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="unknown",
+            used_percent=0, remaining_percent=0, reset_at="2026-07-18T10:30:00+08:00",
+            window_duration_minutes=0, observed_at="2026-07-18T10:30:00+08:00",
+            source_type="provider_runtime", confidence="missing", status="provider_failed",
+        )
+
+        write_limit_windows(self.db_path, [success], seen_at=success.observed_at)
+        write_limit_windows(self.db_path, [failure], seen_at=failure.observed_at)
+        write_limit_windows(self.db_path, [success], seen_at="2026-07-18T10:31:00+08:00")
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute("SELECT window, status, observed_at FROM limit_windows ORDER BY window").fetchall()
+        self.assertEqual(rows, [
+            ("session", "ok", "2026-07-18T10:00:00+08:00"),
+            ("unknown", "provider_failed", "2026-07-18T10:30:00+08:00"),
+        ])
+
     def test_limit_windows_keep_multiple_accounts_for_same_provider(self) -> None:
         first = LimitWindow(
             provider="claude",

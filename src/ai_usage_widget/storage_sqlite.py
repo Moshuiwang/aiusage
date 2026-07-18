@@ -1016,8 +1016,9 @@ def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at:
               AND provider = ?
               AND source_type = 'provider_runtime'
               AND status = 'provider_failed'
+              AND julianday(observed_at) < julianday(?)
             """,
-            (source_id, window.provider),
+            (source_id, window.provider, window.observed_at),
         )
     conn.execute(
         """

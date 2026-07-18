@@ -618,7 +618,8 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
     statements.push(db.prepare(`
       DELETE FROM limit_windows
       WHERE source_id = ? AND provider = ? AND source_type = 'provider_runtime' AND status = 'provider_failed'
-    `).bind(window.source_id, window.provider));
+        AND julianday(observed_at) < julianday(?)
+    `).bind(window.source_id, window.provider, window.observed_at));
   }
   statements.push(db.prepare(`
     INSERT INTO limit_windows (
