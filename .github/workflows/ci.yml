@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Run Python test suite
+        run: PYTHONPATH=src python3 -m unittest discover -s tests -v
+
+  worker:
+    name: Cloudflare Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install JavaScript dependencies
+        run: npm ci
+      - name: Run Native Worker tests
+        run: npm run cf:native:test
+
+  macos-swift:
+    name: macOS Swift
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run macOS package tests
+        run: swift test --package-path clients/macos
+
+  ios-swift:
+    name: iOS Swift
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Run iOS package tests
+        run: swift test --package-path mobile/ios
+      - name: Verify Xcode integration
+        run: python3 -m unittest tests.test_ios_xcode_integration -v

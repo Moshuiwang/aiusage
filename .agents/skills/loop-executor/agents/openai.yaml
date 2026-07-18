@@ -1,0 +1,4 @@
+interface:
+  display_name: "Loop Executor v2.2.0"
+  short_description: "按获批 Plan v2 持续实现、验证、条件合并并完成收尾"
+  default_prompt: "设定一个长期目标，使用 $loop-executor 执行已批准的 Loop Execution Plan v2，直到完成。"

@@ -1,4 +1,5 @@
 import AIUsageMenuBarCore
+import Foundation
 @testable import AIUsageMenuBarApp
 import XCTest
 
@@ -108,7 +109,11 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertTrue(model.errorMessage?.hasPrefix("刷新失败，正在显示缓存：") == true)
     }
 
-    func testPopoverQuitActionTerminatesApplication() {
+    func testPopoverQuitActionTerminatesApplication() throws {
+        try XCTSkipIf(
+            ProcessInfo.processInfo.environment["CI"] == "true",
+            "requires a macOS WindowServer session"
+        )
         var didQuit = false
         let controller = StatusBarController(
             paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),

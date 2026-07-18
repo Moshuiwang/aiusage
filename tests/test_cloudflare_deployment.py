@@ -9,13 +9,17 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class CloudflareDeploymentContracts(unittest.TestCase):
-    def test_wrangler_binds_created_cloudflare_resources(self) -> None:
+    def test_wrangler_binds_current_native_entrypoint_resources(self) -> None:
         config = (ROOT / "wrangler.toml").read_text(encoding="utf-8")
 
         self.assertIn('name = "aiusage-api"', config)
         self.assertIn('main = "cloudflare/aiusage-api-worker.js"', config)
         self.assertIn('ENVIRONMENT = "development"', config)
-        self.assertIn('ORIGIN_BASE_URL = "https://vpn2.chunbai.com:8443"', config)
+        self.assertIn(
+            'ORIGIN_BASE_URL = "https://aiusage-native-staging.chunbai.workers.dev"',
+            config,
+        )
+        self.assertNotIn("vpn2.chunbai.com", config)
         self.assertIn('pattern = "aiusage.chunbai.com/*"', config)
         self.assertNotIn('pattern = "aiusage.chunbai.com/api/*"', config)
         self.assertNotIn('pattern = "aiusage.chunbai.com/ingest"', config)
@@ -67,6 +71,7 @@ class CloudflareDeploymentContracts(unittest.TestCase):
 
     def test_pages_is_not_the_current_dashboard_success_path(self) -> None:
         package_json = (ROOT / "package.json").read_text(encoding="utf-8")
+        root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
         readme = (ROOT / "cloudflare" / "README.md").read_text(encoding="utf-8")
         package = (
             ROOT
@@ -79,8 +84,11 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("wrangler deploy", package_json)
         self.assertIn("cf:worker:deploy", package_json)
         self.assertIn("aiusage.chunbai.com/*", readme)
-        self.assertIn("Worker 统一入口回源", readme)
-        self.assertIn("Pages 静态化是后续任务", readme)
+        self.assertIn("Cloudflare Native Worker + D1", readme)
+        self.assertIn("VPN2 旧 AI Usage 后端已经下线", readme)
+        self.assertIn("Pages 静态化不是当前用户入口", readme)
+        self.assertIn("生产入口已经切到 Cloudflare Worker + D1", root_readme)
+        self.assertIn("VPN2 旧后端不再承载 AI Usage 读写链路", root_readme)
         self.assertIn("不要用 `curl -I`", readme)
         self.assertIn("--resolve aiusage.chunbai.com:443:<Cloudflare IP>", readme)
         self.assertIn("Worker 统一入口回源旧服务", package)
