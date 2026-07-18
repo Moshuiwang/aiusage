@@ -7,7 +7,12 @@ from typing import Any, Dict
 
 from ai_usage_widget.config import DeviceConfig
 from ai_usage_widget.models import CommandResult
-from ai_usage_widget.pusher import DevicePusher, IngestHTTPClient
+from ai_usage_widget.pusher import (
+    DevicePusher,
+    IngestHTTPClient,
+    _facts_digest,
+    _usage_hourly_facts_from_mswusage,
+)
 
 
 class FakeExecutor:
@@ -78,6 +83,42 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
     def tearDown(self) -> None:
         if "AI_USAGE_TOKEN" in os.environ:
             del os.environ["AI_USAGE_TOKEN"]
+
+    def test_full_rescan_facts_are_limited_to_declared_coverage(self) -> None:
+        report = {
+            "provenance": "mswusage_codex_token_count",
+            "generated_at": "2026-07-18T10:00:00+08:00",
+            "collector": {
+                "mode": "full-rescan",
+                "coverage": {"start": "2026-07-12T00:00:00+08:00", "end": "2026-07-13T00:00:00+08:00"},
+            },
+            "hourly": [
+                {"hour": "2026-07-11T23:00:00+08:00", "total_tokens": 999},
+                {"hour": "2026-07-12T08:00:00+08:00", "total_tokens": 100},
+            ],
+        }
+
+        facts = _usage_hourly_facts_from_mswusage(self.config, report)
+
+        self.assertEqual([fact["window_start"] for fact in facts], ["2026-07-12T08:00:00+08:00"])
+
+    def test_facts_digest_uses_utf8_canonical_json(self) -> None:
+        fact = {
+            "fact_id": "事实:中文账号",
+            "agent": "codex",
+            "client": "codex",
+            "window_start": "2026-07-12T08:00:00+08:00",
+            "window_end": "2026-07-12T09:00:00+08:00",
+            "usage": {"total_tokens": 1},
+            "event_count": 1,
+            "session_count": 1,
+            "attribution_confidence": "confirmed",
+            "provenance": "mswusage_codex_token_count",
+        }
+
+        digest = _facts_digest([fact], {"coverage": {"start": None, "end": None}})
+
+        self.assertEqual(digest, "4d8a3fd8150a43afd055d1fcc6d31c0932841e2ca814ca033d424f3b60ee3ec0")
 
     def test_pusher_success_flow(self) -> None:
         """测试正常流：ccusage 采集成功且 HTTP 上报成功"""
@@ -338,6 +379,16 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
             "daily": [],
             "hourly": [],
             "sessions": [],
+            "collector": {
+                "version": "0.1.0",
+                "parser_schema_version": 2,
+                "mode": "full-rescan",
+                "lookback_hours": None,
+                "coverage": {"start": None, "end": None},
+                "counts": {"read_errors": 0, "unresolved_mismatch": 0},
+                "scan_complete": True,
+                "report_digest": "safe-digest-a",
+            },
         })
         empty_claude_report = json.dumps({
             "schema_version": 1,
@@ -363,6 +414,7 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
             executor=executor,
             http_client=http_client,
             ledger_mode="full-rescan",
+            ledger_coverage_start="2026-07-12T00:00:00+08:00",
         ).push()
 
         self.assertTrue(result["success"])
@@ -372,6 +424,11 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual(executor.calls[4][executor.calls[4].index("--mode") + 1], "full-rescan")
         self.assertNotIn("--lookback-hours", executor.calls[3])
         self.assertNotIn("--lookback-hours", executor.calls[4])
+        self.assertEqual(executor.calls[3][executor.calls[3].index("--coverage-start") + 1], "2026-07-12T00:00:00+08:00")
+        self.assertEqual(executor.calls[4][executor.calls[4].index("--coverage-start") + 1], "2026-07-12T00:00:00+08:00")
+        self.assertEqual(http_client.last_json["usage_ledger_runs"][0]["agent"], "codex")
+        self.assertEqual(http_client.last_json["usage_ledger_runs"][0]["collector"]["report_digest"], "safe-digest-a")
+        self.assertRegex(http_client.last_json["usage_ledger_runs"][0]["facts_digest"], r"^[0-9a-f]{64}$")
 
     def test_pusher_marks_drift_unavailable_without_matching_daily_codex_baseline(self) -> None:
         executor = FakeExecutor([

@@ -8,9 +8,96 @@ import unittest
 
 from ai_usage_widget.models import UsageBlockItem, UsageHourlyFact, UsageHourlyItem, UsageItem
 from ai_usage_widget.storage_sqlite import write_sqlite, _safe_error
+from ai_usage_widget.pusher import _facts_digest
+from ai_usage_widget.snapshot_builder import build_snapshot
 
 
 class TestStorageSQLiteWAL(unittest.TestCase):
+    def test_accuracy_evidence_is_persisted_verified_and_downgraded_for_legacy(self) -> None:
+        raw_fact = {
+            "fact_id": "fact-accuracy",
+            "agent": "codex",
+            "client": "codex",
+            "window_start": "2026-07-12T08:00:00+08:00",
+            "window_end": "2026-07-12T09:00:00+08:00",
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 0,
+                "cache_creation_tokens": 0,
+                "cache_read_tokens": 0,
+                "reasoning_output_tokens": 0,
+                "total_tokens": 100,
+            },
+            "event_count": 1,
+            "session_count": 1,
+            "attribution_confidence": "unconfirmed_local_source",
+            "provenance": "mswusage_codex_token_count",
+        }
+        fact = UsageHourlyFact(
+            fact_id="fact-accuracy", source_id="linux-test", machine_id="linux-test",
+            machine_name="linux-test", host="linux-test", os_user="tester", platform="linux",
+            ai_provider="openai", ai_account_id="local", ai_account_label="local",
+            ai_account_display_name=None, ai_account_subscription=None, agent="codex", client="codex",
+            window_start=raw_fact["window_start"], window_end=raw_fact["window_end"], timezone=self.timezone,
+            input_tokens=100, output_tokens=0, cache_creation_tokens=0, cache_read_tokens=0,
+            reasoning_output_tokens=0, total_tokens=100, event_count=1, session_count=1,
+            attribution_confidence="unconfirmed_local_source", provenance="mswusage_codex_token_count",
+        )
+        collector = {
+            "version": "0.1.0", "parser_schema_version": 2, "mode": "full-rescan",
+            "lookback_hours": None,
+            "coverage": {"start": "2026-07-12T00:00:00+08:00", "end": "2026-07-13T00:00:00+08:00"},
+            "counts": {"read_errors": 0, "unresolved_mismatch": 0},
+            "scan_complete": True, "report_digest": "report-a",
+        }
+        run = {
+            "agent": "codex", "provenance": "mswusage_codex_token_count", "collector": collector,
+            "facts_digest": _facts_digest([raw_fact], collector),
+        }
+        report = {
+            "source_id": "linux-test", "report_type": "daily", "command": "test", "status": "ok",
+            "ccusage_version": None, "first_period": None, "last_period": None,
+            "error_type": None, "error_message": None,
+        }
+
+        for observed_at in ["2026-07-18T10:50:00+08:00", "2026-07-18T10:50:00+08:00"]:
+            write_sqlite(
+                self.db_path, observed_at, self.timezone, "ok", [report], [],
+                hourly_facts=[fact], usage_ledger_runs=[run], usage_hourly_fact_payloads=[raw_fact],
+                accuracy_source_id="linux-test",
+            )
+
+        with sqlite3.connect(self.db_path) as conn:
+            self.assertEqual(
+                conn.execute("SELECT accuracy_status, matching_full_scans FROM source_accuracy").fetchone(),
+                ("unverified", 1),
+            )
+
+        write_sqlite(
+            self.db_path, "2026-07-18T10:51:00+08:00", self.timezone, "ok", [report], [],
+            hourly_facts=[fact], usage_ledger_runs=[run], usage_hourly_fact_payloads=[raw_fact],
+            accuracy_source_id="linux-test",
+        )
+
+        with sqlite3.connect(self.db_path) as conn:
+            self.assertEqual(conn.execute("SELECT accuracy_status FROM source_accuracy").fetchone()[0], "verified")
+
+        output_path = self.db_path + ".json"
+        build_snapshot(self.db_path, output_path, "2026-07-12", self.timezone, current_time_str="2026-07-18T10:52:00+08:00")
+        with open(output_path, encoding="utf-8") as handle:
+            snapshot = json.load(handle)
+        self.assertEqual(snapshot["source_status"][0]["accuracy"]["status"], "verified")
+
+        write_sqlite(
+            self.db_path, "2026-07-18T10:53:00+08:00", self.timezone, "ok", [report], [],
+            hourly_facts=[fact], usage_ledger_runs=[], usage_hourly_fact_payloads=[raw_fact],
+            accuracy_source_id="linux-test",
+        )
+        with sqlite3.connect(self.db_path) as conn:
+            self.assertEqual(conn.execute("SELECT accuracy_status FROM source_accuracy").fetchone()[0], "unknown")
+        if os.path.exists(output_path):
+            os.remove(output_path)
+
     def setUp(self) -> None:
         self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
         self.collected_at = "2026-06-01T10:50:00+08:00"

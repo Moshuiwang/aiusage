@@ -11,6 +11,8 @@ from .timezones import get_timezone
 
 
 PROVENANCE = "mswusage_codex_token_count"
+COLLECTOR_VERSION = "0.2.0"
+PARSER_SCHEMA_VERSION = 2
 FORBIDDEN_SESSION_MARKERS = ("/", "\\", "~", ".codex", ".claude", ".jsonl", "/Users/", "/home/")
 SAFE_SESSION_RE = re.compile(r"^[A-Za-z0-9:_-]{1,128}$")
 TOKEN_FIELDS = (
@@ -28,11 +30,20 @@ def build_report(
     timezone: str,
     now: datetime | None = None,
     since: datetime | None = None,
+    mode: str = "full-rescan",
+    lookback_hours: float | None = None,
+    read_diagnostics: dict | None = None,
+    coverage_start: datetime | None = None,
 ) -> dict:
     tz = get_timezone(timezone)
-    generated_at = _format_datetime(_coerce_now(now, tz))
+    now_at = _coerce_now(now, tz)
+    generated_at = _format_datetime(now_at)
     since_at = _coerce_datetime(since, tz) if since is not None else None
-    events = _parse_events(jsonl_lines, tz, since=since_at)
+    coverage_start_at = _coerce_datetime(coverage_start, tz) if coverage_start is not None else None
+    effective_since = coverage_start_at if coverage_start_at is not None else since_at
+    events, parse_stats, coverage = _parse_events(jsonl_lines, tz, since=effective_since)
+    if coverage_start_at is not None:
+        coverage = _explicit_coverage(coverage_start_at, now_at)
     fallback_session_id = _fallback_session_id(events)
 
     hourly: dict[str, dict] = {}
@@ -69,7 +80,19 @@ def build_report(
         session["last_event_at"] = max(session["last_event_at"], event["event_at"])
         _add_usage(session, event, session_id=session_id)
 
-    return {
+    read_errors = _to_non_negative_int((read_diagnostics or {}).get("read_errors"))
+    parse_stats["read_errors"] = read_errors
+    scan_complete = read_errors == 0 and parse_stats["unresolved_mismatch"] == 0
+    collector = {
+        "version": COLLECTOR_VERSION,
+        "parser_schema_version": PARSER_SCHEMA_VERSION,
+        "mode": mode,
+        "lookback_hours": float(lookback_hours) if mode == "incremental" and lookback_hours is not None else None,
+        "coverage": coverage,
+        "counts": parse_stats,
+        "scan_complete": scan_complete,
+    }
+    report = {
         "schema_version": 1,
         "source": "mswusage_codex",
         "timezone": timezone,
@@ -78,7 +101,10 @@ def build_report(
         "daily": [_finalize_bucket(row) for _, row in sorted(daily.items())],
         "hourly": [_finalize_bucket(row) for _, row in sorted(hourly.items())],
         "sessions": [_finalize_bucket(row, include_session_count=False) for _, row in sorted(sessions.items())],
+        "collector": collector,
     }
+    collector["report_digest"] = _safe_report_digest(report)
+    return report
 
 
 def read_local_codex_jsonl_lines(
@@ -86,24 +112,35 @@ def read_local_codex_jsonl_lines(
     *,
     include_archived: bool = True,
     modified_since: datetime | None = None,
+    diagnostics: dict | None = None,
 ) -> list[str]:
     codex_roots = _codex_roots(root, include_archived=include_archived)
     cutoff = modified_since.timestamp() if modified_since is not None else None
 
     lines: list[str] = []
+    files_scanned = 0
+    read_errors = 0
+    roots_found = 0
     for codex_root in codex_roots:
         if not codex_root.exists():
             continue
+        roots_found += 1
         for path in sorted(codex_root.glob("**/*.jsonl")):
             if not path.is_file():
                 continue
             try:
                 if cutoff is not None and path.stat().st_mtime < cutoff:
                     continue
+                files_scanned += 1
                 lines.append(json.dumps({"type": "mswusage_file_boundary"}, separators=(",", ":")))
                 lines.extend(path.read_text(encoding="utf-8").splitlines())
             except (OSError, UnicodeDecodeError):
+                read_errors += 1
                 continue
+    if roots_found == 0:
+        read_errors += 1
+    if diagnostics is not None:
+        diagnostics.update({"files_scanned": files_scanned, "read_errors": read_errors})
     return lines
 
 
@@ -125,12 +162,26 @@ def _codex_roots(root: Path | None, *, include_archived: bool) -> list[Path]:
     return roots
 
 
-def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = None) -> list[dict]:
+def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = None) -> tuple[list[dict], dict, dict]:
     current_session_id: str | None = None
+    file_scope = 0
+    candidates: list[dict] = []
     events: list[dict] = []
     seen_event_keys: set[str] = set()
+    stats = {
+        "scanned": 0,
+        "seeded": 0,
+        "accepted": 0,
+        "exact_duplicate": 0,
+        "no_growth": 0,
+        "cumulative_reset": 0,
+        "non_contiguous_transition": 0,
+        "same_total_state_change": 0,
+        "fallback": 0,
+        "unresolved_mismatch": 0,
+    }
 
-    for line in jsonl_lines:
+    for input_index, line in enumerate(jsonl_lines):
         try:
             row = json.loads(line)
         except json.JSONDecodeError:
@@ -139,6 +190,7 @@ def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = No
             continue
 
         if row.get("type") == "mswusage_file_boundary":
+            file_scope += 1
             current_session_id = None
             continue
 
@@ -159,26 +211,87 @@ def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = No
         event_at = _parse_timestamp(row.get("timestamp"), tz)
         if event_at is None:
             continue
-        if since is not None and event_at < since:
-            continue
-
         normalized = _normalize_usage(usage)
         if normalized["total_tokens"] <= 0:
             continue
-        event_key = _event_key(current_session_id, row.get("timestamp"), usage)
+        cumulative_usage = info.get("total_token_usage") if isinstance(info, dict) else None
+        cumulative = _normalize_usage(cumulative_usage) if isinstance(cumulative_usage, dict) else None
+        if cumulative is not None and cumulative["total_tokens"] <= 0:
+            cumulative = None
+        scope = f"session:{current_session_id}" if current_session_id else f"file:{file_scope}"
+        candidates.append({
+            "scope": scope,
+            "session_id": current_session_id,
+            "timestamp": row.get("timestamp"),
+            "event_at_value": event_at,
+            "input_index": input_index,
+            "usage": usage,
+            "normalized": normalized,
+            "cumulative": cumulative,
+        })
+
+    seen_cumulative_states: dict[str, set[tuple[int, ...]]] = {}
+    previous_cumulative: dict[str, dict[str, int]] = {}
+    coverage_times: list[datetime] = []
+    for candidate in sorted(candidates, key=lambda item: (item["scope"], item["event_at_value"], item["input_index"])):
+        stats["scanned"] += 1
+        event_at = candidate["event_at_value"]
+        coverage_times.append(event_at)
+        event_key = _event_key(candidate["session_id"], candidate["timestamp"], candidate["usage"])
         if event_key in seen_event_keys:
+            stats["exact_duplicate"] += 1
             continue
         seen_event_keys.add(event_key)
+
+        normalized = candidate["normalized"]
+        cumulative = candidate["cumulative"]
+        accept = True
+        if cumulative is not None:
+            scope = candidate["scope"]
+            state = tuple(cumulative[field] for field in TOKEN_FIELDS)
+            previous = previous_cumulative.get(scope)
+            if previous is not None and cumulative["total_tokens"] == previous["total_tokens"] and state != tuple(previous[field] for field in TOKEN_FIELDS):
+                stats["same_total_state_change"] += 1
+            reset = previous is not None and any(cumulative[field] < previous[field] for field in TOKEN_FIELDS)
+            if reset:
+                stats["cumulative_reset"] += 1
+                seen_cumulative_states[scope] = set()
+            states = seen_cumulative_states.setdefault(scope, set())
+            if state in states:
+                stats["no_growth"] += 1
+                accept = False
+            else:
+                states.add(state)
+            mismatch = any(cumulative[field] < normalized[field] for field in TOKEN_FIELDS)
+            if previous is not None and not reset and accept and any(
+                    cumulative[field] - previous[field] != normalized[field]
+                    for field in TOKEN_FIELDS
+            ):
+                stats["non_contiguous_transition"] += 1
+            if mismatch:
+                stats["unresolved_mismatch"] += 1
+            previous_cumulative[scope] = cumulative
+        else:
+            stats["fallback"] += 1
+
+        if since is not None and event_at < since:
+            if cumulative is not None:
+                stats["seeded"] += 1
+            continue
+        if not accept:
+            continue
         event = {
             **normalized,
-            "session_id": current_session_id,
+            "session_id": candidate["session_id"],
             "event_at": _format_datetime(event_at),
             "hour": _format_datetime(event_at.replace(minute=0, second=0, microsecond=0)),
             "date": event_at.date().isoformat(),
         }
         events.append(event)
+        stats["accepted"] += 1
 
-    return events
+    coverage = _coverage(coverage_times)
+    return events, stats, coverage
 
 
 def _event_key(session_id: str | None, timestamp: object, usage: dict) -> str:
@@ -193,6 +306,44 @@ def _event_key(session_id: str | None, timestamp: object, usage: dict) -> str:
     }
     fingerprint = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+
+
+def _coverage(event_times: list[datetime]) -> dict:
+    if not event_times:
+        return {"start": None, "end": None}
+    start = min(event_times).replace(minute=0, second=0, microsecond=0)
+    end = max(event_times).replace(minute=0, second=0, microsecond=0)
+    from datetime import timedelta
+    return {"start": _format_datetime(start), "end": _format_datetime(end + timedelta(hours=1))}
+
+
+def _safe_report_digest(report: dict) -> str:
+    collector = report["collector"]
+    coverage = collector["coverage"]
+    hourly = [
+        row for row in report["hourly"]
+        if (not coverage.get("start") or row["hour"] >= coverage["start"])
+        and (not coverage.get("end") or row["hour"] < coverage["end"])
+    ]
+    payload = {
+        "source": report["source"],
+        "timezone": report["timezone"],
+        "parser_schema_version": collector["parser_schema_version"],
+        "coverage": collector["coverage"],
+        "scan_complete": collector["scan_complete"],
+        "hourly": hourly,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _explicit_coverage(start: datetime, now: datetime) -> dict:
+    start_hour = start.replace(minute=0, second=0, microsecond=0)
+    end_hour = now.replace(minute=0, second=0, microsecond=0)
+    if now > end_hour:
+        from datetime import timedelta
+        end_hour += timedelta(hours=1)
+    return {"start": _format_datetime(start_hour), "end": _format_datetime(end_hour)}
 
 
 def _normalize_usage(usage: dict) -> dict[str, int]:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shlex
 import subprocess
@@ -203,6 +204,7 @@ class DevicePusher:
         retry_sleep: Callable[[float], None] = time.sleep,
         ledger_mode: str = "incremental",
         ledger_lookback_hours: float = 48.0,
+        ledger_coverage_start: str | None = None,
     ) -> None:
         self.config = config
         self.executor = executor
@@ -213,6 +215,7 @@ class DevicePusher:
             raise ValueError("ledger_mode must be incremental or full-rescan")
         self.ledger_mode = ledger_mode
         self.ledger_lookback_hours = max(float(ledger_lookback_hours), 1.0)
+        self.ledger_coverage_start = ledger_coverage_start
 
     def push(self) -> Dict[str, Any]:
         """
@@ -302,6 +305,8 @@ class DevicePusher:
         ]
         if self.ledger_mode == "incremental":
             mswusage_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
+        elif self.ledger_coverage_start:
+            mswusage_argv.extend(["--coverage-start", self.ledger_coverage_start])
         mswusage_res = self.executor(mswusage_argv, float(self.config.timeout_seconds))
         if mswusage_res.ok and mswusage_res.stdout:
             try:
@@ -336,6 +341,8 @@ class DevicePusher:
         ]
         if self.ledger_mode == "incremental":
             claude_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
+        elif self.ledger_coverage_start:
+            claude_argv.extend(["--coverage-start", self.ledger_coverage_start])
         claude_res = self.executor(claude_argv, float(self.config.timeout_seconds))
         if claude_res.ok and claude_res.stdout:
             try:
@@ -392,6 +399,9 @@ class DevicePusher:
             )
             if hourly_facts:
                 payload["usage_hourly_facts"] = hourly_facts
+            ledger_run = _usage_ledger_run(mswusage_codex_hourly_report, hourly_facts, agent="codex")
+            if ledger_run is not None:
+                payload.setdefault("usage_ledger_runs", []).append(ledger_run)
         elif codex_hourly_status is not None:
             payload["codex_hourly_status"] = codex_hourly_status
         if mswusage_claude_report is not None:
@@ -405,6 +415,9 @@ class DevicePusher:
             )
             if hourly_facts:
                 payload.setdefault("usage_hourly_facts", []).extend(hourly_facts)
+            ledger_run = _usage_ledger_run(mswusage_claude_report, hourly_facts, agent="claude")
+            if ledger_run is not None:
+                payload.setdefault("usage_ledger_runs", []).append(ledger_run)
 
         # 4. 读取认证 Token 并准备 headers
         headers = {}
@@ -545,15 +558,23 @@ def _usage_hourly_facts_from_mswusage(
         or ("account_observed_usage_inferred" if account_confirmed else "unconfirmed_local_source")
     )
     provenance_default = str(report.get("provenance") or f"mswusage_{default_agent}_usage")
+    collector = report.get("collector") if isinstance(report.get("collector"), dict) else {}
+    coverage = collector.get("coverage") if isinstance(collector.get("coverage"), dict) else {}
+    coverage_start = str(coverage.get("start")) if coverage.get("start") else None
+    coverage_end = str(coverage.get("end")) if coverage.get("end") else None
     facts = []
     for row in rows:
         if not isinstance(row, dict) or not row.get("hour"):
             continue
         hour = str(row["hour"])
+        if coverage_start and hour < coverage_start:
+            continue
+        if coverage_end and hour >= coverage_end:
+            continue
         window_start = hour
         window_end = str(row.get("window_end") or _next_hour_iso(hour) or hour)
         provenance = str(row.get("provenance") or provenance_default)
-        facts.append({
+        fact = {
             "fact_id": f"{provider_key}:{default_client}:{config.source_id}:{window_start}:{window_end}:{confidence}:{provider}:{account_id}:{provenance}",
             "agent": default_agent,
             "client": default_client,
@@ -584,8 +605,50 @@ def _usage_hourly_facts_from_mswusage(
                 "window": "collection_time",
             },
             "sensitive_payload": False,
-        })
+        }
+        if isinstance(report.get("collector"), dict):
+            fact["metadata"] = {"collector": report["collector"]}
+        facts.append(fact)
     return facts
+
+
+def _usage_ledger_run(report: dict, facts: list[dict[str, Any]], *, agent: str) -> dict[str, Any] | None:
+    collector = report.get("collector")
+    if not isinstance(collector, dict):
+        return None
+    return {
+        "agent": agent,
+        "provenance": str(report.get("provenance") or f"mswusage_{agent}_usage"),
+        "collector": collector,
+        "facts_digest": _facts_digest(facts, collector),
+    }
+
+
+def _facts_digest(facts: list[dict[str, Any]], collector: dict) -> str:
+    coverage = collector.get("coverage") if isinstance(collector.get("coverage"), dict) else {}
+    start = coverage.get("start")
+    end = coverage.get("end")
+    canonical = []
+    for fact in facts:
+        window_start = str(fact.get("window_start") or "")
+        if start and window_start < str(start):
+            continue
+        if end and window_start >= str(end):
+            continue
+        canonical.append({
+            key: fact.get(key)
+            for key in (
+                "fact_id", "agent", "client", "window_start", "window_end", "usage",
+                "event_count", "session_count", "attribution_confidence", "provenance",
+            )
+        })
+    encoded = json.dumps(
+        sorted(canonical, key=lambda row: str(row["fact_id"])),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _next_hour_iso(value: str) -> str | None:

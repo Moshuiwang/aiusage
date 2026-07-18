@@ -123,6 +123,27 @@ class TestIngestContract(unittest.TestCase):
 
         self.assertEqual(req.mswusage_codex_hourly_report["source"], "mswusage_codex")
 
+    def test_accepts_usage_ledger_accuracy_evidence(self) -> None:
+        data = self.valid_data.copy()
+        data["usage_ledger_runs"] = [{
+            "agent": "codex",
+            "provenance": "mswusage_codex_token_count",
+            "facts_digest": "safe-facts-digest",
+            "collector": {
+                "version": "0.1.0",
+                "parser_schema_version": 2,
+                "mode": "full-rescan",
+                "coverage": {"start": None, "end": None},
+                "counts": {"read_errors": 0, "unresolved_mismatch": 0},
+                "scan_complete": True,
+                "report_digest": "safe-digest",
+            },
+        }]
+
+        req = validate_ingest_payload(data)
+
+        self.assertEqual(req.usage_ledger_runs[0]["collector"]["report_digest"], "safe-digest")
+
     def test_rejects_invalid_mswusage_codex_hourly_report_shape(self) -> None:
         data = self.valid_data.copy()
         data["mswusage_codex_hourly_report"] = []

@@ -134,6 +134,16 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
       ORDER BY id ASC
     `,
   );
+  const accuracyRows = await all<Record<string, unknown>>(
+    db,
+    `
+      SELECT source_id, agent, accuracy_status, collector_version, parser_schema_version,
+             mode, lookback_hours, coverage_start, coverage_end, matching_full_scans,
+             scan_complete, read_errors, unresolved_mismatch, verified_at, observed_at
+      FROM source_accuracy
+      ORDER BY source_id ASC, agent ASC
+    `,
+  );
   let hourlyRows: TimedRow[] = [];
   let blockRows: TimedRow[] = [];
   if (hourAxisValues.length > 0) {
@@ -381,7 +391,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     },
     items,
     trend,
-    source_status: buildSourceStatus(statusRows, identities, refTime, request.machine, request.account),
+    source_status: buildSourceStatus(statusRows, accuracyRows, identities, refTime, request.machine, request.account),
     limits,
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
@@ -529,11 +539,19 @@ async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[
 
 function buildSourceStatus(
   statusRows: Record<string, string | null>[],
+  accuracyRows: Record<string, unknown>[],
   identities: Record<string, SourceIdentity>,
   refTime: Date,
   machineFilter?: string | null,
   accountFilter?: string | null,
 ): Record<string, unknown>[] {
+  const accuracyBySource = new Map<string, Record<string, unknown>[]>();
+  for (const row of accuracyRows) {
+    const sourceId = str(row.source_id);
+    const entries = accuracyBySource.get(sourceId) ?? [];
+    entries.push(row);
+    accuracyBySource.set(sourceId, entries);
+  }
   const rows = statusRows
     .filter((row) => identityMatchesFilter(identities[str(row.source_id)], machineFilter, accountFilter))
     .map((row) => {
@@ -553,9 +571,39 @@ function buildSourceStatus(
       if (host && osUser) result.display_name = `${host} · ${osUser}`;
       else if (host) result.display_name = String(host);
       else result.display_name = str(row.source_id || "unknown-source");
+      result.accuracy = sourceAccuracySummary(accuracyBySource.get(str(row.source_id)) ?? []);
       return result;
     });
   return rows;
+}
+
+function sourceAccuracySummary(rows: Record<string, unknown>[]): Record<string, unknown> {
+  if (!rows.length) return { status: "unknown", agents: [] };
+  const agents = rows.map((row) => ({
+    agent: row.agent,
+    status: row.accuracy_status || "unknown",
+    collector_version: row.collector_version,
+    parser_schema_version: int(row.parser_schema_version),
+    mode: row.mode,
+    lookback_hours: row.lookback_hours,
+    coverage: { start: row.coverage_start, end: row.coverage_end },
+    matching_full_scans: int(row.matching_full_scans),
+    scan_complete: int(row.scan_complete) === 1,
+    read_errors: int(row.read_errors),
+    unresolved_mismatch: int(row.unresolved_mismatch),
+    verified_at: row.verified_at,
+    observed_at: row.observed_at,
+  }));
+  const statuses = agents.map((row) => str(row.status));
+  const status = statuses.every((value) => value === "verified") ? "verified" : "unverified";
+  const primary = agents.length === 1 ? agents[0] : null;
+  return {
+    status,
+    collector_version: primary?.collector_version ?? null,
+    matching_full_scans: primary?.matching_full_scans ?? Math.min(...agents.map((row) => int(row.matching_full_scans))),
+    verified_at: primary?.verified_at ?? null,
+    agents,
+  };
 }
 
 function statusWithStaleness(status: string, collectedAt: string, refTime: Date, staleMinutes: number): string {

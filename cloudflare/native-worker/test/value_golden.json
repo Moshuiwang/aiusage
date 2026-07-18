@@ -361,6 +361,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -371,6 +375,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -381,6 +389,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "host": "workstation-9",
@@ -391,6 +403,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -1044,6 +1060,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:30:00+08:00",
@@ -1055,6 +1075,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -1066,6 +1090,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "last_observed_at": "2026-06-03T10:00:00+08:00",
@@ -1077,6 +1105,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
@@ -1779,6 +1811,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -1789,6 +1825,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -1799,6 +1839,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "host": "workstation-9",
@@ -1809,6 +1853,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -2314,6 +2362,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:30:00+08:00",
@@ -2325,6 +2377,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -2336,6 +2392,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "last_observed_at": "2026-06-03T10:00:00+08:00",
@@ -2347,6 +2407,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
@@ -2920,6 +2984,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -2930,6 +2998,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -2940,6 +3012,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "host": "workstation-9",
@@ -2950,6 +3026,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -3791,6 +3871,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:30:00+08:00",
@@ -3802,6 +3886,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -3813,6 +3901,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "last_observed_at": "2026-06-03T10:00:00+08:00",
@@ -3824,6 +3916,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
@@ -4645,6 +4741,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -4655,6 +4755,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -4665,6 +4769,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "host": "workstation-9",
@@ -4675,6 +4783,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -5227,6 +5339,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:30:00+08:00",
@@ -5238,6 +5354,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -5249,6 +5369,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "last_observed_at": "2026-06-03T10:00:00+08:00",
@@ -5260,6 +5384,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
@@ -5590,6 +5718,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -5911,6 +6043,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -6259,6 +6395,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -6580,6 +6720,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -7129,6 +7273,10 @@
         "schema_version": 1,
         "source_status": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "host": "macbook-pro",
@@ -7139,6 +7287,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -7149,6 +7301,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "host": "workstation-9",
@@ -7159,6 +7315,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -7664,6 +7824,10 @@
         "schema_version": 1,
         "sources": [
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "macbook-pro \u00b7 alice",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:30:00+08:00",
@@ -7675,6 +7839,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -7686,6 +7854,10 @@
             "status": "ok"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "workstation-9 \u00b7 cara",
             "error_message": "Antigravity provider unavailable",
             "last_observed_at": "2026-06-03T10:00:00+08:00",
@@ -7697,6 +7869,10 @@
             "status": "failed"
           },
           {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
