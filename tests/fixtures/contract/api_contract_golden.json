@@ -846,6 +846,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -873,6 +891,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -1499,6 +1518,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -1529,6 +1566,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",
@@ -1979,6 +2017,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -2006,6 +2062,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -2966,6 +3023,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -2996,6 +3071,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",
@@ -3446,6 +3522,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -3473,6 +3567,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -4433,6 +4528,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -4463,6 +4576,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",
@@ -4913,6 +5027,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -4940,6 +5072,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -5900,6 +6033,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -5930,6 +6081,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",
@@ -6380,6 +6532,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -6407,6 +6577,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -6972,6 +7143,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -6999,6 +7188,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -7651,6 +7841,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -7681,6 +7889,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",
@@ -8218,6 +8427,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -8248,6 +8475,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",
@@ -9076,6 +9304,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -9103,6 +9349,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "host",
@@ -10063,6 +10310,24 @@
               "items": [
                 {
                   "fields": {
+                    "accuracy": {
+                      "fields": {
+                        "agents": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "unknown"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "status"
+                      ],
+                      "type": "object"
+                    },
                     "display_name": {
                       "type": "str"
                     },
@@ -10093,6 +10358,7 @@
                     }
                   },
                   "keys": [
+                    "accuracy",
                     "display_name",
                     "error_message",
                     "last_observed_at",

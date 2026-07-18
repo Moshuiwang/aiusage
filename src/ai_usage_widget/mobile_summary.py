@@ -124,6 +124,7 @@ def _mobile_source(row: Dict[str, Any]) -> Dict[str, Any]:
         "last_observed_at": observed_at,
         "last_pushed_at": observed_at,
         "error_message": row.get("error_message"),
+        "accuracy": row.get("accuracy") or {"status": "unknown", "agents": []},
     }
 
 
