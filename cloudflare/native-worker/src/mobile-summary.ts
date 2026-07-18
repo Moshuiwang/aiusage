@@ -1,4 +1,5 @@
 type AnyRecord = Record<string, unknown>;
+const LIMIT_STALE_AFTER_MS = 120 * 60 * 1000;
 
 export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
   const summary = dict(snapshot.summary);
@@ -11,10 +12,11 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
   const cacheTokens = int(summary.cache_creation_tokens) + int(summary.cache_read_tokens);
   const totalTokens = int(summary.total_tokens);
   const accountContext = accountContextFrom(snapshot.account_hourly, snapshot.ai_accounts);
-  const windows = limits
+  const candidateWindows = limits
     .map((row) => limitWindow(row, accountContext))
     .filter((window) => effectiveLimitWindow(window))
     .filter((window) => !expiredShortWindow(window, generatedAt));
+  const windows = candidateWindows.filter((window) => !staleLimitWindow(window, generatedAt));
   const byMachine = groupRows(list<AnyRecord>(groups.by_machine));
   const visibleSourceIds = new Set(byMachine.flatMap((row) => list<string>(row.source_ids).map(String)));
   const healthSourceIds = new Set(
@@ -58,7 +60,7 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
       total_count: windows.length,
       windows,
     },
-    metadata: mobileMetadata(snapshot, windows),
+    metadata: mobileMetadata(snapshot, windows, candidateWindows, generatedAt),
   };
 }
 
@@ -170,16 +172,27 @@ function effectiveLimitWindow(window: AnyRecord): boolean {
     window.source_type !== "active_limits_cache";
 }
 
-function mobileMetadata(snapshot: AnyRecord, windows: AnyRecord[]): AnyRecord {
+function mobileMetadata(snapshot: AnyRecord, windows: AnyRecord[], candidateWindows: AnyRecord[], generatedAt: Date | null): AnyRecord {
   const metadata = dict(snapshot.metadata);
-  const observed = windows.map((window) => str(window.observed_at)).filter(Boolean).sort();
+  const observed = candidateWindows.map((window) => str(window.observed_at)).filter(Boolean).sort();
+  let freshnessStatus = metadata.freshness_status || (windows.length ? "ok" : "unknown");
+  if (!windows.length && candidateWindows.some((window) => staleLimitWindow(window, generatedAt))) {
+    freshnessStatus = "stale";
+  }
   return {
     backend_mode: metadata.backend_mode || "native_d1_staging",
     canonical_store: metadata.canonical_store || "cloudflare_d1",
     read_model_generated_at: metadata.read_model_generated_at || snapshot.generated_at,
-    freshness_status: metadata.freshness_status || (windows.length ? "ok" : "unknown"),
+    freshness_status: freshnessStatus,
     limits_observed_at: metadata.limits_observed_at || (observed.length ? observed[observed.length - 1] : null),
   };
+}
+
+function staleLimitWindow(window: AnyRecord, generatedAt: Date | null): boolean {
+  if (!generatedAt) return false;
+  const observedAt = parseDate(str(window.observed_at));
+  if (!observedAt) return true;
+  return generatedAt.getTime() - observedAt.getTime() > LIMIT_STALE_AFTER_MS;
 }
 
 function groupRows(rows: AnyRecord[]): AnyRecord[] {

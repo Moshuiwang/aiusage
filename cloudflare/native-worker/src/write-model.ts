@@ -625,11 +625,12 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
       source_id, provider, window, used_percent, remaining_percent, reset_at,
       window_duration_minutes, source_type, confidence, status, observed_at, first_seen_at, last_seen_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(source_id, provider, source_type, window) DO UPDATE SET
+    ON CONFLICT(source_id, provider, window) DO UPDATE SET
       used_percent = excluded.used_percent,
       remaining_percent = excluded.remaining_percent,
       reset_at = excluded.reset_at,
       window_duration_minutes = excluded.window_duration_minutes,
+      source_type = excluded.source_type,
       confidence = excluded.confidence,
       status = excluded.status,
       observed_at = excluded.observed_at,
@@ -638,6 +639,7 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
        OR limit_windows.remaining_percent IS NOT excluded.remaining_percent
        OR limit_windows.reset_at IS NOT excluded.reset_at
        OR limit_windows.window_duration_minutes IS NOT excluded.window_duration_minutes
+       OR limit_windows.source_type IS NOT excluded.source_type
        OR limit_windows.confidence IS NOT excluded.confidence
        OR limit_windows.status IS NOT excluded.status
        OR limit_windows.observed_at IS NOT excluded.observed_at
@@ -1695,14 +1697,15 @@ async function upsertLimitWindow(db: D1Database, window: LimitWindow, seenAt: st
     }
   }
   written += await upsertIfChanged(db, {
-    select: `SELECT used_percent, remaining_percent, reset_at, window_duration_minutes, confidence, status, observed_at
-             FROM limit_windows WHERE source_id = ? AND provider = ? AND source_type = ? AND window = ?`,
-    keyParams: [window.source_id, window.provider, window.source_type, window.window],
+    select: `SELECT used_percent, remaining_percent, reset_at, window_duration_minutes, source_type, confidence, status, observed_at
+             FROM limit_windows WHERE source_id = ? AND provider = ? AND window = ?`,
+    keyParams: [window.source_id, window.provider, window.window],
     compare: {
       used_percent: window.used_percent,
       remaining_percent: window.remaining_percent,
       reset_at: window.reset_at,
       window_duration_minutes: window.window_duration_minutes,
+      source_type: window.source_type,
       confidence: window.confidence,
       status: window.status,
       observed_at: window.observed_at,
@@ -1721,13 +1724,13 @@ async function upsertLimitWindow(db: D1Database, window: LimitWindow, seenAt: st
     update: `
       UPDATE limit_windows
       SET used_percent = ?, remaining_percent = ?, reset_at = ?, window_duration_minutes = ?,
-          confidence = ?, status = ?, observed_at = ?, last_seen_at = ?
-      WHERE source_id = ? AND provider = ? AND source_type = ? AND window = ?
+          source_type = ?, confidence = ?, status = ?, observed_at = ?, last_seen_at = ?
+      WHERE source_id = ? AND provider = ? AND window = ?
     `,
     updateParams: [
       window.used_percent, window.remaining_percent, window.reset_at, window.window_duration_minutes,
-      window.confidence, window.status, window.observed_at, seenAt,
-      window.source_id, window.provider, window.source_type, window.window,
+      window.source_type, window.confidence, window.status, window.observed_at, seenAt,
+      window.source_id, window.provider, window.window,
     ],
   });
   return written;

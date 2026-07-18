@@ -4,6 +4,9 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
 
+LIMIT_STALE_AFTER_MINUTES = 120
+
+
 def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     summary = _dict(snapshot.get("summary"))
     trend = _dict(snapshot.get("trend"))
@@ -17,7 +20,7 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     total_tokens = _int(summary.get("total_tokens"))
 
     account_context = _account_context(snapshot.get("account_hourly"), snapshot.get("ai_accounts"))
-    windows = [
+    candidate_windows = [
         window
         for row in limits
         if isinstance(row, dict)
@@ -25,6 +28,7 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
         if _effective_limit_window(window)
         if not _expired_short_window(window, generated_at)
     ]
+    windows = [window for window in candidate_windows if not _stale_limit_window(window, generated_at)]
     by_machine = _group_rows(_list(groups.get("by_machine")))
     visible_source_ids = {
         str(source_id)
@@ -80,7 +84,7 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "total_count": len(windows),
             "windows": windows,
         },
-        "metadata": _mobile_metadata(snapshot, windows),
+        "metadata": _mobile_metadata(snapshot, windows, candidate_windows, generated_at),
     }
 
 
@@ -211,19 +215,42 @@ def _effective_limit_window(window: Dict[str, Any]) -> bool:
     )
 
 
-def _mobile_metadata(snapshot: Dict[str, Any], windows: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _mobile_metadata(
+    snapshot: Dict[str, Any],
+    windows: List[Dict[str, Any]],
+    candidate_windows: List[Dict[str, Any]],
+    generated_at: Optional[datetime],
+) -> Dict[str, Any]:
     metadata = _dict(snapshot.get("metadata"))
     limits_observed_at = metadata.get("limits_observed_at") or max(
-        (str(window.get("observed_at") or "") for window in windows),
+        (str(window.get("observed_at") or "") for window in candidate_windows),
         default=None,
     )
+    freshness_status = metadata.get("freshness_status") or ("ok" if windows else "unknown")
+    if not windows and candidate_windows and any(_stale_limit_window(window, generated_at) for window in candidate_windows):
+        freshness_status = "stale"
     return {
         "backend_mode": metadata.get("backend_mode") or "origin_direct",
         "canonical_store": metadata.get("canonical_store") or "origin_sqlite",
         "read_model_generated_at": metadata.get("read_model_generated_at") or snapshot.get("generated_at"),
-        "freshness_status": metadata.get("freshness_status") or ("ok" if windows else "unknown"),
+        "freshness_status": freshness_status,
         "limits_observed_at": limits_observed_at,
     }
+
+
+def _stale_limit_window(window: Dict[str, Any], generated_at: Optional[datetime]) -> bool:
+    if generated_at is None:
+        return False
+    observed_at = _parse_datetime(window.get("observed_at"))
+    if observed_at is None:
+        return True
+    if observed_at.tzinfo is not None and generated_at.tzinfo is not None:
+        observed_at = observed_at.astimezone(generated_at.tzinfo)
+    try:
+        age_minutes = (generated_at - observed_at).total_seconds() / 60
+    except TypeError:
+        return True
+    return age_minutes > LIMIT_STALE_AFTER_MINUTES
 
 
 def _group_rows(rows: List[Any]) -> List[Dict[str, Any]]:

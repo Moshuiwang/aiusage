@@ -91,6 +91,28 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(afterCounts).toEqual(beforeCounts);
   });
 
+  it("reconciles a limits source type change by source provider and window", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const window = { ...base.windows[0], source_id: "linux-biai-wang", provider: "claude", window: "week" };
+    for (const [sourceType, usedPercent] of [["official_cli", 20], ["oauth_usage_api", 21]] as const) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          windows: [{ ...window, source_type: sourceType, used_percent: usedPercent, remaining_percent: 100 - usedPercent }],
+        }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const rows = await db.prepare(`
+      SELECT source_type, used_percent FROM limit_windows
+      WHERE source_id = ? AND provider = ? AND window = ?
+    `).bind("linux-biai-wang", "claude", "week").all<{ source_type: string; used_percent: number }>();
+    expect(rows.results).toEqual([{ source_type: "oauth_usage_api", used_percent: 21 }]);
+  });
+
   it("recovers source health through HTTP ingest when report tables start empty", async () => {
     await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
     await clearSourceHealthTables();

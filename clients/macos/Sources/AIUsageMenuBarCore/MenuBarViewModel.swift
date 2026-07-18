@@ -30,6 +30,11 @@ public struct QuotaRingData: Equatable, Sendable, Identifiable {
     public let innerPctText: String
     public let outerTimeText: String
     public let innerTimeText: String
+    public let outerLabel: String
+    public let innerLabel: String
+    public let sourceText: String
+    public let updatedText: String
+    public let availabilityText: String
 }
 
 public struct MenuTrendBar: Equatable, Sendable, Identifiable {
@@ -93,7 +98,7 @@ public enum MenuBarViewModel {
             sources: sourceRows(summary.sources, byMachine: summary.breakdown.byMachine, generatedAt: summary.generatedAt),
             limitRows: sortedLimits(currentLimits).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(from: currentLimits, now: now)
+            quotaRings: quotaRings(from: summary.limits.windows, now: now)
         )
     }
 
@@ -241,6 +246,7 @@ public enum MenuBarViewModel {
     private static func sourceQuality(_ sourceType: String?) -> Int {
         switch sourceType {
         case "oauth_usage_api": return 4
+        case "runtime_api", "cli_rpc": return 4
         case "official_cli": return 3
         case "official_cli_limit_message", "official_cli_subscription": return 2
         case "active_limits_cache": return 1
@@ -252,7 +258,8 @@ public enum MenuBarViewModel {
         windows.filter { window in
             window.isOfficialObserved &&
             !isLocalEstimate(window.sourceType) &&
-            !isExpired(resetAt: window.resetAt, now: now)
+            !isExpired(resetAt: window.resetAt, now: now) &&
+            !isStale(observedAt: window.observedAt, now: now)
         }
     }
 
@@ -270,6 +277,11 @@ public enum MenuBarViewModel {
             return false
         }
         return resetDate <= now
+    }
+
+    private static func isStale(observedAt: String?, now: Date) -> Bool {
+        guard let observedDate = parseDate(observedAt) else { return true }
+        return now.timeIntervalSince(observedDate) > 120 * 60
     }
 
     private static func bestWindowPerType(_ windows: [MobileLimitWindow]) -> [MobileLimitWindow] {
@@ -297,23 +309,26 @@ public enum MenuBarViewModel {
 
     private static func quotaRings(from windows: [MobileLimitWindow], now: Date) -> [QuotaRingData] {
         let observed = currentLimitWindows(windows, now: now)
-        guard !observed.isEmpty else { return [] }
-        let grouped = Dictionary(grouping: observed, by: \.provider)
-        let order = ["anthropic", "claude", "openai", "codex", "gpt"]
-        let ordered = order.filter { grouped[$0] != nil } +
-                      grouped.keys.filter { !Set(order).contains($0) }.sorted()
-        return ordered.prefix(2).compactMap { provider in
-            guard let wins = grouped[provider] else { return nil }
+        let grouped = Dictionary(grouping: observed, by: { canonicalProvider($0.provider) })
+        let rawGrouped = Dictionary(grouping: windows, by: { canonicalProvider($0.provider) })
+        return ["claude", "codex"].map { provider in
+            let wins = grouped[provider] ?? []
+            let rawWins = rawGrouped[provider] ?? []
             let bestWindows = bestWindowPerType(wins)
             let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
             let weekWindow = bestWindows.first(where: isWeekLimitWindow)
-            guard sessionWindow != nil || weekWindow != nil else { return nil }
+            let otherWindow = bestWindows
+                .filter { !isSessionLimitWindow($0) && !isWeekLimitWindow($0) }
+                .sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
+                .first
+            let outerWindow = sessionWindow ?? otherWindow
+            let freshest = rawWins.max { ($0.observedAt ?? "") < ($1.observedAt ?? "") }
             let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
             switch provider {
-            case "anthropic", "claude":
+            case "claude":
                 name = "Claude"; oR = 0.855; oG = 0.467; oB = 0.337; iR = 0.918; iG = 0.659; iB = 0.510
-            case "openai", "codex", "gpt":
-                name = provider == "codex" ? "Codex" : "OpenAI"
+            case "codex":
+                name = "Codex"
                 oR = 0.039; oG = 0.518; oB = 1.0; iR = 0.353; iG = 0.784; iB = 0.980
             default:
                 name = provider.prefix(1).uppercased() + provider.dropFirst()
@@ -323,14 +338,43 @@ public enum MenuBarViewModel {
                 id: provider, displayName: name,
                 outerRed: oR, outerGreen: oG, outerBlue: oB,
                 innerRed: iR, innerGreen: iG, innerBlue: iB,
-                outerFraction: (sessionWindow?.usedPercent ?? 0) / 100.0,
+                outerFraction: (outerWindow?.usedPercent ?? 0) / 100.0,
                 innerFraction: (weekWindow?.usedPercent ?? 0) / 100.0,
-                outerPctText: sessionWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
+                outerPctText: outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
                 innerPctText: weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
-                outerTimeText: sessionWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
-                innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--"
+                outerTimeText: outerWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                outerLabel: outerWindow.map(windowLabel) ?? "额度",
+                innerLabel: weekWindow.map(windowLabel) ?? "长期",
+                sourceText: sourceText(provider: provider, sourceID: freshest?.sourceID),
+                updatedText: compactDateTime(freshest?.observedAt, reference: freshest?.observedAt, suffix: "更新") ?? "未更新",
+                availabilityText: outerWindow != nil || weekWindow != nil ? "官方额度" : "暂不可用"
             )
         }
+    }
+
+    private static func canonicalProvider(_ provider: String) -> String {
+        switch provider.lowercased() {
+        case "anthropic", "claude": return "claude"
+        case "openai", "codex", "gpt": return "codex"
+        default: return provider.lowercased()
+        }
+    }
+
+    private static func windowLabel(_ window: MobileLimitWindow) -> String {
+        let minutes = window.windowDurationMinutes
+        if minutes > 0 && minutes % (24 * 60) == 0 { return "\(minutes / (24 * 60))d" }
+        if minutes > 0 && minutes % 60 == 0 { return "\(minutes / 60)h" }
+        if minutes > 0 { return "\(minutes)m" }
+        return window.window
+    }
+
+    private static func sourceText(provider: String, sourceID: String?) -> String {
+        if let sourceID, let range = sourceID.range(of: "biai-", options: .caseInsensitive) {
+            let account = String(sourceID[range.upperBound...])
+            return account.isEmpty ? "BIAI" : "BIAI · \(account)"
+        }
+        return provider == "codex" ? "Codex 官方" : "Claude 官方"
     }
 
     private static func isSessionLimitWindow(_ window: MobileLimitWindow) -> Bool {

@@ -78,6 +78,34 @@ class TestCodexLimitsProvider(unittest.TestCase):
         self.assertEqual([window.used_percent for window in windows], [25.0, 40.0])
         self.assertTrue(all(window.is_official for window in windows))
 
+    def test_wham_missing_primary_keeps_only_verified_secondary_window(self) -> None:
+        windows = parse_codex_wham_usage({
+            "observed_at": "2026-07-18T10:00:00+08:00",
+            "rate_limit": {
+                "secondary_window": {
+                    "used_percent": 34,
+                    "reset_at": 1784556000,
+                    "limit_window_seconds": 604800,
+                },
+            },
+        })
+
+        self.assertEqual([window.window for window in windows], ["week"])
+        self.assertEqual(windows[0].used_percent, 34)
+
+    def test_wham_present_but_changed_window_schema_fails_closed(self) -> None:
+        with self.assertRaisesRegex(Exception, "used_percent"):
+            parse_codex_wham_usage({
+                "observed_at": "2026-07-18T10:00:00+08:00",
+                "rate_limit": {
+                    "primary_window": {
+                        "percentage": 34,
+                        "reset_at": 1784556000,
+                        "limit_window_seconds": 86400,
+                    },
+                },
+            })
+
     def test_rpc_rate_limits_fixture_maps_fallback_windows(self) -> None:
         payload = json.loads((FIXTURES / "codex_rpc_rate_limits.json").read_text(encoding="utf-8"))
 

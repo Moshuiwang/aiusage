@@ -31,3 +31,37 @@ describe("mobile trend agent classification", () => {
     });
   });
 });
+
+describe("mobile official limits freshness", () => {
+  it("hides stale remote windows while preserving the last trusted update", () => {
+    const mobile = buildMobileSummary({
+      generated_at: "2026-07-18T12:30:00+08:00",
+      timezone: "Asia/Shanghai",
+      summary: { period: "today", total_tokens: 600 },
+      trend: { points: [] },
+      source_status: [],
+      groups: {},
+      items: [],
+      limits: [{
+        source_id: "linux-biai-wang",
+        provider: "claude",
+        window: "week",
+        used_percent: 41,
+        remaining_percent: 59,
+        reset_at: "2026-07-20T00:00:00+08:00",
+        window_duration_minutes: 10080,
+        observed_at: "2026-07-18T10:00:00+08:00",
+        source_type: "official_cli",
+        confidence: "observed",
+        status: "ok",
+        official: true,
+      }],
+    }) as Record<string, any>;
+
+    expect(mobile.limits.windows).toEqual([]);
+    expect(mobile.metadata).toMatchObject({
+      freshness_status: "stale",
+      limits_observed_at: "2026-07-18T10:00:00+08:00",
+    });
+  });
+});

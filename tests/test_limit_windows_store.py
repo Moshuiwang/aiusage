@@ -88,6 +88,31 @@ class TestLimitWindowsStore(unittest.TestCase):
 
         self.assertEqual(row, ("claude-main", "claude", "session", "official_cli", "observed", "ok"))
 
+    def test_stable_key_reconciles_source_type_change_without_duplicate_window(self) -> None:
+        old = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="week",
+            used_percent=20, remaining_percent=80,
+            reset_at="2026-07-20T00:00:00+08:00", window_duration_minutes=10080,
+            observed_at="2026-07-18T09:00:00+08:00", source_type="official_cli",
+            confidence="observed", status="ok",
+        )
+        current = LimitWindow(
+            provider="claude", source_id="linux-biai-wang", window="week",
+            used_percent=21, remaining_percent=79,
+            reset_at="2026-07-20T00:00:00+08:00", window_duration_minutes=10080,
+            observed_at="2026-07-18T09:05:00+08:00", source_type="oauth_usage_api",
+            confidence="observed", status="ok",
+        )
+
+        write_limit_windows(self.db_path, [old], seen_at=old.observed_at)
+        write_limit_windows(self.db_path, [current], seen_at=current.observed_at)
+
+        with sqlite3.connect(self.db_path) as conn:
+            rows = conn.execute(
+                "SELECT source_id, provider, window, source_type, used_percent FROM limit_windows"
+            ).fetchall()
+        self.assertEqual(rows, [("linux-biai-wang", "claude", "week", "oauth_usage_api", 21.0)])
+
     def test_limit_windows_keep_multiple_accounts_for_same_provider(self) -> None:
         first = LimitWindow(
             provider="claude",

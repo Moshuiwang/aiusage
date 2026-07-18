@@ -286,6 +286,34 @@ class TestMobileSummaryLimits(unittest.TestCase):
 
                 self.assertEqual([(w["provider"], w["window"]) for w in summary["limits"]["windows"]], [("claude", "session")])
 
+    def test_filters_stale_official_window_even_when_reset_is_still_in_future(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-07-18T12:30:00+08:00",
+            "summary": {"period": "today", "total_tokens": 1200},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [{
+                "source_id": "linux-biai-wang",
+                "provider": "claude",
+                "window": "week",
+                "used_percent": 41,
+                "remaining_percent": 59,
+                "reset_at": "2026-07-20T00:00:00+08:00",
+                "window_duration_minutes": 10080,
+                "observed_at": "2026-07-18T10:00:00+08:00",
+                "source_type": "official_cli",
+                "confidence": "observed",
+                "status": "ok",
+                "official": True,
+            }],
+        })
+
+        self.assertEqual(summary["limits"]["windows"], [])
+        self.assertEqual(summary["metadata"]["freshness_status"], "stale")
+        self.assertEqual(summary["metadata"]["limits_observed_at"], "2026-07-18T10:00:00+08:00")
+
     def test_naive_short_quota_reset_does_not_crash_period_summary(self) -> None:
         summary = build_mobile_summary({
             "generated_at": "2026-06-02T10:45:00+08:00",

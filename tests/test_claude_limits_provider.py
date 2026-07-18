@@ -56,6 +56,18 @@ class TestClaudeLimitsProvider(unittest.TestCase):
         self.assertEqual(windows[0].confidence, "observed")
         self.assertTrue(all(window.is_official for window in windows))
 
+    def test_current_oauth_usage_shape_maps_five_hour_and_seven_day(self) -> None:
+        windows = parse_claude_oauth_usage({
+            "five_hour": {"utilization": 12.5, "resets_at": "2026-07-18T14:00:00+00:00"},
+            "seven_day": {"utilization": 34.0, "resets_at": "2026-07-23T00:00:00+00:00"},
+        })
+
+        self.assertEqual([window.window for window in windows], ["session", "week"])
+        self.assertEqual([window.used_percent for window in windows], [12.5, 34.0])
+        self.assertEqual([window.window_duration_minutes for window in windows], [300, 10080])
+        self.assertTrue(all(window.source_type == "oauth_usage_api" for window in windows))
+        self.assertTrue(all(window.is_official for window in windows))
+
     def test_cli_usage_fixture_parses_used_percent_and_reset_time(self) -> None:
         text = (FIXTURES / "claude_usage_cli.txt").read_text(encoding="utf-8")
 

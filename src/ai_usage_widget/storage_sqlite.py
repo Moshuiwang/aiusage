@@ -512,7 +512,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           observed_at TEXT NOT NULL,
           first_seen_at TEXT NOT NULL,
           last_seen_at TEXT NOT NULL,
-          PRIMARY KEY(source_id, provider, source_type, window)
+          PRIMARY KEY(source_id, provider, window)
         );
 
         CREATE INDEX IF NOT EXISTS idx_source_accuracy_status
@@ -685,7 +685,7 @@ def _ensure_limit_windows_schema(conn: sqlite3.Connection) -> None:
     columns = [row for row in conn.execute("PRAGMA table_info(limit_windows)")]
     column_names = [row[1] for row in columns]
     pk_columns = [row[1] for row in sorted(columns, key=lambda row: row[5]) if row[5]]
-    if column_names and column_names[0] == "source_id" and pk_columns == ["source_id", "provider", "source_type", "window"]:
+    if column_names and column_names[0] == "source_id" and pk_columns == ["source_id", "provider", "window"]:
         return
 
     conn.execute("ALTER TABLE limit_windows RENAME TO limit_windows_old")
@@ -705,7 +705,7 @@ def _ensure_limit_windows_schema(conn: sqlite3.Connection) -> None:
           observed_at TEXT NOT NULL,
           first_seen_at TEXT NOT NULL,
           last_seen_at TEXT NOT NULL,
-          PRIMARY KEY(source_id, provider, source_type, window)
+          PRIMARY KEY(source_id, provider, window)
         );
         """
     )
@@ -722,6 +722,7 @@ def _ensure_limit_windows_schema(conn: sqlite3.Connection) -> None:
                used_percent, remaining_percent, reset_at, window_duration_minutes,
                source_type, confidence, status, observed_at, first_seen_at, last_seen_at
         FROM limit_windows_old
+        ORDER BY observed_at ASC
         """
     )
     conn.execute("DROP TABLE limit_windows_old")
@@ -1025,11 +1026,12 @@ def _upsert_limit_window(conn: sqlite3.Connection, window: LimitWindow, seen_at:
           window_duration_minutes, source_type, confidence, status, observed_at,
           first_seen_at, last_seen_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(source_id, provider, source_type, window) DO UPDATE SET
+        ON CONFLICT(source_id, provider, window) DO UPDATE SET
           used_percent=excluded.used_percent,
           remaining_percent=excluded.remaining_percent,
           reset_at=excluded.reset_at,
           window_duration_minutes=excluded.window_duration_minutes,
+          source_type=excluded.source_type,
           confidence=excluded.confidence,
           status=excluded.status,
           observed_at=excluded.observed_at,

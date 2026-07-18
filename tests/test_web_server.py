@@ -397,6 +397,7 @@ class TestWebServerSummary(unittest.TestCase):
             with urllib.request.urlopen(req) as response:
                 self.assertEqual(response.status, 200)
 
+        limit_observed_at = datetime.now(timezone.utc).isoformat()
         write_limit_windows(
             self.db_path,
             [
@@ -408,7 +409,7 @@ class TestWebServerSummary(unittest.TestCase):
                     remaining_percent=60.0,
                     reset_at=(datetime.now(timezone.utc) + timedelta(hours=5)).isoformat(),
                     window_duration_minutes=300,
-                    observed_at="2026-06-02T10:45:00+08:00",
+                    observed_at=limit_observed_at,
                     source_type="runtime_api",
                     confidence="observed",
                     status="ok",
@@ -427,7 +428,7 @@ class TestWebServerSummary(unittest.TestCase):
                     status="provider_failed",
                 ),
             ],
-            seen_at="2026-06-02T10:45:00+08:00",
+            seen_at=limit_observed_at,
         )
 
         req = urllib.request.Request(mobile_url, headers={"Authorization": f"Bearer {self.token}"})
