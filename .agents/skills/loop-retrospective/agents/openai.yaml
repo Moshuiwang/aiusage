@@ -1,0 +1,4 @@
+interface:
+  display_name: "Loop Retrospective v2.2.0"
+  short_description: "基于 GitHub 证据复盘 Loop Plan 的周期、质量与流程规则"
+  default_prompt: "使用 $loop-retrospective 复盘指定的 Loop Execution Plan，并把脱敏报告写回 Plan Issue。"

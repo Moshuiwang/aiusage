@@ -4,12 +4,19 @@ import importlib.util
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import sys
 import unittest
 
 
-SKILL_SCRIPT = Path("/Users/wangzhipeng/.codex/skills/ai-usage-fact-check/scripts/check_usage_facts.py")
+SKILL_ROOT = Path(
+    os.environ.get(
+        "AI_USAGE_FACT_CHECK_SKILL_ROOT",
+        Path.home() / ".codex" / "skills" / "ai-usage-fact-check",
+    )
+)
+SKILL_SCRIPT = SKILL_ROOT / "scripts" / "check_usage_facts.py"
 
 
 def load_fact_check_module():
@@ -22,6 +29,20 @@ def load_fact_check_module():
     return module
 
 
+class TestUsageFactCheckSkillContract(unittest.TestCase):
+    def test_skill_path_is_not_bound_to_a_personal_home(self) -> None:
+        source = Path(__file__).read_text(encoding="utf-8")
+        personal_home = "/" + "/".join(("Users", "wangzhipeng"))
+
+        self.assertNotIn(personal_home, source)
+
+    def test_missing_external_skill_is_declared_as_a_class_skip(self) -> None:
+        if not SKILL_SCRIPT.is_file():
+            self.assertTrue(getattr(TestUsageFactCheckSkill, "__unittest_skip__", False))
+            self.assertIn("external", getattr(TestUsageFactCheckSkill, "__unittest_skip_why__", "").lower())
+
+
+@unittest.skipUnless(SKILL_SCRIPT.is_file(), "external ai-usage-fact-check skill is not installed")
 class TestUsageFactCheckSkill(unittest.TestCase):
     def test_fact_table_marks_mac_current_tokens_not_applicable(self) -> None:
         module = load_fact_check_module()

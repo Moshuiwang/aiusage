@@ -148,6 +148,10 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-105 | [TP-V2-105-codex-cumulative-delta-dedupe.md](TP-V2-105-codex-cumulative-delta-dedupe.md) | done | TP-V2-103 | none |
 | TP-V2-106 | [TP-V2-106-collector-accuracy-coverage-contract.md](TP-V2-106-collector-accuracy-coverage-contract.md) | done | TP-V2-105 | none |
 | TP-V2-107 | [TP-V2-107-biai-collector-upgrade-history-reconcile.md](TP-V2-107-biai-collector-upgrade-history-reconcile.md) | done | TP-V2-105, TP-V2-106 | none |
+| TP-V2-112 | [TP-V2-112-github-actions-ci-baseline.md](TP-V2-112-github-actions-ci-baseline.md) | in_progress | TP-V2-114, TP-V2-115 | none |
+| TP-V2-113 | [TP-V2-113-loop-conditional-pr-merge.md](TP-V2-113-loop-conditional-pr-merge.md) | done | none | TP-V2-112 |
+| TP-V2-114 | [TP-V2-114-hermetic-fact-check-tests.md](TP-V2-114-hermetic-fact-check-tests.md) | done | none | TP-V2-115 |
+| TP-V2-115 | [TP-V2-115-cloudflare-current-contract-tests.md](TP-V2-115-cloudflare-current-contract-tests.md) | done | none | TP-V2-114 |
 
 ## subagent 分配建议
 
@@ -193,5 +197,8 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 - Usage data agent：TP-V2-103 已完成，把 Usage Ledger 小时事实接到现有 `/api/mobile/summary`，让 macOS menu popover 看到新口径；本轮不改 popover 视觉。
 - Device pusher agent：执行 TP-V2-104，让 `ccusage` 从硬依赖降级为可选 daily baseline，支持卸载 CC Usage 后继续上传 Usage Ledger 小时事实。
 - Usage accuracy agent：先执行 TP-V2-105，修复 Codex 累计量未增长事件的重复入账；再执行 TP-V2-106，把运行健康与数据准确性分开；最后执行 TP-V2-107 升级 BIAI 并回填历史。
+- CI agent：执行 TP-V2-112，先用失败测试固定 GitHub Actions 触发、权限、四类 job 和命令合同，再建立 CI bootstrap；不访问生产、不自动 merge。
+- Loop governance agent：执行 TP-V2-113，把 PR 代合并改为 Plan 显式选择的能力；默认仍人工合并，且不得绕过最新 head 的验证、Review、CI 和 P0/P1 门禁。
+- CI agent：先执行 TP-V2-114 与 TP-V2-115，移除全量 Python 基线对个人 skill 路径和已下线 VPN2 断言的依赖，再收口 TP-V2-112。
 - Watch agent：TP-V2-100 已完成，补齐 iPhone/Watch freshness 诊断、WatchConnectivity 失败原因、刷新触发来源和安装版本对齐证据；保持 Watch 不直连服务端。
 - Watch agent：TP-V2-101 已完成，把 Watch 圆形小组件落到 Reset At 双圆环 UI；只改 `.accessoryCircular` 用户可见展示，不碰服务端数据口径。
