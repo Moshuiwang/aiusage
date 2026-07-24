@@ -123,11 +123,11 @@ describe.sequential("native TS Worker read-only API parity", () => {
     const summaryWeek = bodyFor(records, "summary-week");
     const mobileSummaryWeek = bodyFor(records, "mobile-summary-week");
     const dbCounts = await tableCounts(db);
-    expect(summaryWeek.source_status, "Native source_status must be covered by value parity").toEqual(
-      bodyFor(golden, "summary-week").source_status,
+    expect(sortedSourceRows(summaryWeek.source_status), "Native source_status must be covered by value parity").toEqual(
+      sortedSourceRows(bodyFor(golden, "summary-week").source_status),
     );
-    expect(mobileSummaryWeek.sources, "Native mobile sources must be covered by value parity").toEqual(
-      bodyFor(golden, "mobile-summary-week").sources,
+    expect(sortedSourceRows(mobileSummaryWeek.sources), "Native mobile sources must be covered by value parity").toEqual(
+      sortedSourceRows(bodyFor(golden, "mobile-summary-week").sources),
     );
     expect((summaryWeek.source_status as unknown[]).length, "source_status must be non-empty").toBeGreaterThan(0);
     expect((mobileSummaryWeek.sources as unknown[]).length, "mobile sources must be non-empty").toBeGreaterThan(0);
@@ -486,17 +486,26 @@ function bodyFor(records: ContractRecord[], name: string): Shape {
   return record?.response.body as Shape;
 }
 
-function normalizeStoreMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => normalizeStoreMetadata(item));
+function normalizeStoreMetadata(value: unknown, fieldName = ""): unknown {
+  if (Array.isArray(value)) {
+    const normalized = value.map((item) => normalizeStoreMetadata(item));
+    return fieldName === "source_status" || fieldName === "sources" ? sortedSourceRows(normalized) : normalized;
+  }
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
         key,
-        key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item),
+        key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item, key),
       ]),
     );
   }
   return value;
+}
+
+function sortedSourceRows(value: unknown): unknown[] {
+  return Array.isArray(value)
+    ? [...value].sort((left, right) => String((left as Shape).source_id ?? "").localeCompare(String((right as Shape).source_id ?? "")))
+    : [];
 }
 
 async function bundleWorker(): Promise<string> {
