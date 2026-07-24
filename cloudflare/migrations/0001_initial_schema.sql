@@ -24,6 +24,22 @@ CREATE TABLE IF NOT EXISTS source_reports (
   FOREIGN KEY(run_id) REFERENCES collection_runs(id)
 );
 
+-- Read model for ingest-time source-report decisions. Keeping the latest
+-- report per source here avoids re-sorting the full audit history on every
+-- accepted ingest request.
+CREATE TABLE IF NOT EXISTS source_report_states (
+  source_id TEXT PRIMARY KEY,
+  collected_at TEXT NOT NULL,
+  report_type TEXT NOT NULL,
+  command TEXT NOT NULL,
+  status TEXT NOT NULL,
+  ccusage_version TEXT,
+  first_period TEXT,
+  last_period TEXT,
+  error_type TEXT,
+  error_message TEXT
+);
+
 CREATE TABLE IF NOT EXISTS usage_daily (
   source_id TEXT NOT NULL,
   date TEXT NOT NULL,

@@ -273,6 +273,7 @@ async function resetDatabase(db: D1Database): Promise<void> {
     "usage_hourly",
     "usage_daily_models",
     "usage_daily",
+    "source_report_states",
     "source_reports",
     "collection_runs",
   ];

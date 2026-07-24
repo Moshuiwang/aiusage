@@ -28,6 +28,7 @@ type IngestFixture = {
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
+const sourceReportStatesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0004_source_report_states.sql");
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const writeModelPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts");
 const fixturePath = path.join(repoRoot, "tests/fixtures/native_worker_ingest_payloads.json");
@@ -89,6 +90,50 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(sourceHealthByRecord(after)).toEqual(beforeSourceHealth);
     expect(after).toEqual(before);
     expect(afterCounts).toEqual(beforeCounts);
+  });
+
+  it("keeps the latest source-report decision in a per-source read model", async () => {
+    await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const sourceId = String(fixture.ingest_payloads[0].source_id);
+
+    const state = await db.prepare(`
+      SELECT source_id, collected_at, status
+      FROM source_report_states
+      WHERE source_id = ?
+    `).bind(sourceId).first<{ source_id: string; collected_at: string; status: string }>();
+
+    expect(state).toMatchObject({ source_id: sourceId, status: "ok" });
+    expect(state?.collected_at).toBe(String(fixture.ingest_payloads[0].observed_at));
+  });
+
+  it("backfills the per-source read model from legacy audit history without changing the latest result", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.prepare(`
+      INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status)
+      VALUES (7001, '2026-07-01T01:00:00+00:00', 'UTC', 'test', 'ok'),
+             (7002, '2026-07-01T02:00:00+00:00', 'UTC', 'test', 'ok'),
+             (7003, '2026-07-01T02:00:00+00:00', 'UTC', 'test', 'ok')
+    `).run();
+    await db.prepare(`
+      INSERT INTO source_reports (id, run_id, source_id, report_type, command, status)
+      VALUES (7001, 7001, 'legacy-source', 'daily', 'test', 'failed'),
+             (7002, 7002, 'legacy-source', 'daily', 'test', 'ok'),
+             (7003, 7003, 'legacy-source', 'daily', 'test', 'partial')
+    `).run();
+
+    await applySqlText(db, await readFile(sourceReportStatesMigrationPath, "utf8"));
+    const state = await db.prepare(`
+      SELECT collected_at, status FROM source_report_states WHERE source_id = ?
+    `).bind("legacy-source").first<{ collected_at: string; status: string }>();
+    const plan = await db.prepare(`
+      EXPLAIN QUERY PLAN
+      SELECT collected_at FROM source_report_states WHERE source_id = 'legacy-source'
+    `).all<{ detail: string }>();
+
+    expect(state).toEqual({ collected_at: "2026-07-01T02:00:00+00:00", status: "partial" });
+    expect((plan.results ?? []).map((row) => row.detail).join(" ")).toContain("SEARCH source_report_states");
+    expect((plan.results ?? []).map((row) => row.detail).join(" ")).not.toContain("TEMP B-TREE");
   });
 
   it("reconciles a limits source type change by source provider and window", async () => {
@@ -578,6 +623,7 @@ describe.sequential("native TS Worker write API parity", () => {
 
   async function clearSourceHealthTables(): Promise<void> {
     const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.prepare("DELETE FROM source_report_states").run();
     await db.prepare("DELETE FROM source_reports").run();
     await db.prepare("DELETE FROM collection_runs").run();
   }
@@ -658,6 +704,7 @@ async function resetDatabase(db: D1Database): Promise<void> {
     "usage_hourly",
     "usage_daily_models",
     "usage_daily",
+    "source_report_states",
     "source_reports",
     "collection_runs",
   ];
