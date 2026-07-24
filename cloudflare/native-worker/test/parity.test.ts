@@ -636,6 +636,23 @@ async function insertUsagePayload(
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(row.runId, row.runId, row.sourceId, "daily", "HTTP Ingest", "ok", null, row.period, row.period, null, null),
     db.prepare(`
+      INSERT INTO source_report_states (
+        source_id, collected_at, report_type, command, status, ccusage_version,
+        first_period, last_period, error_type, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_id) DO UPDATE SET
+        collected_at = excluded.collected_at,
+        report_type = excluded.report_type,
+        command = excluded.command,
+        status = excluded.status,
+        ccusage_version = excluded.ccusage_version,
+        first_period = excluded.first_period,
+        last_period = excluded.last_period,
+        error_type = excluded.error_type,
+        error_message = excluded.error_message
+      WHERE excluded.collected_at >= source_report_states.collected_at
+    `).bind(row.sourceId, row.now, "daily", "HTTP Ingest", "ok", null, row.period, row.period, null, null),
+    db.prepare(`
       INSERT INTO source_identities (
         source_id, host, machine, os_user, platform, first_seen_at, last_seen_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)

@@ -315,18 +315,7 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
 async function latestSourceStatuses(db: D1Database): Promise<Array<{ source_id: string | null; status: string | null }>> {
   const result = await db.prepare(`
     SELECT source_id, status
-    FROM (
-      SELECT
-        r.source_id,
-        r.status,
-        ROW_NUMBER() OVER (
-          PARTITION BY r.source_id
-          ORDER BY c.collected_at DESC, r.id DESC
-        ) AS row_rank
-      FROM source_reports r
-      JOIN collection_runs c ON r.run_id = c.id
-    )
-    WHERE row_rank = 1
+    FROM source_report_states
     ORDER BY source_id ASC
   `).all<{ source_id: string | null; status: string | null }>();
   return result.results ?? [];
@@ -368,6 +357,7 @@ async function databaseSizeProxy(db: D1Database): Promise<number> {
   const tables = [
     "collection_runs",
     "source_reports",
+    "source_report_states",
     "usage_daily",
     "usage_daily_models",
     "usage_hourly",
