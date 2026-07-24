@@ -9,6 +9,8 @@ export interface Env {
   AIUSAGE_SESSION_SECRET?: string;
   AIUSAGE_TIMEZONE?: string;
   AIUSAGE_NOW?: string;
+  AIUSAGE_CACHE_NAMESPACE?: string;
+  AIUSAGE_DISABLE_SUMMARY_CACHE?: string;
 }
 
 const SESSION_COOKIE_NAME = "ai_usage_session";
@@ -26,6 +28,7 @@ const LOCAL_ESTIMATE_SOURCE_TYPES = [
   "session_log_estimate",
 ];
 const AUDIT_RETENTION_DAYS = 7;
+const SUMMARY_CACHE_TTL_SECONDS = 60;
 
 function securityHeaders(): Record<string, string> {
   return {
@@ -120,6 +123,17 @@ export default {
       if (!(await isAuthenticated(request, env))) {
         return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, 401);
       }
+      const cacheKey = request.method === "GET" && env.AIUSAGE_DISABLE_SUMMARY_CACHE !== "true"
+        ? await summaryCacheKey(request, env)
+        : null;
+      if (cacheKey) {
+        try {
+          const cached = await caches.default.match(cacheKey);
+          if (cached) return cacheResponse(cached, "HIT");
+        } catch (_exc) {
+          // Cache availability must not affect a user's ability to read current data.
+        }
+      }
       const date = url.searchParams.get("date") ?? currentDate();
       const requestParams = {
         date,
@@ -132,7 +146,15 @@ export default {
       const payload = url.pathname === "/api/mobile/summary"
         ? await buildMobile(env.AIUSAGE_DB, requestParams)
         : await buildSummary(env.AIUSAGE_DB, requestParams);
-      return json(payload);
+      const response = json(payload, 200, cacheKey ? summaryResponseHeaders("MISS") : {});
+      if (cacheKey) {
+        try {
+          await caches.default.put(cacheKey, cacheableSummaryResponse(response.clone()));
+        } catch (_exc) {
+          // A failed cache write is safe to ignore because this is only a read optimization.
+        }
+      }
+      return response;
     }
     return json({ status: "error", error_type: "not_found", message: "Endpoint not found" }, 404);
   },
@@ -158,6 +180,38 @@ async function pruneAuditTables(db: D1Database, now: Date): Promise<void> {
     `).bind(cutoff),
     db.prepare("DELETE FROM collection_runs WHERE datetime(collected_at) < datetime(?)").bind(cutoff),
   ]);
+}
+
+async function summaryCacheKey(request: Request, env: Env): Promise<Request> {
+  const cacheUrl = new URL(request.url);
+  cacheUrl.protocol = "https:";
+  cacheUrl.hostname = `${env.AIUSAGE_CACHE_NAMESPACE ?? "default"}.aiusage-summary-cache.invalid`;
+  cacheUrl.port = "";
+  const credential = request.headers.get("Authorization") ?? request.headers.get("Cookie") ?? "unprotected";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential));
+  cacheUrl.searchParams.set("__auth", Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(""));
+  return new Request(cacheUrl.toString(), { method: "GET" });
+}
+
+function summaryResponseHeaders(status: "HIT" | "MISS"): Record<string, string> {
+  return {
+    "Cache-Control": "private, no-store",
+    "X-AIUsage-Cache": status,
+    "Vary": "Authorization, Cookie",
+  };
+}
+
+function cacheableSummaryResponse(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", `max-age=${SUMMARY_CACHE_TTL_SECONDS}`);
+  return new Response(response.body, { status: response.status, headers });
+}
+
+function cacheResponse(cached: Response, status: "HIT"): Response {
+  const headers = new Headers(cached.headers);
+  headers.set("X-AIUsage-Cache", status);
+  headers.set("Cache-Control", "private, no-store");
+  return new Response(cached.body, { status: cached.status, headers });
 }
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {

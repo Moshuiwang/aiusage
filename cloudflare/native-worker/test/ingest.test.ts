@@ -667,6 +667,8 @@ async function createMiniflare(extraBindings: Record<string, string> = {}): Prom
     d1Databases: ["AIUSAGE_DB"],
     bindings: {
       AIUSAGE_TOKEN: token,
+      AIUSAGE_CACHE_NAMESPACE: crypto.randomUUID(),
+      AIUSAGE_DISABLE_SUMMARY_CACHE: "true",
       ...extraBindings,
     },
   });
