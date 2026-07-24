@@ -19,8 +19,8 @@
 
 ## 2. 访问方式(凭据只指位置,不含值)
 
-- **Cloudflare**:凭据在兄弟目录 `/Users/wangzhipeng/Documents/cloud-flare/.env`。用 **Global Key 认证**(`unset CLOUDFLARE_API_TOKEN`,因为那个 token 没有 D1 权限会报 10000;`export CLOUDFLARE_API_KEY="$CLOUDFLARE_GLOBAL_API_KEY"`,EMAIL 已在 .env)。不读、不打印任何密钥值(看变量名用 `grep -oE '^[A-Z_]+=' .env`)。
-- **D1 查询**:`cd /Users/wangzhipeng/Documents/cloud-flare && set -a && source .env && set +a && unset CLOUDFLARE_API_TOKEN && export CLOUDFLARE_API_KEY="$CLOUDFLARE_GLOBAL_API_KEY" && npx --yes wrangler d1 execute aiusage-prod-db --remote --json --command "<SQL>"`。D1 的 UNION/compound SELECT 项数有限,拆短或用标量子查询。
+- **Cloudflare**:真实账号操作只在 `/Users/wangzhipeng/Documents/ops` 中执行。先读取该目录的 `AGENTS.md`，由 Ops 选择受保护且具备目标资源权限的凭据；不读、不打印任何密钥值。
+- **D1 查询**:由 Ops 在其受保护环境中执行只读查询；应用项目不得复制凭据或在本目录伪造账号侧结果。D1 的 UNION/compound SELECT 项数有限，拆短或用标量子查询。
 - **SSH**:`~/.ssh/config` 已有 `vpn2`、`108.129.165.139`(eu-west EC2)。VPN2 的 canonical SQLite 在 `/home/ubuntu/ai-usage-widget/data/usage.sqlite`,只读访问可能需 `sudo -n`(`ssh vpn2 'sqlite3 -readonly <path> "<SQL>" || sudo -n sqlite3 -readonly <path> "<SQL>"'`)。
 - **HTTP 直连 Native(workers.dev)**:本机有 HTTPS 代理且 workers.dev 有 BIC,curl 要 `env -u HTTPS_PROXY -u http_proxy ... curl -A "<浏览器UA>"`。生产入口 `aiusage.chunbai.com` 正常可达。
 - **关键对象名**:入口 worker = `aiusage-api`(仓库根 `wrangler.toml`,代码 `cloudflare/aiusage-api-worker.js`,路由 `aiusage.chunbai.com/*`);Native worker = `aiusage-native-staging`(`cloudflare/native-worker/`,URL `https://aiusage-native-staging.chunbai.workers.dev`);D1 = `aiusage-prod-db`。

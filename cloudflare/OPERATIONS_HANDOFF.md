@@ -2,13 +2,13 @@
 
 ## 入口
 
-Cloudflare 账号侧操作必须由兄弟目录的运维 Agent 执行：
+Cloudflare 账号侧操作必须由实际 Ops 工作区的运维 Agent 执行：
 
 ```bash
-codex exec --cd /Users/wangzhipeng/Documents/cloud-flare --skip-git-repo-check "<Cloudflare 运维任务说明>"
+codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check "<Cloudflare 运维任务说明>"
 ```
 
-运维 Agent 必须读取 `/Users/wangzhipeng/Documents/cloud-flare/AGENTS.md`，并使用该目录自己的 `.env`。不要读取或输出 .env、Cloudflare token、ingest token、SQLite 或原始 usage 日志。
+运维 Agent 必须读取 `/Users/wangzhipeng/Documents/ops/AGENTS.md`，并使用该工作区受保护的凭据环境。不要读取或输出 `.env`、Cloudflare token、ingest token、SQLite 或原始 usage 日志；应用 Agent 不得以本项目目录的凭据替代 Ops。
 
 ## 应用侧输入
 

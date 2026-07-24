@@ -106,8 +106,8 @@ codex exec -s read-only "<问题>"
 # 代码评审（codex 自带）
 codex review                 # 或 codex exec review
 
-# 真实 Cloudflare 账号运维：切到兄弟目录
-codex exec -C /Users/wangzhipeng/Documents/cloud-flare -c model_reasoning_effort="high" "<运维任务>"
+# 真实 Cloudflare 账号运维：切到实际 Ops 工作区
+codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check -c model_reasoning_effort="high" "<运维任务>"
 ```
 
 并行需要时，可由 subagent 各驱动一条 codex 流，互不阻塞；编排和最终 review 仍归 Claude。
