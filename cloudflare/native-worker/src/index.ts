@@ -28,6 +28,7 @@ const LOCAL_ESTIMATE_SOURCE_TYPES = [
   "session_log_estimate",
 ];
 const AUDIT_RETENTION_DAYS = 7;
+const HOURLY_ROLLUP_RETENTION_DAYS = 30;
 const SUMMARY_CACHE_TTL_SECONDS = 60;
 
 function securityHeaders(): Record<string, string> {
@@ -169,16 +170,18 @@ export default {
 
 async function pruneAuditTables(db: D1Database, now: Date): Promise<void> {
   const cutoff = new Date(now.getTime() - AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const hourlyRollupCutoff = new Date(now.getTime() - HOURLY_ROLLUP_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
   await db.batch([
     db.prepare(`
       DELETE FROM source_reports
       WHERE run_id IN (
         SELECT id
         FROM collection_runs
-        WHERE datetime(collected_at) < datetime(?)
+        WHERE collected_at < ?
       )
     `).bind(cutoff),
-    db.prepare("DELETE FROM collection_runs WHERE datetime(collected_at) < datetime(?)").bind(cutoff),
+    db.prepare("DELETE FROM collection_runs WHERE collected_at < ?").bind(cutoff),
+    db.prepare("DELETE FROM usage_hourly_rollups WHERE bucket_start < ?").bind(hourlyRollupCutoff),
   ]);
 }
 

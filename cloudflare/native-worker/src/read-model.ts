@@ -487,6 +487,33 @@ async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<
 }
 
 async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, endDate: string, timezone: string): Promise<Record<string, unknown>[]> {
+  const endExclusive = `${formatDate(addDays(parseDateOnly(endDate), 1))}T00:00:00+08:00`;
+  const startInclusive = startDate === null ? null : `${startDate}T00:00:00+08:00`;
+  const rollupTable = startDate === endDate ? "usage_hourly_rollups" : "usage_daily_rollups";
+  const rollupRows = await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive);
+  if (rollupRows.length > 0) return rollupRows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
+  return fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive)
+    .then((rows) => rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
+}
+
+async function fetchAccountRowsFromTable(
+  db: D1Database,
+  table: "usage_hourly_rollups" | "usage_daily_rollups" | "usage_hourly_facts",
+  startInclusive: string | null,
+  endExclusive: string,
+): Promise<Record<string, unknown>[]> {
+  const periodWhere = startInclusive === null
+    ? "f.window_start < ?"
+    : "f.window_start >= ? AND f.window_start < ?";
+  const params = startInclusive === null ? [endExclusive] : [startInclusive, endExclusive];
+  const source = table === "usage_hourly_facts"
+    ? "usage_hourly_facts f"
+    : `(SELECT NULL AS fact_id, bucket_start AS window_start, bucket_end AS window_end,
+               source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+               attribution_confidence, provenance, input_tokens, output_tokens,
+               cache_creation_tokens, cache_read_tokens, reasoning_output_tokens,
+               total_tokens, event_count, session_count, fact_count
+        FROM ${table}) f`;
   const rows = await all<Record<string, unknown>>(
     db,
     `
@@ -497,13 +524,15 @@ async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, 
              f.input_tokens, f.output_tokens, f.cache_creation_tokens, f.cache_read_tokens,
              f.reasoning_output_tokens, f.total_tokens, f.event_count, f.session_count,
              f.attribution_confidence, f.provenance
-      FROM usage_hourly_facts f
+      FROM ${source}
       LEFT JOIN machines m ON m.machine_id = f.machine_id
       LEFT JOIN ai_accounts a ON a.provider = f.ai_provider AND a.account_id = f.ai_account_id
+      WHERE ${periodWhere}
       ORDER BY f.window_start ASC, f.source_id ASC, f.agent ASC
     `,
+    params,
   );
-  return rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
+  return rows;
 }
 
 async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[]> {
@@ -957,7 +986,7 @@ function accountHourlySummary(rows: Record<string, unknown>[]): Record<string, u
   });
   return {
     total_tokens: totalTokens,
-    facts: rows.length,
+    facts: rows.reduce((total, row) => total + Math.max(1, int(row.fact_count ?? 1)), 0),
     by_ai_account: accounts.sort((lhs, rhs) => int(rhs.total_tokens) - int(lhs.total_tokens)),
     by_machine: Array.from(byMachine.values()).sort((lhs, rhs) => int(rhs.total_tokens) - int(lhs.total_tokens)),
     by_os_user: Array.from(byOsUser.values()).sort((lhs, rhs) => int(rhs.total_tokens) - int(lhs.total_tokens)),

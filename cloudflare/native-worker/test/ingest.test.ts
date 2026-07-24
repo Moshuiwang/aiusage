@@ -29,6 +29,7 @@ type IngestFixture = {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const sourceReportStatesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0004_source_report_states.sql");
+const auditIndexesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0005_audit_retention_indexes.sql");
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const writeModelPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts");
 const fixturePath = path.join(repoRoot, "tests/fixtures/native_worker_ingest_payloads.json");
@@ -90,6 +91,15 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(sourceHealthByRecord(after)).toEqual(beforeSourceHealth);
     expect(after).toEqual(before);
     expect(afterCounts).toEqual(beforeCounts);
+  });
+
+  it("maintains hourly and daily display rollups when real hourly facts change", async () => {
+    await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const hourly = await db.prepare("SELECT count(*) AS count FROM usage_hourly_rollups").first<{ count: number }>();
+    const daily = await db.prepare("SELECT count(*) AS count FROM usage_daily_rollups").first<{ count: number }>();
+    expect(hourly?.count).toBeGreaterThan(0);
+    expect(daily?.count).toBeGreaterThan(0);
   });
 
   it("keeps the latest source-report decision in a per-source read model", async () => {
@@ -273,6 +283,15 @@ describe.sequential("native TS Worker write API parity", () => {
         '2026-06-15T02:59:00+00:00', '2026-06-15T02:59:00+00:00'
       )
     `).run();
+    await db.prepare(`
+      INSERT INTO usage_hourly_rollups (
+        bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+      ) VALUES
+        ('2026-05-01T01:00:00+08:00', '2026-05-01T01:59:59+08:00', 'old-source', 'old', 'alice', 'openai', 'old', 'codex', 'codex', 'observed', 'test', 1, 0, 0, 0, 0, 1, 1, 1, 1),
+        ('2026-06-23T01:00:00+08:00', '2026-06-23T01:59:59+08:00', 'fresh-source', 'fresh', 'alice', 'openai', 'fresh', 'codex', 'codex', 'observed', 'test', 1, 0, 0, 0, 0, 1, 1, 1, 1)
+    `).run();
 
     const worker = await mf.getWorker();
     const scheduled = await worker.scheduled({
@@ -290,6 +309,24 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(remainingRun?.collected_at).toBe("2026-06-22T02:59:00+00:00");
     expect(remainingReport?.source_id).toBe("fresh-source");
     expect(usageRows?.count).toBe(1);
+    const rollups = await db.prepare("SELECT count(*) AS count FROM usage_hourly_rollups").first<{ count: number }>();
+    expect(rollups?.count).toBe(1);
+  });
+
+  it("uses indexes for the bounded audit-retention lookup", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySqlText(db, await readFile(auditIndexesMigrationPath, "utf8"));
+    const runs = await db.prepare(`
+      EXPLAIN QUERY PLAN SELECT id FROM collection_runs WHERE collected_at < ?
+    `).bind("2026-06-17T03:00:00.000Z").all<{ detail: string }>();
+    const reports = await db.prepare(`
+      EXPLAIN QUERY PLAN DELETE FROM source_reports WHERE run_id IN (
+        SELECT id FROM collection_runs WHERE collected_at < ?
+      )
+    `).bind("2026-06-17T03:00:00.000Z").all<{ detail: string }>();
+
+    expect((runs.results ?? []).map((row) => row.detail).join(" ")).toContain("SEARCH collection_runs");
+    expect((reports.results ?? []).map((row) => row.detail).join(" ")).toContain("SEARCH source_reports");
   });
 
   it("writes large historical ingest payloads through HTTP without dropping source health", async () => {

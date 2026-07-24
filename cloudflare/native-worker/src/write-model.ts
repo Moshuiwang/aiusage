@@ -189,6 +189,9 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
   }
 
   rowsWritten += await runWriteBatch(env.AIUSAGE_DB, writeStatements);
+  if (hourlyFacts.length > 0 && rowsWritten > 0) {
+    await refreshDisplayRollups(env.AIUSAGE_DB, hourlyFacts, accuracyPlans);
+  }
   if (!shouldWriteReport && rowsWritten > 0) {
     rowsWritten += await runWriteBatch(env.AIUSAGE_DB, reportStatements);
   }
@@ -203,6 +206,87 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
       message: "Data accepted successfully",
     },
   };
+}
+
+async function refreshDisplayRollups(db: D1Database, facts: UsageHourlyFact[], plans: AccuracyPlan[]): Promise<void> {
+  const hours = Array.from(new Set(facts.map((fact) => fact.window_start)));
+  const dates = Array.from(new Set(facts.map((fact) => fact.window_start.slice(0, 10))));
+  const statements: D1PreparedStatement[] = [];
+  for (const hour of hours) {
+    statements.push(db.prepare("DELETE FROM usage_hourly_rollups WHERE bucket_start = ?").bind(hour));
+    statements.push(db.prepare(`
+      INSERT INTO usage_hourly_rollups (
+        bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+      )
+      SELECT window_start, max(window_end), source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+             attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*)
+      FROM usage_hourly_facts WHERE window_start = ?
+      GROUP BY window_start, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
+    `).bind(hour));
+  }
+  for (const date of dates) {
+    const start = `${date}T00:00:00+08:00`;
+    const end = new Date(`${date}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() + 1);
+    const endValue = `${end.toISOString().slice(0, 10)}T00:00:00+08:00`;
+    statements.push(db.prepare("DELETE FROM usage_daily_rollups WHERE date = ?").bind(date));
+    statements.push(db.prepare(`
+      INSERT INTO usage_daily_rollups (
+        date, bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+      )
+      SELECT ?, ?, ?, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+             attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*)
+      FROM usage_hourly_facts WHERE window_start >= ? AND window_start < ?
+      GROUP BY source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
+    `).bind(date, start, endValue, start, endValue));
+  }
+  for (const plan of plans.filter((plan) => plan.can_reconcile && plan.coverage_start && plan.coverage_end)) {
+    statements.push(db.prepare(`
+      DELETE FROM usage_hourly_rollups
+      WHERE source_id = ? AND agent = ? AND provenance = ? AND bucket_start >= ? AND bucket_start < ?
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end));
+    statements.push(db.prepare(`
+      INSERT INTO usage_hourly_rollups (
+        bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+      )
+      SELECT window_start, max(window_end), source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+             attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*)
+      FROM usage_hourly_facts
+      WHERE source_id = ? AND agent = ? AND provenance = ? AND window_start >= ? AND window_start < ?
+      GROUP BY window_start, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end));
+    statements.push(db.prepare(`
+      DELETE FROM usage_daily_rollups
+      WHERE source_id = ? AND agent = ? AND provenance = ?
+        AND date >= substr(?, 1, 10) AND date <= substr(?, 1, 10)
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end));
+    statements.push(db.prepare(`
+      INSERT INTO usage_daily_rollups (
+        date, bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+      )
+      SELECT substr(window_start, 1, 10), substr(window_start, 1, 10) || 'T00:00:00+08:00',
+             substr(window_start, 1, 10) || 'T23:59:59+08:00', source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+             attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*)
+      FROM usage_hourly_facts
+      WHERE source_id = ? AND agent = ? AND provenance = ? AND window_start >= ? AND window_start < ?
+      GROUP BY substr(window_start, 1, 10), source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end));
+  }
+  for (let offset = 0; offset < statements.length; offset += 100) {
+    await db.batch(statements.slice(offset, offset + 100));
+  }
 }
 
 export async function handleLimitsWrite(payload: unknown, env: Env): Promise<{ body: AnyRecord; rowsWritten: number }> {
