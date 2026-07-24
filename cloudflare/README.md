@@ -43,7 +43,7 @@ npm run cf:worker:deploy
 npm run cf:pages:deploy
 ```
 
-真实 Cloudflare 部署和线上验证必须交给兄弟目录 `/Users/wangzhipeng/Documents/cloud-flare` 的运维 Agent，入口见 [`OPERATIONS_HANDOFF.md`](OPERATIONS_HANDOFF.md)。
+真实 Cloudflare 部署和线上验证必须交给 `/Users/wangzhipeng/Documents/ops` 的运维 Agent，入口见 [`OPERATIONS_HANDOFF.md`](OPERATIONS_HANDOFF.md)。不要假定旧 `cloud-flare` 目录存在。
 
 ## 验证
 

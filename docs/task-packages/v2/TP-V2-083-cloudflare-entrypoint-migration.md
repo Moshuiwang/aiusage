@@ -30,7 +30,7 @@ Cloudflare 运维 Agent 已创建：
 - 新增 Cloudflare Worker 回源代码，先保护现有 Python Web 登录、Dashboard、API 和 SQLite 写入链路。
 - 保留 Pages 部署脚本作为后续静态化准备；Pages 静态化不作为本轮成功标准。
 - 新增合同测试，锁定路由、缓存、安全和部署入口。
-- 记录运维交接要求：Cloudflare 账号侧部署必须由兄弟目录 `/Users/wangzhipeng/Documents/cloud-flare` 的运维 Agent 通过 Codex CLI 执行；当前 Worker 环境里的 `ORIGIN_BASE_URL` 应为 `https://vpn2.chunbai.com:8443`，或后续切到 Tunnel origin。
+- 记录运维交接要求：Cloudflare 账号侧部署必须由 `/Users/wangzhipeng/Documents/ops` 的运维 Agent 通过 Codex CLI 执行；当前 Worker 环境里的 `ORIGIN_BASE_URL` 应为 `https://vpn2.chunbai.com:8443`，或后续切到 Tunnel origin。
 
 ## Out of Scope
 
@@ -68,7 +68,7 @@ Cloudflare 运维 Agent 已创建：
 - Pages 部署脚本保留为后续静态化准备；Pages 静态化不作为本轮成功标准。
 - 源码不包含真实 ingest token、SQLite、local config 或原始日志。
 - 本地测试和 scoped AI Review 通过。
-- Cloudflare 账号侧部署和线上 smoke 由兄弟目录 `/Users/wangzhipeng/Documents/cloud-flare` 的运维 Agent 执行。
+- Cloudflare 账号侧部署和线上 smoke 由 `/Users/wangzhipeng/Documents/ops` 的运维 Agent 执行。
 
 ## Verification
 
@@ -90,10 +90,10 @@ Scoped AI Review 记录：
 - `reviews/20260621-214554-codex-cloudflare-aiusage-migration-local-0f94445-cf001.md`
 - `reviews/20260621-221333-codex-cloudflare-aiusage-migration-local-0f94445-cf002.md`
 
-Cloudflare 线上验证由运维 Agent 在 `/Users/wangzhipeng/Documents/cloud-flare` 中通过 Codex CLI 执行。建议命令入口：
+Cloudflare 线上验证由运维 Agent 在 `/Users/wangzhipeng/Documents/ops` 中通过 Codex CLI 执行。建议命令入口：
 
 ```bash
-codex exec --cd /Users/wangzhipeng/Documents/cloud-flare --skip-git-repo-check "<Cloudflare 运维任务说明>"
+codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check "<Cloudflare 运维任务说明>"
 ```
 
 线上 smoke 至少包括：

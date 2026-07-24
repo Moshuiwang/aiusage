@@ -98,12 +98,13 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         for asset in ["index.html", "dashboard.css", "dashboard.js", "login.html"]:
             self.assertTrue((ROOT / "src" / "ai_usage_widget" / "static" / asset).exists())
 
-    def test_operations_handoff_points_to_cloud_flare_sibling_codex_cli(self) -> None:
+    def test_operations_handoff_points_to_actual_ops_workspace(self) -> None:
         handoff = (ROOT / "cloudflare" / "OPERATIONS_HANDOFF.md").read_text(encoding="utf-8")
 
-        self.assertIn("/Users/wangzhipeng/Documents/cloud-flare", handoff)
-        self.assertIn("codex exec --cd /Users/wangzhipeng/Documents/cloud-flare --skip-git-repo-check", handoff)
-        self.assertIn("不要读取或输出 .env", handoff)
+        self.assertIn("/Users/wangzhipeng/Documents/ops", handoff)
+        self.assertIn("codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check", handoff)
+        self.assertNotIn("/Users/wangzhipeng/Documents/cloud-flare", handoff)
+        self.assertIn("不要读取或输出 `.env`", handoff)
         self.assertIn("不要用 `curl -I`", handoff)
         self.assertIn("curl -D - -o /dev/null", handoff)
         self.assertIn("未登录 /static/* 预期可以是 401", handoff)
