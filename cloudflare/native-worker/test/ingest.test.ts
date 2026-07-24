@@ -757,17 +757,25 @@ function expectSourceHealth(records: ContractRecord[]): void {
   }
 }
 
-function normalizeStoreMetadata(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => normalizeStoreMetadata(item));
+function normalizeStoreMetadata(value: unknown, fieldName = ""): unknown {
+  if (Array.isArray(value)) {
+    const normalized = value.map((item) => normalizeStoreMetadata(item));
+    return fieldName === "source_status" || fieldName === "sources" ? sortedSourceRows(normalized) : normalized;
+  }
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-        key,
-        key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item),
+        key, key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item, key),
       ]),
     );
   }
   return value;
+}
+
+function sortedSourceRows(value: unknown): unknown[] {
+  return Array.isArray(value)
+    ? [...value].sort((left, right) => String((left as Record<string, unknown>).source_id ?? "").localeCompare(String((right as Record<string, unknown>).source_id ?? "")))
+    : [];
 }
 
 function expectMobileLimitsWindows(records: ContractRecord[]): void {

@@ -173,7 +173,74 @@ describe.sequential("native TS Worker web surface", () => {
 
     expect(indexSource).toContain("FROM source_report_states");
     expect(indexSource).not.toContain("FROM source_reports r");
-    expect(readModelSource).not.toContain("FROM source_reports r2");
+    expect(readModelSource).toContain("FROM source_report_states");
+    expect(readModelSource).not.toContain("FROM source_reports");
+    expect(readModelSource).not.toContain("FROM collection_runs");
+    expect(readModelSource).not.toContain("ROW_NUMBER() OVER");
+  });
+
+  it("keeps dashboard and mobile source health on current per-source states, including ok, failed, and stale sources", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.batch([
+      db.prepare(`
+        INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status)
+        VALUES (?, ?, ?, ?, ?)
+      `).bind(3, "2026-06-03T11:59:00+08:00", "Asia/Shanghai", "legacy", "ok"),
+      db.prepare(`
+        INSERT INTO source_reports (
+          id, run_id, source_id, report_type, command, status, ccusage_version,
+          first_period, last_period, error_type, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(3, 3, "mac-local", "daily", "legacy audit", "provider_failed", null, null, null, "provider_failed", "legacy failure must not affect current state"),
+      db.prepare(`
+        INSERT INTO source_identities (
+          source_id, host, machine, os_user, platform, first_seen_at, last_seen_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).bind("stale-source", "old-host", "old-host", "carol", "linux", "2026-06-03T09:00:00+08:00", "2026-06-03T09:00:00+08:00"),
+      db.prepare(`
+        INSERT INTO source_report_states (
+          source_id, collected_at, report_type, command, status, ccusage_version,
+          first_period, last_period, error_type, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("stale-source", "2026-06-03T09:00:00+08:00", "daily", "HTTP Ingest", "ok", null, null, null, null, null),
+    ]);
+
+    const cookie = await sessionCookieHeader();
+    const dashboardResponse = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03&period=today", {
+      headers: { Cookie: cookie },
+    });
+    const mobileResponse = await mf.dispatchFetch("http://native.test/api/mobile/summary?date=2026-06-03&period=today", {
+      headers: { Cookie: cookie },
+    });
+    const dashboard = await dashboardResponse.json() as Record<string, unknown>;
+    const mobile = await mobileResponse.json() as Record<string, unknown>;
+    const dashboardSources = new Map(
+      (dashboard.source_status as Array<Record<string, unknown>>).map((row) => [String(row.source_id), row]),
+    );
+    const mobileSources = new Map(
+      (mobile.sources as Array<Record<string, unknown>>).map((row) => [String(row.source_id), row]),
+    );
+
+    expect(dashboardResponse.status).toBe(200);
+    expect(mobileResponse.status).toBe(200);
+    expect(dashboardSources.get("mac-local")).toMatchObject({
+      source_id: "mac-local", status: "ok", observed_at: "2026-06-03T11:55:00+08:00", error_message: null,
+    });
+    expect(dashboardSources.get("linux-dev-bob")).toMatchObject({
+      source_id: "linux-dev-bob", status: "provider_failed", observed_at: "2026-06-03T11:50:00+08:00", error_message: "provider down",
+    });
+    expect(dashboardSources.get("stale-source")).toMatchObject({
+      source_id: "stale-source", status: "stale", observed_at: "2026-06-03T09:00:00+08:00", error_message: null,
+    });
+    expect(mobileSources.get("mac-local")).toMatchObject({
+      source_id: "mac-local", status: "ok", last_observed_at: "2026-06-03T11:55:00+08:00", error_message: null,
+    });
+    expect(mobileSources.get("linux-dev-bob")).toMatchObject({
+      source_id: "linux-dev-bob", status: "provider_failed", last_observed_at: "2026-06-03T11:50:00+08:00", error_message: "provider down",
+    });
+    expect(mobileSources.get("stale-source")).toMatchObject({
+      source_id: "stale-source", status: "stale", last_observed_at: "2026-06-03T09:00:00+08:00", error_message: null,
+    });
   });
 
   it("accepts the session cookie on read APIs", async () => {

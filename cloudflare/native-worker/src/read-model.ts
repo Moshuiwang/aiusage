@@ -116,22 +116,8 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     db,
     `
       SELECT source_id, status, collected_at, error_message
-      FROM (
-        SELECT
-          r.id,
-          r.source_id,
-          r.status,
-          c.collected_at,
-          r.error_message,
-          ROW_NUMBER() OVER (
-            PARTITION BY r.source_id
-            ORDER BY c.collected_at DESC, r.id DESC
-          ) AS row_rank
-        FROM source_reports r
-        JOIN collection_runs c ON r.run_id = c.id
-      )
-      WHERE row_rank = 1
-      ORDER BY id ASC
+      FROM source_report_states
+      ORDER BY source_id ASC
     `,
   );
   const accuracyRows = await all<Record<string, unknown>>(
