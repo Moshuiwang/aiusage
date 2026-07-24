@@ -13,6 +13,25 @@ INSERT INTO source_reports (
   (3, 3, 'workstation-cara', 'daily', 'seed.sql', 'failed', NULL, '2026-06-01', '2026-06-01', 'provider_failed', 'Antigravity provider unavailable'),
   (4, 4, 'mac-mini-dan', 'daily', 'seed.sql', 'ok', NULL, '2026-04-10', '2026-04-10', NULL, NULL);
 
+INSERT INTO source_report_states (
+  source_id, collected_at, report_type, command, status, ccusage_version,
+  first_period, last_period, error_type, error_message
+)
+SELECT source_id, collected_at, report_type, command, status, ccusage_version,
+       first_period, last_period, error_type, error_message
+FROM (
+  SELECT
+    r.source_id, c.collected_at, r.report_type, r.command, r.status,
+    r.ccusage_version, r.first_period, r.last_period, r.error_type, r.error_message,
+    ROW_NUMBER() OVER (
+      PARTITION BY r.source_id
+      ORDER BY c.collected_at DESC, r.id DESC
+    ) AS row_rank
+  FROM source_reports r
+  JOIN collection_runs c ON r.run_id = c.id
+)
+WHERE row_rank = 1;
+
 INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at) VALUES
   ('mac-local', 'macbook-pro', 'macbook-pro', 'alice', 'darwin', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
   ('linux-dev-bob', 'linux-dev', 'linux-dev', 'bob', 'linux', '2026-05-15T09:00:00+08:00', '2026-06-03T11:31:00+08:00'),

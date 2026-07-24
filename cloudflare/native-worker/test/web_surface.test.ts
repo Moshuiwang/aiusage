@@ -167,11 +167,12 @@ describe.sequential("native TS Worker web surface", () => {
     });
   });
 
-  it("does not use correlated source report scans for current source health", async () => {
+  it("reads current source health from the per-source state model", async () => {
     const indexSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/index.ts"), "utf8");
     const readModelSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/read-model.ts"), "utf8");
 
-    expect(indexSource).not.toContain("FROM source_reports r2");
+    expect(indexSource).toContain("FROM source_report_states");
+    expect(indexSource).not.toContain("FROM source_reports r");
     expect(readModelSource).not.toContain("FROM source_reports r2");
   });
 
@@ -333,6 +334,18 @@ async function seedHealthRows(db: D1Database): Promise<void> {
         first_period, last_period, error_type, error_message
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(2, 2, "linux-dev-bob", "limits", "HTTP Ingest", "provider_failed", null, null, null, "provider_failed", "provider down"),
+    db.prepare(`
+      INSERT INTO source_report_states (
+        source_id, collected_at, report_type, command, status, ccusage_version,
+        first_period, last_period, error_type, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind("mac-local", "2026-06-03T11:55:00+08:00", "daily", "HTTP Ingest", "ok", null, "2026-06-03", "2026-06-03", null, null),
+    db.prepare(`
+      INSERT INTO source_report_states (
+        source_id, collected_at, report_type, command, status, ccusage_version,
+        first_period, last_period, error_type, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind("linux-dev-bob", "2026-06-03T11:50:00+08:00", "limits", "HTTP Ingest", "provider_failed", null, null, null, "provider_failed", "provider down"),
   ]);
 }
 
