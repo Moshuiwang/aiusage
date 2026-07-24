@@ -149,6 +149,29 @@ describe.sequential("native TS Worker read-only API parity", () => {
     }
   });
 
+  it("bounds the hourly-fact query to the requested display period", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const queries: string[] = [];
+    const tracedDb = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property !== "prepare") return Reflect.get(target, property, receiver);
+        return (sql: string) => {
+          queries.push(sql);
+          return target.prepare(sql);
+        };
+      },
+    }) as unknown as D1Database;
+
+    const summary = await import("../src/read-model");
+    await summary.buildSummary(tracedDb, {
+      date: "2026-06-03", period: "week", timezone: "Asia/Shanghai", currentTime: fixedNow,
+    });
+
+    const hourlyQuery = queries.find((sql) => sql.includes("FROM usage_hourly_facts"));
+    expect(hourlyQuery).toContain("f.window_start >= ?");
+    expect(hourlyQuery).toContain("f.window_start < ?");
+  });
+
   it("fails closed immediately when a provider failure follows a successful quota read", async () => {
     await mf.dispose();
     mf = await createMiniflare({ AIUSAGE_NOW: "2026-06-03T10:31:00+08:00" });

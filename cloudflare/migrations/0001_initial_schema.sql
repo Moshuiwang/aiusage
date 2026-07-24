@@ -250,6 +250,63 @@ CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_agent
 CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_source
   ON usage_hourly_facts(source_id, window_start);
 
+-- Read models for the user-facing summary. Hourly rows are retained for the
+-- recent window; daily rows retain the longer history.
+CREATE TABLE IF NOT EXISTS usage_hourly_rollups (
+  bucket_start TEXT NOT NULL,
+  bucket_end TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  machine_id TEXT NOT NULL,
+  os_user TEXT NOT NULL,
+  ai_provider TEXT NOT NULL,
+  ai_account_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  client TEXT NOT NULL,
+  attribution_confidence TEXT NOT NULL,
+  provenance TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cache_creation_tokens INTEGER NOT NULL,
+  cache_read_tokens INTEGER NOT NULL,
+  reasoning_output_tokens INTEGER NOT NULL,
+  total_tokens INTEGER NOT NULL,
+  event_count INTEGER NOT NULL,
+  session_count INTEGER NOT NULL,
+  fact_count INTEGER NOT NULL,
+  PRIMARY KEY (bucket_start, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
+);
+
+CREATE TABLE IF NOT EXISTS usage_daily_rollups (
+  date TEXT NOT NULL,
+  bucket_start TEXT NOT NULL,
+  bucket_end TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  machine_id TEXT NOT NULL,
+  os_user TEXT NOT NULL,
+  ai_provider TEXT NOT NULL,
+  ai_account_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  client TEXT NOT NULL,
+  attribution_confidence TEXT NOT NULL,
+  provenance TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL,
+  output_tokens INTEGER NOT NULL,
+  cache_creation_tokens INTEGER NOT NULL,
+  cache_read_tokens INTEGER NOT NULL,
+  reasoning_output_tokens INTEGER NOT NULL,
+  total_tokens INTEGER NOT NULL,
+  event_count INTEGER NOT NULL,
+  session_count INTEGER NOT NULL,
+  fact_count INTEGER NOT NULL,
+  PRIMARY KEY (date, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_hourly_rollups_bucket
+  ON usage_hourly_rollups(bucket_start);
+
+CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_date
+  ON usage_daily_rollups(date);
+
 CREATE INDEX IF NOT EXISTS idx_source_accuracy_status
   ON source_accuracy(accuracy_status, source_id, agent);
 
