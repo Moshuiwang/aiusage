@@ -11,6 +11,20 @@ from ai_usage_widget.storage_sqlite import _ensure_schema
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MIGRATION_SQL = REPO_ROOT / "cloudflare" / "migrations" / "0001_initial_schema.sql"
 LIMIT_STABLE_KEY_MIGRATION_SQL = REPO_ROOT / "cloudflare" / "migrations" / "0003_limit_window_stable_key.sql"
+D1_ONLY_TABLE_COLUMNS = {
+    "source_report_states": [
+        ("source_id", "TEXT", 0, None, 1),
+        ("collected_at", "TEXT", 1, None, 0),
+        ("report_type", "TEXT", 1, None, 0),
+        ("command", "TEXT", 1, None, 0),
+        ("status", "TEXT", 1, None, 0),
+        ("ccusage_version", "TEXT", 0, None, 0),
+        ("first_period", "TEXT", 0, None, 0),
+        ("last_period", "TEXT", 0, None, 0),
+        ("error_type", "TEXT", 0, None, 0),
+        ("error_message", "TEXT", 0, None, 0),
+    ],
+}
 
 
 def _user_tables(conn: sqlite3.Connection) -> list[str]:
@@ -75,9 +89,21 @@ class TestD1SchemaMigration(unittest.TestCase):
                 actual_columns = {table: _table_columns(conn, table) for table in actual_tables}
                 actual_indexes = {table: _created_indexes(conn, table) for table in actual_tables}
 
-            self.assertEqual(actual_tables, expected_tables)
-            self.assertEqual(actual_columns, expected_columns)
-            self.assertEqual(actual_indexes, expected_indexes)
+            canonical_actual_tables = [table for table in actual_tables if table not in D1_ONLY_TABLE_COLUMNS]
+            canonical_actual_columns = {
+                table: columns for table, columns in actual_columns.items() if table not in D1_ONLY_TABLE_COLUMNS
+            }
+            canonical_actual_indexes = {
+                table: indexes for table, indexes in actual_indexes.items() if table not in D1_ONLY_TABLE_COLUMNS
+            }
+
+            self.assertEqual(canonical_actual_tables, expected_tables)
+            self.assertEqual(canonical_actual_columns, expected_columns)
+            self.assertEqual(canonical_actual_indexes, expected_indexes)
+            for table, expected_columns in D1_ONLY_TABLE_COLUMNS.items():
+                self.assertIn(table, actual_tables)
+                self.assertEqual(actual_columns[table], expected_columns)
+                self.assertEqual(actual_indexes[table], {})
 
     def test_limit_window_migration_keeps_latest_row_for_stable_key(self) -> None:
         with sqlite3.connect(":memory:") as conn:

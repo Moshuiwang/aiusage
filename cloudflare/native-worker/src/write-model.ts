@@ -683,6 +683,26 @@ function collectionReportStatements(
       report.source_id, report.report_type, report.command, report.status,
       report.ccusage_version, report.first_period, report.last_period, report.error_type, report.error_message,
     ),
+    db.prepare(`
+      INSERT INTO source_report_states (
+        source_id, collected_at, report_type, command, status, ccusage_version,
+        first_period, last_period, error_type, error_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_id) DO UPDATE SET
+        collected_at = excluded.collected_at,
+        report_type = excluded.report_type,
+        command = excluded.command,
+        status = excluded.status,
+        ccusage_version = excluded.ccusage_version,
+        first_period = excluded.first_period,
+        last_period = excluded.last_period,
+        error_type = excluded.error_type,
+        error_message = excluded.error_message
+      WHERE excluded.collected_at >= source_report_states.collected_at
+    `).bind(
+      report.source_id, collectedAt, report.report_type, report.command, report.status,
+      report.ccusage_version, report.first_period, report.last_period, report.error_type, report.error_message,
+    ),
   ];
 }
 
@@ -1703,12 +1723,9 @@ async function insertSourceReport(db: D1Database, runId: number, report: AnyReco
 
 async function latestSourceReportState(db: D1Database, report: AnyRecord): Promise<SourceReportState> {
   const existing = await db.prepare(`
-    SELECT r.source_id, r.report_type, r.command, r.status, r.ccusage_version, r.first_period, r.last_period, r.error_type, r.error_message
-    FROM source_reports r
-    JOIN collection_runs c ON r.run_id = c.id
-    WHERE r.source_id = ?
-    ORDER BY c.collected_at DESC, r.id DESC
-    LIMIT 1
+    SELECT source_id, report_type, command, status, ccusage_version, first_period, last_period, error_type, error_message
+    FROM source_report_states
+    WHERE source_id = ?
   `).bind(report.source_id).first<AnyRecord>();
   if (!existing) return { hasExisting: false, changed: true };
   return { hasExisting: true, changed: !rowMatches(existing, report) };
@@ -1718,12 +1735,9 @@ async function sourceHasNewerReport(db: D1Database, sourceId: string, observedAt
   const observed = new Date(observedAt);
   if (Number.isNaN(observed.getTime())) return false;
   const existing = await db.prepare(`
-    SELECT c.collected_at
-    FROM source_reports r
-    JOIN collection_runs c ON r.run_id = c.id
-    WHERE r.source_id = ?
-    ORDER BY c.collected_at DESC, r.id DESC
-    LIMIT 1
+    SELECT collected_at
+    FROM source_report_states
+    WHERE source_id = ?
   `).bind(sourceId).first<{ collected_at: string | null }>();
   if (!existing?.collected_at) return false;
   const latest = new Date(existing.collected_at);
