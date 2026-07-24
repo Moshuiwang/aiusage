@@ -24,6 +24,7 @@ describe.sequential("native TS Worker web surface", () => {
   beforeEach(async () => {
     mf = await createMiniflare({
       AIUSAGE_TOKEN: token,
+      AIUSAGE_TOKEN_SPECS: "second:second-contract-test-token",
       AIUSAGE_SESSION_SECRET: sessionSecret,
       AIUSAGE_NOW: fixedNow,
     });
@@ -255,6 +256,46 @@ describe.sequential("native TS Worker web surface", () => {
     expect(response.status).toBe(200);
     expect(payload.summary).toMatchObject({ total_tokens: 300 });
   });
+
+  it("caches successful summary reads for one authenticated session without sharing query variants", async () => {
+    const cookie = await sessionCookieHeader();
+    const todayUrl = "http://native.test/api/summary?date=2026-06-03&period=today";
+
+    const first = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
+    expect(first.status).toBe(200);
+    expect(first.headers.get("X-AIUsage-Cache")).toBe("MISS");
+    expect((await first.json() as Record<string, any>).summary.total_tokens).toBe(300);
+
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.prepare("UPDATE usage_daily SET total_tokens = 999 WHERE source_id = ? AND date = ? AND agent = ?")
+      .bind("mac-local", "2026-06-03", "codex")
+      .run();
+
+    const cached = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
+    expect(cached.headers.get("X-AIUsage-Cache")).toBe("HIT");
+    expect((await cached.json() as Record<string, any>).summary.total_tokens).toBe(300);
+
+    const distinctQuery = await mf.dispatchFetch(
+      "http://native.test/api/summary?date=2026-06-03&period=week",
+      { headers: { Cookie: cookie } },
+    );
+    expect(distinctQuery.headers.get("X-AIUsage-Cache")).toBe("MISS");
+    expect((await distinctQuery.json() as Record<string, any>).summary.total_tokens).toBe(300);
+
+    const distinctCredential = await mf.dispatchFetch(todayUrl, {
+      headers: { Authorization: "Bearer second-contract-test-token" },
+    });
+    expect(distinctCredential.headers.get("X-AIUsage-Cache")).toBe("MISS");
+    expect((await distinctCredential.json() as Record<string, any>).summary.total_tokens).toBe(300);
+  });
+
+  it("does not cache unauthenticated summary responses", async () => {
+    const response = await mf.dispatchFetch("http://native.test/api/mobile/summary?date=2026-06-03&period=today");
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("X-AIUsage-Cache")).toBeNull();
+    expect(response.headers.get("Cache-Control")).toBeNull();
+  });
 });
 
 async function sessionCookieHeader(): Promise<string> {
@@ -311,6 +352,7 @@ async function createMiniflare(extraBindings: Record<string, string> = {}): Prom
     bindings: {
       AIUSAGE_TOKEN: token,
       AIUSAGE_TIMEZONE: "Asia/Shanghai",
+      AIUSAGE_CACHE_NAMESPACE: crypto.randomUUID(),
       ...extraBindings,
     },
   });

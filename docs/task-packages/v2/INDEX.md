@@ -156,6 +156,7 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-113 | [TP-V2-113-loop-conditional-pr-merge.md](TP-V2-113-loop-conditional-pr-merge.md) | done | none | TP-V2-112 |
 | TP-V2-114 | [TP-V2-114-hermetic-fact-check-tests.md](TP-V2-114-hermetic-fact-check-tests.md) | done | none | TP-V2-115 |
 | TP-V2-115 | [TP-V2-115-cloudflare-current-contract-tests.md](TP-V2-115-cloudflare-current-contract-tests.md) | done | none | TP-V2-114 |
+| TP-V2-116 | [TP-V2-116-summary-read-cache.md](TP-V2-116-summary-read-cache.md) | done | TP-V2-088, TP-V2-093 | none |
 
 ## subagent 分配建议
 
