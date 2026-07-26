@@ -138,7 +138,13 @@ class D1LegacyBackfillTest(unittest.TestCase):
         )
         self.conn.commit()
 
-        plan = build_plan(self.conn, self.options())
+        options = BackfillOptions(
+            start_date="2026-05-18",
+            end_date="2026-07-01",
+            as_of_date="2026-07-01",
+            discard_missing_account=True,
+        )
+        plan = build_plan(self.conn, options)
 
         self.assertTrue(plan.unresolved_identities)
         self.assertEqual(plan.daily_rows, [])
@@ -247,6 +253,72 @@ class D1LegacyBackfillTest(unittest.TestCase):
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["unresolved_identities"], [])
         self.assertEqual(report["plan"]["model_rows"], 0)
+
+    def test_explicit_discard_policy_skips_all_agent_and_missing_account_rows(self) -> None:
+        self.conn.executescript(
+            """
+            INSERT INTO source_identities (
+              source_id, host, machine, os_user, platform, first_seen_at, last_seen_at
+            ) VALUES (
+              'orphan-c', 'orphanbox', 'orphanbox', 'carol', 'linux',
+              '2026-05-01', '2026-07-01'
+            );
+            INSERT INTO machines (
+              machine_id, machine_name, host, platform, first_seen_at, last_seen_at
+            ) VALUES (
+              'orphanbox', 'orphanbox', 'orphanbox', 'linux',
+              '2026-05-01', '2026-07-01'
+            );
+            INSERT INTO usage_daily (
+              source_id, date, agent, input_tokens, output_tokens,
+              cache_creation_tokens, cache_read_tokens, total_tokens, total_cost,
+              metadata_json, raw_json, first_seen_at, last_seen_at
+            ) VALUES
+              (
+                'mac-a', '2026-05-20', 'all', 220, 50, 30, 0, 300, 3.0,
+                '{}', '{}', 'x', 'x'
+              ),
+              (
+                'orphan-c', '2026-05-22', 'codex', 40, 10, 0, 0, 50, 0.5,
+                '{}', '{}', 'x', 'x'
+              );
+            """
+        )
+        self.conn.commit()
+        options = BackfillOptions(
+            start_date="2026-05-18",
+            end_date="2026-07-01",
+            as_of_date="2026-07-01",
+            discard_all_agent=True,
+            discard_missing_account=True,
+        )
+
+        plan = build_plan(self.conn, options)
+        before = render_report(self.conn, plan)
+
+        self.assertEqual(plan.unresolved_identities, [])
+        self.assertFalse(any(row["agent"] == "all" for row in plan.daily_rows))
+        self.assertFalse(any(row["source_id"] == "orphan-c" for row in plan.daily_rows))
+        self.assertEqual(before["status"], "ready")
+        self.assertEqual(before["discarded"]["all_agent"]["identity_keys"], 1)
+        self.assertEqual(before["discarded"]["all_agent"]["daily_rows"], 1)
+        self.assertEqual(before["discarded"]["missing_account"]["identity_keys"], 1)
+        self.assertEqual(before["discarded"]["missing_account"]["daily_rows"], 1)
+        self.assertEqual(before["discarded"]["user_visible_legacy_tokens"], 150)
+        self.assertEqual(before["discarded"]["policy"], {
+            "discard_all_agent": True,
+            "discard_missing_account": True,
+        })
+
+        apply_plan(self.conn, plan)
+        after = render_report(self.conn, plan)
+
+        self.assertEqual(after["parity"]["all"]["difference_tokens"], 0)
+        self.assertEqual(after["daily_differences"], [])
+        self.assertEqual(
+            after["full_legacy_parity"]["all"]["difference_tokens"],
+            -150,
+        )
 
     def test_emitted_sql_is_bounded_new_table_only_and_has_targeted_rollback(self) -> None:
         plan = build_plan(self.conn, self.options(batch_size=1))

@@ -2,8 +2,17 @@
 
 ## 用户可见结果
 
-本次目标是让 2026-05-18 之后的 today / week / month / all 总量恢复到发布前基线，
-并保持机器、系统账号和 AI 账号归属。旧表仍是只读归档，Worker 恢复新读模型后不再读取旧表。
+本次目标是让 2026-05-18 之后可可靠归属的历史数据进入新账本，并保持这些数据的
+机器、系统账号和 AI 账号归属。产品明确放弃的历史数据允许形成可审计缺口。
+旧表仍是只读归档，Worker 恢复新读模型后不再读取旧表。
+
+产品已明确接受以下历史数据取舍：
+
+- 所有旧 `agent=all` 候选均不补齐，避免与具体 agent 明细重复。
+- 仅因缺少 AI 账号映射而无法补齐的候选直接放弃；对应历史缺口被接受。
+- 其他机器、系统账号、多账号或来源身份歧义仍必须停止，不能扩大丢弃范围。
+- 报告中的 `parity` 是扣除上述已接受丢弃数据后的验收口径；
+  `full_legacy_parity` 保留原始旧表口径差异，不能省略或宣称为 0。
 
 补齐有两类：
 
@@ -82,6 +91,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.d1_legacy_backfill \
   --end-date 2026-07-01 \
   --as-of-date "$(date +%F)" \
   --batch-size 500 \
+  --discard-all-agent \
+  --discard-missing-account \
   > /tmp/aiusage-d1-backfill/dry-run.json
 ```
 
@@ -89,6 +100,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.d1_legacy_backfill \
 
 - 状态不是 `ready`。
 - `unresolved_identities` 非空。
+- `discarded.policy` 未同时确认两个显式丢弃开关。
+- `discarded` 行数、身份键数或历史 token 缺口未经过本次发布审核。
 - 任一日期计划补写量为负或超出旧基线。
 - 计划触及四张旧表。
 - 预计单批超过 1000 个语句。
@@ -121,6 +134,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.d1_legacy_backfill \
   --end-date 2026-07-01 \
   --as-of-date "$(date +%F)" \
   --batch-size 500 \
+  --discard-all-agent \
+  --discard-missing-account \
   --emit-write-sql /tmp/aiusage-d1-backfill/sql \
   > /tmp/aiusage-d1-backfill/plan.json
 ```
@@ -134,6 +149,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.d1_legacy_backfill \
   - `legacy_hourly_archive_backfill_v1`
 - `rollback.sql` 只能按本计划生成的精确主键删除本次补写，并再次校验上述 provenance。
 - `model_rows` 必须为 0。
+- `parity` 和 `daily_differences` 必须为 0；`full_legacy_parity` 必须与
+  `discarded.user_visible_legacy_tokens` 解释一致，不得隐藏已接受的数据损失。
 
 先在 before.sqlite 的副本完整演练并再次运行报告；差异不为 0 时停止。
 
@@ -176,6 +193,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.d1_legacy_backfill \
   --start-date 2026-05-18 \
   --end-date 2026-07-01 \
   --as-of-date "$(date +%F)" \
+  --discard-all-agent \
+  --discard-missing-account \
   --actual-meta /tmp/aiusage-d1-backfill/meta/apply-*.json \
   > /tmp/aiusage-d1-backfill/after-report.json
 ```
@@ -185,6 +204,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.d1_legacy_backfill \
 - today / week / month / all `difference_tokens == 0`。
 - `daily_differences` 为空。
 - 机器、系统账号、AI 账号筛选差异全部为 0。
+- `full_legacy_parity` 的非零差异只能来自报告列出的显式丢弃历史数据。
 - 旧表行数与 before 完全相同。
 - 新表新增行数与计划一致。
 - 模型补写为 0，用户可见影响已接受。
