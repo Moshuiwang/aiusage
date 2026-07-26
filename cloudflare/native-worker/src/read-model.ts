@@ -116,6 +116,15 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
+  const historicalFallbackKeys = new Set(
+    filteredAccountHourlyRows
+      .filter((row) => row.provenance === "historical_ccusage_fallback_v1")
+      .map((row) => {
+        const date = localDateFromWindowStart(row.window_start);
+        return date ? itemKey(str(row.source_id), date, str(row.agent)) : "";
+      })
+      .filter(Boolean),
+  );
   const factRows = (await fetchFactRows(db, startDate, endDate, request.timezone))
     .filter((row) => accountHourlyRowMatchesFilter(row, request.machine, request.account));
   const costsByItem = factCostsByItem(factRows);
@@ -127,7 +136,10 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     db, startDate, endDate, request.timezone, request.machine, request.account,
   );
   const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
-  const allowedModelRows = modelRows.filter((row) => allowed.has(itemKey(row.source_id, row.date, row.agent)));
+  const allowedModelRows = modelRows.filter((row) => {
+    const key = itemKey(row.source_id, row.date, row.agent);
+    return allowed.has(key) && !historicalFallbackKeys.has(key);
+  });
   const hourlyRows = periodId === "today"
     ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows)
     : [];
@@ -436,9 +448,68 @@ async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, 
   const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
   const rollupTable = startDate === endDate ? "usage_hourly_rollups" : "usage_daily_rollups";
   const rollupRows = await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive);
-  if (rollupRows.length > 0) return rollupRows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
+  if (rollupRows.length > 0) {
+    const inPeriod = rollupRows.filter((row) =>
+      accountHourlyRowInPeriod(row, startDate, endDate, timezone)
+    );
+    return rollupTable === "usage_daily_rollups"
+      ? preferHistoricalDailyFallbackRows(inPeriod)
+      : preferLegacyHourlyBackfillRows(inPeriod);
+  }
   return fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive)
-    .then((rows) => rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
+    .then((rows) => preferLegacyHourlyBackfillRows(
+      rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone))
+    ));
+}
+
+function preferHistoricalDailyFallbackRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const fallbackKeys = new Set(
+    rows
+      .filter((row) => row.provenance === "historical_ccusage_fallback_v1")
+      .map((row) => {
+        const date = localDateFromWindowStart(row.window_start);
+        return date ? itemKey(str(row.source_id), date, str(row.agent)) : "";
+      })
+      .filter(Boolean),
+  );
+  const sourceDateFallbackKeys = new Set(
+    rows
+      .filter((row) =>
+        row.provenance === "historical_ccusage_fallback_v1"
+        && str(row.agent).toLowerCase() === "all"
+      )
+      .map((row) => {
+        const date = localDateFromWindowStart(row.window_start);
+        return date ? `${str(row.source_id)}\u0000${date}` : "";
+      })
+      .filter(Boolean),
+  );
+  if (!fallbackKeys.size) return rows;
+  return rows.filter((row) => {
+    const date = localDateFromWindowStart(row.window_start);
+    if (!date) return true;
+    const sourceDateKey = `${str(row.source_id)}\u0000${date}`;
+    if (sourceDateFallbackKeys.has(sourceDateKey)) {
+      return row.provenance === "historical_ccusage_fallback_v1";
+    }
+    const key = itemKey(str(row.source_id), date, str(row.agent));
+    return !fallbackKeys.has(key) || row.provenance === "historical_ccusage_fallback_v1";
+  });
+}
+
+function preferLegacyHourlyBackfillRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  const keys = new Set(
+    rows
+      .filter((row) => row.provenance === "legacy_hourly_archive_backfill_v1")
+      .map((row) =>
+        `${str(row.source_id)}\u0000${str(row.window_start)}\u0000${str(row.agent)}`
+      ),
+  );
+  if (!keys.size) return rows;
+  return rows.filter((row) => {
+    const key = `${str(row.source_id)}\u0000${str(row.window_start)}\u0000${str(row.agent)}`;
+    return !keys.has(key) || row.provenance === "legacy_hourly_archive_backfill_v1";
+  });
 }
 
 async function fetchFactRows(

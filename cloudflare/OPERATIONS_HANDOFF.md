@@ -29,6 +29,9 @@ codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check "<Cloudfl
 3. 确认 API health 返回 D1 canonical store。
 4. 执行线上 smoke。
 
+历史账本一次性补齐不走常规部署步骤，必须使用
+[`D1_LEGACY_BACKFILL_HANDOFF.md`](D1_LEGACY_BACKFILL_HANDOFF.md) 的独立检查、分批写入和回退流程。
+
 ## Smoke Checklist
 
 不要用 `curl -I` / `HEAD` 判断本 Worker 是否正常。线上 smoke 使用真实 `GET`：

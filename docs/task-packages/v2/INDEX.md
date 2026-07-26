@@ -160,6 +160,7 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-117 | [TP-V2-117-cloudflare-ops-handoff-path.md](TP-V2-117-cloudflare-ops-handoff-path.md) | done | none | none |
 | TP-V2-118 | [TP-V2-118-d1-bounded-summary-and-audit-cleanup.md](TP-V2-118-d1-bounded-summary-and-audit-cleanup.md) | done | TP-V2-116 | none |
 | TP-V2-119 | [TP-V2-119-precomputed-hourly-daily-read-model.md](TP-V2-119-precomputed-hourly-daily-read-model.md) | done | TP-V2-118 | none |
+| TP-V2-120 | [TP-V2-120-d1-legacy-ledger-backfill.md](TP-V2-120-d1-legacy-ledger-backfill.md) | done | TP-V2-103, TP-V2-119 | none |
 
 ## subagent 分配建议
 
