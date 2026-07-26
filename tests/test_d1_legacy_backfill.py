@@ -199,12 +199,54 @@ class D1LegacyBackfillTest(unittest.TestCase):
         )
 
         plan = build_plan(self.conn, options)
+        report = render_report(self.conn, plan)
 
         self.assertEqual(plan.daily_rows, [])
         self.assertTrue(any(
             item["source_id"] == "mac-a" and "overlaps detailed identities" in item["reason"]
             for item in plan.unresolved_identities
         ))
+        self.assertEqual(report["status"], "blocked_identity_mapping")
+        self.assertTrue(any(
+            item["source_id"] == "mac-a" and "overlaps detailed identities" in item["reason"]
+            for item in report["unresolved_identities"]
+        ))
+
+    def test_all_agent_dry_run_renders_structured_report(self) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO usage_daily (
+              source_id, date, agent, input_tokens, output_tokens,
+              cache_creation_tokens, cache_read_tokens, total_tokens, total_cost,
+              metadata_json, raw_json, first_seen_at, last_seen_at
+            ) VALUES (
+              'mac-a', '2026-05-21', 'all', 220, 50, 30, 0, 300, 3.0,
+              '{}', '{}', 'x', 'x'
+            )
+            """
+        )
+        self.conn.commit()
+        options = BackfillOptions(
+            start_date="2026-05-18",
+            end_date="2026-07-01",
+            as_of_date="2026-07-01",
+            identity_overrides={
+                "mac-a|all": {
+                    "machine_id": "macbook",
+                    "os_user": "alice",
+                    "ai_provider": "claude",
+                    "ai_account_id": "claude-main",
+                }
+            },
+        )
+
+        plan = build_plan(self.conn, options)
+        report = render_report(self.conn, plan)
+
+        self.assertEqual(plan.unresolved_identities, [])
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["unresolved_identities"], [])
+        self.assertEqual(report["plan"]["model_rows"], 0)
 
     def test_emitted_sql_is_bounded_new_table_only_and_has_targeted_rollback(self) -> None:
         plan = build_plan(self.conn, self.options(batch_size=1))

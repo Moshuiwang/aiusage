@@ -625,13 +625,12 @@ def _period_total(rows: list[dict[str, Any]], period: str, as_of: str) -> int:
 def _mapping_for_report(
     conn: sqlite3.Connection, overrides: dict[str, dict[str, str]]
 ) -> dict[tuple[str, str], dict[str, str]]:
-    rows = {
-        (row["source_id"], row["agent"])
-        for row in conn.execute("SELECT DISTINCT source_id, agent FROM usage_daily")
+    candidates = {
+        "daily": conn.execute(
+            "SELECT DISTINCT source_id, date, agent FROM usage_daily"
+        ).fetchall(),
+        "hourly": [],
     }
-    candidates = {"daily": [
-        {"source_id": source_id, "agent": agent} for source_id, agent in rows
-    ], "hourly": []}
     mappings, _ = _resolve_identities(conn, candidates, overrides)
     return mappings
 
