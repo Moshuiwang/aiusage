@@ -33,9 +33,9 @@ Parallel with: none
   - Codex 和 Claude 小时事实写入现有 `usage_hourly_facts` payload。
   - 账号无法确认时，使用 `unconfirmed_local_source`，popover 不显示成已确认账号。
 - 服务端读模型：
-  - `/api/summary` 和 `/api/mobile/summary` 在有 `usage_hourly_facts` 时，用这些小时事实生成周期总量、趋势和来源拆分。
-  - 对同一 source/date/agent，Usage Ledger 事实优先于旧 `usage_daily`。
-  - 旧 `usage_daily` 在没有新事实时继续作为 fallback，保护既有 daily baseline。
+  - `/api/summary` 和 `/api/mobile/summary` 只使用 `usage_hourly_facts`、`usage_hourly_models`、`usage_hourly_rollups`、`usage_daily_rollups` 生成周期总量、趋势和来源拆分。
+  - `usage_daily`、`usage_daily_models`、`usage_hourly`、`usage_blocks` 仅保留为只读归档，不再参与 fallback 或兼容写入。
+  - 生产切换前必须核验新 facts/rollups 的历史覆盖；覆盖不足时停止发布。
 - Cloudflare native Worker / D1 与本地 Python snapshot builder 保持同口径。
 
 ## Out of Scope
@@ -71,7 +71,7 @@ Parallel with: none
 - Codex session 归档不会让已上报的历史小时事实变少。
 - 日常增量上报不会每次做全量扫描；全量重算必须显式选择。
 - 账号不确定时，数据仍可入账，但显示为未确认来源，不伪装成官方账号。
-- 没有 ledger facts 的旧日期仍走既有 daily fallback。
+- today/week/month/all 及机器、账号筛选均不依赖旧 usage 归档表；生产历史覆盖核验通过后才允许切换。
 - 所有测试输出和 payload 不泄漏本机原始日志路径或内容。
 
 ## Verification
