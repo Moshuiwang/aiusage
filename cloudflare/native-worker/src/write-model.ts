@@ -30,49 +30,6 @@ type IngestRequest = {
   error_message: string | null;
 };
 
-type UsageDailyItem = {
-  source_id: string;
-  date: string;
-  agent: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  total_cost: number | null;
-  metadata: AnyRecord;
-  model_breakdowns: AnyRecord[];
-};
-
-type UsageHourlyItem = {
-  source_id: string;
-  machine: string;
-  account: string;
-  agent: string;
-  hour: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  total_cost: number | null;
-  metadata: AnyRecord;
-};
-
-type UsageBlockItem = {
-  source_id: string;
-  agent: string;
-  start_time: string;
-  end_time: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-  total_cost: number | null;
-  metadata: AnyRecord;
-};
-
 type UsageHourlyFact = {
   fact_id: string;
   source_id: string;
@@ -148,9 +105,6 @@ export class WriteValidationError extends Error {
 
 export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ body: AnyRecord; rowsWritten: number }> {
   const req = validateIngestPayload(payload);
-  const dailyItems = normalizeDaily(req);
-  const hourlyItems = normalizeHourly(req);
-  const blockItems = normalizeBlocks(req);
   const hourlyFacts = filterFactsByLedgerCoverage(req, normalizeFacts(req));
   const acceptedAt = req.observed_at || acceptedAtFromEnv(env);
   const superseded = await sourceHasNewerReport(env.AIUSAGE_DB, req.source_id, acceptedAt);
@@ -177,10 +131,10 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
     machine: req.machine ?? req.host,
     os_user: req.os_user,
     platform: req.platform,
-  }, dailyItems, hourlyItems, blockItems, hourlyFacts, acceptedAt);
+  }, hourlyFacts, acceptedAt);
   writeStatements.push(...accuracyWriteStatements(env.AIUSAGE_DB, accuracyPlans, hourlyFacts, acceptedAt, req.source_id));
 
-  const report = sourceReport(req, dailyItems);
+  const report = sourceReport(req, hourlyFacts);
   const reportState = await latestSourceReportState(env.AIUSAGE_DB, report);
   const reportStatements = collectionReportStatements(env.AIUSAGE_DB, acceptedAt, env.AIUSAGE_TIMEZONE ?? req.timezone, "ok", report);
   const shouldWriteReport = !reportState.hasExisting || reportState.changed;
@@ -312,18 +266,11 @@ async function runWriteBatch(db: D1Database, statements: D1PreparedStatement[]):
 function ingestWriteStatements(
   db: D1Database,
   identity: AnyRecord,
-  dailyItems: UsageDailyItem[],
-  hourlyItems: UsageHourlyItem[],
-  blockItems: UsageBlockItem[],
   hourlyFacts: UsageHourlyFact[],
   seenAt: string,
 ): D1PreparedStatement[] {
   return [
     sourceIdentityStatement(db, identity, seenAt),
-    ...replaceCodexHourlyStatements(db, hourlyItems),
-    ...dailyItems.flatMap((item) => dailyItemStatements(db, item, seenAt)),
-    ...hourlyItems.map((item) => hourlyItemStatement(db, item, seenAt)),
-    ...blockItems.map((item) => blockItemStatement(db, item, seenAt)),
     ...hourlyFacts.flatMap((fact) => hourlyFactStatements(db, fact, seenAt)),
   ];
 }
@@ -354,161 +301,6 @@ function sourceIdentityStatement(db: D1Database, identity: AnyRecord, seenAt: st
          AND source_identities.last_seen_at IS NOT excluded.last_seen_at
        )
   `).bind(identity.source_id, identity.host, identity.machine, identity.os_user, identity.platform, seenAt, seenAt);
-}
-
-function dailyItemStatements(db: D1Database, item: UsageDailyItem, seenAt: string): D1PreparedStatement[] {
-  return [
-    db.prepare(`
-      INSERT INTO usage_daily (
-        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(source_id, date, agent) DO UPDATE SET
-        input_tokens = excluded.input_tokens,
-        output_tokens = excluded.output_tokens,
-        cache_creation_tokens = excluded.cache_creation_tokens,
-        cache_read_tokens = excluded.cache_read_tokens,
-        total_tokens = excluded.total_tokens,
-        total_cost = excluded.total_cost,
-        metadata_json = excluded.metadata_json,
-        raw_json = excluded.raw_json,
-        last_seen_at = excluded.last_seen_at
-      WHERE usage_daily.input_tokens IS NOT excluded.input_tokens
-         OR usage_daily.output_tokens IS NOT excluded.output_tokens
-         OR usage_daily.cache_creation_tokens IS NOT excluded.cache_creation_tokens
-         OR usage_daily.cache_read_tokens IS NOT excluded.cache_read_tokens
-         OR usage_daily.total_tokens IS NOT excluded.total_tokens
-         OR usage_daily.total_cost IS NOT excluded.total_cost
-         OR usage_daily.metadata_json IS NOT excluded.metadata_json
-         OR usage_daily.raw_json IS NOT excluded.raw_json
-    `).bind(
-      item.source_id, item.date, item.agent, item.input_tokens, item.output_tokens,
-      item.cache_creation_tokens, item.cache_read_tokens, item.total_tokens, item.total_cost,
-      stableStringify(item.metadata), isRecord(item.metadata.ccusage_row) ? stableStringify(item.metadata.ccusage_row) : null,
-      seenAt, seenAt,
-    ),
-    ...item.model_breakdowns.map((model) => dailyModelStatement(db, item, model, seenAt)),
-  ];
-}
-
-function dailyModelStatement(db: D1Database, item: UsageDailyItem, model: AnyRecord, seenAt: string): D1PreparedStatement {
-  const raw = isRecord(model.raw) ? stableStringify(model.raw) : null;
-  return db.prepare(`
-    INSERT INTO usage_daily_models (
-      source_id, date, agent, model_name, input_tokens, output_tokens, cache_creation_tokens,
-      cache_read_tokens, total_tokens, cost, raw_json, first_seen_at, last_seen_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(source_id, date, agent, model_name) DO UPDATE SET
-      input_tokens = excluded.input_tokens,
-      output_tokens = excluded.output_tokens,
-      cache_creation_tokens = excluded.cache_creation_tokens,
-      cache_read_tokens = excluded.cache_read_tokens,
-      total_tokens = excluded.total_tokens,
-      cost = excluded.cost,
-      raw_json = excluded.raw_json,
-      last_seen_at = excluded.last_seen_at
-    WHERE usage_daily_models.input_tokens IS NOT excluded.input_tokens
-       OR usage_daily_models.output_tokens IS NOT excluded.output_tokens
-       OR usage_daily_models.cache_creation_tokens IS NOT excluded.cache_creation_tokens
-       OR usage_daily_models.cache_read_tokens IS NOT excluded.cache_read_tokens
-       OR usage_daily_models.total_tokens IS NOT excluded.total_tokens
-       OR usage_daily_models.cost IS NOT excluded.cost
-       OR usage_daily_models.raw_json IS NOT excluded.raw_json
-  `).bind(
-    item.source_id, item.date, item.agent, model.model_name, model.input_tokens, model.output_tokens,
-    model.cache_creation_tokens, model.cache_read_tokens, model.total_tokens, model.cost, raw, seenAt, seenAt,
-  );
-}
-
-function replaceCodexHourlyStatements(db: D1Database, items: UsageHourlyItem[]): D1PreparedStatement[] {
-  const affected = new Map<string, Set<string>>();
-  for (const item of items) {
-    if (item.metadata.provenance !== "mswusage_codex_token_count" || !isCodexAgent(item.agent)) continue;
-    const day = item.hour.slice(0, 10);
-    const key = `${item.source_id}\0${day}`;
-    const keep = affected.get(key) ?? new Set<string>();
-    keep.add(`${item.hour}\0${item.agent}`);
-    affected.set(key, keep);
-  }
-  const statements: D1PreparedStatement[] = [];
-  for (const [key, keep] of affected.entries()) {
-    const [sourceId, day] = key.split("\0");
-    const keepClauses = Array.from(keep).map(() => "(hour = ? AND agent = ?)");
-    const keepParams = Array.from(keep).flatMap((item) => item.split("\0"));
-    statements.push(db.prepare(`
-      DELETE FROM usage_hourly
-      WHERE source_id = ? AND substr(hour, 1, 10) = ?
-        AND (lower(agent) LIKE '%codex%' OR lower(agent) LIKE '%gpt%' OR lower(agent) LIKE '%openai%')
-        AND NOT (${keepClauses.join(" OR ")})
-    `).bind(sourceId, day, ...keepParams));
-  }
-  return statements;
-}
-
-function hourlyItemStatement(db: D1Database, item: UsageHourlyItem, seenAt: string): D1PreparedStatement {
-  const metadataJson = stableStringify(item.metadata);
-  const rawJson = isRecord(item.metadata.ccusage_session_row) ? stableStringify(item.metadata.ccusage_session_row) : null;
-  return db.prepare(`
-    INSERT INTO usage_hourly (
-      source_id, hour, agent, input_tokens, output_tokens, cache_creation_tokens,
-      cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json, first_seen_at, last_seen_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(source_id, hour, agent) DO UPDATE SET
-      input_tokens = excluded.input_tokens,
-      output_tokens = excluded.output_tokens,
-      cache_creation_tokens = excluded.cache_creation_tokens,
-      cache_read_tokens = excluded.cache_read_tokens,
-      total_tokens = excluded.total_tokens,
-      total_cost = excluded.total_cost,
-      metadata_json = excluded.metadata_json,
-      raw_json = excluded.raw_json,
-      last_seen_at = excluded.last_seen_at
-    WHERE usage_hourly.input_tokens IS NOT excluded.input_tokens
-       OR usage_hourly.output_tokens IS NOT excluded.output_tokens
-       OR usage_hourly.cache_creation_tokens IS NOT excluded.cache_creation_tokens
-       OR usage_hourly.cache_read_tokens IS NOT excluded.cache_read_tokens
-       OR usage_hourly.total_tokens IS NOT excluded.total_tokens
-       OR usage_hourly.total_cost IS NOT excluded.total_cost
-       OR usage_hourly.metadata_json IS NOT excluded.metadata_json
-       OR usage_hourly.raw_json IS NOT excluded.raw_json
-  `).bind(
-    item.source_id, item.hour, item.agent, item.input_tokens, item.output_tokens,
-    item.cache_creation_tokens, item.cache_read_tokens, item.total_tokens, item.total_cost,
-    metadataJson, rawJson, seenAt, seenAt,
-  );
-}
-
-function blockItemStatement(db: D1Database, item: UsageBlockItem, seenAt: string): D1PreparedStatement {
-  const metadataJson = stableStringify(item.metadata);
-  const rawJson = isRecord(item.metadata.ccusage_block_row) ? stableStringify(item.metadata.ccusage_block_row) : null;
-  return db.prepare(`
-    INSERT INTO usage_blocks (
-      source_id, start_time, end_time, agent, input_tokens, output_tokens, cache_creation_tokens,
-      cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json, first_seen_at, last_seen_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(source_id, start_time, end_time, agent) DO UPDATE SET
-      input_tokens = excluded.input_tokens,
-      output_tokens = excluded.output_tokens,
-      cache_creation_tokens = excluded.cache_creation_tokens,
-      cache_read_tokens = excluded.cache_read_tokens,
-      total_tokens = excluded.total_tokens,
-      total_cost = excluded.total_cost,
-      metadata_json = excluded.metadata_json,
-      raw_json = excluded.raw_json,
-      last_seen_at = excluded.last_seen_at
-    WHERE usage_blocks.input_tokens IS NOT excluded.input_tokens
-       OR usage_blocks.output_tokens IS NOT excluded.output_tokens
-       OR usage_blocks.cache_creation_tokens IS NOT excluded.cache_creation_tokens
-       OR usage_blocks.cache_read_tokens IS NOT excluded.cache_read_tokens
-       OR usage_blocks.total_tokens IS NOT excluded.total_tokens
-       OR usage_blocks.total_cost IS NOT excluded.total_cost
-       OR usage_blocks.metadata_json IS NOT excluded.metadata_json
-       OR usage_blocks.raw_json IS NOT excluded.raw_json
-  `).bind(
-    item.source_id, item.start_time, item.end_time, item.agent, item.input_tokens, item.output_tokens,
-    item.cache_creation_tokens, item.cache_read_tokens, item.total_tokens, item.total_cost,
-    metadataJson, rawJson, seenAt, seenAt,
-  );
 }
 
 function hourlyFactStatements(db: D1Database, fact: UsageHourlyFact, seenAt: string): D1PreparedStatement[] {
@@ -1098,205 +890,6 @@ function parseLimitWindow(payload: AnyRecord): LimitWindow {
   };
 }
 
-function normalizeDaily(req: IngestRequest): UsageDailyItem[] {
-  const source = sourceConfig(req);
-  let usageDaily = req.usage_daily;
-  const totals = isRecord(req.ccusage_daily_report?.totals) ? req.ccusage_daily_report.totals : undefined;
-  if (Array.isArray(req.ccusage_daily_report?.daily)) usageDaily = req.ccusage_daily_report.daily.filter(isRecord);
-  const items = new Map<string, UsageDailyItem>();
-  for (const row of usageDaily) {
-    if (!row.period) continue;
-    const item = dailyRowToItem(source, row, totals);
-    item.metadata.machine = item.metadata.machine ?? item.source_id;
-    item.metadata.host = req.host;
-    item.metadata.account = item.metadata.account ?? req.os_user;
-    item.metadata.platform = req.platform;
-    items.set(`${item.source_id}\0${item.date}\0${item.agent}`, item);
-  }
-  return Array.from(items.values());
-}
-
-function dailyRowToItem(source: AnyRecord, row: AnyRecord, totals?: unknown): UsageDailyItem {
-  const input = intField(row, "inputTokens");
-  const output = intField(row, "outputTokens");
-  const cacheCreation = intField(row, "cacheCreationTokens");
-  const cacheRead = intField(row, "cacheReadTokens");
-  const total = optionalInt(row, "totalTokens") ?? input + output + cacheCreation + cacheRead;
-  const metadata: AnyRecord = isRecord(row.metadata) ? { ...row.metadata } : {};
-  metadata.ccusage_row = { ...row };
-  if (isRecord(totals)) metadata.ccusage_totals = { ...totals };
-  metadata.machine = String(source.host_label ?? source.machine ?? source.source_id);
-  metadata.host = source.host;
-  metadata.account = String(source.os_user ?? source.account ?? "unknown");
-  metadata.platform = String(source.platform ?? "unknown");
-  return {
-    source_id: String(source.source_id),
-    machine: String(metadata.machine),
-    account: String(metadata.account),
-    agent: String(row.agent ?? "unknown"),
-    date: String(row.period),
-    input_tokens: input,
-    output_tokens: output,
-    cache_creation_tokens: cacheCreation,
-    cache_read_tokens: cacheRead,
-    total_tokens: total,
-    total_cost: optionalFloat(row, "totalCost"),
-    metadata,
-    model_breakdowns: normalizeModels(row.modelBreakdowns),
-  } as UsageDailyItem;
-}
-
-function normalizeModels(models: unknown): AnyRecord[] {
-  if (!Array.isArray(models)) return [];
-  return models.filter(isRecord).map((model) => {
-    const input = intField(model, "inputTokens");
-    const output = intField(model, "outputTokens");
-    const cacheCreation = intField(model, "cacheCreationTokens");
-    const cacheRead = intField(model, "cacheReadTokens");
-    return {
-      model_name: model.modelName ?? "unknown",
-      input_tokens: input,
-      output_tokens: output,
-      cache_creation_tokens: cacheCreation,
-      cache_read_tokens: cacheRead,
-      total_tokens: optionalInt(model, "totalTokens") ?? input + output + cacheCreation + cacheRead,
-      cost: optionalFloat(model, "cost"),
-      raw: { ...model },
-    };
-  });
-}
-
-function normalizeHourly(req: IngestRequest): UsageHourlyItem[] {
-  const source = sourceConfig(req);
-  const items = new Map<string, UsageHourlyItem>();
-  for (const item of mswusageCodexHourlyItems(source, req)) items.set(`${item.source_id}\0${item.hour}\0${item.agent}`, item);
-  const sessions = Array.isArray(req.ccusage_session_report?.session) ? req.ccusage_session_report.session : [];
-  for (const row of sessions.filter(isRecord)) {
-    if (isCodexAgent(row.agent)) continue;
-    const hour = sessionHour(row, req.timezone);
-    if (!hour) continue;
-    const item = sessionRowToHourlyItem(source, row, hour);
-    const key = `${item.source_id}\0${item.hour}\0${item.agent}`;
-    const prev = items.get(key);
-    if (prev) {
-      prev.input_tokens += item.input_tokens;
-      prev.output_tokens += item.output_tokens;
-      prev.cache_creation_tokens += item.cache_creation_tokens;
-      prev.cache_read_tokens += item.cache_read_tokens;
-      prev.total_tokens += item.total_tokens;
-      prev.total_cost = prev.total_cost !== null || item.total_cost !== null ? (prev.total_cost ?? 0) + (item.total_cost ?? 0) : null;
-    } else {
-      item.metadata.machine = item.machine;
-      item.metadata.host = req.host;
-      item.metadata.account = item.account;
-      item.metadata.platform = req.platform;
-      items.set(key, item);
-    }
-  }
-  return Array.from(items.values());
-}
-
-function mswusageCodexHourlyItems(source: AnyRecord, req: IngestRequest): UsageHourlyItem[] {
-  const report = req.mswusage_codex_hourly_report;
-  const rows = Array.isArray(report?.hourly) ? report.hourly.filter(isRecord) : [];
-  const drift = isRecord(report?.drift) ? report.drift : null;
-  return rows.filter((row) => row.hour).map((row) => {
-    const metadata: AnyRecord = {
-      machine: String(source.host_label ?? source.machine ?? source.source_id),
-      host: source.host,
-      account: String(source.os_user ?? source.account ?? "unknown"),
-      platform: String(source.platform ?? "unknown"),
-      provenance: row.provenance ?? report?.provenance ?? "mswusage_codex_token_count",
-      reasoning_output_tokens: intField(row, "reasoning_output_tokens"),
-      event_count: intField(row, "event_count"),
-      session_count: intField(row, "session_count"),
-    };
-    if (drift) metadata.drift = { ...drift };
-    return {
-      source_id: String(source.source_id),
-      machine: String(metadata.machine),
-      account: String(metadata.account),
-      agent: "codex",
-      hour: String(row.hour),
-      input_tokens: intField(row, "input_tokens"),
-      output_tokens: intField(row, "output_tokens"),
-      cache_creation_tokens: intField(row, "cache_creation_tokens"),
-      cache_read_tokens: intField(row, "cache_read_tokens"),
-      total_tokens: intField(row, "total_tokens"),
-      total_cost: null,
-      metadata,
-    };
-  });
-}
-
-function sessionRowToHourlyItem(source: AnyRecord, row: AnyRecord, hour: string): UsageHourlyItem {
-  const input = intField(row, "inputTokens");
-  const output = intField(row, "outputTokens");
-  const cacheCreation = intField(row, "cacheCreationTokens");
-  const cacheRead = intField(row, "cacheReadTokens");
-  const metadata: AnyRecord = isRecord(row.metadata) ? { ...row.metadata } : {};
-  metadata.ccusage_session_row = { ...row };
-  return {
-    source_id: String(source.source_id),
-    machine: String(source.host_label ?? source.machine ?? source.source_id),
-    account: String(source.os_user ?? source.account ?? "unknown"),
-    agent: String(row.agent ?? "unknown"),
-    hour,
-    input_tokens: input,
-    output_tokens: output,
-    cache_creation_tokens: cacheCreation,
-    cache_read_tokens: cacheRead,
-    total_tokens: optionalInt(row, "totalTokens") ?? input + output + cacheCreation + cacheRead,
-    total_cost: optionalFloat(row, "totalCost"),
-    metadata,
-  };
-}
-
-function normalizeBlocks(req: IngestRequest): UsageBlockItem[] {
-  const source = sourceConfig(req);
-  const rows = Array.isArray(req.ccusage_blocks_report?.blocks) ? req.ccusage_blocks_report.blocks.filter(isRecord) : [];
-  const items: UsageBlockItem[] = [];
-  for (const row of rows) {
-    if (row.isGap) continue;
-    const item = blockRowToItem(source, row, req.timezone);
-    if (item) items.push(item);
-  }
-  return items;
-}
-
-function blockRowToItem(source: AnyRecord, row: AnyRecord, timezone: string): UsageBlockItem | null {
-  const start = blockTime(row.startTime, timezone);
-  const end = blockTime(row.actualEndTime ?? row.endTime, timezone);
-  if (!start || !end) return null;
-  const tokenCounts = isRecord(row.tokenCounts) ? row.tokenCounts : {};
-  const input = Number(tokenCounts.inputTokens ?? row.inputTokens ?? 0);
-  const output = Number(tokenCounts.outputTokens ?? row.outputTokens ?? 0);
-  const cacheCreation = Number(tokenCounts.cacheCreationInputTokens ?? row.cacheCreationTokens ?? 0);
-  const cacheRead = Number(tokenCounts.cacheReadInputTokens ?? row.cacheReadTokens ?? 0);
-  const total = optionalInt(row, "totalTokens") ?? input + output + cacheCreation + cacheRead;
-  if (total <= 0) return null;
-  const metadata = {
-    machine: String(source.host_label ?? source.machine ?? source.source_id),
-    host: source.host,
-    account: String(source.os_user ?? source.account ?? "unknown"),
-    platform: String(source.platform ?? "unknown"),
-    ccusage_block_row: { ...row },
-  };
-  return {
-    source_id: String(source.source_id),
-    agent: String(row.agent ?? "claude"),
-    start_time: start,
-    end_time: end,
-    input_tokens: input,
-    output_tokens: output,
-    cache_creation_tokens: cacheCreation,
-    cache_read_tokens: cacheRead,
-    total_tokens: total,
-    total_cost: optionalFloat(row, "costUSD"),
-    metadata,
-  };
-}
-
 function normalizeFacts(req: IngestRequest): UsageHourlyFact[] {
   const device = {
     machine_id: req.machine ?? req.host ?? req.source_id,
@@ -1346,236 +939,6 @@ function normalizeFacts(req: IngestRequest): UsageHourlyFact[] {
     seen.set(fact.fact_id, fact);
   }
   return Array.from(seen.values());
-}
-
-async function upsertSourceIdentity(db: D1Database, identity: AnyRecord, seenAt: string): Promise<number> {
-  const existing = await db.prepare(
-    "SELECT host, machine, os_user, platform, last_seen_at FROM source_identities WHERE source_id = ?",
-  ).bind(identity.source_id).first<AnyRecord>();
-  const compare = {
-    host: identity.host,
-    machine: identity.machine,
-    os_user: identity.os_user,
-    platform: identity.platform,
-  };
-  if (!existing) {
-    await db.prepare(`
-      INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).bind(identity.source_id, identity.host, identity.machine, identity.os_user, identity.platform, seenAt, seenAt).run();
-    return 1;
-  }
-  const shouldRefreshLastSeen = newerOrSameIso(seenAt, String(existing.last_seen_at ?? ""));
-  if (!rowMatches(existing, compare)) {
-    await db.prepare(`
-      UPDATE source_identities
-      SET host = ?, machine = ?, os_user = ?, platform = ?, last_seen_at = ?
-      WHERE source_id = ?
-    `).bind(identity.host, identity.machine, identity.os_user, identity.platform, shouldRefreshLastSeen ? seenAt : existing.last_seen_at, identity.source_id).run();
-    return 1;
-  }
-  if (shouldRefreshLastSeen && !sameValue(existing.last_seen_at, seenAt)) {
-    await db.prepare("UPDATE source_identities SET last_seen_at = ? WHERE source_id = ?")
-      .bind(seenAt, identity.source_id)
-      .run();
-    return 1;
-  }
-  return 0;
-}
-
-async function upsertDailyItem(db: D1Database, item: UsageDailyItem, seenAt: string): Promise<number> {
-  let written = await upsertIfChanged(db, {
-    select: `SELECT input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json
-             FROM usage_daily WHERE source_id = ? AND date = ? AND agent = ?`,
-    keyParams: [item.source_id, item.date, item.agent],
-    compare: {
-      input_tokens: item.input_tokens,
-      output_tokens: item.output_tokens,
-      cache_creation_tokens: item.cache_creation_tokens,
-      cache_read_tokens: item.cache_read_tokens,
-      total_tokens: item.total_tokens,
-      total_cost: item.total_cost,
-      metadata_json: stableStringify(item.metadata),
-      raw_json: isRecord(item.metadata.ccusage_row) ? stableStringify(item.metadata.ccusage_row) : null,
-    },
-    insert: `
-      INSERT INTO usage_daily (
-        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    insertParams: [
-      item.source_id, item.date, item.agent, item.input_tokens, item.output_tokens,
-      item.cache_creation_tokens, item.cache_read_tokens, item.total_tokens, item.total_cost,
-      stableStringify(item.metadata), isRecord(item.metadata.ccusage_row) ? stableStringify(item.metadata.ccusage_row) : null,
-      seenAt, seenAt,
-    ],
-    update: `
-      UPDATE usage_daily
-      SET input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?, cache_read_tokens = ?,
-          total_tokens = ?, total_cost = ?, metadata_json = ?, raw_json = ?, last_seen_at = ?
-      WHERE source_id = ? AND date = ? AND agent = ?
-    `,
-    updateParams: [
-      item.input_tokens, item.output_tokens, item.cache_creation_tokens, item.cache_read_tokens,
-      item.total_tokens, item.total_cost, stableStringify(item.metadata),
-      isRecord(item.metadata.ccusage_row) ? stableStringify(item.metadata.ccusage_row) : null,
-      seenAt, item.source_id, item.date, item.agent,
-    ],
-  });
-  for (const model of item.model_breakdowns) written += await upsertDailyModel(db, item, model, seenAt);
-  return written;
-}
-
-async function upsertDailyModel(db: D1Database, item: UsageDailyItem, model: AnyRecord, seenAt: string): Promise<number> {
-  const raw = isRecord(model.raw) ? stableStringify(model.raw) : null;
-  return upsertIfChanged(db, {
-    select: `SELECT input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, cost, raw_json
-             FROM usage_daily_models WHERE source_id = ? AND date = ? AND agent = ? AND model_name = ?`,
-    keyParams: [item.source_id, item.date, item.agent, model.model_name],
-    compare: {
-      input_tokens: model.input_tokens,
-      output_tokens: model.output_tokens,
-      cache_creation_tokens: model.cache_creation_tokens,
-      cache_read_tokens: model.cache_read_tokens,
-      total_tokens: model.total_tokens,
-      cost: model.cost,
-      raw_json: raw,
-    },
-    insert: `
-      INSERT INTO usage_daily_models (
-        source_id, date, agent, model_name, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, cost, raw_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    insertParams: [
-      item.source_id, item.date, item.agent, model.model_name, model.input_tokens, model.output_tokens,
-      model.cache_creation_tokens, model.cache_read_tokens, model.total_tokens, model.cost, raw, seenAt, seenAt,
-    ],
-    update: `
-      UPDATE usage_daily_models
-      SET input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?, cache_read_tokens = ?,
-          total_tokens = ?, cost = ?, raw_json = ?, last_seen_at = ?
-      WHERE source_id = ? AND date = ? AND agent = ? AND model_name = ?
-    `,
-    updateParams: [
-      model.input_tokens, model.output_tokens, model.cache_creation_tokens, model.cache_read_tokens,
-      model.total_tokens, model.cost, raw, seenAt, item.source_id, item.date, item.agent, model.model_name,
-    ],
-  });
-}
-
-async function replaceCodexHourlyRows(db: D1Database, items: UsageHourlyItem[]): Promise<number> {
-  const affected = new Map<string, Set<string>>();
-  for (const item of items) {
-    if (item.metadata.provenance === "mswusage_codex_token_count" && isCodexAgent(item.agent)) {
-      const day = item.hour.slice(0, 10);
-      const key = `${item.source_id}\0${day}`;
-      const keep = affected.get(key) ?? new Set<string>();
-      keep.add(`${item.hour}\0${item.agent}`);
-      affected.set(key, keep);
-    }
-  }
-  let deleted = 0;
-  for (const [key, keep] of affected.entries()) {
-    const [sourceId, day] = key.split("\0");
-    const existing = await db.prepare(`
-      SELECT hour, agent
-      FROM usage_hourly
-      WHERE source_id = ? AND substr(hour, 1, 10) = ?
-        AND (lower(agent) LIKE '%codex%' OR lower(agent) LIKE '%gpt%' OR lower(agent) LIKE '%openai%')
-    `).bind(sourceId, day).all<{ hour: string; agent: string }>();
-    for (const row of existing.results ?? []) {
-      if (keep.has(`${row.hour}\0${row.agent}`)) continue;
-      await db.prepare("DELETE FROM usage_hourly WHERE source_id = ? AND hour = ? AND agent = ?")
-        .bind(sourceId, row.hour, row.agent).run();
-      deleted += 1;
-    }
-  }
-  return deleted;
-}
-
-async function upsertHourlyItem(db: D1Database, item: UsageHourlyItem, seenAt: string): Promise<number> {
-  const metadataJson = stableStringify(item.metadata);
-  const rawJson = isRecord(item.metadata.ccusage_session_row) ? stableStringify(item.metadata.ccusage_session_row) : null;
-  return upsertIfChanged(db, {
-    select: `SELECT input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json
-             FROM usage_hourly WHERE source_id = ? AND hour = ? AND agent = ?`,
-    keyParams: [item.source_id, item.hour, item.agent],
-    compare: {
-      input_tokens: item.input_tokens,
-      output_tokens: item.output_tokens,
-      cache_creation_tokens: item.cache_creation_tokens,
-      cache_read_tokens: item.cache_read_tokens,
-      total_tokens: item.total_tokens,
-      total_cost: item.total_cost,
-      metadata_json: metadataJson,
-      raw_json: rawJson,
-    },
-    insert: `
-      INSERT INTO usage_hourly (
-        source_id, hour, agent, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    insertParams: [
-      item.source_id, item.hour, item.agent, item.input_tokens, item.output_tokens,
-      item.cache_creation_tokens, item.cache_read_tokens, item.total_tokens, item.total_cost,
-      metadataJson, rawJson, seenAt, seenAt,
-    ],
-    update: `
-      UPDATE usage_hourly
-      SET input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?, cache_read_tokens = ?,
-          total_tokens = ?, total_cost = ?, metadata_json = ?, raw_json = ?, last_seen_at = ?
-      WHERE source_id = ? AND hour = ? AND agent = ?
-    `,
-    updateParams: [
-      item.input_tokens, item.output_tokens, item.cache_creation_tokens, item.cache_read_tokens,
-      item.total_tokens, item.total_cost, metadataJson, rawJson, seenAt, item.source_id, item.hour, item.agent,
-    ],
-  });
-}
-
-async function upsertBlockItem(db: D1Database, item: UsageBlockItem, seenAt: string): Promise<number> {
-  const metadataJson = stableStringify(item.metadata);
-  const rawJson = isRecord(item.metadata.ccusage_block_row) ? stableStringify(item.metadata.ccusage_block_row) : null;
-  return upsertIfChanged(db, {
-    select: `SELECT input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json
-             FROM usage_blocks WHERE source_id = ? AND start_time = ? AND end_time = ? AND agent = ?`,
-    keyParams: [item.source_id, item.start_time, item.end_time, item.agent],
-    compare: {
-      input_tokens: item.input_tokens,
-      output_tokens: item.output_tokens,
-      cache_creation_tokens: item.cache_creation_tokens,
-      cache_read_tokens: item.cache_read_tokens,
-      total_tokens: item.total_tokens,
-      total_cost: item.total_cost,
-      metadata_json: metadataJson,
-      raw_json: rawJson,
-    },
-    insert: `
-      INSERT INTO usage_blocks (
-        source_id, start_time, end_time, agent, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, total_cost, metadata_json, raw_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    insertParams: [
-      item.source_id, item.start_time, item.end_time, item.agent, item.input_tokens, item.output_tokens,
-      item.cache_creation_tokens, item.cache_read_tokens, item.total_tokens, item.total_cost,
-      metadataJson, rawJson, seenAt, seenAt,
-    ],
-    update: `
-      UPDATE usage_blocks
-      SET input_tokens = ?, output_tokens = ?, cache_creation_tokens = ?, cache_read_tokens = ?,
-          total_tokens = ?, total_cost = ?, metadata_json = ?, raw_json = ?, last_seen_at = ?
-      WHERE source_id = ? AND start_time = ? AND end_time = ? AND agent = ?
-    `,
-    updateParams: [
-      item.input_tokens, item.output_tokens, item.cache_creation_tokens, item.cache_read_tokens,
-      item.total_tokens, item.total_cost, metadataJson, rawJson, seenAt,
-      item.source_id, item.start_time, item.end_time, item.agent,
-    ],
-  });
 }
 
 async function upsertHourlyFact(db: D1Database, fact: UsageHourlyFact, seenAt: string): Promise<number> {
@@ -1828,8 +1191,8 @@ async function sourceHasNewerReport(db: D1Database, sourceId: string, observedAt
   return !Number.isNaN(latest.getTime()) && latest.getTime() > observed.getTime();
 }
 
-function sourceReport(req: IngestRequest, dailyItems: UsageDailyItem[]): AnyRecord {
-  const periods = dailyItems.map((item) => item.date);
+function sourceReport(req: IngestRequest, hourlyFacts: UsageHourlyFact[]): AnyRecord {
+  const periods = hourlyFacts.map((fact) => fact.window_start.slice(0, 10));
   return {
     source_id: req.source_id,
     report_type: "daily",
@@ -1917,70 +1280,12 @@ function rejectSensitiveLimitKeys(payload: AnyRecord): void {
   }
 }
 
-function sourceConfig(req: IngestRequest): AnyRecord {
-  return {
-    source_id: req.source_id,
-    host_label: req.machine ?? req.host,
-    host: req.host,
-    os_user: req.os_user,
-    platform: req.platform,
-  };
-}
-
-function sessionHour(row: AnyRecord, timezone: string): string | null {
-  const metadata = isRecord(row.metadata) ? row.metadata : {};
-  const value = metadata.lastActivity;
-  if (!value) return null;
-  const text = String(value);
-  if (text.length === 10 && text[4] === "-" && text[7] === "-") return `${text}T00:00:00`;
-  return toLocalIso(text, timezone, true);
-}
-
-function blockTime(value: unknown, timezone: string): string | null {
-  if (!value) return null;
-  return toLocalIso(String(value), timezone, false);
-}
-
-function toLocalIso(value: string, timezone: string, truncateHour: boolean): string | null {
-  const hasTz = /([zZ]|[+-]\d\d:\d\d)$/.test(value);
-  if (!hasTz) {
-    const [date, time = "00:00:00"] = value.split("T");
-    const parts = time.split(":");
-    return truncateHour ? `${date}T${parts[0] ?? "00"}:00:00` : `${date}T${parts[0] ?? "00"}:${parts[1] ?? "00"}:${(parts[2] ?? "00").slice(0, 2)}`;
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return formatInTimezone(parsed, timezone, truncateHour);
-}
-
-function formatInTimezone(date: Date, timezone: string, truncateHour: boolean): string {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(date).map((part) => [part.type, part.value]));
-  const hour = String(Number(parts.hour) % 24).padStart(2, "0");
-  const minute = truncateHour ? "00" : parts.minute;
-  const second = truncateHour ? "00" : parts.second;
-  const offset = timezone === "Asia/Shanghai" ? "+08:00" : "";
-  return `${parts.year}-${parts.month}-${parts.day}T${hour}:${minute}:${second}${offset}`;
-}
-
 function acceptedAtFromEnv(env: Env): string {
   return env.AIUSAGE_NOW || new Date().toISOString();
 }
 
 function intField(row: AnyRecord, name: string): number {
   return row[name] === undefined || row[name] === null ? 0 : Number(row[name]);
-}
-
-function optionalInt(row: AnyRecord, name: string): number | null {
-  return row[name] === undefined || row[name] === null ? null : Number(row[name]);
 }
 
 function optionalFloat(row: AnyRecord, name: string): number | null {
@@ -2019,11 +1324,6 @@ function positiveInt(payload: AnyRecord, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value)) throw new WriteValidationError(400, "limit_schema_invalid", `${field} must be an integer`);
   if (value < 0) throw new WriteValidationError(400, "limit_schema_invalid", `${field} must be positive`);
   return value;
-}
-
-function isCodexAgent(agent: unknown): boolean {
-  const raw = String(agent ?? "").toLowerCase();
-  return raw.includes("codex") || raw.includes("gpt") || raw.includes("openai");
 }
 
 function isRecord(value: unknown): value is AnyRecord {

@@ -99,6 +99,19 @@ INSERT INTO usage_hourly_facts (
   ('fact-linux-20260515-12', 'linux-dev-bob', 'linux-dev', 'bob', 'codex', 'codex-main', 'codex', 'cli', '2026-05-15T12:00:00+08:00', '2026-05-15T13:00:00+08:00', 'Asia/Shanghai', 1600, 900, 500, 0, 40, 3000, 1.50, 5, 2, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-linux-month"}', '2026-05-15T12:00:00+08:00', '2026-06-03T11:31:00+08:00'),
   ('fact-mini-20260410-12', 'mac-mini-dan', 'mac-mini', 'dan', 'codex', 'codex-main', 'codex', 'cli', '2026-04-10T12:00:00+08:00', '2026-04-10T13:00:00+08:00', 'Asia/Shanghai', 800, 400, 100, 0, 15, 1300, 0.61, 2, 1, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-mini-all"}', '2026-04-10T12:00:00+08:00', '2026-06-03T11:32:00+08:00');
 
+INSERT INTO usage_hourly_models (
+  fact_id, model, input_tokens, output_tokens, cache_creation_tokens,
+  cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost,
+  metadata_json, first_seen_at, last_seen_at
+) VALUES
+  ('fact-mac-20260603-09', 'claude-sonnet', 1600, 400, 100, 50, 0, 2150, 0.86, '{"seed":"claude-sonnet"}', '2026-06-03T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
+  ('fact-mac-20260603-09', 'claude-opus', 600, 200, 100, 50, 0, 950, 0.37, '{"seed":"claude-opus"}', '2026-06-03T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
+  ('fact-linux-20260603-10', 'gpt-5', 1000, 500, 100, 0, 25, 1600, 0.72, '{"seed":"gpt-5-today"}', '2026-06-03T10:00:00+08:00', '2026-06-03T11:31:00+08:00'),
+  ('fact-workstation-20260601-10', 'ag-coder', 700, 300, 50, 50, 0, 1100, 0.44, '{"seed":"ag-coder"}', '2026-06-01T10:00:00+08:00', '2026-06-03T10:00:00+08:00'),
+  ('fact-mac-20260529-09', 'claude-sonnet', 1200, 500, 300, 0, 0, 2000, 0.84, '{"seed":"claude-sonnet-week"}', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
+  ('fact-linux-20260515-12', 'gpt-5', 1600, 900, 500, 0, 40, 3000, 1.50, '{"seed":"gpt-5-month"}', '2026-05-15T12:00:00+08:00', '2026-06-03T11:31:00+08:00'),
+  ('fact-mini-20260410-12', 'gpt-4.1', 800, 400, 100, 0, 15, 1300, 0.61, '{"seed":"gpt-4.1-all"}', '2026-04-10T12:00:00+08:00', '2026-06-03T11:32:00+08:00');
+
 INSERT INTO limit_windows (
   source_id, provider, window, used_percent, remaining_percent, reset_at,
   window_duration_minutes, source_type, confidence, status, observed_at,

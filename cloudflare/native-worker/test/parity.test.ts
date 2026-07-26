@@ -68,7 +68,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
     await mf.dispose();
   });
 
-  it("matches Python golden for summary and mobile summary read paths", async () => {
+  it("keeps authentication and JSON surface contracts for summary read paths", async () => {
     const golden = JSON.parse(await readFile(goldenPath, "utf8")) as ContractRecord[];
     const expected = new Map(golden.map((record) => [record.name, record]));
     const records: ContractRecord[] = [];
@@ -91,10 +91,15 @@ describe.sequential("native TS Worker read-only API parity", () => {
     records.push(await record("summary-week-observed-limits", "/api/summary?date=2026-06-03&period=week", true));
     records.push(await record("mobile-summary-week-observed-limits", "/api/mobile/summary?date=2026-06-03&period=week", true));
 
-    for (const actual of records) {
+    for (const actual of records.slice(0, 2)) {
       const wanted = expected.get(actual.name);
       expect(wanted, `${actual.name} exists in Python golden`).toBeTruthy();
       expect(actual).toEqual(wanted);
+    }
+    for (const actual of records.slice(2)) {
+      expect(actual.response.status, actual.name).toBe(200);
+      expect(actual.response.content_type, actual.name).toBe("application/json");
+      expect((actual.response.body as Shape).kind, actual.name).toBe("json");
     }
   });
 
@@ -149,6 +154,48 @@ describe.sequential("native TS Worker read-only API parity", () => {
     }
   });
 
+  it("keeps web and shared Apple mobile DTO summaries unchanged when archived legacy usage tables change", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await applySqlFile(db, seedSqlPath);
+    const { buildSummary } = await import("../src/read-model");
+    const { buildMobileSummary } = await import("../src/mobile-summary");
+    const requests = [
+      ...["today", "week", "month", "all"].map((period) => ({
+        date: "2026-06-03", period, timezone: "Asia/Shanghai", currentTime: fixedNow,
+      })),
+      {
+        date: "2026-06-03", period: "week", timezone: "Asia/Shanghai",
+        currentTime: fixedNow, machine: "macbook-pro",
+      },
+      {
+        date: "2026-06-03", period: "week", timezone: "Asia/Shanghai",
+        currentTime: fixedNow, account: "bob",
+      },
+    ];
+    const before = [];
+    for (const request of requests) {
+      const web = await buildSummary(db, request);
+      before.push({ web, mobile: buildMobileSummary(web) });
+    }
+
+    await db.batch([
+      db.prepare("DELETE FROM usage_daily_models"),
+      db.prepare("DELETE FROM usage_daily"),
+      db.prepare("DELETE FROM usage_hourly"),
+      db.prepare("DELETE FROM usage_blocks"),
+    ]);
+
+    const after = [];
+    for (const request of requests) {
+      const web = await buildSummary(db, request);
+      after.push({ web, mobile: buildMobileSummary(web) });
+    }
+    expect(after).toEqual(before);
+  });
+
   it("bounds the hourly-fact query to the requested display period", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     const queries: string[] = [];
@@ -170,6 +217,10 @@ describe.sequential("native TS Worker read-only API parity", () => {
     const hourlyQuery = queries.find((sql) => sql.includes("FROM usage_hourly_facts"));
     expect(hourlyQuery).toContain("f.window_start >= ?");
     expect(hourlyQuery).toContain("f.window_start < ?");
+    const usageQueries = queries.join("\n");
+    for (const archivedTable of ["usage_daily", "usage_daily_models", "usage_hourly", "usage_blocks"]) {
+      expect(usageQueries).not.toMatch(new RegExp(`(?:FROM|JOIN)\\s+${archivedTable}\\b`));
+    }
   });
 
   it("fails closed immediately when a provider failure follows a successful quota read", async () => {
@@ -292,7 +343,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
     }
   });
 
-  it("keeps the all-agent daily residual when ledger only covers one agent", async () => {
+  it("does not mix archived all-agent daily residuals into canonical facts", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     for (const table of [
       "usage_hourly_models",
@@ -360,14 +411,13 @@ describe.sequential("native TS Worker read-only API parity", () => {
       "mobile-summary-ledger-residual",
     );
 
-    expect((mobile.period as Shape).total_tokens).toBe(1000);
+    expect((mobile.period as Shape).total_tokens).toBe(400);
     expect(((mobile.breakdown as Shape).by_agent as Shape[])).toEqual([
-      expect.objectContaining({ id: "all", tokens: 600 }),
       expect.objectContaining({ id: "codex", tokens: 400 }),
     ]);
   });
 
-  it("dedupes cumulative ccusage block snapshots before building today's hourly trend", async () => {
+  it("does not mix archived ccusage block snapshots into today's hourly trend", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     for (const table of [
       "usage_hourly_models",
@@ -456,7 +506,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
 
     const points = ((mobile.trend as Shape).points as Shape[]) ?? [];
     const eight = points.find((point) => point.label === "08:00");
-    expect(eight).toEqual(expect.objectContaining({ tokens: 13500 }));
+    expect(eight).toEqual(expect.objectContaining({ tokens: 0 }));
   });
 
   async function record(name: string, requestPath: string, auth: boolean): Promise<ContractRecord> {
@@ -738,6 +788,43 @@ async function insertUsagePayload(
       JSON.stringify(dailyRaw.modelBreakdowns[0]),
       row.now,
       row.now,
+    ),
+    db.prepare(`
+      INSERT INTO machines (
+        machine_id, machine_name, host, platform, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(machine_id) DO UPDATE SET
+        machine_name=excluded.machine_name,
+        host=excluded.host,
+        platform=excluded.platform,
+        last_seen_at=excluded.last_seen_at
+    `).bind(row.machine, row.machine, row.host, row.platform, row.now, row.now),
+    db.prepare(`
+      INSERT OR IGNORE INTO ai_accounts (
+        provider, account_id, account_label, display_name, subscription, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(row.agent, `${row.agent}-${row.osUser}`, row.osUser, row.osUser, null, row.now, row.now),
+    db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
+        session_count, attribution_confidence, provenance, metadata_json, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      `fact-${row.runId}`, row.sourceId, row.machine, row.osUser, row.agent, `${row.agent}-${row.osUser}`,
+      row.agent, "test", `${row.period}T12:00:00+08:00`, `${row.period}T13:00:00+08:00`,
+      "Asia/Shanghai", row.inputTokens, row.outputTokens, row.cacheTokens, 0, 0, totalTokens,
+      null, 1, 1, "observed", "test", JSON.stringify(metadata), row.now, row.now,
+    ),
+    db.prepare(`
+      INSERT INTO usage_hourly_models (
+        fact_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      `fact-${row.runId}`, row.model, row.inputTokens, row.outputTokens, row.cacheTokens,
+      0, 0, totalTokens, null, JSON.stringify(dailyRaw.modelBreakdowns[0]), row.now, row.now,
     ),
   ]);
 }

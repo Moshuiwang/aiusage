@@ -32,16 +32,18 @@ Web、iPhone、Watch 和 macOS 菜单栏都通过 Cloudflare Worker API 读取�
 | --- | --- | --- |
 | `collection_runs` | 一次采集写入运行记录。 | `id` autoincrement |
 | `source_reports` | 每个 source 的采集状态、错误类型和错误摘要。 | `id` autoincrement |
-| `usage_daily` | `source_id/date/agent` 级 daily usage baseline。 | `(source_id, date, agent)` |
-| `usage_daily_models` | `source_id/date/agent/model_name` 级 daily model breakdown。 | `(source_id, date, agent, model_name)` |
-| `usage_hourly` | `source_id/hour/agent` 级 hourly 聚合，主要服务趋势。 | `(source_id, hour, agent)` |
-| `usage_blocks` | session/block 时间窗级 usage。 | `(source_id, start_time, end_time, agent)` |
+| `usage_daily` | 旧 daily 数据只读归档；Worker 不再常规读取或兼容写入。 | `(source_id, date, agent)` |
+| `usage_daily_models` | 旧 daily model 数据只读归档；Worker 不再常规读取或兼容写入。 | `(source_id, date, agent, model_name)` |
+| `usage_hourly` | 旧 hourly 数据只读归档；Worker 不再常规读取或兼容写入。 | `(source_id, hour, agent)` |
+| `usage_blocks` | 旧 session/block 数据只读归档；Worker 不再常规读取或兼容写入。 | `(source_id, start_time, end_time, agent)` |
 | `source_identities` | source 到 host/machine/os_user/platform 的当前身份映射。 | `source_id` |
 | `machines` | 账号归因链路中的机器维度。 | `machine_id` |
 | `os_identities` | 机器下 OS 用户维度。 | `(machine_id, os_user)` |
 | `ai_accounts` | AI provider 账号维度。 | `(provider, account_id)` |
 | `usage_hourly_facts` | 账号级 hourly fact，承载 machine/user/account/provider 归因。 | `fact_id`，另有小时去重唯一索引 |
 | `usage_hourly_models` | `usage_hourly_facts` 的 model breakdown。 | `(fact_id, model)` |
+| `usage_hourly_rollups` | today 与小时趋势的权威汇总读模型。 | 账号归因维度 + `window_start` |
+| `usage_daily_rollups` | week/month/all 的权威日汇总读模型。 | 账号归因维度 + `window_start` |
 | `limit_windows` | 官方或结构化 provider 的额度窗口事实。 | `(source_id, provider, source_type, window)` |
 
 SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个写入入口中执行。
@@ -101,8 +103,9 @@ SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个
 
 ## 约束与边界
 
-- daily baseline 是用户可见 token 总量的基础，不得被 limits/provider 失败阻塞。
-- Usage Ledger 明细上报不得被 `ccusage daily` 缺失阻塞；`ccusage` 只做日级对账或历史兜底。
+- 用户可见 token 总量只使用 `usage_hourly_facts`、`usage_hourly_models`、`usage_hourly_rollups`、`usage_daily_rollups`，不得被 limits/provider 失败阻塞。
+- Usage Ledger 明细上报不得被 `ccusage daily` 缺失阻塞；旧 usage 表只保留为只读归档，不参与摘要或历史兜底。
+- 生产发布前必须核验新 facts/rollups 对 today/week/month/all 历史范围的覆盖完整性；覆盖不足时停止发布，不得重新启用旧表 fallback。
 - 官方额度只有 `official == true`、`confidence == "observed"`、`status == "ok"` 才能作为强结论展示。
 - `.claude`、`.codex` 原始日志目录、token、cookie、完整 provider response 不进入 SQLite。
 - 任何改表都必须单独任务包，先写迁移方案和测试；本轮不做 SQLite 迁移。

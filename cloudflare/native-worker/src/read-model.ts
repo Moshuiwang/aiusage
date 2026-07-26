@@ -86,32 +86,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const refTime = nowInTimezone(request.timezone, request.currentTime);
   const [periodId, startDate, endDate] = periodBounds(request.date, request.period);
   const hourAxisValues = periodId === "today" ? hourAxis(endDate) : [];
-  const dateParams = startDate === null ? [endDate] : [startDate, endDate];
-  const dateWhere = startDate === null ? "date <= ?" : "date >= ? AND date <= ?";
-
-  let rows = await all<DailyRow>(
-    db,
-    `
-      SELECT source_id, date, agent, input_tokens, output_tokens,
-             cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json
-      FROM usage_daily
-      WHERE ${dateWhere}
-      ORDER BY date ASC, source_id ASC, agent ASC
-    `,
-    dateParams,
-  );
   const identities = await fetchSourceIdentities(db);
-  let modelRows = await all<ModelRow>(
-    db,
-    `
-      SELECT source_id, date, agent, model_name, input_tokens, output_tokens,
-             cache_creation_tokens, cache_read_tokens, total_tokens, cost
-      FROM usage_daily_models
-      WHERE ${dateWhere}
-      ORDER BY date ASC, source_id ASC, agent ASC, model_name ASC
-    `,
-    dateParams,
-  );
   const statusRows = await all<Record<string, string | null>>(
     db,
     `
@@ -130,12 +105,6 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
       ORDER BY source_id ASC, agent ASC
     `,
   );
-  let hourlyRows: TimedRow[] = [];
-  let blockRows: TimedRow[] = [];
-  if (hourAxisValues.length > 0) {
-    hourlyRows = await fetchHourlyRows(db, hourAxisValues[0], hourAxisValues[hourAxisValues.length - 1]);
-    blockRows = await fetchBlockRows(db, hourAxisValues[0], hourAxisValues[hourAxisValues.length - 1]);
-  }
   const limits = await fetchLimitWindows(
     db,
     periodId === "today" && endDate === formatDate(refTime) ? refTime : null,
@@ -144,23 +113,29 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const accountHourlyRows = await fetchAccountHourlyRows(db, startDate, endDate, request.timezone);
   const aiAccounts = await fetchAiAccounts(db);
 
-  rows = rows.filter((row) => dailyRowMatchesFilter(row, request.machine, request.account));
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
-  rows = applyLedgerDailyRows(rows, accountHourlyRowsToDailyRows(filteredAccountHourlyRows));
-  const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
-  modelRows = modelRows.filter((row) => allowed.has(itemKey(row.source_id, row.date, row.agent)));
-  hourlyRows = hourlyRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
-  hourlyRows = applyLedgerHourlyRows(
-    hourlyRows,
-    periodId === "today" ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows) : [],
+  const factRows = (await fetchFactRows(db, startDate, endDate, request.timezone))
+    .filter((row) => accountHourlyRowMatchesFilter(row, request.machine, request.account));
+  const costsByItem = factCostsByItem(factRows);
+  const rows = accountHourlyRowsToDailyRows(filteredAccountHourlyRows).map((row) => ({
+    ...row,
+    total_cost: costsByItem.get(itemKey(row.source_id, row.date, row.agent)) ?? null,
+  }));
+  const modelRows = await fetchHourlyModelRows(
+    db, startDate, endDate, request.timezone, request.machine, request.account,
   );
-  blockRows = blockRows.filter((row) => timedRowMatchesFilter(row, request.machine, request.account));
+  const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
+  const allowedModelRows = modelRows.filter((row) => allowed.has(itemKey(row.source_id, row.date, row.agent)));
+  const hourlyRows = periodId === "today"
+    ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows)
+    : [];
+  const blockRows: TimedRow[] = [];
   const accountHourly = accountHourlySummary(filteredAccountHourlyRows);
 
   const modelsByItem = new Map<string, Record<string, unknown>[]>();
-  for (const row of modelRows) {
+  for (const row of allowedModelRows) {
     const key = itemKey(row.source_id, row.date, row.agent);
     const breakdown = {
       model_name: row.model_name,
@@ -427,35 +402,6 @@ async function fetchSourceIdentities(db: D1Database): Promise<Record<string, Sou
   return result;
 }
 
-async function fetchHourlyRows(db: D1Database, startHour: string, endHour: string): Promise<TimedRow[]> {
-  return all<TimedRow>(
-    db,
-    `
-      SELECT source_id, hour, agent, input_tokens, output_tokens,
-             cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json
-      FROM usage_hourly
-      WHERE hour >= ? AND hour <= ?
-      ORDER BY hour ASC, source_id ASC, agent ASC
-    `,
-    [startHour, endHour],
-  );
-}
-
-async function fetchBlockRows(db: D1Database, startHour: string, endHour: string): Promise<TimedRow[]> {
-  const endExclusive = addHours(endHour, 1);
-  return all<TimedRow>(
-    db,
-    `
-      SELECT source_id, start_time, end_time, agent, input_tokens, output_tokens,
-             cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, metadata_json
-      FROM usage_blocks
-      WHERE start_time < ? AND end_time > ?
-      ORDER BY start_time ASC, source_id ASC, agent ASC
-    `,
-    [endExclusive, startHour],
-  );
-}
-
 async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<LimitRow[]> {
   const rows = await all<Omit<LimitRow, "official">>(
     db,
@@ -487,13 +433,30 @@ async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<
 }
 
 async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, endDate: string, timezone: string): Promise<Record<string, unknown>[]> {
-  const endExclusive = `${formatDate(addDays(parseDateOnly(endDate), 1))}T00:00:00+08:00`;
-  const startInclusive = startDate === null ? null : `${startDate}T00:00:00+08:00`;
+  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
   const rollupTable = startDate === endDate ? "usage_hourly_rollups" : "usage_daily_rollups";
   const rollupRows = await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive);
   if (rollupRows.length > 0) return rollupRows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
   return fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive)
     .then((rows) => rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
+}
+
+async function fetchFactRows(
+  db: D1Database,
+  startDate: string | null,
+  endDate: string,
+  timezone: string,
+): Promise<Record<string, unknown>[]> {
+  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
+  return fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive)
+    .then((rows) => rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
+}
+
+function periodWindowBounds(startDate: string | null, endDate: string): [string | null, string] {
+  return [
+    startDate === null ? null : `${startDate}T00:00:00+08:00`,
+    `${formatDate(addDays(parseDateOnly(endDate), 1))}T00:00:00+08:00`,
+  ];
 }
 
 async function fetchAccountRowsFromTable(
@@ -512,7 +475,7 @@ async function fetchAccountRowsFromTable(
                source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
                attribution_confidence, provenance, input_tokens, output_tokens,
                cache_creation_tokens, cache_read_tokens, reasoning_output_tokens,
-               total_tokens, event_count, session_count, fact_count
+               total_tokens, NULL AS total_cost, event_count, session_count, fact_count
         FROM ${table}) f`;
   const rows = await all<Record<string, unknown>>(
     db,
@@ -522,7 +485,7 @@ async function fetchAccountRowsFromTable(
              COALESCE(a.account_label, f.ai_account_id) AS account_label,
              a.display_name, a.subscription, f.agent, f.client, f.window_start, f.window_end,
              f.input_tokens, f.output_tokens, f.cache_creation_tokens, f.cache_read_tokens,
-             f.reasoning_output_tokens, f.total_tokens, f.event_count, f.session_count,
+             f.reasoning_output_tokens, f.total_tokens, f.total_cost, f.event_count, f.session_count,
              f.attribution_confidence, f.provenance
       FROM ${source}
       LEFT JOIN machines m ON m.machine_id = f.machine_id
@@ -533,6 +496,84 @@ async function fetchAccountRowsFromTable(
     params,
   );
   return rows;
+}
+
+function factCostsByItem(rows: Record<string, unknown>[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    if (row.total_cost === null || row.total_cost === undefined) continue;
+    const date = localDateFromWindowStart(row.window_start);
+    if (!date) continue;
+    const key = itemKey(str(row.source_id), date, str(row.agent));
+    totals.set(key, (totals.get(key) ?? 0) + Number(row.total_cost));
+  }
+  return totals;
+}
+
+async function fetchHourlyModelRows(
+  db: D1Database,
+  startDate: string | null,
+  endDate: string,
+  timezone: string,
+  machineFilter?: string | null,
+  accountFilter?: string | null,
+): Promise<ModelRow[]> {
+  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
+  const periodWhere = startInclusive === null
+    ? "f.window_start < ?"
+    : "f.window_start >= ? AND f.window_start < ?";
+  const params = startInclusive === null ? [endExclusive] : [startInclusive, endExclusive];
+  const rows = await all<Record<string, unknown>>(
+    db,
+    `
+      SELECT f.source_id, f.window_start, f.agent, f.machine_id,
+             COALESCE(m.machine_name, f.machine_id) AS machine_name, f.os_user,
+             hm.model AS model_name, hm.input_tokens, hm.output_tokens,
+             hm.cache_creation_tokens, hm.cache_read_tokens, hm.total_tokens, hm.total_cost AS cost
+      FROM usage_hourly_models hm
+      JOIN usage_hourly_facts f ON f.fact_id = hm.fact_id
+      LEFT JOIN machines m ON m.machine_id = f.machine_id
+      WHERE ${periodWhere}
+      ORDER BY f.window_start ASC, f.source_id ASC, f.agent ASC, hm.model ASC
+    `,
+    params,
+  );
+  const aggregated = new Map<string, ModelRow>();
+  for (const row of rows) {
+    if (!accountHourlyRowInPeriod(row, startDate, endDate, timezone)) continue;
+    if (!accountHourlyRowMatchesFilter(row, machineFilter, accountFilter)) continue;
+    const date = localDateFromWindowStart(row.window_start);
+    if (!date) continue;
+    const sourceId = str(row.source_id);
+    const agent = str(row.agent);
+    const modelName = str(row.model_name || "unknown");
+    const key = `${itemKey(sourceId, date, agent)}\u0000${modelName}`;
+    const current = aggregated.get(key) ?? {
+      source_id: sourceId,
+      date,
+      agent,
+      model_name: modelName,
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_creation_tokens: 0,
+      cache_read_tokens: 0,
+      total_tokens: 0,
+      cost: null,
+    };
+    current.input_tokens += int(row.input_tokens);
+    current.output_tokens += int(row.output_tokens);
+    current.cache_creation_tokens += int(row.cache_creation_tokens);
+    current.cache_read_tokens += int(row.cache_read_tokens);
+    current.total_tokens += int(row.total_tokens);
+    if (row.cost !== null && row.cost !== undefined) {
+      current.cost = Number(current.cost ?? 0) + Number(row.cost);
+    }
+    aggregated.set(key, current);
+  }
+  return Array.from(aggregated.values()).sort((lhs, rhs) =>
+    `${lhs.date}:${lhs.source_id}:${lhs.agent}:${lhs.model_name}`
+      .localeCompare(`${rhs.date}:${rhs.source_id}:${rhs.agent}:${rhs.model_name}`),
+  );
 }
 
 async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[]> {
@@ -1037,7 +1078,7 @@ function accountHourlyRowsToDailyRows(rows: Record<string, unknown>[]): DailyRow
     buckets.set(key, bucket);
   }
   return Array.from(buckets.values())
-    .sort((lhs, rhs) => itemKey(lhs.source_id, lhs.date, lhs.agent).localeCompare(itemKey(rhs.source_id, rhs.date, rhs.agent)))
+    .sort((lhs, rhs) => `${lhs.date}:${lhs.source_id}:${lhs.agent}`.localeCompare(`${rhs.date}:${rhs.source_id}:${rhs.agent}`))
     .map((bucket) => ({
       source_id: bucket.source_id,
       date: bucket.date,
@@ -1119,114 +1160,6 @@ function accountHourlyRowsToHourlyRows(rows: Record<string, unknown>[]): TimedRo
         source_provenances: Array.from(bucket.provenances).sort(),
       }),
     }));
-}
-
-function applyLedgerDailyRows(rows: DailyRow[], ledgerRows: DailyRow[]): DailyRow[] {
-  if (!ledgerRows.length) return rows;
-  const costByKey = new Map(rows.map((row) => [itemKey(row.source_id, row.date, row.agent), row.total_cost]));
-  const enrichedLedgerRows = ledgerRows.map((row) => ({
-    ...row,
-    total_cost: row.total_cost ?? costByKey.get(itemKey(row.source_id, row.date, row.agent)) ?? null,
-  }));
-  const ledgerKeys = new Set(ledgerRows.map((row) => itemKey(row.source_id, row.date, row.agent)));
-  const ledgerTotalsBySourceDate = new Map<string, {
-    input_tokens: number;
-    output_tokens: number;
-    cache_creation_tokens: number;
-    cache_read_tokens: number;
-    total_tokens: number;
-  }>();
-  for (const row of ledgerRows) {
-    const key = `${row.source_id}\u0000${row.date}`;
-    const totals = ledgerTotalsBySourceDate.get(key) ?? {
-      input_tokens: 0,
-      output_tokens: 0,
-      cache_creation_tokens: 0,
-      cache_read_tokens: 0,
-      total_tokens: 0,
-    };
-    totals.input_tokens += int(row.input_tokens);
-    totals.output_tokens += int(row.output_tokens);
-    totals.cache_creation_tokens += int(row.cache_creation_tokens);
-    totals.cache_read_tokens += int(row.cache_read_tokens);
-    totals.total_tokens += int(row.total_tokens);
-    ledgerTotalsBySourceDate.set(key, totals);
-  }
-  const keptRows: DailyRow[] = [];
-  for (const row of rows) {
-    if (ledgerKeys.has(itemKey(row.source_id, row.date, row.agent))) continue;
-    const sourceDateKey = `${row.source_id}\u0000${row.date}`;
-    if (row.agent.toLowerCase() === "all" && ledgerTotalsBySourceDate.has(sourceDateKey)) {
-      const residual = dailyAllResidualRow(row, ledgerTotalsBySourceDate.get(sourceDateKey));
-      if (residual) keptRows.push(residual);
-      continue;
-    }
-    keptRows.push(row);
-  }
-  return [
-    ...keptRows,
-    ...enrichedLedgerRows,
-  ].sort((lhs, rhs) => `${lhs.date}:${lhs.source_id}:${lhs.agent}`.localeCompare(`${rhs.date}:${rhs.source_id}:${rhs.agent}`));
-}
-
-function dailyAllResidualRow(row: DailyRow, ledgerTotals?: {
-  input_tokens: number;
-  output_tokens: number;
-  cache_creation_tokens: number;
-  cache_read_tokens: number;
-  total_tokens: number;
-}): DailyRow | null {
-  if (!ledgerTotals) return null;
-  const oldTotal = int(row.total_tokens);
-  const residualTotal = Math.max(oldTotal - int(ledgerTotals.total_tokens), 0);
-  const residualInput = Math.max(int(row.input_tokens) - int(ledgerTotals.input_tokens), 0);
-  const residualOutput = Math.max(int(row.output_tokens) - int(ledgerTotals.output_tokens), 0);
-  const residualCacheCreation = Math.max(int(row.cache_creation_tokens) - int(ledgerTotals.cache_creation_tokens), 0);
-  const residualCacheRead = Math.max(int(row.cache_read_tokens) - int(ledgerTotals.cache_read_tokens), 0);
-  if (residualTotal <= 0 && !residualInput && !residualOutput && !residualCacheCreation && !residualCacheRead) {
-    return null;
-  }
-  const residualCost = row.total_cost == null || oldTotal <= 0
-    ? row.total_cost
-    : Number(row.total_cost) * (residualTotal / oldTotal);
-  return {
-    ...row,
-    input_tokens: residualInput,
-    output_tokens: residualOutput,
-    cache_creation_tokens: residualCacheCreation,
-    cache_read_tokens: residualCacheRead,
-    total_tokens: residualTotal,
-    total_cost: residualCost,
-    metadata_json: metadataJsonWithProvenance(row.metadata_json, "usage_daily_residual_after_ledger"),
-  };
-}
-
-function metadataJsonWithProvenance(raw: unknown, provenance: string): string {
-  let metadata: Record<string, unknown> = {};
-  if (raw) {
-    try {
-      const parsed = JSON.parse(str(raw));
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        metadata = { ...parsed };
-      }
-    } catch {
-      metadata = {};
-    }
-  }
-  if (!metadata.provenance) metadata.provenance = provenance;
-  metadata.residual_provenance = provenance;
-  return JSON.stringify(metadata);
-}
-
-function applyLedgerHourlyRows(rows: TimedRow[], ledgerRows: TimedRow[]): TimedRow[] {
-  if (!ledgerRows.length) return rows;
-  const ledgerKeys = new Set(ledgerRows.map((row) => `${row.source_id}\u0000${row.hour}\u0000${row.agent}`));
-  return [
-    ...rows.filter((row) => !ledgerKeys.has(`${row.source_id}\u0000${row.hour}\u0000${row.agent}`)),
-    ...ledgerRows,
-  ].sort((lhs, rhs) =>
-    `${lhs.hour || ""}:${lhs.source_id}:${lhs.agent}`.localeCompare(`${rhs.hour || ""}:${rhs.source_id}:${rhs.agent}`),
-  );
 }
 
 function localDateFromWindowStart(value: unknown): string | null {
@@ -1398,22 +1331,6 @@ function dateAxis(startDate: string | null, endDate: string, rows: DailyRow[]): 
 
 function hourAxis(date: string): string[] {
   return Array.from({ length: 24 }, (_, index) => `${date}T${String(index).padStart(2, "0")}:00:00+08:00`);
-}
-
-function dailyRowMatchesFilter(row: DailyRow, machineFilter?: string | null, accountFilter?: string | null): boolean {
-  const metadata = metadataFromStr(row.metadata_json);
-  return identityMatchesFilter({
-    host: str(metadata.machine ?? metadata.host ?? row.source_id),
-    os_user: str(metadata.account ?? metadata.os_user ?? "unknown"),
-  }, machineFilter, accountFilter);
-}
-
-function timedRowMatchesFilter(row: TimedRow, machineFilter?: string | null, accountFilter?: string | null): boolean {
-  const metadata = metadataFromStr(row.metadata_json);
-  return identityMatchesFilter({
-    host: str(metadata.machine ?? metadata.host ?? row.source_id),
-    os_user: str(metadata.account ?? metadata.os_user ?? "unknown"),
-  }, machineFilter, accountFilter);
 }
 
 function identityMatchesFilter(identity: SourceIdentity | undefined, machineFilter?: string | null, accountFilter?: string | null): boolean {

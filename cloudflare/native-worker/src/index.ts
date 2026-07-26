@@ -415,16 +415,14 @@ async function databaseSizeProxy(db: D1Database): Promise<number> {
     "collection_runs",
     "source_reports",
     "source_report_states",
-    "usage_daily",
-    "usage_daily_models",
-    "usage_hourly",
-    "usage_blocks",
     "source_identities",
     "machines",
     "os_identities",
     "ai_accounts",
     "usage_hourly_facts",
     "usage_hourly_models",
+    "usage_hourly_rollups",
+    "usage_daily_rollups",
     "limit_windows",
   ];
   let rows = 0;

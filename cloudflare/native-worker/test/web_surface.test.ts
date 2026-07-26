@@ -146,6 +146,48 @@ describe.sequential("native TS Worker web surface", () => {
     expect(payload.database).toHaveProperty("size_bytes");
   });
 
+  it("does not read archived legacy usage tables for the health database-size proxy", async () => {
+    const cookie = await sessionCookieHeader();
+    const beforeResponse = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Cookie: cookie },
+    });
+    const before = await beforeResponse.json() as Record<string, any>;
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.batch([
+      db.prepare(`
+        INSERT INTO usage_daily (
+          source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
+          cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
+        ) VALUES ('archive-health', '2026-01-01', 'codex', 1, 0, 0, 0, 1, 0, '2026-01-01', '2026-01-01')
+      `),
+      db.prepare(`
+        INSERT INTO usage_daily_models (
+          source_id, date, agent, model_name, input_tokens, output_tokens,
+          cache_creation_tokens, cache_read_tokens, total_tokens, cost, first_seen_at, last_seen_at
+        ) VALUES ('archive-health', '2026-01-01', 'codex', 'archive', 1, 0, 0, 0, 1, 0, '2026-01-01', '2026-01-01')
+      `),
+      db.prepare(`
+        INSERT INTO usage_hourly (
+          source_id, hour, agent, input_tokens, output_tokens, cache_creation_tokens,
+          cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
+        ) VALUES ('archive-health', '2026-01-01T00:00:00+08:00', 'codex', 1, 0, 0, 0, 1, 0, '2026-01-01', '2026-01-01')
+      `),
+      db.prepare(`
+        INSERT INTO usage_blocks (
+          source_id, start_time, end_time, agent, input_tokens, output_tokens,
+          cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
+        ) VALUES ('archive-health', '2026-01-01T00:00:00+08:00', '2026-01-01T01:00:00+08:00', 'codex', 1, 0, 0, 0, 1, 0, '2026-01-01', '2026-01-01')
+      `),
+    ]);
+
+    const afterResponse = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Cookie: cookie },
+    });
+    const after = await afterResponse.json() as Record<string, any>;
+
+    expect(after.database.size_bytes).toBe(before.database.size_bytes);
+  });
+
   it("reports D1 limits freshness separately from collection health", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     await seedLimitRows(db);
@@ -421,6 +463,19 @@ async function seedMinimalUsage(db: D1Database): Promise<void> {
       "{}",
       "2026-06-03T11:55:00+08:00",
       "2026-06-03T11:55:00+08:00",
+    ),
+    db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
+        session_count, attribution_confidence, provenance, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "minimal-fact", "mac-local", "macbook-pro", "alice", "claude", "claude-alice", "claude", "test",
+      "2026-06-03T11:00:00+08:00", "2026-06-03T12:00:00+08:00", "Asia/Shanghai",
+      100, 150, 50, 0, 0, 300, null, 1, 1, "observed", "test",
+      "2026-06-03T11:55:00+08:00", "2026-06-03T11:55:00+08:00",
     ),
   ]);
 }

@@ -143,6 +143,61 @@
               "reasoning_output_tokens": 0,
               "total_tokens": 2150,
               "total_cost": 0.86
+            },
+            {
+              "model": "claude-opus",
+              "input_tokens": 600,
+              "output_tokens": 200,
+              "cache_creation_tokens": 100,
+              "cache_read_tokens": 50,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 950,
+              "total_cost": 0.37
+            }
+          ]
+        },
+        {
+          "fact_id": "fact-mac-20260529-09",
+          "agent": "claude",
+          "client": "cli",
+          "window_start": "2026-05-29T09:00:00+08:00",
+          "window_end": "2026-05-29T10:00:00+08:00",
+          "usage": {
+            "input_tokens": 1200,
+            "output_tokens": 500,
+            "cache_creation_tokens": 300,
+            "cache_read_tokens": 0,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 2000,
+            "total_cost": 0.84
+          },
+          "event_count": 3,
+          "session_count": 1,
+          "attribution_confidence": "observed",
+          "provenance": "fixture",
+          "ai_account": {
+            "provider": "claude",
+            "account_id": "claude-main",
+            "label": "Claude Team",
+            "display_name": "Claude Team",
+            "subscription": "pro"
+          },
+          "account_evidence": {
+            "source": "fixture"
+          },
+          "metadata": {
+            "fixture": "mac-history"
+          },
+          "model_breakdowns": [
+            {
+              "model": "claude-sonnet",
+              "input_tokens": 1200,
+              "output_tokens": 500,
+              "cache_creation_tokens": 300,
+              "cache_read_tokens": 0,
+              "reasoning_output_tokens": 0,
+              "total_tokens": 2000,
+              "total_cost": 0.84
             }
           ]
         }
