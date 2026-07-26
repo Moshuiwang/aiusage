@@ -196,6 +196,126 @@ describe.sequential("native TS Worker read-only API parity", () => {
     expect(after).toEqual(before);
   });
 
+  it("keeps a reviewed historical daily fallback stable when later detailed facts coexist", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await applySqlFile(db, seedSqlPath);
+    await db.prepare(`
+      INSERT INTO usage_daily_rollups (
+        date, bucket_start, bucket_end, source_id, machine_id, os_user,
+        ai_provider, ai_account_id, agent, client, attribution_confidence,
+        provenance, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens,
+        event_count, session_count, fact_count
+      )
+      SELECT substr(window_start, 1, 10),
+             substr(window_start, 1, 10) || 'T00:00:00+08:00',
+             substr(window_start, 1, 10) || 'T23:59:59+08:00',
+             source_id, machine_id, os_user, ai_provider, ai_account_id, agent,
+             client, attribution_confidence, provenance, sum(input_tokens),
+             sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count),
+             sum(session_count), count(*)
+      FROM usage_hourly_facts
+      GROUP BY substr(window_start, 1, 10), source_id, machine_id, os_user,
+               ai_provider, ai_account_id, agent, client,
+               attribution_confidence, provenance
+    `).run();
+    await db.prepare(`
+      INSERT INTO usage_daily_rollups (
+        date, bucket_start, bucket_end, source_id, machine_id, os_user,
+        ai_provider, ai_account_id, agent, client, attribution_confidence,
+        provenance, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens,
+        event_count, session_count, fact_count
+      ) VALUES (
+        '2026-05-29', '2026-05-29T00:00:00+08:00',
+        '2026-05-29T23:59:59+08:00', 'mac-local', 'macbook-pro', 'alice',
+        'claude', 'claude-main', 'claude', 'legacy_daily_archive',
+        'legacy_identity_mapped', 'historical_ccusage_fallback_v1',
+        1500, 600, 400, 0, 0, 2500, 0, 0, 0
+      )
+    `).run();
+
+    const { buildSummary } = await import("../src/read-model");
+    for (const request of [
+      { date: "2026-06-03", period: "all", timezone: "Asia/Shanghai", currentTime: fixedNow },
+      {
+        date: "2026-06-03", period: "all", timezone: "Asia/Shanghai",
+        currentTime: fixedNow, machine: "macbook-pro",
+      },
+      {
+        date: "2026-06-03", period: "all", timezone: "Asia/Shanghai",
+        currentTime: fixedNow, account: "alice",
+      },
+    ]) {
+      const summary = await buildSummary(db, request);
+      const item = (summary.items as Shape[]).find((row) =>
+        row.source_id === "mac-local" && row.date === "2026-05-29" && row.agent === "claude"
+      );
+      expect(item?.total_tokens).toBe(2500);
+      expect(item?.model_breakdowns).toEqual([]);
+    }
+
+    await db.prepare(`
+      INSERT INTO usage_daily_rollups (
+        date, bucket_start, bucket_end, source_id, machine_id, os_user,
+        ai_provider, ai_account_id, agent, client, attribution_confidence,
+        provenance, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens,
+        event_count, session_count, fact_count
+      ) VALUES (
+        '2026-06-01', '2026-06-01T00:00:00+08:00',
+        '2026-06-01T23:59:59+08:00', 'workstation-cara', 'workstation-9',
+        'cara', 'antigravity', 'ag-main', 'all', 'legacy_daily_archive',
+        'legacy_identity_mapped', 'historical_ccusage_fallback_v1',
+        900, 350, 100, 50, 0, 1400, 0, 0, 0
+      )
+    `).run();
+    for (const request of [
+      { date: "2026-06-03", period: "week", timezone: "Asia/Shanghai", currentTime: fixedNow },
+      {
+        date: "2026-06-03", period: "week", timezone: "Asia/Shanghai",
+        currentTime: fixedNow, machine: "workstation-9",
+      },
+      {
+        date: "2026-06-03", period: "week", timezone: "Asia/Shanghai",
+        currentTime: fixedNow, account: "cara",
+      },
+    ]) {
+      const summary = await buildSummary(db, request);
+      const sourceDateItems = (summary.items as Shape[]).filter((row) =>
+        row.source_id === "workstation-cara" && row.date === "2026-06-01"
+      );
+      expect(sourceDateItems).toEqual([
+        expect.objectContaining({ agent: "all", total_tokens: 1400, model_breakdowns: [] }),
+      ]);
+    }
+
+    await db.prepare(`
+      INSERT INTO usage_hourly_rollups (
+        bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider,
+        ai_account_id, agent, client, attribution_confidence, provenance,
+        input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+      ) VALUES (
+        '2026-05-29T09:00:00+08:00', '2026-05-29T10:00:00+08:00',
+        'mac-local', 'macbook-pro', 'alice', 'claude', 'claude-main', 'claude',
+        'legacy_hourly_archive', 'legacy_identity_mapped',
+        'legacy_hourly_archive_backfill_v1', 1500, 600, 400, 0, 0, 2500, 0, 0, 1
+      )
+    `).run();
+    const historicalToday = await buildSummary(db, {
+      date: "2026-05-29", period: "today", timezone: "Asia/Shanghai", currentTime: fixedNow,
+    });
+    const historicalItem = (historicalToday.items as Shape[]).find((row) =>
+      row.source_id === "mac-local" && row.date === "2026-05-29" && row.agent === "claude"
+    );
+    expect(historicalItem?.total_tokens).toBe(2500);
+  });
+
   it("bounds the hourly-fact query to the requested display period", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     const queries: string[] = [];
