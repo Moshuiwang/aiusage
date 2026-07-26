@@ -13,6 +13,7 @@ from typing import Any, Iterable, Sequence
 DAILY_PROVENANCE = "historical_ccusage_fallback_v1"
 HOURLY_PROVENANCE = "legacy_hourly_archive_backfill_v1"
 MIN_START_DATE = "2026-05-18"
+MISSING_ACCOUNT_REASON = "missing account requires an explicit identity map"
 LEGACY_TABLES = ("usage_daily", "usage_daily_models", "usage_hourly", "usage_blocks")
 LEDGER_TABLES = (
     "usage_hourly_facts",
@@ -30,6 +31,8 @@ class BackfillOptions:
     timezone: str = "Asia/Shanghai"
     batch_size: int = 500
     identity_overrides: dict[str, dict[str, str]] = field(default_factory=dict)
+    discard_all_agent: bool = False
+    discard_missing_account: bool = False
 
     def validate(self) -> None:
         start = _date(self.start_date)
@@ -51,6 +54,7 @@ class BackfillPlan:
     daily_rows: list[dict[str, Any]]
     hourly_rows: list[dict[str, Any]]
     unresolved_identities: list[dict[str, str]]
+    discarded_rows: list[dict[str, Any]]
     batches: list[list[tuple[str, tuple[Any, ...]]]]
     estimated_rows_read: int
     legacy_writes: bool = False
@@ -67,10 +71,38 @@ def build_plan(conn: sqlite3.Connection, options: BackfillOptions) -> BackfillPl
     options.validate()
     conn.row_factory = sqlite3.Row
     candidates = _legacy_candidates(conn, options)
+    discarded_rows: list[dict[str, Any]] = []
+    if options.discard_all_agent:
+        candidates, discarded = _discard_candidates(
+            candidates,
+            lambda row: str(row["agent"]).lower() == "all",
+            reason="all_agent",
+        )
+        discarded_rows.extend(discarded)
     mappings, unresolved = _resolve_identities(conn, candidates, options.identity_overrides)
+    if options.discard_missing_account:
+        missing_account_keys = {
+            (item["source_id"], item["agent"])
+            for item in unresolved
+            if item["reason"] == MISSING_ACCOUNT_REASON
+        }
+        if missing_account_keys:
+            candidates, discarded = _discard_candidates(
+                candidates,
+                lambda row: (str(row["source_id"]), str(row["agent"])) in missing_account_keys,
+                reason="missing_account",
+            )
+            discarded_rows.extend(discarded)
+            unresolved = [
+                item
+                for item in unresolved
+                if (item["source_id"], item["agent"]) not in missing_account_keys
+            ]
     estimated_reads = _estimated_rows_read(conn, options)
     if unresolved:
-        return BackfillPlan(options, [], [], unresolved, [], estimated_reads)
+        return BackfillPlan(
+            options, [], [], unresolved, discarded_rows, [], estimated_reads
+        )
 
     daily_rows = [
         _daily_row(row, mappings[(row["source_id"], row["agent"])], options)
@@ -89,7 +121,9 @@ def build_plan(conn: sqlite3.Connection, options: BackfillOptions) -> BackfillPl
             _hourly_rollup_operation(row),
         ])
     batches = _pack_batches(operation_units, options.batch_size)
-    return BackfillPlan(options, daily_rows, hourly_rows, [], batches, estimated_reads)
+    return BackfillPlan(
+        options, daily_rows, hourly_rows, [], discarded_rows, batches, estimated_reads
+    )
 
 
 def _pack_batches(
@@ -128,23 +162,24 @@ def apply_plan(
 
 def render_report(conn: sqlite3.Connection, plan: BackfillPlan) -> dict[str, Any]:
     options = plan.options
-    old_scope_rows = _old_daily_rows(conn, options)
+    full_old_scope_rows = _old_daily_rows(conn, options)
+    old_scope_rows = _exclude_discarded_daily_rows(
+        full_old_scope_rows, plan.discarded_rows
+    )
     new_scope_rows = _effective_daily_rows(conn, options)
     parity_options = replace(options, end_date=max(options.end_date, options.as_of_date))
-    old_rows = _old_daily_rows(conn, parity_options)
+    full_old_rows = _old_daily_rows(conn, parity_options)
+    old_rows = _exclude_discarded_daily_rows(full_old_rows, plan.discarded_rows)
     new_rows = _effective_daily_rows(conn, parity_options)
     mapping = _mapping_for_report(conn, options.identity_overrides)
     daily = _differences(old_scope_rows, new_scope_rows, ("date", "source_id"))
-    periods = {
-        period: {
-            "legacy_tokens": _period_total(old_rows, period, options.as_of_date),
-            "ledger_tokens": _period_total(new_rows, period, options.as_of_date),
-        }
-        for period in ("today", "week", "month", "all")
-    }
-
-    for values in periods.values():
-        values["difference_tokens"] = values["ledger_tokens"] - values["legacy_tokens"]
+    full_legacy_daily = _differences(
+        full_old_scope_rows, new_scope_rows, ("date", "source_id")
+    )
+    periods = _period_differences(old_rows, new_rows, options.as_of_date)
+    full_legacy_periods = _period_differences(
+        full_old_rows, new_rows, options.as_of_date
+    )
 
     machine_old = _group_by_identity(old_rows, mapping, "machine_id")
     machine_new = _group_by_identity(new_rows, mapping, "machine_id")
@@ -163,7 +198,13 @@ def render_report(conn: sqlite3.Connection, plan: BackfillPlan) -> dict[str, Any
         "status": "blocked_identity_mapping" if plan.unresolved_identities else "ready",
         "unresolved_identities": plan.unresolved_identities,
         "parity": periods,
+        "full_legacy_parity": full_legacy_periods,
         "daily_differences": daily,
+        "full_legacy_daily_differences": full_legacy_daily,
+        "discarded": _discarded_summary(
+            plan,
+            full_old_scope_rows,
+        ),
         "filters": {
             "machines": _group_differences(machine_old, machine_new),
             "system_accounts": _group_differences(system_old, system_new),
@@ -191,7 +232,8 @@ def render_report(conn: sqlite3.Connection, plan: BackfillPlan) -> dict[str, Any
             "note": "Actual billed rows must be copied from wrangler D1 JSON metadata.",
         },
         "model_breakdown_user_impact": (
-            "Backfilled dates keep total usage and filters, but model breakdown remains empty."
+            "Backfilled dates keep accepted-policy totals and filters; model breakdown "
+            "remains empty and explicitly discarded legacy data stays absent."
         ),
     }
 
@@ -255,7 +297,7 @@ def _legacy_candidates(
         params,
     ).fetchall()
     daily = [dict(row) for row in raw_daily]
-    hourly = conn.execute(
+    raw_hourly = conn.execute(
         """
         SELECT h.*
         FROM usage_hourly h
@@ -268,7 +310,32 @@ def _legacy_candidates(
         """,
         params,
     ).fetchall()
+    hourly = [dict(row) for row in raw_hourly]
     return {"daily": daily, "hourly": hourly}
+
+
+def _discard_candidates(
+    candidates: dict[str, list[Any]],
+    predicate: Any,
+    *,
+    reason: str,
+) -> tuple[dict[str, list[Any]], list[dict[str, Any]]]:
+    kept: dict[str, list[Any]] = {"daily": [], "hourly": []}
+    discarded: list[dict[str, Any]] = []
+    for kind, rows in candidates.items():
+        for row in rows:
+            if not predicate(row):
+                kept[kind].append(row)
+                continue
+            discarded.append({
+                "reason": reason,
+                "table": "usage_daily" if kind == "daily" else "usage_hourly",
+                "date": str(row["date"] if kind == "daily" else row["hour"])[:10],
+                "source_id": str(row["source_id"]),
+                "agent": str(row["agent"]),
+                "total_tokens": int(row["total_tokens"] or 0),
+            })
+    return kept, discarded
 
 
 def _resolve_identities(
@@ -354,7 +421,7 @@ def _resolve_identities(
                 unresolved.append(_unresolved(source_id, agent, "multiple accounts require an explicit identity map"))
                 continue
             else:
-                unresolved.append(_unresolved(source_id, agent, "missing account requires an explicit identity map"))
+                unresolved.append(_unresolved(source_id, agent, MISSING_ACCOUNT_REASON))
                 continue
         if not machine_id or not os_user:
             unresolved.append(_unresolved(source_id, agent, "missing machine or OS user mapping"))
@@ -577,6 +644,91 @@ def _effective_daily_rows(conn: sqlite3.Connection, options: BackfillOptions) ->
     return result
 
 
+def _exclude_discarded_daily_rows(
+    rows: list[dict[str, Any]],
+    discarded_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    discarded_keys = {
+        (row["date"], row["source_id"], row["agent"])
+        for row in discarded_rows
+        if row["table"] == "usage_daily"
+    }
+    return [
+        row
+        for row in rows
+        if (str(row["date"]), str(row["source_id"]), str(row["agent"]))
+        not in discarded_keys
+    ]
+
+
+def _period_differences(
+    legacy_rows: list[dict[str, Any]],
+    ledger_rows: list[dict[str, Any]],
+    as_of_date: str,
+) -> dict[str, dict[str, int]]:
+    result = {
+        period: {
+            "legacy_tokens": _period_total(legacy_rows, period, as_of_date),
+            "ledger_tokens": _period_total(ledger_rows, period, as_of_date),
+        }
+        for period in ("today", "week", "month", "all")
+    }
+    for values in result.values():
+        values["difference_tokens"] = values["ledger_tokens"] - values["legacy_tokens"]
+    return result
+
+
+def _discarded_summary(
+    plan: BackfillPlan,
+    full_old_scope_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        "policy": {
+            "discard_all_agent": plan.options.discard_all_agent,
+            "discard_missing_account": plan.options.discard_missing_account,
+        },
+        "all_agent": {
+            "identity_keys": 0,
+            "daily_rows": 0,
+            "hourly_rows": 0,
+            "raw_daily_tokens": 0,
+            "raw_hourly_tokens": 0,
+        },
+        "missing_account": {
+            "identity_keys": 0,
+            "daily_rows": 0,
+            "hourly_rows": 0,
+            "raw_daily_tokens": 0,
+            "raw_hourly_tokens": 0,
+        },
+    }
+    for row in plan.discarded_rows:
+        bucket = summary[row["reason"]]
+        kind = "daily" if row["table"] == "usage_daily" else "hourly"
+        bucket[f"{kind}_rows"] += 1
+        bucket[f"raw_{kind}_tokens"] += int(row["total_tokens"])
+
+    for reason in ("all_agent", "missing_account"):
+        summary[reason]["identity_keys"] = len({
+            (row["source_id"], row["agent"])
+            for row in plan.discarded_rows
+            if row["reason"] == reason
+        })
+
+    discarded_daily_keys = {
+        (row["date"], row["source_id"], row["agent"])
+        for row in plan.discarded_rows
+        if row["table"] == "usage_daily"
+    }
+    summary["user_visible_legacy_tokens"] = sum(
+        int(row["total_tokens"])
+        for row in full_old_scope_rows
+        if (str(row["date"]), str(row["source_id"]), str(row["agent"]))
+        in discarded_daily_keys
+    )
+    return summary
+
+
 def _differences(
     old_rows: list[dict[str, Any]],
     new_rows: list[dict[str, Any]],
@@ -767,6 +919,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--batch-size", type=int, default=500)
     parser.add_argument("--identity-map", type=Path)
     parser.add_argument(
+        "--discard-all-agent",
+        action="store_true",
+        help=(
+            "Explicitly discard legacy agent=all candidates instead of migrating "
+            "or blocking on them."
+        ),
+    )
+    parser.add_argument(
+        "--discard-missing-account",
+        action="store_true",
+        help=(
+            "Explicitly discard candidates whose only blocker is a missing AI "
+            "account mapping; all other identity ambiguity still blocks."
+        ),
+    )
+    parser.add_argument(
         "--actual-meta",
         type=Path,
         nargs="+",
@@ -789,6 +957,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         timezone=args.timezone,
         batch_size=args.batch_size,
         identity_overrides=overrides,
+        discard_all_agent=args.discard_all_agent,
+        discard_missing_account=args.discard_missing_account,
     )
     conn = sqlite3.connect(args.db)
     conn.row_factory = sqlite3.Row
