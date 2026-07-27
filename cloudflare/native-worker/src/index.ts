@@ -1,5 +1,6 @@
 import { buildMobile, buildSummary } from "./read-model";
 import { STATIC_ASSETS } from "./static-assets";
+import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
 
 export interface Env {
@@ -11,6 +12,8 @@ export interface Env {
   AIUSAGE_NOW?: string;
   AIUSAGE_CACHE_NAMESPACE?: string;
   AIUSAGE_DISABLE_SUMMARY_CACHE?: string;
+  AIUSAGE_SUPABASE_URL?: string;
+  AIUSAGE_SUPABASE_SECRET_KEY?: string;
 }
 
 const SESSION_COOKIE_NAME = "ai_usage_session";
@@ -165,6 +168,18 @@ export default {
       ? new Date(controller.scheduledTime)
       : new Date();
     await pruneAuditTables(env.AIUSAGE_DB, scheduledTime);
+    if (env.AIUSAGE_SUPABASE_URL && env.AIUSAGE_SUPABASE_SECRET_KEY) {
+      try {
+        await syncDailyRollupsToSupabase({
+          db: env.AIUSAGE_DB,
+          supabaseUrl: env.AIUSAGE_SUPABASE_URL,
+          secretKey: env.AIUSAGE_SUPABASE_SECRET_KEY,
+          now: scheduledTime,
+        });
+      } catch (error) {
+        console.error("Supabase daily rollup sync failed", error);
+      }
+    }
   },
 };
 
