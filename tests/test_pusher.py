@@ -3,6 +3,9 @@ from __future__ import annotations
 import os
 import json
 import unittest
+import io
+import urllib.error
+from unittest.mock import patch
 from typing import Any, Dict
 
 from ai_usage_widget.config import DeviceConfig
@@ -138,6 +141,7 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual(result["status"], "accepted")
         # 校验 HTTP 头部携带 Bearer Token
         self.assertEqual(http_client.last_headers.get("Authorization"), "Bearer test-token-123")
+        self.assertEqual(http_client.last_headers.get("User-Agent"), "AIUsagePusher/1.0")
         # 校验采集时使用了正确的参数
         self.assertIn("ccusage", executor.calls[0][0])
         self.assertIn("daily", executor.calls[0])
@@ -576,6 +580,37 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
 
         self.assertFalse(result["success"])
         self.assertEqual(result["error_type"], "http_auth_failed")
+
+    def test_pusher_http_cloudflare_403_is_access_blocked_not_auth_failure(self) -> None:
+        """非 JSON 的 Cloudflare 403 不能误导用户轮换有效 token"""
+        executor = FakeExecutor(CommandResult(stdout='{"daily": []}', exit_code=0))
+        http_client = FakeHTTPClient(status_code=403, response_data={})
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_type"], "http_access_blocked")
+        self.assertIn("入口防护", result["error_message"])
+
+    def test_ingest_http_client_safely_handles_non_json_cloudflare_403(self) -> None:
+        """Cloudflare HTML 403 只返回空响应对象，不泄露 HTML 或认证信息"""
+        http_error = urllib.error.HTTPError(
+            "https://example.test/ingest",
+            403,
+            "Forbidden",
+            {"Content-Type": "text/html"},
+            io.BytesIO(b"<html>Cloudflare challenge</html>"),
+        )
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            status, response = IngestHTTPClient().post(
+                "https://example.test/ingest",
+                {"source_id": "test"},
+                {"Authorization": "Bearer test-token"},
+                1,
+            )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(response, {})
 
     def test_pusher_http_timeout(self) -> None:
         """测试 HTTP 上报连接超时"""

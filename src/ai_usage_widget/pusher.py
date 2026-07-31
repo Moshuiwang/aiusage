@@ -22,6 +22,7 @@ class IngestHTTPClient:
         req_data = json.dumps(data).encode("utf-8")
         req_headers = headers.copy()
         req_headers["Content-Type"] = "application/json"
+        req_headers.setdefault("User-Agent", "AIUsagePusher/1.0")
 
         req = urllib.request.Request(url, data=req_data, headers=req_headers, method="POST")
         try:
@@ -420,7 +421,7 @@ class DevicePusher:
                 payload.setdefault("usage_ledger_runs", []).append(ledger_run)
 
         # 4. 读取认证 Token 并准备 headers
-        headers = {}
+        headers = {"User-Agent": "AIUsagePusher/1.0"}
         if self.config.token_env:
             token = os.environ.get(self.config.token_env)
             if token:
@@ -442,11 +443,17 @@ class DevicePusher:
             }
 
         # 6. 处理响应状态
-        if status_code in {401, 403}:
+        if status_code == 401:
             return {
                 "success": False,
                 "error_type": "http_auth_failed",
                 "error_message": resp_data.get("message") or "Authentication failed at Ingest Server",
+            }
+        if status_code == 403:
+            return {
+                "success": False,
+                "error_type": "http_access_blocked",
+                "error_message": resp_data.get("message") or "入口防护拦截或访问被拒绝，请检查网络入口策略",
             }
         elif status_code != 200:
             return {
@@ -478,7 +485,7 @@ class DevicePusher:
             "error_message": error_message,
             "usage_daily": [],
         }
-        headers = {}
+        headers = {"User-Agent": "AIUsagePusher/1.0"}
         if self.config.token_env:
             token = os.environ.get(self.config.token_env)
             if token:
@@ -496,11 +503,17 @@ class DevicePusher:
                 "error_type": "http_request_failed",
                 "error_message": f"HTTP request failed: {exc}",
             }
-        if status_code in {401, 403}:
+        if status_code == 401:
             return {
                 "success": False,
                 "error_type": "http_auth_failed",
                 "error_message": resp_data.get("message") or "Authentication failed at Ingest Server",
+            }
+        if status_code == 403:
+            return {
+                "success": False,
+                "error_type": "http_access_blocked",
+                "error_message": resp_data.get("message") or "入口防护拦截或访问被拒绝，请检查网络入口策略",
             }
         if status_code != 200:
             return {
