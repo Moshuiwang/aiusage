@@ -90,9 +90,7 @@ def install_release(plan: ReleasePlan, *, command_runner: CommandRunner) -> Dict
     previous_target = _symlink_target(root / PREVIOUS_LINK) or previous_target
 
     commands = plan.commands()
-    _run_commands(commands, command_runner)
-
-    return {
+    result = {
         "success": True,
         "changed": changed,
         "version": plan.version,
@@ -105,6 +103,99 @@ def install_release(plan: ReleasePlan, *, command_runner: CommandRunner) -> Dict
         "config_path": spec.config_path,
         "config_created": config_created,
         "commands": commands,
+        "rolled_back": False,
+    }
+
+    try:
+        _run_commands(commands, command_runner)
+    except (ReleaseError, OSError) as exc:
+        # 激活失败就退回上一个 release 与 timer；用户配置全程不动。
+        return _recover_from_failed_activation(root, unit_dir, command_runner, result, exc)
+    return result
+
+
+def _recover_from_failed_activation(
+    root: Path,
+    unit_dir: Path,
+    command_runner: CommandRunner,
+    result: Dict[str, Any],
+    exc: Exception,
+) -> Dict[str, Any]:
+    failed = dict(result)
+    failed["success"] = False
+    failed["error_type"] = exc.__class__.__name__
+    failed["error_message"] = str(exc)
+    try:
+        rollback = rollback_release(root, unit_dir, command_runner=command_runner)
+    except ReleaseError as rollback_exc:
+        failed["rolled_back"] = False
+        failed["rollback_error_type"] = rollback_exc.__class__.__name__
+        failed["rollback_error_message"] = str(rollback_exc)
+        return failed
+    failed["rolled_back"] = True
+    failed["rollback"] = rollback
+    failed["current_target"] = _symlink_target(root / CURRENT_LINK)
+    failed["previous_target"] = _symlink_target(root / PREVIOUS_LINK)
+    return failed
+
+
+def rollback_release(
+    root: Path,
+    unit_dir: Path,
+    *,
+    command_runner: CommandRunner,
+) -> Dict[str, Any]:
+    """回滚到 `previous` 指向的 release，并恢复它的 timer / service。
+
+    只动 release 链接和由代码生成的单元文件，**绝不触碰用户配置**。
+    """
+
+    root = Path(root)
+    unit_dir = Path(unit_dir)
+    previous_target = _symlink_target(root / PREVIOUS_LINK)
+    if not previous_target:
+        raise ReleaseError("没有 previous release 可回滚")
+
+    previous_dir = root / previous_target
+    manifest = read_manifest(previous_dir)
+    if manifest is None:
+        raise ReleaseError(f"previous release 缺少 {MANIFEST_NAME}，无法回滚: {previous_dir}")
+    spec_fields = manifest.get("unit_spec")
+    if not isinstance(spec_fields, dict):
+        raise ReleaseError(f"previous release 的 {MANIFEST_NAME} 缺少 unit_spec，无法回滚")
+
+    try:
+        spec = CollectorUnitSpec(**spec_fields)
+    except TypeError as exc:
+        raise ReleaseError(f"previous release 的 unit_spec 无法解析: {exc}") from exc
+
+    current_target = _symlink_target(root / CURRENT_LINK)
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    _write_unit_files(unit_dir, spec)
+    _replace_symlink(root / CURRENT_LINK, previous_target)
+    if current_target and current_target != previous_target:
+        _replace_symlink(root / PREVIOUS_LINK, current_target)
+
+    commands = [
+        ["systemctl", "--user", "daemon-reload"],
+        ["systemctl", "--user", "restart", spec.timer_name],
+    ]
+    command_error = None
+    try:
+        _run_commands(commands, command_runner)
+    except (ReleaseError, OSError) as exc:
+        command_error = f"{exc.__class__.__name__}: {exc}"
+
+    return {
+        "success": command_error is None,
+        "rolled_back_to": manifest.get("version"),
+        "revision": manifest.get("revision"),
+        "release_dir": str(previous_dir),
+        "current_target": _symlink_target(root / CURRENT_LINK),
+        "previous_target": _symlink_target(root / PREVIOUS_LINK),
+        "units": {"timer": spec.timer_name, "service": spec.service_name},
+        "commands": commands,
+        "command_error": command_error,
     }
 
 
@@ -256,4 +347,5 @@ __all__ = [
     "ReleasePlan",
     "install_release",
     "read_manifest",
+    "rollback_release",
 ]
