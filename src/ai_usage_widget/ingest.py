@@ -52,15 +52,19 @@ class IngestResponse:
     accepted_at: str
     message: str
     facts_accepted: int = 0
+    version: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "status": self.status,
             "source_id": self.source_id,
             "accepted_at": self.accepted_at,
             "facts_accepted": self.facts_accepted,
             "message": self.message,
         }
+        if self.version is not None:
+            payload["version"] = self.version
+        return payload
 
 
 def validate_ingest_payload(

@@ -19,6 +19,14 @@ from .normalize import (
 )
 from .storage_sqlite import write_limit_windows, write_sqlite
 from .snapshot_builder import build_snapshot
+from .version_contract import (
+    UNSUPPORTED_ERROR_TYPE,
+    VersionPolicy,
+    build_version_health,
+    evaluate_collector_release,
+    public_version_view,
+    unsupported_message,
+)
 
 
 class ServiceError(Exception):
@@ -37,6 +45,7 @@ def handle_ingest_payload(
     db_path: str,
     latest_path: str,
     timezone: str,
+    version_policy: Optional[VersionPolicy] = None,
 ) -> Dict[str, Any]:
     try:
         req = validate_ingest_payload(
@@ -49,6 +58,12 @@ def handle_ingest_payload(
         raise ServiceError(status_code, exc.error_type, str(exc)) from exc
     except Exception as exc:
         raise ServiceError(500, "internal_error", str(exc)) from exc
+
+    # 版本兼容判定在写库之前完成：明确不兼容就返回明确错误，不静默 200 也不静默丢数据。
+    # 版本未知只标记为未核实，照常接收。
+    version_state = evaluate_collector_release(req.collector_release, policy=version_policy)
+    if not version_state["accepted"]:
+        raise ServiceError(400, UNSUPPORTED_ERROR_TYPE, unsupported_message(version_state))
 
     items = normalize_ingest_request(req)
     hourly_items = normalize_ingest_hourly_request(req)
@@ -122,6 +137,7 @@ def handle_ingest_payload(
         accepted_at=collected_at,
         facts_accepted=len(hourly_facts),
         message="Data accepted successfully",
+        version=public_version_view(version_state),
     ).to_dict()
 
 
@@ -269,6 +285,7 @@ def build_health_response(
                 if isinstance(source, dict) and str(source.get("status") or "unknown") != "ok"
             ],
         },
+        "versions": build_version_health(source_status),
         "limits": limits_health,
     }
 

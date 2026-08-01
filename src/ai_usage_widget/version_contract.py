@@ -271,6 +271,27 @@ def evaluate_collector_release(
     return _finish(result, VERSION_STATE_CURRENT, "collector_version_current")
 
 
+def public_version_view(result: Dict[str, Any]) -> Dict[str, Any]:
+    """把判定结果转成对外可见的版本块，去掉只在服务端内部用的接受/拒绝开关。"""
+    return {key: value for key, value in result.items() if key != "accepted"}
+
+
+def unsupported_message(result: Dict[str, Any]) -> str:
+    """明确不兼容时给采集端的可读理由。必须说清本次上报没有写入。"""
+    reason = result.get("reason")
+    tail = "本次上报未写入，请升级采集端后重试"
+    if reason == "collector_version_below_minimum":
+        return (
+            f"采集端版本 {result.get('collector_version')} 低于服务端最低支持版本 "
+            f"{result.get('min_supported_collector_version')}，{tail}"
+        )
+    if reason == "config_schema_version_below_minimum":
+        return f"采集端配置 schema 版本 {result.get('config_schema_version')} 低于服务端最低支持版本，{tail}"
+    if reason == "parser_schema_version_below_minimum":
+        return f"采集端 parser schema 版本 {result.get('parser_schema_version')} 低于服务端最低支持版本，{tail}"
+    return f"采集端版本与服务端不兼容，{tail}"
+
+
 def server_version_block(policy: Optional[VersionPolicy] = None) -> Dict[str, Any]:
     """服务端自身的版本与兼容策略，用于诊断页和 /api/health。"""
     active = policy or DEFAULT_VERSION_POLICY
