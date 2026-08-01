@@ -55,7 +55,7 @@
         "observed_at": "2026-06-03T07:10:00+08:00",
         "os_user": "wangzhipeng",
         "reason": "collector_version_below_minimum",
-        "release_channel": "stable",
+        "release_channel": null,
         "source_id": "mac-air-wang",
         "state": "unsupported",
         "status": "stale"

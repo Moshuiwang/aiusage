@@ -453,7 +453,13 @@ function compareScalar(left: unknown, right: unknown): number {
 
 function safeKeyName(key: unknown): string {
   const text = String(key);
-  return SAFE_KEY_RE.test(text) ? text : REDACTED_KEY;
+  // 长度上限不能省：正则允许 `a_b_c…` 无限拼接，只靠它挡不住长 key。
+  // Python 侧 `_safe_key` 是「超长 或 不匹配」两个条件，这里必须逐字一致，
+  // 否则同一个未知 key 在两套实现上一个脱敏一个原样回显进 400 响应体。
+  if (text.length > MAX_SAFE_KEY_LENGTH || !SAFE_KEY_RE.test(text)) {
+    return REDACTED_KEY;
+  }
+  return text;
 }
 
 function semverOrNull(value: unknown, field: string): string | null {

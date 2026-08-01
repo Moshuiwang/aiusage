@@ -479,15 +479,33 @@ class TestVerifyCloudReadOnlyAccess(unittest.TestCase):
         self.assertNotIn(SECRET, request.full_url)
         self.assertNotIn(SECRET, source.label)
 
-    def test_base_url_label_drops_path_query_and_userinfo(self) -> None:
+    def test_base_url_label_drops_path_and_query(self) -> None:
         with unittest.mock.patch.dict(os.environ, {"AI_USAGE_TEST_READ_TOKEN": SECRET}, clear=False):
             source = verify_cloud.build_read_source(
-                self._args(base_url=f"https://user:{SECRET}@usage.example.com/base?t={SECRET}")
+                self._args(base_url=f"https://usage.example.com/base?t={SECRET}")
             )
 
         self.assertNotIn(SECRET, source.label)
-        self.assertNotIn("user", source.label)
         self.assertEqual(source.label, "https://usage.example.com")
+
+    def test_userinfo_in_base_url_is_refused_outright_not_merely_hidden_from_the_label(self) -> None:
+        """只把 userinfo 从 label 里抹掉是不够的。
+
+        真正的泄露发生在 urlopen 阶段：CPython 抛 InvalidURL，异常信息里带密码原文，
+        而它继承自 HTTPException，既不是 HTTPError 也不是 URLError，read() 的两个
+        except 都捕不到，密码随 traceback 打到 stderr。所以要在入口就拒绝。
+        """
+        with unittest.mock.patch.dict(os.environ, {"AI_USAGE_TEST_READ_TOKEN": SECRET}, clear=False):
+            code, out, err = run_cli([
+                "verify-cloud", "summary",
+                "--base-url", f"https://user:{SECRET}@usage.example.com",
+                "--token-env", "AI_USAGE_TEST_READ_TOKEN",
+            ])
+
+        self.assertEqual(code, verify_cloud.EXIT_FETCH_FAILED)
+        self.assertNotIn(SECRET, out)
+        self.assertNotIn(SECRET, err)
+        self.assertNotIn("Traceback", err)
 
     def test_missing_token_env_exits_fetch_failed_and_names_only_the_variable(self) -> None:
         env = dict(os.environ)
@@ -546,6 +564,35 @@ class TestVerifyCloudOutputCarriesNoSecrets(unittest.TestCase):
         "/.codex",
         "eyJ",
     )
+
+    def test_the_http_path_that_actually_carries_the_token_never_echoes_it(self) -> None:
+        """真正会接触凭据的是 HTTP 路径，fixture 路径压根不读环境变量。
+
+        `build_read_source` 在 `--fixture-dir` 分支就 return 了，`os.environ` 从未被读到，
+        所以只用 fixture 跑出来的「无凭据泄露」是空证明。这条用例走 HttpReadSource
+        自己的构造与异常路径，让守卫真的覆盖凭据所在的那一条路。
+        """
+        source = verify_cloud.HttpReadSource(
+            "https://usage.example.invalid", SECRET, timeout=1.0
+        )
+
+        request = source.build_request(verify_cloud.ENDPOINT_SUMMARY, {"period": "today"})
+        self.assertEqual(request.get_header("Authorization"), f"Bearer {SECRET}")
+        self.assertNotIn(SECRET, request.full_url)
+        self.assertNotIn(SECRET, source.label)
+
+        def _boom(*_args, **_kwargs):
+            raise OSError(f"connect failed for {SECRET}")
+
+        with unittest.mock.patch.object(verify_cloud.urlrequest, "urlopen", _boom):
+            with self.assertRaises(verify_cloud.ReadSourceError) as caught:
+                source.read(verify_cloud.ENDPOINT_SUMMARY, {})
+        self.assertNotIn(SECRET, str(caught.exception))
+
+    def test_userinfo_base_url_is_refused_before_any_request_is_built(self) -> None:
+        with self.assertRaises(verify_cloud.ReadSourceError) as caught:
+            verify_cloud.HttpReadSource("https://u:pw-secret@host.invalid", SECRET)
+        self.assertNotIn("pw-secret", str(caught.exception))
 
     def test_no_subcommand_output_contains_credentials_or_raw_paths(self) -> None:
         env = {
@@ -730,3 +777,153 @@ class TestVerifyCloudJsonSchema(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestVerifyCloudParityStructuralFloor(unittest.TestCase):
+    """parity 必须有结构下限。
+
+    两个端点由同一个 Worker 提供，共享失败模式（200 + 错误信封、CDN 缓存了空对象、
+    read model 抛错后返回兜底空快照）时会同时退化成同形状的垃圾。逐字段比对此时
+    两边都取到 None，None == None，parity 会报「核对通过」——而 README 把它写成
+    可以直接进 CI 的门禁。这是最难被发现的假绿：它长得像核对结果。
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="verify-cloud-floor-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def _write(self, payload: dict) -> str:
+        for name in ("summary", "mobile_summary", "health"):
+            (Path(self.tmp) / f"{name}.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+        return self.tmp
+
+    def test_two_empty_documents_are_a_data_issue_not_a_pass(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", self._write({})])
+
+        self.assertEqual(code, verify_cloud.EXIT_DATA_ISSUE)
+        self.assertNotIn("核对通过", out)
+
+    def test_period_without_totals_is_a_data_issue(self) -> None:
+        payload = {"period": {"id": "today", "start_date": "2026-06-03", "end_date": "2026-06-03"}}
+        code, _, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", self._write(payload)])
+
+        self.assertEqual(code, verify_cloud.EXIT_DATA_ISSUE)
+
+    def test_the_floor_names_the_missing_block_in_json(self) -> None:
+        code, out, _ = run_cli(
+            ["verify-cloud", "parity", "--fixture-dir", self._write({}), "--json"]
+        )
+        report = json.loads(out)
+
+        self.assertEqual(code, verify_cloud.EXIT_DATA_ISSUE)
+        self.assertEqual(report["exit_code"], verify_cloud.EXIT_DATA_ISSUE)
+        codes = {issue["code"] for issue in report["issues"]}
+        self.assertIn("parity_input_unusable", codes)
+
+
+class TestVerifyCloudHttpFailuresNeverLeakOrCrash(unittest.TestCase):
+    """取数异常必须归一到 EXIT_FETCH_FAILED，且绝不回显 URL 里的凭据。
+
+    `--base-url` 里带 userinfo 时，CPython 在 urlopen 阶段抛 InvalidURL，
+    它是 HTTPException/ValueError 的子类，既不是 HTTPError 也不是 URLError，
+    现有的两个 except 都捕不到——密码原文会随 traceback 打到 stderr。
+    """
+
+    def test_userinfo_in_base_url_is_rejected_without_echoing_the_password(self) -> None:
+        password = "sk-my-secret-pass"
+        with unittest.mock.patch.dict(
+            os.environ, {"AI_USAGE_READ_TOKEN": SECRET}, clear=False
+        ):
+            code, out, err = run_cli([
+                "verify-cloud", "summary",
+                "--base-url", f"https://user:{password}@usage.example.invalid",
+            ])
+
+        self.assertEqual(code, verify_cloud.EXIT_FETCH_FAILED)
+        self.assertNotIn(password, out)
+        self.assertNotIn(password, err)
+        self.assertNotIn("Traceback", err)
+
+    def test_non_utf8_response_body_exits_fetch_failed(self) -> None:
+        source = verify_cloud.HttpReadSource(
+            "https://usage.example.invalid", SECRET, timeout=1.0
+        )
+
+        class _Body:
+            def read(self):
+                return b"\xff\xfe\x00bad"
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        with unittest.mock.patch.object(verify_cloud.urlrequest, "urlopen", lambda *a, **k: _Body()):
+            with self.assertRaises(verify_cloud.ReadSourceError) as caught:
+                source.read(verify_cloud.ENDPOINT_SUMMARY, {})
+
+        self.assertNotIn(SECRET, str(caught.exception))
+
+    def test_socket_timeout_while_reading_body_exits_fetch_failed(self) -> None:
+        source = verify_cloud.HttpReadSource(
+            "https://usage.example.invalid", SECRET, timeout=1.0
+        )
+
+        def _boom(*_args, **_kwargs):
+            raise TimeoutError("timed out")
+
+        with unittest.mock.patch.object(verify_cloud.urlrequest, "urlopen", _boom):
+            with self.assertRaises(verify_cloud.ReadSourceError) as caught:
+                source.read(verify_cloud.ENDPOINT_SUMMARY, {})
+
+        self.assertNotIn(SECRET, str(caught.exception))
+
+
+class TestVerifyCloudNamesUncheckableDimensions(unittest.TestCase):
+    """后端没有版本读取侧时，不能报「核对通过」。
+
+    生产权威实现（Cloudflare Worker）今天不返回 `source_status[].version`、
+    也不返回 `/api/health` 的 `versions`（Issue #63 的已知缺口）。如果 verify-cloud
+    对此判 exit 0，就把 #63 的缺口翻译成了绿灯：无图形界面的用户拿到「核对通过」，
+    而「哪台设备还在跑旧采集器」——#58 存在的唯一理由——从头到尾没被核对过。
+
+    未核对不等于核对通过。缺维度必须说出来。
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.mkdtemp(prefix="verify-cloud-noversion-")
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        for name in ("summary", "mobile_summary", "health"):
+            src = json.loads((HEALTHY / f"{name}.json").read_text(encoding="utf-8"))
+            src.pop("version_health", None)
+            src.pop("versions", None)
+            entries = src.get("source_status")
+            if isinstance(entries, dict):
+                entries = entries.get("non_ok") or []
+            for entry in entries or []:
+                if isinstance(entry, dict):
+                    entry.pop("version", None)
+            (Path(self.tmp) / f"{name}.json").write_text(json.dumps(src), encoding="utf-8")
+
+    def test_health_without_any_version_block_is_not_reported_as_a_pass(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "health", "--fixture-dir", self.tmp])
+
+        self.assertNotEqual(code, verify_cloud.EXIT_OK)
+        self.assertNotIn("核对通过", out)
+
+    def test_the_uncheckable_version_dimension_is_named_in_json(self) -> None:
+        code, out, _ = run_cli(
+            ["verify-cloud", "health", "--fixture-dir", self.tmp, "--json"]
+        )
+        report = json.loads(out)
+
+        self.assertEqual(code, report["exit_code"])
+        self.assertIn("version_block_unavailable", {i["code"] for i in report["issues"]})
+
+    def test_a_backend_that_does_carry_versions_stays_clean(self) -> None:
+        code, _, _ = run_cli(["verify-cloud", "health", "--fixture-dir", str(HEALTHY)])
+
+        self.assertEqual(code, verify_cloud.EXIT_OK)

@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import http.client as httpclient
 import json
 import os
 import sys
@@ -96,6 +97,12 @@ class HttpReadSource:
     """在线只读：对 `/api/*` 发只读请求，凭据只进请求头。"""
 
     def __init__(self, base_url: str, token: str, timeout: float = 15.0) -> None:
+        # URL 里带 userinfo 时，CPython 到 urlopen 阶段才抛 InvalidURL，而异常信息里
+        # 含密码原文；它继承自 HTTPException 而非 HTTPError/URLError，read() 捕不到，
+        # 密码会随 traceback 打到 stderr。只读凭据只走请求头，URL 里本就不该有
+        # userinfo，直接在入口拒绝，且不回显它。
+        if "@" in urlparse.urlsplit(base_url).netloc:
+            raise ReadSourceError("基地址不得包含 userinfo：只读凭据只能通过环境变量传入")
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._timeout = timeout
@@ -137,6 +144,14 @@ class HttpReadSource:
             raise ReadSourceError(f"读取 {endpoint} 失败：HTTP {exc.code}") from exc
         except urlerror.URLError as exc:
             raise ReadSourceError(f"读取 {endpoint} 失败：{exc.reason}") from exc
+        except UnicodeDecodeError as exc:
+            # 响应体不是 UTF-8。原始字节可能是任何东西，不回显。
+            raise ReadSourceError(f"读取 {endpoint} 失败：响应体不是合法 UTF-8") from exc
+        except (OSError, httpclient.HTTPException) as exc:
+            # body 读取阶段的超时/连接中断落在 urlopen 自身的保护范围之外；
+            # InvalidURL 之类要到 urlopen 才暴露，且继承自 HTTPException 而非 OSError，
+            # 两个基类都要兜。只报异常类名——异常信息里可能夹带 URL 片段。
+            raise ReadSourceError(f"读取 {endpoint} 失败：{exc.__class__.__name__}") from exc
         return _decode_json(text, endpoint)
 
 
@@ -561,8 +576,23 @@ def build_health_report(
             f"/api/health 报告 {_show(source_total)} 个来源，/api/summary 只有 {len(sources)} 个",
         ))
 
-    versions = health_document.get("versions")
-    versions = versions if isinstance(versions, dict) else {}
+    # 后端没有版本读取侧时（生产 Worker 今天就是这样，见 Issue #63），版本维度
+    # 根本没被核对过。这时候判「核对通过」等于把那个缺口翻译成绿灯：使用者会以为
+    # 「哪台设备还在跑旧采集器」已经查过了。**未核对不等于核对通过**，必须说出来。
+    versions_raw = health_document.get("versions")
+    if not isinstance(versions_raw, dict):
+        issues.append(_issue(
+            "version_block_unavailable",
+            "/api/health 没有 versions 块：本后端未实现版本读取侧，版本维度未核对",
+        ))
+    if sources and all(row["version_state"] is None for row in sources):
+        issues.append(_issue(
+            "version_block_unavailable",
+            "/api/summary 的 source_status 没有 version 块：本后端未实现版本读取侧，"
+            "无法判断哪些采集端落后或不兼容",
+        ))
+
+    versions = versions_raw if isinstance(versions_raw, dict) else {}
     snapshot = health_document.get("snapshot")
     snapshot = snapshot if isinstance(snapshot, dict) else {}
     limits_health = health_document.get("limits")
@@ -701,6 +731,39 @@ def build_parity_report(
     )
 
     fields = sorted(summary_facts)
+
+    # 结构下限。两个端点由同一个服务端提供，会共享失败模式（200 + 错误信封、CDN 缓存
+    # 了空对象、read model 抛错后返回兜底空快照）。两边同时退化成同形状的垃圾时，逐字段
+    # 比对拿到的全是 None，None == None，差异为空，parity 会报「核对通过」。这是最难被
+    # 发现的假绿：它长得像核对结果，而 README 把这个退出码写成可以直接进 CI 的门禁。
+    unusable = [
+        f"/api/{name}"
+        for name, facts in (("summary", summary_facts), ("mobile/summary", mobile_facts))
+        if facts.get("period.id") is None or facts.get("period.total_tokens") is None
+    ]
+    if unusable:
+        return _finish_report(
+            {
+                "command": "parity",
+                "source": source_label,
+                "requested": dict(requested),
+                "summary_generated_at": summary_document.get("generated_at"),
+                "mobile_generated_at": mobile_document.get("generated_at"),
+                "compared_fields": fields,
+                "differences": [],
+                "known_differences": [dict(row) for row in KNOWN_MOBILE_OMISSIONS],
+            },
+            [
+                _issue(
+                    "parity_input_unusable",
+                    f"{endpoint} 没有可比对的周期与总量，无法据此判定口径一致",
+                )
+                for endpoint in unusable
+            ],
+            EXIT_DATA_ISSUE,
+            "data_issue",
+        )
+
     differences = [
         {"field": field, "summary": summary_facts[field], "mobile": mobile_facts[field]}
         for field in fields
