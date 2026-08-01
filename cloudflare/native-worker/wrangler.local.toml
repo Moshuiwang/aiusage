@@ -6,6 +6,7 @@ workers_dev = false
 [vars]
 AIUSAGE_TOKEN = "contract-test-token"
 AIUSAGE_TIMEZONE = "Asia/Shanghai"
+AIUSAGE_BACKEND_MODE = "native_d1_local"
 
 [[d1_databases]]
 binding = "AIUSAGE_DB"

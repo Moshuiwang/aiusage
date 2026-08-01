@@ -12,6 +12,7 @@ export interface Env {
   AIUSAGE_NOW?: string;
   AIUSAGE_CACHE_NAMESPACE?: string;
   AIUSAGE_DISABLE_SUMMARY_CACHE?: string;
+  AIUSAGE_BACKEND_MODE?: string;
   AIUSAGE_SUPABASE_URL?: string;
   AIUSAGE_SUPABASE_SECRET_KEY?: string;
 }
@@ -146,6 +147,7 @@ export default {
         machine: url.searchParams.get("machine"),
         account: url.searchParams.get("account"),
         currentTime: env.AIUSAGE_NOW,
+        backendMode: backendMode(env),
       };
       const payload = url.pathname === "/api/mobile/summary"
         ? await buildMobile(env.AIUSAGE_DB, requestParams)
@@ -363,7 +365,7 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
   return {
     status: "ok",
     generated_at: env.AIUSAGE_NOW ?? new Date().toISOString(),
-    backend_mode: "native_d1_staging",
+    backend_mode: backendMode(env),
     canonical_store: "cloudflare_d1",
     database: {
       path: "D1:AIUSAGE_DB",
@@ -382,6 +384,11 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
     },
     limits: limitsReport,
   };
+}
+
+function backendMode(env: Env): string {
+  const configured = String(env.AIUSAGE_BACKEND_MODE ?? "").trim();
+  return configured || "native_d1_unknown";
 }
 
 async function latestSourceStatuses(db: D1Database): Promise<Array<{ source_id: string | null; status: string | null }>> {

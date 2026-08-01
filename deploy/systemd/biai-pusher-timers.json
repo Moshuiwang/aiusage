@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "drop_in": "ai-usage-pusher-calendar.conf",
+  "timers": {
+    "ai-usage-pusher-linux-biai-ec2-user.timer": "ai-usage-pusher-linux-biai-ec2-user.service",
+    "ai-usage-pusher-linux-biai-wangANT.timer": "ai-usage-pusher-linux-biai-wangANT.service",
+    "ai-usage-pusher-linux-biai-wangDS.timer": "ai-usage-pusher-linux-biai-wangDS.service",
+    "ai-usage-pusher-linux-biai-wangzp.timer": "ai-usage-pusher-linux-biai-wangzp.service",
+    "ai-usage-pusher-linux-wang.timer": "ai-usage-pusher-linux-wang.service"
+  }
+}

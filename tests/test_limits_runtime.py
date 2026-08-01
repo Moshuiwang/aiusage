@@ -168,6 +168,40 @@ class TestLimitsRuntime(unittest.TestCase):
 
         self.assertEqual(row, ("codex", "unknown", "provider_runtime", "missing", "provider_failed"))
 
+    def test_runtime_does_not_report_cached_only_provider_as_success(self) -> None:
+        cached = LimitWindow(
+            provider="claude",
+            source_id="claude-main",
+            window="week",
+            used_percent=31.0,
+            remaining_percent=69.0,
+            reset_at="2026-06-09T00:00:00+08:00",
+            window_duration_minutes=10080,
+            observed_at="2026-06-03T10:00:00+08:00",
+            source_type="active_limits_cache",
+            confidence="estimated",
+            status="unavailable",
+        )
+
+        result = LimitsRuntime(
+            db_path=self.db_path,
+            latest_path=self.out_path,
+            timezone="Asia/Shanghai",
+            providers={"claude-main": FakeProvider([cached])},
+            now_provider=lambda: "2026-06-03T10:02:00+08:00",
+        ).collect(provider_names=["claude-main"], rebuild_snapshot=False, dry_run=True)
+
+        self.assertFalse(result.success)
+        self.assertEqual(result.provider_results, [
+            ProviderRuntimeResult(
+                provider="claude-main",
+                status="unavailable",
+                windows_written=0,
+                error_type="provider_unavailable",
+            )
+        ])
+        self.assertEqual(result.windows, [cached])
+
     def test_runtime_dry_run_collects_without_writing_sqlite_or_snapshot(self) -> None:
         os.close(self.db_fd)
         os.close(self.out_fd)

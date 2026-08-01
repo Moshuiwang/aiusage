@@ -27,6 +27,7 @@ describe.sequential("native TS Worker web surface", () => {
       AIUSAGE_TOKEN_SPECS: "second:second-contract-test-token",
       AIUSAGE_SESSION_SECRET: sessionSecret,
       AIUSAGE_NOW: fixedNow,
+      AIUSAGE_BACKEND_MODE: "native_d1_production",
     });
     const db = await mf.getD1Database("AIUSAGE_DB");
     await applySchema(db);
@@ -120,7 +121,7 @@ describe.sequential("native TS Worker web surface", () => {
     expect(payload).toMatchObject({
       status: "ok",
       generated_at: fixedNow,
-      backend_mode: "native_d1_staging",
+      backend_mode: "native_d1_production",
       canonical_store: "cloudflare_d1",
       database: {
         path: "D1:AIUSAGE_DB",
@@ -199,7 +200,7 @@ describe.sequential("native TS Worker web surface", () => {
 
     expect(response.status).toBe(200);
     expect(payload).toMatchObject({
-      backend_mode: "native_d1_staging",
+      backend_mode: "native_d1_production",
       canonical_store: "cloudflare_d1",
       limits: {
         latest_observed_at: "2026-06-03T11:01:00+08:00",
@@ -208,6 +209,43 @@ describe.sequential("native TS Worker web surface", () => {
         stale_window_count: 1,
       },
     });
+  });
+
+  it("uses the same explicit production identity in health and user summaries", async () => {
+    const headers = { Authorization: `Bearer ${token}` };
+    const health = await (await mf.dispatchFetch("http://native.test/api/health", { headers })).json<Record<string, any>>();
+    const summary = await (await mf.dispatchFetch("http://native.test/api/mobile/summary?period=today", { headers }))
+      .json<Record<string, any>>();
+
+    expect(health.backend_mode).toBe("native_d1_production");
+    expect(summary.metadata.backend_mode).toBe("native_d1_production");
+  });
+
+  it("fails closed when deployment identity is missing", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({
+      AIUSAGE_TOKEN: token,
+      AIUSAGE_SESSION_SECRET: sessionSecret,
+      AIUSAGE_NOW: fixedNow,
+      AIUSAGE_BACKEND_MODE: "",
+    });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await seedMinimalUsage(db);
+    await seedHealthRows(db);
+
+    const response = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const payload = await response.json<Record<string, any>>();
+
+    expect(payload.backend_mode).toBe("native_d1_unknown");
+  });
+
+  it("pins the deployed Native Worker configuration to production identity", async () => {
+    const config = await readFile(path.join(repoRoot, "cloudflare/native-worker/wrangler.toml"), "utf8");
+
+    expect(config).toContain('AIUSAGE_BACKEND_MODE = "native_d1_production"');
   });
 
   it("reads current source health from the per-source state model", async () => {
@@ -239,7 +277,7 @@ describe.sequential("native TS Worker web surface", () => {
         INSERT INTO source_identities (
           source_id, host, machine, os_user, platform, first_seen_at, last_seen_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind("stale-source", "old-host", "old-host", "carol", "linux", "2026-06-03T09:00:00+08:00", "2026-06-03T09:00:00+08:00"),
+      `).bind("stale-source", "wrong-network-host", "actual-machine", "carol", "linux", "2026-06-03T09:00:00+08:00", "2026-06-03T09:00:00+08:00"),
       db.prepare(`
         INSERT INTO source_report_states (
           source_id, collected_at, report_type, command, status, ccusage_version,
@@ -273,7 +311,9 @@ describe.sequential("native TS Worker web surface", () => {
       source_id: "linux-dev-bob", status: "provider_failed", observed_at: "2026-06-03T11:50:00+08:00", error_message: "provider down",
     });
     expect(dashboardSources.get("stale-source")).toMatchObject({
-      source_id: "stale-source", status: "stale", observed_at: "2026-06-03T09:00:00+08:00", error_message: null,
+      source_id: "stale-source", machine: "actual-machine", host: "wrong-network-host",
+      display_name: "actual-machine · carol", status: "stale",
+      observed_at: "2026-06-03T09:00:00+08:00", error_message: null,
     });
     expect(mobileSources.get("mac-local")).toMatchObject({
       source_id: "mac-local", status: "ok", last_observed_at: "2026-06-03T11:55:00+08:00", error_message: null,
@@ -282,7 +322,8 @@ describe.sequential("native TS Worker web surface", () => {
       source_id: "linux-dev-bob", status: "provider_failed", last_observed_at: "2026-06-03T11:50:00+08:00", error_message: "provider down",
     });
     expect(mobileSources.get("stale-source")).toMatchObject({
-      source_id: "stale-source", status: "stale", last_observed_at: "2026-06-03T09:00:00+08:00", error_message: null,
+      source_id: "stale-source", machine: "actual-machine", status: "stale",
+      last_observed_at: "2026-06-03T09:00:00+08:00", error_message: null,
     });
   });
 

@@ -217,7 +217,7 @@ function mobileMetadata(snapshot: AnyRecord, windows: AnyRecord[], candidateWind
     freshnessStatus = "stale";
   }
   return {
-    backend_mode: metadata.backend_mode || "native_d1_staging",
+    backend_mode: metadata.backend_mode || "native_d1_unknown",
     canonical_store: metadata.canonical_store || "cloudflare_d1",
     read_model_generated_at: metadata.read_model_generated_at || snapshot.generated_at,
     freshness_status: freshnessStatus,

@@ -163,6 +163,13 @@ Usage Ledger 换源已在 TP-V2-103 收口：本轮不改 macOS menu popover UI�
 | TP-V2-120 | [TP-V2-120-supabase-daily-rollup-sync.md](TP-V2-120-supabase-daily-rollup-sync.md) | in_progress | TP-V2-119 | none |
 | TP-V2-120 | [TP-V2-120-d1-legacy-ledger-backfill.md](TP-V2-120-d1-legacy-ledger-backfill.md) | done | TP-V2-103, TP-V2-119 | none |
 | TP-V2-121 | [TP-V2-121-d1-explicit-discard-policy.md](TP-V2-121-d1-explicit-discard-policy.md) | done | TP-V2-120 | none |
+| TP-V2-122 | [TP-V2-122-production-runtime-identity-contract.md](TP-V2-122-production-runtime-identity-contract.md) | done | TP-V2-093 | TP-V2-123 |
+| TP-V2-123 | [TP-V2-123-collector-http-identity-deploy.md](TP-V2-123-collector-http-identity-deploy.md) | done | TP-V2-042, TP-V2-104 | TP-V2-122 |
+| TP-V2-124 | [TP-V2-124-stale-limit-cache-guard.md](TP-V2-124-stale-limit-cache-guard.md) | done | TP-V2-041, TP-V2-109 | none |
+| TP-V2-125 | [TP-V2-125-linux-collector-timer-reliability.md](TP-V2-125-linux-collector-timer-reliability.md) | done | TP-V2-107 | TP-V2-122, TP-V2-123, TP-V2-124 |
+| TP-V2-126 | [TP-V2-126-source-machine-display-identity.md](TP-V2-126-source-machine-display-identity.md) | done | TP-V2-103 | TP-V2-122, TP-V2-123, TP-V2-124, TP-V2-125 |
+| TP-V2-127 | [TP-V2-127-biai-collector-http-runtime.md](TP-V2-127-biai-collector-http-runtime.md) | done | TP-V2-123, TP-V2-125 | none |
+| TP-V2-128 | [TP-V2-128-tz-collector-release-and-timer.md](TP-V2-128-tz-collector-release-and-timer.md) | done | TP-V2-123, TP-V2-125 | none |
 
 ## subagent 分配建议
 

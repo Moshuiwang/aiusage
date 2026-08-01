@@ -18,6 +18,16 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class TestCliLimits(unittest.TestCase):
+    def setUp(self) -> None:
+        self.default_now = patch(
+            "ai_usage_widget.limits_runtime._default_now",
+            return_value="2026-06-03T10:02:00+08:00",
+        )
+        self.default_now.start()
+
+    def tearDown(self) -> None:
+        self.default_now.stop()
+
     def test_collect_limits_fixture_writes_sqlite_and_snapshot(self) -> None:
         db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
         out_fd, out_path = tempfile.mkstemp(suffix=".json")

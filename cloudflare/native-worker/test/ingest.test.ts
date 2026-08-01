@@ -465,6 +465,38 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(await limitsResponse.json()).toMatchObject({ status: "error", error_type: "limit_schema_invalid" });
   });
 
+  it("rejects cached or expired limits pretending to be current", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const common = {
+      source_id: "claude-main",
+      provider: "claude",
+      window: "week",
+      used_percent: 40,
+      remaining_percent: 60,
+      window_duration_minutes: 10080,
+      observed_at: "2026-08-01T13:20:00+08:00",
+      reset_at: "2026-08-08T00:00:00+08:00",
+      source_type: "oauth_usage_api",
+      confidence: "observed",
+      status: "ok",
+    };
+    const invalidWindows = [
+      { ...common, source_type: "active_limits_cache" },
+      { ...common, reset_at: "2026-07-31T00:00:00+08:00" },
+    ];
+
+    for (const window of invalidWindows) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...base, observed_at: window.observed_at, windows: [window] }),
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ status: "error", error_type: "limit_schema_invalid" });
+    }
+  });
+
   it("requires two complete matching scans before verification and authoritative deletion", async () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     const fact = (hour: string, total: number) => ({

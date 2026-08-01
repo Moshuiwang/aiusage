@@ -86,6 +86,17 @@ def parse_limit_window(payload: Dict[str, Any]) -> LimitWindow:
     confidence = _optional_string(payload, "confidence", default="unknown")
     status = _optional_string(payload, "status", default="unknown")
 
+    if source_type == "active_limits_cache" and (confidence == "observed" or status == "ok"):
+        raise LimitContractError(
+            "limit_schema_invalid",
+            "active_limits_cache cannot claim observed or current status",
+        )
+    if status == "ok" and _iso_at_or_before(reset_at, observed_at):
+        raise LimitContractError(
+            "limit_schema_invalid",
+            "reset_at must be later than observed_at when status is ok",
+        )
+
     return LimitWindow(
         provider=provider,
         source_id=source_id,
@@ -152,3 +163,14 @@ def _optional_positive_int(payload: Dict[str, Any], field: str) -> int:
     if value < 0:
         raise LimitContractError("limit_schema_invalid", f"{field} must be positive")
     return value
+
+
+def _iso_at_or_before(candidate: str, reference: str) -> bool:
+    candidate_time = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+    reference_time = datetime.fromisoformat(reference.replace("Z", "+00:00"))
+    if (candidate_time.tzinfo is None) != (reference_time.tzinfo is None):
+        raise LimitContractError(
+            "limit_schema_invalid",
+            "reset_at and observed_at must use matching timezone forms",
+        )
+    return candidate_time <= reference_time
