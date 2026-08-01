@@ -17,6 +17,7 @@ from .snapshot_filters import (
 )
 from .snapshot_periods import date_axis, hour_axis, parse_datetime, period_bounds, zoneinfo
 from .snapshot_source_health import build_source_status
+from .version_contract import build_version_health
 from .snapshot_trends import cap_today_hourly_to_period_totals, codex_hourly_context, fill_today_hourly_residual, hourly_trend
 
 
@@ -91,13 +92,20 @@ def build_snapshot(
             # 查询各 source_id 的最后一次上报状态
             cursor = conn.execute(
                 """
-                SELECT r.source_id, r.status, c.collected_at, r.error_message
+                SELECT r.source_id, r.status, c.collected_at, r.error_message, c.collector_version
                 FROM source_reports r
                 JOIN collection_runs c ON r.run_id = c.id
                 WHERE r.id IN (SELECT max(id) FROM source_reports GROUP BY source_id)
                 """
             )
-            status_rows = cursor.fetchall()
+            latest_report_rows = cursor.fetchall()
+            status_rows = [row[:4] for row in latest_report_rows]
+            # 只有采集端真实上报过版本才进入版本读模型；NULL 表示未知，不假装成某个版本。
+            source_versions = {
+                str(row[0]): {"collector_version": row[4]}
+                for row in latest_report_rows
+                if row[4]
+            }
             source_identities = _fetch_source_identities(conn)
             source_accuracy = _fetch_source_accuracy(conn)
             hourly_rows = _fetch_hourly_rows(conn, hour_axis_values[0], hour_axis_values[-1]) if hour_axis_values else []
@@ -385,6 +393,7 @@ def build_snapshot(
         machine_filter=machine_filter,
         account_filter=account_filter,
         source_accuracy=source_accuracy,
+        source_versions=source_versions,
     )
 
     # 6. 组装完整快照 (v1 schema)
@@ -416,6 +425,7 @@ def build_snapshot(
         "items": items,
         "trend": trend,
         "source_status": source_status,
+        "version_health": build_version_health(source_status),
         "limits": limits,
         "limit_status": limit_status,
         "provider_slots": _build_provider_slots(provider_usage, all_limits, limit_status, ref_time),
@@ -1524,6 +1534,7 @@ def _empty_snapshot(
             "by_agent": [],
         },
         "source_status": [],
+        "version_health": build_version_health([]),
         "limits": [],
         "limit_status": [],
         "provider_slots": _build_provider_slots({}, [], [], ref_time),

@@ -15,6 +15,12 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from .config import DeviceConfig
 from .http_identity import PRODUCT_USER_AGENT
 from .models import CommandResult
+from .version_contract import (
+    COLLECTOR_RELEASE_FIELD,
+    UNSUPPORTED_ERROR_TYPE,
+    VersionContractError,
+    local_collector_release,
+)
 
 
 class IngestHTTPClient:
@@ -380,6 +386,7 @@ class DevicePusher:
             "collection_window": "daily",
             "collection_status": "ok",
             "usage_daily": usage_daily,
+            COLLECTOR_RELEASE_FIELD: _local_collector_release(self.config),
         }
         if ccusage_daily_available:
             payload["ccusage_daily_report"] = ccusage_data
@@ -456,6 +463,12 @@ class DevicePusher:
                 "error_type": "http_access_blocked",
                 "error_message": resp_data.get("message") or "入口防护拦截或访问被拒绝，请检查网络入口策略",
             }
+        if resp_data.get("error_type") == UNSUPPORTED_ERROR_TYPE:
+            return {
+                "success": False,
+                "error_type": UNSUPPORTED_ERROR_TYPE,
+                "error_message": resp_data.get("message") or "采集端版本不被服务端支持，本次上报未写入",
+            }
         elif status_code != 200:
             return {
                 "success": False,
@@ -485,6 +498,7 @@ class DevicePusher:
             "error_type": error_type,
             "error_message": error_message,
             "usage_daily": [],
+            COLLECTOR_RELEASE_FIELD: _local_collector_release(self.config),
         }
         headers = {"User-Agent": PRODUCT_USER_AGENT}
         if self.config.token_env:
@@ -515,6 +529,12 @@ class DevicePusher:
                 "success": False,
                 "error_type": "http_access_blocked",
                 "error_message": resp_data.get("message") or "入口防护拦截或访问被拒绝，请检查网络入口策略",
+            }
+        if resp_data.get("error_type") == UNSUPPORTED_ERROR_TYPE:
+            return {
+                "success": False,
+                "error_type": UNSUPPORTED_ERROR_TYPE,
+                "error_message": resp_data.get("message") or "采集端版本不被服务端支持，本次上报未写入",
             }
         if status_code != 200:
             return {
@@ -624,6 +644,51 @@ def _usage_hourly_facts_from_mswusage(
             fact["metadata"] = {"collector": report["collector"]}
         facts.append(fact)
     return facts
+
+
+def _local_collector_release(config: DeviceConfig) -> dict[str, Any]:
+    """构造本机要上报的采集端版本块。
+
+    build_sha 和最后升级结果来自环境变量，未来由自升级 agent 写入。
+    任何一层给了不合规的值就**逐层丢掉该来源**并退回更安全的默认值：
+    既不让疑似凭据出网，也不因为一个环境变量或一项配置写错就中断整次采集上报。
+    最后一层只含代码常量，永远合法。
+    """
+    candidates: list[dict[str, Any]] = [
+        {
+            "config_schema_version": config.schema_version,
+            "release_channel": config.release_channel,
+            "build_sha": os.environ.get("AI_USAGE_BUILD_SHA"),
+            "last_upgrade": _last_upgrade_from_env(),
+        },
+        {
+            "config_schema_version": config.schema_version,
+            "release_channel": config.release_channel,
+        },
+        {},
+    ]
+    for kwargs in candidates:
+        try:
+            return local_collector_release(**kwargs)
+        except VersionContractError:
+            continue
+    raise AssertionError("local_collector_release() 的常量兜底不应失败")
+
+
+def _last_upgrade_from_env() -> dict[str, Any] | None:
+    status = os.environ.get("AI_USAGE_LAST_UPGRADE_STATUS")
+    if not status:
+        return None
+    last_upgrade: dict[str, Any] = {"status": status}
+    for key, env_name in (
+        ("from_version", "AI_USAGE_LAST_UPGRADE_FROM_VERSION"),
+        ("to_version", "AI_USAGE_LAST_UPGRADE_TO_VERSION"),
+        ("finished_at", "AI_USAGE_LAST_UPGRADE_FINISHED_AT"),
+    ):
+        value = os.environ.get(env_name)
+        if value:
+            last_upgrade[key] = value
+    return last_upgrade
 
 
 def _usage_ledger_run(report: dict, facts: list[dict[str, Any]], *, agent: str) -> dict[str, Any] | None:

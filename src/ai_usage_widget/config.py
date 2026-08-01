@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
+from .version_contract import DEFAULT_RELEASE_CHANNEL, RELEASE_CHANNELS
+
 
 class ConfigError(ValueError):
     pass
@@ -76,6 +78,7 @@ class DeviceConfig:
     timeout_seconds: int = 30
     token_env: Optional[str] = None
     ai_accounts: Optional[Dict[str, Dict[str, Any]]] = None
+    release_channel: str = DEFAULT_RELEASE_CHANNEL
 
 
 def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
@@ -103,6 +106,13 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
     if platform not in {"darwin", "linux", "windows"}:
         raise ConfigError(f"Unsupported device platform: {platform}")
 
+    # 4. 发布通道：只接受版本合同声明的通道，避免各设备自定义通道名
+    release_channel = str(data.get("release_channel") or DEFAULT_RELEASE_CHANNEL)
+    if release_channel not in RELEASE_CHANNELS:
+        raise ConfigError(
+            "Unsupported device release_channel: " + ", ".join(RELEASE_CHANNELS) + " expected"
+        )
+
     return DeviceConfig(
         schema_version=int(data.get("schema_version", 1)),
         source_id=str(data["source_id"]),
@@ -115,4 +125,5 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
         timeout_seconds=int(data.get("timeout_seconds", 30)),
         token_env=data.get("token_env"),
         ai_accounts=data.get("ai_accounts") if isinstance(data.get("ai_accounts"), dict) else None,
+        release_channel=release_channel,
     )
