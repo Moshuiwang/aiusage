@@ -100,6 +100,14 @@ struct MenuBarPopoverView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
             }
+            if let coverage = model.state.providerUsageCoverageText {
+                Label(coverage, systemImage: "info.circle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+            }
 
             Picker(selection: $model.selectedPeriodID) {
                 ForEach(periods, id: \.0) { id, label in Text(label).tag(id) }
@@ -169,7 +177,7 @@ struct MenuBarPopoverView: View {
 
     private var quotaSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("已使用额度")
+            sectionTitle("Provider 用量与额度")
             HStack(alignment: .top, spacing: 0) {
                 ForEach(Array(model.state.quotaRings.enumerated()), id: \.element.id) { index, ring in
                     if index > 0 { Divider().padding(.vertical, 4) }
@@ -440,6 +448,9 @@ struct QuotaRingItem: View {
             .frame(width: 110, height: 110)
 
             VStack(spacing: 3) {
+                Text(data.usageText)
+                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(data.usageText == "用量不可用" ? Color.orange : .secondary)
                 ringRow(key: data.outerLabel, pct: data.outerPctText, time: data.outerTimeText,
                         color: Color(red: data.outerRed, green: data.outerGreen, blue: data.outerBlue))
                 ringRow(key: data.innerLabel, pct: data.innerPctText, time: data.innerTimeText,

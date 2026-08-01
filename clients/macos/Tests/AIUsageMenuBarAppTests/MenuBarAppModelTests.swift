@@ -57,6 +57,41 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    func testAllFourPeriodsKeepIndependentFreshCaches() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let periods = ["today": 100, "week": 200, "month": 300, "all": 400]
+        let cached = try Dictionary(uniqueKeysWithValues: periods.map { period, total in
+            (
+                period,
+                CachedMenuSummary(
+                    summary: try summary(periodID: period, totalTokens: total),
+                    fetchedAt: now.addingTimeInterval(-60)
+                )
+            )
+        })
+        let model = MenuBarAppModel(
+            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: cached,
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        for period in ["today", "week", "month", "all"] {
+            model.refresh(periodID: period)
+            await yieldToMainActor()
+            XCTAssertEqual(model.selectedPeriodID, period)
+            XCTAssertEqual(model.summary.period.id, period)
+            XCTAssertEqual(model.summary.period.totalTokens, periods[period])
+            XCTAssertNil(model.errorMessage)
+        }
+
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
     func testSwitchToExpiredCachedPeriodShowsCacheThenRefreshesInBackground() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")

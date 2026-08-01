@@ -17,6 +17,7 @@ public struct MenuBarState: Equatable, Sendable {
     public let limitRows: [MenuDisplayRow]
     public let breakdownSections: [MenuDisplaySection]
     public let quotaRings: [QuotaRingData]
+    public let providerUsageCoverageText: String?
 }
 
 public struct QuotaRingData: Equatable, Sendable, Identifiable {
@@ -35,6 +36,7 @@ public struct QuotaRingData: Equatable, Sendable, Identifiable {
     public let sourceText: String
     public let updatedText: String
     public let availabilityText: String
+    public let usageText: String
 }
 
 public struct MenuTrendBar: Equatable, Sendable, Identifiable {
@@ -64,8 +66,8 @@ public enum MenuBarViewModel {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
-        let currentLimits = currentLimitWindows(summary.limits.windows, now: now)
-        let primaryLimit = currentLimits
+        let currentProviderWindows = currentProviderWindows(summary.providerSlots, now: now)
+        let primaryLimit = currentProviderWindows
             .sorted { lhs, rhs in
                 if lhs.usedPercent == rhs.usedPercent {
                     return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
@@ -96,9 +98,14 @@ public enum MenuBarViewModel {
             trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
             trendMidText: maxTokens > 0 && midVal > 0 ? ceilingText(midVal) : "",
             sources: sourceRows(summary.sources, byMachine: summary.breakdown.byMachine, generatedAt: summary.generatedAt),
-            limitRows: sortedLimits(currentLimits).map { limitRow($0, generatedAt: summary.generatedAt) },
+            limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(from: summary.limits.windows, providers: summary.limits.providers, now: now)
+            quotaRings: quotaRings(
+                from: summary.providerSlots,
+                generatedAt: summary.generatedAt,
+                now: now
+            ),
+            providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage)
         )
     }
 
@@ -132,6 +139,14 @@ public enum MenuBarViewModel {
             return "暂无可信额度"
         }
         return "\(providerName(window.provider)) \(window.window) · \(Int(window.usedPercent.rounded()))% 已用"
+    }
+
+    private static func providerUsageCoverageText(_ coverage: MobileProviderUsageCoverage) -> String? {
+        guard !coverage.isComplete else { return nil }
+        if coverage.status == "unknown" {
+            return "用量归属未知：服务端未提供归属信息"
+        }
+        return "用量归属不完整：部分用量未归属到 Claude/Codex"
     }
 
     private static func timeText(_ generatedAt: String?, timezone: String?) -> String {
@@ -254,12 +269,16 @@ public enum MenuBarViewModel {
         }
     }
 
-    private static func currentLimitWindows(_ windows: [MobileLimitWindow], now: Date) -> [MobileLimitWindow] {
-        windows.filter { window in
-            window.isOfficialObserved &&
-            !isLocalEstimate(window.sourceType) &&
-            !isExpired(resetAt: window.resetAt, now: now) &&
-            !isStale(observedAt: window.observedAt, now: now)
+    private static func currentProviderWindows(_ slots: [MobileProviderSlot], now: Date) -> [MobileLimitWindow] {
+        slots.flatMap { slot -> [MobileLimitWindow] in
+            guard slot.quota.status == "available" else { return [] }
+            return slot.quota.windows.filter { window in
+                window.isOfficialObserved &&
+                (slot.quota.sourceID == nil || slot.quota.sourceID == window.sourceID) &&
+                !isLocalEstimate(window.sourceType) &&
+                !isExpired(resetAt: window.resetAt, now: now) &&
+                !isStale(observedAt: window.observedAt, now: now)
+            }
         }
     }
 
@@ -308,24 +327,19 @@ public enum MenuBarViewModel {
     }
 
     private static func quotaRings(
-        from windows: [MobileLimitWindow],
-        providers: [MobileLimitProviderStatus],
+        from slots: [MobileProviderSlot],
+        generatedAt: String?,
         now: Date
     ) -> [QuotaRingData] {
-        let rawGrouped = Dictionary(grouping: windows, by: { canonicalProvider($0.provider) })
-        let providerStatus = Dictionary(
-            providers.map { (canonicalProvider($0.provider), $0) },
-            uniquingKeysWith: { _, latest in latest }
-        )
-        return ["claude", "codex"].map { provider in
-            let status = providerStatus[provider]
-            let allRawWins = rawGrouped[provider] ?? []
-            let fallbackSource = allRawWins.max {
-                (parseDate($0.observedAt) ?? .distantPast) < (parseDate($1.observedAt) ?? .distantPast)
-            }?.sourceID
-            let selectedSource = status?.sourceID ?? fallbackSource
-            let rawWins = allRawWins.filter { selectedSource == nil || $0.sourceID == selectedSource }
-            let wins = currentLimitWindows(rawWins, now: now)
+        let providerOrder = ["claude", "codex"]
+        return slots.sorted {
+            let lhs = providerOrder.firstIndex(of: canonicalProvider($0.provider)) ?? providerOrder.count
+            let rhs = providerOrder.firstIndex(of: canonicalProvider($1.provider)) ?? providerOrder.count
+            return lhs == rhs ? $0.provider < $1.provider : lhs < rhs
+        }.map { slot in
+            let provider = canonicalProvider(slot.provider)
+            let rawWins = slot.quota.windows
+            let wins = currentProviderWindows([slot], now: now)
             let bestWindows = bestWindowPerType(wins)
             let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
             let weekWindow = bestWindows.first(where: isWeekLimitWindow)
@@ -337,6 +351,8 @@ public enum MenuBarViewModel {
             let freshest = rawWins.max {
                 (parseDate($0.observedAt) ?? .distantPast) < (parseDate($1.observedAt) ?? .distantPast)
             }
+            let sourceID = slot.quota.sourceID ?? freshest?.sourceID
+            let verifiedAt = slot.quota.lastVerifiedAt ?? freshest?.observedAt
             let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
             switch provider {
             case "claude":
@@ -360,15 +376,43 @@ public enum MenuBarViewModel {
                 innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 outerLabel: outerWindow.map(windowLabel) ?? "额度",
                 innerLabel: weekWindow.map(windowLabel) ?? "长期",
-                sourceText: sourceText(provider: provider, sourceID: status?.sourceID ?? freshest?.sourceID),
+                sourceText: sourceText(provider: provider, sourceID: sourceID),
                 updatedText: compactDateTime(
-                    status?.observedAt ?? freshest?.observedAt,
-                    reference: status?.observedAt ?? freshest?.observedAt,
+                    verifiedAt,
+                    reference: generatedAt,
                     suffix: "更新"
                 ) ?? "未更新",
-                availabilityText: outerWindow != nil || weekWindow != nil ? "官方额度" : "暂不可用"
+                availabilityText: quotaAvailabilityText(
+                    slot.quota,
+                    hasVisibleWindow: outerWindow != nil || weekWindow != nil
+                ),
+                usageText: slot.usage.status == "available"
+                    ? "用量 \(TokenFormat.compact(slot.usage.totalTokens))"
+                    : "用量不可用"
             )
         }
+    }
+
+    private static func quotaAvailabilityText(
+        _ quota: MobileProviderQuota,
+        hasVisibleWindow: Bool
+    ) -> String {
+        if hasVisibleWindow {
+            return "官方额度"
+        }
+        guard let reason = quota.reason, !reason.isEmpty else {
+            return "额度暂不可用"
+        }
+        let label: String
+        switch reason {
+        case "no_data": label = "暂无数据"
+        case "stale": label = "数据已过期"
+        case "unverified": label = "未验证"
+        case "unsupported": label = "暂不支持"
+        case "unavailable", "failed", "provider_failed": label = "读取失败"
+        default: label = reason
+        }
+        return "额度暂不可用 · \(label)"
     }
 
     private static func canonicalProvider(_ provider: String) -> String {
