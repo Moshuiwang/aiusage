@@ -741,10 +741,6 @@ class TestMobileSummaryLimits(unittest.TestCase):
         self.assertEqual(summary["sources"], [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestMobileSummaryProviderSlots(unittest.TestCase):
     """Issue #61：/api/mobile/summary 与 /api/summary 用同一份 provider 槽位事实，只裁剪不重算。"""
 
@@ -866,3 +862,7 @@ class TestMobileSummaryProviderSlots(unittest.TestCase):
         serialized = json.dumps(claude["quota"], sort_keys=True)
         for leaked in ("used_percent", "remaining_percent", "reset_at", "91.0", "2026-06-01T10:00:00+08:00"):
             self.assertNotIn(leaked, serialized)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1434,7 +1434,8 @@ function providerQuotaSlot(
   statusRow: Record<string, unknown> | undefined,
   refTime: Date,
 ): Record<string, unknown> {
-  const lastVerifiedAt = lastVerifiedAtOf(rows);
+  const selectedSourceId = statusRow ? statusRow.source_id : undefined;
+  const lastVerifiedAt = lastVerifiedAtOf(rows, selectedSourceId);
   // 缺失态只暴露「最近一次验证时间」和来源标识，绝不带任何百分比或 reset 时间。
   const missing = (reason: string, sourceId: unknown = null, sourceType: unknown = null) => ({
     status: "missing",
@@ -1455,8 +1456,8 @@ function providerQuotaSlot(
   const windows = rows.filter((row) =>
     str(row.source_id) === str(sourceId) &&
     effectiveLimitWindow(row) &&
-    !limitWindowExpired(row, refTime) &&
-    !limitWindowStale(row, refTime));
+    !limitWindowStale(row, refTime) &&
+    !limitWindowExpired(row, refTime));
   if (!windows.length) return missing("unverified", sourceId, sourceType);
   return {
     status: "available",
@@ -1468,11 +1469,16 @@ function providerQuotaSlot(
   };
 }
 
-function lastVerifiedAtOf(rows: LimitRow[]): string | null {
+// 最近一次**官方**验证时间。本地估算（ccusage daily/blocks、active cache 等）不是官方验证，
+// 不能借这个字段把「刚刚算过」伪装成「官方额度刚刚核对过」；已选定来源时只看该来源，
+// 保证 (source_id, source_type, last_verified_at) 指向同一条记录。与 Python 侧一致。
+function lastVerifiedAtOf(rows: LimitRow[], sourceId?: unknown): string | null {
   let best: string | null = null;
   let bestTime = Number.NEGATIVE_INFINITY;
   for (const row of rows) {
     if (!row.observed_at) continue;
+    if (localEstimateSourceTypes.has(row.source_type)) continue;
+    if (sourceId !== undefined && str(row.source_id) !== str(sourceId)) continue;
     const time = parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY;
     if (time > bestTime) {
       bestTime = time;
@@ -1483,9 +1489,16 @@ function lastVerifiedAtOf(rows: LimitRow[]): string | null {
 }
 
 function limitWindowStale(limit: LimitRow, refTime: Date): boolean {
+  // 没有时区标记的观测时间无法判断新鲜度，按不可信处理（fail closed），
+  // 不让年龄不明的记录冒充当前官方额度。Python 侧同样处理。
+  if (!hasTimezoneDesignator(limit.observed_at)) return true;
   const observed = parseDate(limit.observed_at);
   if (!observed) return true;
   return refTime.getTime() - observed.getTime() > limitStaleAfterMs;
+}
+
+function hasTimezoneDesignator(value: unknown): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(str(value).trim());
 }
 
 function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unknown>[] {

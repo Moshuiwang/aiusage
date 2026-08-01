@@ -6,9 +6,10 @@
 - ``cloudflare/native-worker/test/provider-slots-parity.test.ts``：用 Native Worker
   在 Miniflare D1 上重放同一份 fixture，比对同一个 golden。
 
-golden 里的值是按验收标准手写的预期，不是从任何一侧实现导出的。任何一侧漂移都会红。
-更新 golden：``UPDATE_PROVIDER_SLOTS_GOLDEN=1 python3 -m unittest tests.test_provider_slots_parity``
-（只有在预期本身确实要改时才允许更新）。
+golden 里的值最初是按验收标准逐条手写的，不是从任一侧实现导出的；两侧都必须匹配它。
+``UPDATE_PROVIDER_SLOTS_GOLDEN=1 python3 -m unittest tests.test_provider_slots_parity``
+会用 Python 侧的当前输出覆盖 golden —— 这是逃生口，只有在**预期本身**确实要改并且
+改动经过复核时才允许用；不得用它把实现漂移洗白成新预期。
 """
 
 from __future__ import annotations
@@ -97,8 +98,40 @@ class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
                 "03-quota-without-usage.sql",
                 "04-neither.sql",
                 "05-codex-quota-only.sql",
+                "06-expired-official-quota.sql",
+                "07-provider-failed-after-success.sql",
+                "08-stale-official-with-local-estimate.sql",
+                "09-local-estimate-only.sql",
             ],
         )
+
+    def test_golden_covers_every_quota_missing_reason(self) -> None:
+        golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
+        reasons = {
+            slot["quota"]["reason"]
+            for record in golden
+            for slot in record["provider_slots"]
+            if slot["quota"]["status"] == "missing"
+        }
+
+        self.assertEqual(reasons, {"no_data", "unverified", "stale", "expired", "unavailable"})
+
+    def test_golden_never_borrows_local_estimate_freshness_for_official_quota(self) -> None:
+        """本地估算的新鲜度不得冒充官方验证时间（08 / 09 两个 fixture 锁死）。"""
+        golden = {record["name"]: record for record in json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))}
+
+        for endpoint in ("summary", "mobile-summary"):
+            stale = _claude_quota(golden[f"08-stale-official-with-local-estimate:{endpoint}"])
+            self.assertEqual(stale["last_verified_at"], "2026-06-01T09:00:00+08:00")
+            self.assertEqual(stale["source_type"], "oauth_usage_api")
+
+            estimate_only = _claude_quota(golden[f"09-local-estimate-only:{endpoint}"])
+            self.assertEqual(estimate_only["reason"], "unverified")
+            self.assertIsNone(estimate_only["last_verified_at"])
+
+
+def _claude_quota(record: dict[str, Any]) -> dict[str, Any]:
+    return next(row for row in record["provider_slots"] if row["provider"] == "claude")["quota"]
 
 
 def _collect_records() -> list[dict[str, Any]]:

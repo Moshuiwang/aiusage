@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .limits import LimitWindow
+from .limits import LOCAL_ESTIMATE_SOURCE_TYPES, LimitWindow
 from .snapshot_filters import (
     daily_row_matches_filter,
     identity_matches_filter,
@@ -754,7 +754,8 @@ def _provider_quota_slot(
     status_row: Optional[dict[str, Any]],
     ref_time: datetime,
 ) -> dict[str, Any]:
-    last_verified_at = _last_verified_at(rows)
+    selected_source_id = status_row.get("source_id") if status_row is not None else None
+    last_verified_at = _last_verified_at(rows, selected_source_id)
 
     def missing(reason: str, source_id: Any = None, source_type: Any = None) -> dict[str, Any]:
         # 缺失态只暴露「最近一次验证时间」和来源标识，绝不带任何百分比或 reset 时间。
@@ -781,8 +782,8 @@ def _provider_quota_slot(
         for row in rows
         if str(row.get("source_id") or "") == str(source_id or "")
         and _effective_limit_window(row)
-        and not _limit_window_expired(row, ref_time)
         and not _limit_window_stale(row, ref_time)
+        and not _limit_window_expired(row, ref_time)
     ]
     if not windows:
         return missing("unverified", source_id, source_type)
@@ -796,12 +797,22 @@ def _provider_quota_slot(
     }
 
 
-def _last_verified_at(rows: list[dict[str, Any]]) -> Optional[str]:
+def _last_verified_at(rows: list[dict[str, Any]], source_id: Any = None) -> Optional[str]:
+    """最近一次**官方**验证时间。
+
+    本地估算（ccusage daily/blocks、active cache 等）不是官方验证，不能借这个字段
+    把「刚刚算过」伪装成「官方额度刚刚核对过」。已经选定来源时只看该来源，
+    保证 (source_id, source_type, last_verified_at) 指向同一条记录。
+    """
     best: Optional[str] = None
     best_timestamp = float("-inf")
     for row in rows:
         observed_at = row.get("observed_at")
         if not observed_at:
+            continue
+        if str(row.get("source_type") or "") in LOCAL_ESTIMATE_SOURCE_TYPES:
+            continue
+        if source_id is not None and str(row.get("source_id") or "") != str(source_id or ""):
             continue
         timestamp = _limit_timestamp(observed_at)
         if timestamp > best_timestamp:
@@ -814,12 +825,13 @@ def _limit_window_stale(limit: dict[str, Any], ref_time: datetime) -> bool:
     observed = parse_datetime(str(limit.get("observed_at") or ""))
     if observed is None:
         return True
-    if observed.tzinfo is not None and ref_time.tzinfo is not None:
-        observed = observed.astimezone(ref_time.tzinfo)
-    try:
-        return (ref_time - observed).total_seconds() > LIMIT_STALE_AFTER_MINUTES * 60
-    except TypeError:
+    # 观测时间和参考时间的时区形式不一致时无法判断新鲜度，按不可信处理（fail closed），
+    # 不让年龄不明的记录冒充当前官方额度。Worker 侧同样处理。
+    if (observed.tzinfo is None) != (ref_time.tzinfo is None):
         return True
+    if observed.tzinfo is not None:
+        observed = observed.astimezone(ref_time.tzinfo)
+    return (ref_time - observed).total_seconds() > LIMIT_STALE_AFTER_MINUTES * 60
 
 
 def _limit_timestamp(value: Any) -> float:

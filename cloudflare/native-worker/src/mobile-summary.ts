@@ -91,8 +91,10 @@ function providerSlot(provider: string, row: AnyRecord | undefined): AnyRecord {
   const usage = dict(source.usage);
   const quota = dict(source.quota);
   const totalTokens = int(usage.total_tokens);
-  const usageStatus = str(usage.status) || (totalTokens > 0 ? "available" : "missing");
-  const quotaStatus = str(quota.status) === "available" ? "available" : "missing";
+  const usageStatus = typeof usage.status === "string" && usage.status
+    ? usage.status
+    : (totalTokens > 0 ? "available" : "missing");
+  const quotaStatus = quota.status === "available" ? "available" : "missing";
   const rawReason = quota.reason;
   const reason = quotaStatus === "available"
     ? null

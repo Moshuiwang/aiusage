@@ -588,5 +588,381 @@
       "path": "/api/mobile/summary?date=2026-06-03&period=today"
     },
     "scenario": "05-codex-quota-only"
+  },
+  {
+    "name": "06-expired-official-quota:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T10:30:00+08:00",
+          "reason": "expired",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "06-expired-official-quota"
+  },
+  {
+    "name": "06-expired-official-quota:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T10:30:00+08:00",
+          "reason": "expired",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "06-expired-official-quota"
+  },
+  {
+    "name": "07-provider-failed-after-success:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:30:00+08:00",
+          "reason": "unavailable",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "07-provider-failed-after-success"
+  },
+  {
+    "name": "07-provider-failed-after-success:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:30:00+08:00",
+          "reason": "unavailable",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "07-provider-failed-after-success"
+  },
+  {
+    "name": "08-stale-official-with-local-estimate:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "08-stale-official-with-local-estimate"
+  },
+  {
+    "name": "08-stale-official-with-local-estimate:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "08-stale-official-with-local-estimate"
+  },
+  {
+    "name": "09-local-estimate-only:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "unverified",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "09-local-estimate-only"
+  },
+  {
+    "name": "09-local-estimate-only:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "unverified",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "09-local-estimate-only"
   }
 ]

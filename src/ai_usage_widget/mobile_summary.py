@@ -120,8 +120,13 @@ def _provider_slot(provider: str, row: Any) -> Dict[str, Any]:
     usage = _dict(row.get("usage"))
     quota = _dict(row.get("quota"))
     total_tokens = _int(usage.get("total_tokens"))
-    usage_status = str(usage.get("status") or "") or ("available" if total_tokens > 0 else "missing")
-    quota_status = "available" if str(quota.get("status") or "") == "available" else "missing"
+    raw_usage_status = usage.get("status")
+    usage_status = (
+        raw_usage_status
+        if isinstance(raw_usage_status, str) and raw_usage_status
+        else ("available" if total_tokens > 0 else "missing")
+    )
+    quota_status = "available" if quota.get("status") == "available" else "missing"
     if quota_status == "available":
         reason = None
         quota_windows = [window for window in _list(quota.get("windows")) if isinstance(window, dict)]

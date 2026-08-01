@@ -1964,3 +1964,120 @@ class TestSnapshotProviderSlots(unittest.TestCase):
         self.assertEqual(codex["quota"]["status"], "available")
         self.assertEqual(codex["quota"]["source_id"], "codex-main")
         self.assertEqual([row["window"] for row in codex["quota"]["windows"]], ["session"])
+
+    def test_last_verified_at_ignores_local_estimate_rows(self) -> None:
+        """ccusage 本地估算不是官方验证，不能借 last_verified_at 伪装成新鲜的官方额度。"""
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=78.25,
+                    remaining_percent=21.75,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-05-30T10:00:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-local-estimate",
+                    window="week",
+                    used_percent=12.0,
+                    remaining_percent=88.0,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:54:00+08:00",
+                    source_type="ccusage_blocks",
+                    confidence="estimated",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:54:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "stale")
+        self.assertEqual(claude["quota"]["source_id"], "claude-main")
+        self.assertEqual(claude["quota"]["source_type"], "oauth_usage_api")
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-05-30T10:00:00+08:00")
+
+    def test_last_verified_at_belongs_to_the_reported_quota_source(self) -> None:
+        """last_verified_at 必须和同一对象里的 source_id / source_type 指向同一条记录。"""
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=31.5,
+                    remaining_percent=68.5,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-ghost",
+                    window="week",
+                    used_percent=0.0,
+                    remaining_percent=0.0,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:54:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="unknown",
+                    status="unknown",
+                ),
+            ],
+            seen_at="2026-06-01T10:54:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["quota"]["status"], "available")
+        self.assertEqual(claude["quota"]["source_id"], "claude-main")
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-06-01T10:46:00+08:00")
+
+    def test_local_estimate_only_provider_reports_no_official_verification(self) -> None:
+        """只有本地估算时，额度是 unverified，且没有任何官方验证时间可报。"""
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-local-estimate",
+                    window="week",
+                    used_percent=12.0,
+                    remaining_percent=88.0,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:54:00+08:00",
+                    source_type="ccusage_blocks",
+                    confidence="estimated",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:54:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "unverified")
+        self.assertIsNone(claude["quota"]["last_verified_at"])
+        self.assertIsNone(claude["quota"]["source_id"])
+        self.assertEqual(claude["quota"]["windows"], [])
