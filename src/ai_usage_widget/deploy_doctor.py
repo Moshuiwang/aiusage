@@ -91,6 +91,15 @@ CATEGORY_EXIT_CODES: Dict[str, int] = {
 #: doctor 自身跑不起来（配置读不出来等），既不是体检通过也不属于八类之一。
 EXIT_DOCTOR_ERROR = 1
 
+
+class DoctorPreconditionError(ValueError):
+    """doctor 跑不起来的前置失败。
+
+    消息全部由代码写死，只含配置路径和字段名，**不含配置内容或凭据**，
+    因此可以安全地直接输出给用户——说不出哪里错的诊断等于没诊断。
+    """
+
+
 TIMER_SCOPE_USER = "user"
 TIMER_SCOPE_SYSTEM = "system"
 TIMER_SCOPES = (TIMER_SCOPE_USER, TIMER_SCOPE_SYSTEM)
@@ -554,19 +563,22 @@ def _check_timer(environment: DoctorEnvironment) -> DoctorCheck:
         return _fail(
             "timer_schedule",
             REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
-            f"{unit} UnitFileState={properties.get('UnitFileState') or 'unknown'}，未启用，不会再触发",
-            "执行 systemctl --user enable --now 后重新预检。",
+            f"{unit} 在 {scope} scope 下 UnitFileState="
+            f"{properties.get('UnitFileState') or 'unknown'}，未启用，不会再触发",
+            f"执行 systemctl --{scope} enable --now {unit} 后重新预检。",
         )
     if not has_future_trigger(properties):
         return _fail(
             "timer_schedule",
             REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
-            f"{unit} 已启用但 NextElapse 为空，不存在未来触发",
-            "检查 OnCalendar 是否被 drop-in 清空，修好后 daemon-reload 并 restart timer。",
+            f"{unit} 在 {scope} scope 下已启用但 NextElapse 为空，不存在未来触发",
+            f"检查 OnCalendar 是否被 drop-in 清空，修好后 systemctl --{scope} daemon-reload "
+            f"并 restart {unit}。",
         )
     return _ok(
         "timer_schedule",
-        f"{unit} 已启用且有未来触发（NextElapseUSecRealtime={properties.get('NextElapseUSecRealtime') or 'n/a'}）",
+        f"{unit}（{scope} scope）已启用且有未来触发"
+        f"（NextElapseUSecRealtime={properties.get('NextElapseUSecRealtime') or 'n/a'}）",
     )
 
 
@@ -675,7 +687,7 @@ def collect_environment(
 
     device_config = _read_json(Path(config_path))
     if device_config is None:
-        raise ValueError(f"device config unreadable: {config_path}")
+        raise DoctorPreconditionError(f"device config unreadable: {config_path}")
 
     token_env = device_config.get("token_env")
     token_value = resolved_env.get(str(token_env), "") if token_env else ""
@@ -686,7 +698,9 @@ def collect_environment(
     probe_url = derive_probe_url(server_url)
     if not probe_url:
         # 没有可用的 server_url 是配置错误，不能报成「网络不可达」去误导用户查网络。
-        raise ValueError(f"device config server_url is missing or not http(s): {config_path}")
+        raise DoctorPreconditionError(
+            f"device config server_url is missing or not http(s): {config_path}"
+        )
     headers = {"User-Agent": PRODUCT_USER_AGENT, "Accept": "application/json"}
     if token_value:
         headers["Authorization"] = f"Bearer {token_value}"
@@ -811,10 +825,10 @@ def run_deploy_doctor(
     if environment_fixture:
         fixture = _read_json(Path(environment_fixture))
         if fixture is None:
-            raise ValueError(f"doctor environment fixture unreadable: {environment_fixture}")
+            raise DoctorPreconditionError(f"doctor environment fixture unreadable: {environment_fixture}")
         return diagnose(DoctorEnvironment.from_fixture(fixture))
     if not config_path:
-        raise ValueError("doctor requires --config or --environment-fixture")
+        raise DoctorPreconditionError("doctor requires --config or --environment-fixture")
     environment = collect_environment(
         config_path=config_path,
         release_dir=release_dir,
@@ -835,6 +849,7 @@ __all__ = [
     "DoctorEnvironment",
     "DoctorReport",
     "EXIT_DOCTOR_ERROR",
+    "DoctorPreconditionError",
     "EntryProbe",
     "REASON_CATEGORIES",
     "REASON_OK",

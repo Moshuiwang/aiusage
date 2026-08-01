@@ -238,13 +238,15 @@ systemctl --user start ai-usage-pusher.service
 部署或排障时先跑只读预检，它不写任何文件、不打印 token：
 
 ```bash
-PYTHONPATH=%h/ai-usage-widget/src \
+PYTHONPATH="$HOME/ai-usage-widget/src" \
 python3 -m ai_usage_widget.cli doctor \
-  --config %h/ai-usage-widget/config/sources.local.json \
-  --release-dir %h/ai-usage-widget \
+  --config "$HOME/ai-usage-widget/config/sources.local.json" \
+  --release-dir "$HOME/ai-usage-widget" \
   --timer-unit ai-usage-pusher.timer \
   --timer-scope user
 ```
+
+（`%h` 只在 systemd unit 文件里展开，shell 里是字面量，所以这里用 `$HOME`。）
 
 **BIAI 那五个 system-level timer 必须加 `--timer-scope system`**，否则查的是用户级
 manager，会把健康 timer 报成 `timer_without_future_trigger`。
@@ -260,12 +262,12 @@ manager，会把健康 timer 报成 `timer_without_future_trigger`。
 | 14 | `device_identity_mismatch` / `timezone_mismatch` | 修设备身份或时区 |
 | 15 | `runtime_release_unversioned` / `pythonpath_import_mismatch` | 修运行目录版本与 PYTHONPATH |
 | 16 | `timer_without_future_trigger` | 修定时任务（先确认 scope 对不对） |
-| 1 | `doctor_failed` | 配置读不出来，doctor 自身跑不了 |
+| 1 | `doctor_failed` | doctor 自身跑不了（配置读不出来、`server_url` 缺失等），看 `detail` 字段 |
 
-离线重放（不访问网络，用于回归和演练）：
+离线重放（不访问网络，用于回归和演练），在仓库根执行：
 
 ```bash
-python3 -m ai_usage_widget.cli doctor \
+PYTHONPATH=src python3 -m ai_usage_widget.cli doctor \
   --environment-fixture tests/fixtures/deploy_doctor/case_entry_blocked_by_waf.json
 ```
 

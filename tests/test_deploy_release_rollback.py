@@ -160,6 +160,76 @@ class ReleaseRollbackDrillTests(unittest.TestCase):
             self.commands,
         )
 
+    def test_rollback_uses_the_timer_scope_recorded_by_the_release(self) -> None:
+        plan_kwargs = dict(
+            root=self.root,
+            unit_dir=self.unit_dir,
+            source_dir=self.source_dir,
+            installed_at="2026-08-01T00:00:00+00:00",
+            device_config=self.device_config,
+            timer_scope="system",
+        )
+        deploy_release.install_release(
+            deploy_release.ReleasePlan(
+                version="2026.08.01-1", revision="06fa591", unit_spec=self._spec(), **plan_kwargs
+            ),
+            command_runner=self._runner,
+        )
+        deploy_release.install_release(
+            deploy_release.ReleasePlan(
+                version="2026.08.02-1",
+                revision="abc1234",
+                unit_spec=self._spec("*:0/15"),
+                **plan_kwargs,
+            ),
+            command_runner=self._runner,
+        )
+        self.commands.clear()
+
+        deploy_release.rollback_release(self.root, self.unit_dir, command_runner=self._runner)
+
+        self.assertIn(["systemctl", "--system", "daemon-reload"], self.commands)
+        self.assertIn(
+            ["systemctl", "--system", "restart", "ai-usage-pusher-linux-biai-wangzp.timer"],
+            self.commands,
+        )
+        self.assertNotIn(["systemctl", "--user", "daemon-reload"], self.commands)
+
+    def test_install_activation_also_honours_the_timer_scope(self) -> None:
+        deploy_release.install_release(
+            deploy_release.ReleasePlan(
+                root=self.root,
+                unit_dir=self.unit_dir,
+                source_dir=self.source_dir,
+                version="2026.08.01-1",
+                revision="06fa591",
+                installed_at="2026-08-01T00:00:00+00:00",
+                unit_spec=self._spec(),
+                device_config=self.device_config,
+                timer_scope="system",
+            ),
+            command_runner=self._runner,
+        )
+
+        self.assertIn(["systemctl", "--system", "daemon-reload"], self.commands)
+        self.assertIn(
+            ["systemctl", "--system", "enable", "--now", "ai-usage-pusher-linux-biai-wangzp.timer"],
+            self.commands,
+        )
+
+    def test_rolled_back_is_not_claimed_when_the_rollback_commands_fail(self) -> None:
+        self._install("2026.08.01-1", "06fa591")
+        healthy_state = self._effective_state()
+        # 激活和回滚的 systemctl 都失败：文件回到了旧版，但 systemd 没重新加载。
+        self.failing_verbs = {"enable", "restart", "daemon-reload"}
+
+        result = self._install("2026.08.02-1", "abc1234", on_calendar="*:0/15")
+
+        self.assertFalse(result["success"])
+        self.assertFalse(result["rolled_back"])
+        self.assertTrue(result["rollback_files_restored"])
+        self.assertEqual(self._effective_state(), healthy_state)
+
     def test_rollback_without_a_previous_release_is_refused(self) -> None:
         self._install("2026.08.01-1", "06fa591")
 

@@ -13,7 +13,13 @@ from .backup import backup_sqlite
 from .config import ConfigError, load_config, validate_device_config
 from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider, ClaudeOAuthWithCliFallbackProvider
 from .codex_limits_provider import CodexAppServerRPCProvider, CodexWhamProvider, CodexWhamWithRPCFallbackProvider
-from .deploy_doctor import EXIT_DOCTOR_ERROR, TIMER_SCOPES, TIMER_SCOPE_USER, run_deploy_doctor
+from .deploy_doctor import (
+    EXIT_DOCTOR_ERROR,
+    TIMER_SCOPES,
+    TIMER_SCOPE_USER,
+    DoctorPreconditionError,
+    run_deploy_doctor,
+)
 from .lock import FileLock, LockAlreadyHeld
 from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
 from .limits_doctor import run_limits_doctor
@@ -216,7 +222,13 @@ def main(argv: list[str] | None = None) -> int:
                 timeout=args.timeout,
             )
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            # 只暴露异常类型，不回显配置内容，避免把凭据写进日志。
+            # DoctorPreconditionError 的消息由代码写死、不含配置内容，可以安全外显；
+            # 其他异常只给类型，避免把配置或凭据回显进日志。
+            detail = (
+                str(exc)
+                if isinstance(exc, DoctorPreconditionError)
+                else "doctor 前置检查失败，未能采集到判定所需事实"
+            )
             print(json.dumps({
                 "doctor": "deploy",
                 "ok": False,
@@ -224,6 +236,7 @@ def main(argv: list[str] | None = None) -> int:
                 "category": "doctor",
                 "exit_code": EXIT_DOCTOR_ERROR,
                 "error_type": exc.__class__.__name__,
+                "detail": detail,
                 "checks": [],
                 "failed_reason_codes": [],
             }, ensure_ascii=False, sort_keys=True))

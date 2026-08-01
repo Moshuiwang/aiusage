@@ -23,6 +23,7 @@ from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
+from .deploy_doctor import TIMER_SCOPES, TIMER_SCOPE_USER
 from .deploy_units import CollectorUnitSpec, render_service_unit, render_timer_unit
 
 
@@ -49,6 +50,9 @@ class ReleasePlan:
     installed_at: str = ""
     device_config: Optional[Mapping[str, Any]] = None
     activation_commands: Optional[Sequence[Sequence[str]]] = None
+    #: systemd manager 作用域。BIAI 现网多用户采集器是 system-level 的，
+    #: 写死 --user 会在错误的 manager 上操作一个不存在的单元。
+    timer_scope: str = TIMER_SCOPE_USER
 
     @property
     def releases_dir(self) -> Path:
@@ -62,8 +66,8 @@ class ReleasePlan:
         if self.activation_commands is not None:
             return [list(argv) for argv in self.activation_commands]
         return [
-            ["systemctl", "--user", "daemon-reload"],
-            ["systemctl", "--user", "enable", "--now", self.unit_spec.timer_name],
+            ["systemctl", f"--{self.timer_scope}", "daemon-reload"],
+            ["systemctl", f"--{self.timer_scope}", "enable", "--now", self.unit_spec.timer_name],
         ]
 
 
@@ -110,7 +114,9 @@ def install_release(plan: ReleasePlan, *, command_runner: CommandRunner) -> Dict
         _run_commands(commands, command_runner)
     except (ReleaseError, OSError) as exc:
         # 激活失败就退回上一个 release 与 timer；用户配置全程不动。
-        return _recover_from_failed_activation(root, unit_dir, command_runner, result, exc)
+        return _recover_from_failed_activation(
+            root, unit_dir, command_runner, result, exc, plan.timer_scope
+        )
     return result
 
 
@@ -120,19 +126,26 @@ def _recover_from_failed_activation(
     command_runner: CommandRunner,
     result: Dict[str, Any],
     exc: Exception,
+    timer_scope: str,
 ) -> Dict[str, Any]:
     failed = dict(result)
     failed["success"] = False
     failed["error_type"] = exc.__class__.__name__
     failed["error_message"] = str(exc)
+    failed["rollback_files_restored"] = False
     try:
-        rollback = rollback_release(root, unit_dir, command_runner=command_runner)
+        rollback = rollback_release(
+            root, unit_dir, command_runner=command_runner, timer_scope=timer_scope
+        )
     except ReleaseError as rollback_exc:
         failed["rolled_back"] = False
         failed["rollback_error_type"] = rollback_exc.__class__.__name__
         failed["rollback_error_message"] = str(rollback_exc)
         return failed
-    failed["rolled_back"] = True
+    # 文件已经换回旧版，但 systemd 没重新加载时不能自称「已回滚」，
+    # 否则就是用低一级证据宣称高一级完成。
+    failed["rollback_files_restored"] = True
+    failed["rolled_back"] = bool(rollback["success"])
     failed["rollback"] = rollback
     failed["current_target"] = _symlink_target(root / CURRENT_LINK)
     failed["previous_target"] = _symlink_target(root / PREVIOUS_LINK)
@@ -144,6 +157,7 @@ def rollback_release(
     unit_dir: Path,
     *,
     command_runner: CommandRunner,
+    timer_scope: str | None = None,
 ) -> Dict[str, Any]:
     """回滚到 `previous` 指向的 release，并恢复它的 timer / service。
 
@@ -169,6 +183,10 @@ def rollback_release(
     except TypeError as exc:
         raise ReleaseError(f"previous release 的 unit_spec 无法解析: {exc}") from exc
 
+    scope = timer_scope or manifest.get("timer_scope") or TIMER_SCOPE_USER
+    if scope not in TIMER_SCOPES:
+        raise ReleaseError(f"timer_scope must be one of {TIMER_SCOPES}: {scope}")
+
     current_target = _symlink_target(root / CURRENT_LINK)
     unit_dir.mkdir(parents=True, exist_ok=True)
     _write_unit_files(unit_dir, spec)
@@ -177,8 +195,8 @@ def rollback_release(
         _replace_symlink(root / PREVIOUS_LINK, current_target)
 
     commands = [
-        ["systemctl", "--user", "daemon-reload"],
-        ["systemctl", "--user", "restart", spec.timer_name],
+        ["systemctl", f"--{scope}", "daemon-reload"],
+        ["systemctl", f"--{scope}", "restart", spec.timer_name],
     ]
     command_error = None
     try:
@@ -194,6 +212,8 @@ def rollback_release(
         "current_target": _symlink_target(root / CURRENT_LINK),
         "previous_target": _symlink_target(root / PREVIOUS_LINK),
         "units": {"timer": spec.timer_name, "service": spec.service_name},
+        "timer_scope": scope,
+        "files_restored": True,
         "commands": commands,
         "command_error": command_error,
     }
@@ -217,6 +237,8 @@ def _validate(plan: ReleasePlan) -> None:
         raise ValueError("unit_spec.source_id is required")
     if not Path(plan.source_dir).is_dir():
         raise ValueError(f"source dir not found: {plan.source_dir}")
+    if plan.timer_scope not in TIMER_SCOPES:
+        raise ValueError(f"timer_scope must be one of {TIMER_SCOPES}")
 
 
 def _materialize_release(plan: ReleasePlan) -> bool:
@@ -253,6 +275,7 @@ def _build_manifest(plan: ReleasePlan) -> Dict[str, Any]:
         "revision": plan.revision,
         "installed_at": installed_at,
         "source_id": spec.source_id,
+        "timer_scope": plan.timer_scope,
         "units": {"timer": spec.timer_name, "service": spec.service_name},
         "unit_spec": asdict(spec),
     }

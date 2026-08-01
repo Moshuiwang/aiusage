@@ -234,6 +234,29 @@ class TimerScopeTests(unittest.TestCase):
 
         self.assertEqual(recorded[0][:3], ["systemctl", "--system", "show"])
 
+    def test_disabled_timer_remediation_uses_the_configured_scope(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment(
+            device_config={},
+            timer_unit="ai-usage-pusher-linux-biai-wangzp.timer",
+            timer_scope="system",
+            timer_properties={
+                "LoadState": "loaded",
+                "UnitFileState": "disabled",
+                "NextElapseUSecRealtime": "n/a",
+            },
+        )
+
+        check = deploy_doctor._check_timer(environment)
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "timer_without_future_trigger")
+        self.assertIn("system", check.detail)
+        self.assertIn(
+            "systemctl --system enable --now ai-usage-pusher-linux-biai-wangzp.timer",
+            check.remediation,
+        )
+        self.assertNotIn("--user", check.remediation)
+
     def test_unit_missing_in_the_selected_scope_points_at_the_scope(self) -> None:
         _, environment = self._collect(
             "user", show_output="LoadState=not-found\nUnitFileState=\nActiveState=inactive\n"
@@ -277,6 +300,8 @@ class DoctorPreconditionTests(unittest.TestCase):
         self.assertEqual(code, deploy_doctor.EXIT_DOCTOR_ERROR)
         self.assertEqual(payload["reason_code"], "doctor_failed")
         self.assertNotEqual(code, EXPECTED_EXIT_CODES["network_unreachable"])
+        # 说不出哪里错的诊断等于没诊断。
+        self.assertIn("server_url", payload["detail"])
 
     def test_tz_with_a_leading_colon_is_still_a_valid_timezone_name(self) -> None:
         self.assertEqual(deploy_doctor._system_timezone({"TZ": ":Asia/Shanghai"}), "Asia/Shanghai")
