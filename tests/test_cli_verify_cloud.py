@@ -8,15 +8,20 @@
 
 from __future__ import annotations
 
+import argparse
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from ai_usage_widget import cli
+from ai_usage_widget import cli, verify_cloud
+from ai_usage_widget.mobile_summary import build_mobile_summary
+from ai_usage_widget.version_contract import build_version_health
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "verify_cloud"
@@ -413,6 +418,198 @@ class TestVerifyCloudParity(unittest.TestCase):
             ):
                 expected.append(f"provider_slots[{provider}].{leaf}")
         self.assertEqual(report["compared_fields"], sorted(expected))
+
+
+SECRET = "sk-verify-cloud-should-never-print-this"
+
+
+class TestVerifyCloudReadOnlyAccess(unittest.TestCase):
+    """凭据只从环境变量读、只进请求头；能触达的端点只有只读 `/api/*`。"""
+
+    def _args(self, **overrides):
+        base = {
+            "base_url": "https://usage.example.com",
+            "token_env": "AI_USAGE_TEST_READ_TOKEN",
+            "fixture_dir": None,
+            "timeout": 15.0,
+            "date": None,
+            "period": None,
+            "machine": None,
+            "account": None,
+            "as_json": False,
+            "verify_command": "summary",
+        }
+        base.update(overrides)
+        return argparse.Namespace(**base)
+
+    def test_only_read_only_api_paths_are_reachable(self) -> None:
+        self.assertEqual(
+            sorted(verify_cloud.READ_ONLY_PATHS.values()),
+            ["/api/health", "/api/mobile/summary", "/api/summary"],
+        )
+        for path in verify_cloud.READ_ONLY_PATHS.values():
+            with self.subTest(path=path):
+                self.assertTrue(path.startswith("/api/"))
+
+    def test_exit_codes_are_named_constants_with_distinct_values(self) -> None:
+        codes = {
+            "EXIT_OK": verify_cloud.EXIT_OK,
+            "EXIT_DATA_ISSUE": verify_cloud.EXIT_DATA_ISSUE,
+            "EXIT_PARITY_MISMATCH": verify_cloud.EXIT_PARITY_MISMATCH,
+            "EXIT_FETCH_FAILED": verify_cloud.EXIT_FETCH_FAILED,
+        }
+        self.assertEqual(verify_cloud.EXIT_OK, 0)
+        self.assertEqual(len(set(codes.values())), len(codes))
+        self.assertTrue(all(value != 0 for name, value in codes.items() if name != "EXIT_OK"))
+
+    def test_request_is_read_only_and_carries_the_token_only_in_the_header(self) -> None:
+        with unittest.mock.patch.dict(os.environ, {"AI_USAGE_TEST_READ_TOKEN": SECRET}, clear=False):
+            source = verify_cloud.build_read_source(self._args())
+        request = source.build_request(
+            verify_cloud.ENDPOINT_SUMMARY,
+            {"period": "today", "date": "2026-06-03", "machine": None, "account": None},
+        )
+
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(
+            request.full_url,
+            "https://usage.example.com/api/summary?date=2026-06-03&period=today",
+        )
+        self.assertEqual(request.get_header("Authorization"), f"Bearer {SECRET}")
+        self.assertNotIn(SECRET, request.full_url)
+        self.assertNotIn(SECRET, source.label)
+
+    def test_base_url_label_drops_path_query_and_userinfo(self) -> None:
+        with unittest.mock.patch.dict(os.environ, {"AI_USAGE_TEST_READ_TOKEN": SECRET}, clear=False):
+            source = verify_cloud.build_read_source(
+                self._args(base_url=f"https://user:{SECRET}@usage.example.com/base?t={SECRET}")
+            )
+
+        self.assertNotIn(SECRET, source.label)
+        self.assertNotIn("user", source.label)
+        self.assertEqual(source.label, "https://usage.example.com")
+
+    def test_missing_token_env_exits_fetch_failed_and_names_only_the_variable(self) -> None:
+        env = dict(os.environ)
+        env.pop("AI_USAGE_TEST_READ_TOKEN", None)
+        with unittest.mock.patch.dict(os.environ, env, clear=True):
+            code, out, err = run_cli([
+                "verify-cloud", "summary",
+                "--base-url", "https://usage.example.com",
+                "--token-env", "AI_USAGE_TEST_READ_TOKEN",
+            ])
+
+        self.assertEqual(code, 5)
+        self.assertIn("AI_USAGE_TEST_READ_TOKEN", err)
+        self.assertEqual(out, "")
+
+    def test_neither_source_selected_exits_fetch_failed(self) -> None:
+        code, _, err = run_cli(["verify-cloud", "summary"])
+
+        self.assertEqual(code, 5)
+        self.assertIn("--fixture-dir", err)
+
+    def test_missing_fixture_file_exits_fetch_failed(self) -> None:
+        directory = tempfile.mkdtemp(prefix="verify-cloud-empty-")
+        self.addCleanup(shutil.rmtree, directory, True)
+
+        code, _, err = run_cli(["verify-cloud", "summary", "--fixture-dir", directory])
+
+        self.assertEqual(code, 5)
+        self.assertIn("summary.json", err)
+
+    def test_unusable_base_url_exits_fetch_failed_instead_of_crashing(self) -> None:
+        with unittest.mock.patch.dict(os.environ, {"AI_USAGE_TEST_READ_TOKEN": SECRET}, clear=False):
+            code, _, err = run_cli([
+                "verify-cloud", "summary",
+                "--base-url", "not-a-url",
+                "--token-env", "AI_USAGE_TEST_READ_TOKEN",
+            ])
+
+        self.assertEqual(code, 5)
+        self.assertNotIn(SECRET, err)
+        self.assertNotIn("Traceback", err)
+
+
+class TestVerifyCloudOutputCarriesNoSecrets(unittest.TestCase):
+    """核对输出不得含凭据、auth 路径或原始用量日志内容。"""
+
+    FORBIDDEN = (
+        SECRET,
+        "Bearer",
+        "Authorization",
+        "auth.json",
+        ".credentials.json",
+        "/home/",
+        "/Users/",
+        "/.claude",
+        "/.codex",
+        "eyJ",
+    )
+
+    def test_no_subcommand_output_contains_credentials_or_raw_paths(self) -> None:
+        env = {
+            "AI_USAGE_READ_TOKEN": SECRET,
+            "AI_USAGE_INGEST_TOKEN": SECRET,
+        }
+        with unittest.mock.patch.dict(os.environ, env, clear=False):
+            for scenario in (HEALTHY, DEGRADED, PARITY_MISMATCH):
+                for command in ("summary", "limits", "health", "parity"):
+                    for extra in ([], ["--json"]):
+                        with self.subTest(scenario=scenario.name, command=command, extra=extra):
+                            _, out, err = run_cli([
+                                "verify-cloud", command, "--fixture-dir", str(scenario), *extra,
+                            ])
+                            for forbidden in self.FORBIDDEN:
+                                self.assertNotIn(forbidden, out)
+                                self.assertNotIn(forbidden, err)
+
+
+class TestVerifyCloudFixturesStayBoundToReadModel(unittest.TestCase):
+    """fixture 不是手写的想象：mobile DTO 与版本健康都由真正的 owner 现算出来对齐。
+
+    读模型改了形状而 fixture 没跟上，这里会红——否则 verify-cloud 会一直核对一份过时的幻想。
+    """
+
+    maxDiff = None
+
+    def _load(self, scenario: Path, name: str):
+        return json.loads((scenario / name).read_text(encoding="utf-8"))
+
+    def test_mobile_fixture_is_what_the_mobile_dto_owner_produces(self) -> None:
+        for scenario in (HEALTHY, DEGRADED):
+            with self.subTest(scenario=scenario.name):
+                summary = self._load(scenario, "summary.json")
+                self.assertEqual(
+                    build_mobile_summary(summary),
+                    self._load(scenario, "mobile_summary.json"),
+                )
+
+    def test_parity_mismatch_fixture_really_diverges_from_the_owner_output(self) -> None:
+        summary = self._load(PARITY_MISMATCH, "summary.json")
+        self.assertNotEqual(
+            build_mobile_summary(summary),
+            self._load(PARITY_MISMATCH, "mobile_summary.json"),
+        )
+
+    def test_version_blocks_match_the_version_contract_owner(self) -> None:
+        for scenario in (HEALTHY, DEGRADED, PARITY_MISMATCH):
+            with self.subTest(scenario=scenario.name):
+                summary = self._load(scenario, "summary.json")
+                expected = build_version_health(summary["source_status"])
+                self.assertEqual(summary["version_health"], expected)
+                self.assertEqual(self._load(scenario, "health.json")["versions"], expected)
+
+    def test_degraded_fixture_really_covers_all_four_limit_trust_states(self) -> None:
+        summary = self._load(DEGRADED, "summary.json")
+        states = {
+            (row["official"], row["confidence"], row["status"])
+            for row in summary["limits"]
+        }
+        self.assertIn((True, "observed", "ok"), states)
+        self.assertIn((False, "estimated", "ok"), states)
+        self.assertIn((False, "missing", "provider_failed"), states)
+        self.assertIn((False, "unknown", "unsupported"), states)
 
 
 if __name__ == "__main__":

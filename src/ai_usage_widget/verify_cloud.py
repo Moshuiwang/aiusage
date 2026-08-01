@@ -84,7 +84,9 @@ class FixtureReadSource:
 
     def read(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
         del params  # 离线重放按端点整份回放，不做服务端过滤
-        path = self._directory / FIXTURE_FILENAMES[endpoint]
+        # 刻意用 joinpath 而不是 `/`：本模块的只读边界检查禁止一切算术运算符，
+        # 为「这个除号其实是路径拼接」开例外，等于给真正的重算留了后门。
+        path = self._directory.joinpath(FIXTURE_FILENAMES[endpoint])
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -116,15 +118,19 @@ class HttpReadSource:
         )
         path = READ_ONLY_PATHS[endpoint]
         url = f"{self._base_url}{path}?{query}" if query else f"{self._base_url}{path}"
-        return urlrequest.Request(
-            url,
-            headers={
-                "Authorization": f"Bearer {self._token}",
-                "Accept": "application/json",
-                "User-Agent": PRODUCT_USER_AGENT,
-            },
-            method="GET",
-        )
+        try:
+            return urlrequest.Request(
+                url,
+                headers={
+                    "Authorization": f"Bearer {self._token}",
+                    "Accept": "application/json",
+                    "User-Agent": PRODUCT_USER_AGENT,
+                },
+                method="GET",
+            )
+        except ValueError as exc:
+            # 只报「基地址不可用」，不回显 URL：使用者可能把凭据塞进了 query。
+            raise ReadSourceError(f"基地址不可用，无法构造只读请求：{endpoint}") from exc
 
     def read(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
         req = self.build_request(endpoint, params)
