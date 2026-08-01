@@ -195,6 +195,46 @@ class ReleaseRollbackDrillTests(unittest.TestCase):
         )
         self.assertNotIn(["systemctl", "--user", "daemon-reload"], self.commands)
 
+    def test_auto_rollback_uses_the_previous_release_scope_not_the_new_plan_scope(self) -> None:
+        """P2：跨 scope 升级失败时，回滚必须按上一个 release 记录的 scope 操作。"""
+        deploy_release.install_release(
+            deploy_release.ReleasePlan(
+                root=self.root,
+                unit_dir=self.unit_dir,
+                source_dir=self.source_dir,
+                version="2026.08.01-1",
+                revision="06fa591",
+                installed_at="2026-08-01T00:00:00+00:00",
+                unit_spec=self._spec(),
+                device_config=self.device_config,
+                timer_scope="system",
+            ),
+            command_runner=self._runner,
+        )
+        self.commands.clear()
+        self.failing_verbs = {"enable"}
+
+        deploy_release.install_release(
+            deploy_release.ReleasePlan(
+                root=self.root,
+                unit_dir=self.unit_dir,
+                source_dir=self.source_dir,
+                version="2026.08.02-1",
+                revision="abc1234",
+                installed_at="2026-08-01T00:00:00+00:00",
+                unit_spec=self._spec("*:0/15"),
+                device_config=self.device_config,
+                timer_scope="user",
+            ),
+            command_runner=self._runner,
+        )
+
+        rollback_commands = [argv for argv in self.commands if "restart" in argv]
+        self.assertEqual(
+            rollback_commands,
+            [["systemctl", "--system", "restart", "ai-usage-pusher-linux-biai-wangzp.timer"]],
+        )
+
     def test_install_activation_also_honours_the_timer_scope(self) -> None:
         deploy_release.install_release(
             deploy_release.ReleasePlan(

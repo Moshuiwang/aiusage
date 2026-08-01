@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import stat
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
@@ -33,6 +34,11 @@ MANIFEST_NAME = "release.json"
 CURRENT_LINK = "current"
 PREVIOUS_LINK = "previous"
 RELEASES_DIR = "releases"
+
+#: 放 ingest token env 文件的目录只允许 owner 进入。
+SECRET_DIR_MODE = 0o700
+#: 设备配置含来源身份与 token 环境变量名，只允许 owner 读写。
+CONFIG_FILE_MODE = 0o600
 
 
 class ReleaseError(RuntimeError):
@@ -71,13 +77,43 @@ class ReleasePlan:
         ]
 
 
-def install_release(plan: ReleasePlan, *, command_runner: CommandRunner) -> Dict[str, Any]:
+def default_command_runner(argv: Sequence[str]) -> int:  # pragma: no cover - 真实系统路径
+    import subprocess
+
+    completed = subprocess.run(list(argv), capture_output=True, text=True, check=False)
+    return completed.returncode
+
+
+def install_release(
+    plan: ReleasePlan,
+    *,
+    command_runner: Optional[CommandRunner] = None,
+    dry_run: bool = False,
+) -> Dict[str, Any]:
     """幂等安装或升级一个 release。重复执行不产生重复 timer、来源或配置覆盖。"""
 
     _validate(plan)
     root = Path(plan.root)
     unit_dir = Path(plan.unit_dir)
     spec = plan.unit_spec
+    runner = command_runner or default_command_runner
+
+    if dry_run:
+        # 只回报打算做什么，一个文件都不碰，一条命令都不跑。
+        return {
+            "success": True,
+            "dry_run": True,
+            "changed": False,
+            "version": plan.version,
+            "revision": plan.revision,
+            "release_dir": str(plan.release_dir),
+            "unit_dir": str(unit_dir),
+            "units": {"timer": spec.timer_name, "service": spec.service_name},
+            "config_path": spec.config_path,
+            "timer_scope": plan.timer_scope,
+            "commands": plan.commands(),
+            "rolled_back": False,
+        }
 
     root.mkdir(parents=True, exist_ok=True)
     plan.releases_dir.mkdir(parents=True, exist_ok=True)
@@ -96,6 +132,7 @@ def install_release(plan: ReleasePlan, *, command_runner: CommandRunner) -> Dict
     commands = plan.commands()
     result = {
         "success": True,
+        "dry_run": False,
         "changed": changed,
         "version": plan.version,
         "revision": plan.revision,
@@ -111,12 +148,12 @@ def install_release(plan: ReleasePlan, *, command_runner: CommandRunner) -> Dict
     }
 
     try:
-        _run_commands(commands, command_runner)
+        _run_commands(commands, runner)
     except (ReleaseError, OSError) as exc:
         # 激活失败就退回上一个 release 与 timer；用户配置全程不动。
-        return _recover_from_failed_activation(
-            root, unit_dir, command_runner, result, exc, plan.timer_scope
-        )
+        # 注意不要传新 plan 的 scope：回滚要按**上一个 release** 记录的 scope 操作，
+        # 否则跨 scope 升级失败时会去另一个 manager 上重启一个不存在的单元。
+        return _recover_from_failed_activation(root, unit_dir, runner, result, exc)
     return result
 
 
@@ -126,7 +163,6 @@ def _recover_from_failed_activation(
     command_runner: CommandRunner,
     result: Dict[str, Any],
     exc: Exception,
-    timer_scope: str,
 ) -> Dict[str, Any]:
     failed = dict(result)
     failed["success"] = False
@@ -134,9 +170,7 @@ def _recover_from_failed_activation(
     failed["error_message"] = str(exc)
     failed["rollback_files_restored"] = False
     try:
-        rollback = rollback_release(
-            root, unit_dir, command_runner=command_runner, timer_scope=timer_scope
-        )
+        rollback = rollback_release(root, unit_dir, command_runner=command_runner)
     except ReleaseError as rollback_exc:
         failed["rolled_back"] = False
         failed["rollback_error_type"] = rollback_exc.__class__.__name__
@@ -296,15 +330,26 @@ def _create_device_config_if_absent(plan: ReleasePlan) -> bool:
         return False
     config_path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(config_path, dict(plan.device_config))
+    # 设备配置含来源身份与 token 环境变量名，不该让同机其他用户随便读。
+    config_path.chmod(CONFIG_FILE_MODE)
     return True
 
 
 def _ensure_runtime_dirs(spec: CollectorUnitSpec) -> bool:
     changed = False
-    for path in (Path(spec.lock_file).parent, Path(spec.env_file).parent):
-        if not path.exists():
-            path.mkdir(parents=True, exist_ok=True)
-            changed = True
+    # 放 ingest token 的目录必须是 owner-only，不能跟着默认 umask 走。
+    secrets_dir = Path(spec.env_file).parent
+    if not secrets_dir.exists():
+        secrets_dir.mkdir(parents=True, exist_ok=True)
+        changed = True
+    if stat.S_IMODE(secrets_dir.stat().st_mode) != SECRET_DIR_MODE:
+        secrets_dir.chmod(SECRET_DIR_MODE)
+        changed = True
+
+    lock_dir = Path(spec.lock_file).parent
+    if not lock_dir.exists():
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        changed = True
     return changed
 
 
@@ -366,8 +411,11 @@ __all__ = [
     "MANIFEST_NAME",
     "PREVIOUS_LINK",
     "RELEASES_DIR",
+    "CONFIG_FILE_MODE",
     "ReleaseError",
     "ReleasePlan",
+    "SECRET_DIR_MODE",
+    "default_command_runner",
     "install_release",
     "read_manifest",
     "rollback_release",
