@@ -659,6 +659,172 @@ def render_health(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# --- parity 核对 ------------------------------------------------------------
+
+#: `/api/mobile/summary` 与 `/api/summary` 之间**有意**的差异。
+#: 它们不是口径不一致，绝不能被 parity 报成差异，否则真实差异会被噪声淹没。
+KNOWN_MOBILE_OMISSIONS = (
+    {
+        "field": "source_status[].version",
+        "reason": "Mobile DTO 不消费采集端版本字段，缺失是设计如此",
+    },
+    {
+        "field": "version_health",
+        "reason": "版本健康只出现在 /api/summary 与 /api/health，Mobile DTO 不消费",
+    },
+    {
+        "field": "summary.cache_creation_tokens / summary.cache_read_tokens",
+        "reason": "Mobile DTO 只保留合并后的 cache_tokens，两边不是同一个字段，不做逐字段比对",
+    },
+)
+
+
+def build_parity_report(
+    summary_document: Dict[str, Any],
+    mobile_document: Dict[str, Any],
+    *,
+    requested: Dict[str, Any],
+    source_label: str,
+) -> Dict[str, Any]:
+    """比对两个端点对同一周期的口径。只比对**两边都有**的同名事实。"""
+    summary_facts = _parity_facts(
+        _summary_period(summary_document),
+        summary_document.get("provider_slots"),
+        summary_document.get("provider_usage_coverage"),
+    )
+    mobile_facts = _parity_facts(
+        mobile_document.get("period"),
+        mobile_document.get("provider_slots"),
+        mobile_document.get("provider_usage_coverage"),
+    )
+
+    fields = sorted(summary_facts)
+    differences = [
+        {"field": field, "summary": summary_facts[field], "mobile": mobile_facts[field]}
+        for field in fields
+        if summary_facts[field] != mobile_facts[field]
+    ]
+    issues = [
+        _issue(
+            "parity_mismatch",
+            f"{row['field']}：/api/summary={_show(row['summary'])}，"
+            f"/api/mobile/summary={_show(row['mobile'])}",
+        )
+        for row in differences
+    ]
+
+    report = _finish_report(
+        {
+            "command": "parity",
+            "source": source_label,
+            "requested": dict(requested),
+            "summary_generated_at": summary_document.get("generated_at"),
+            "mobile_generated_at": mobile_document.get("generated_at"),
+            "compared_fields": fields,
+            "differences": differences,
+            "known_differences": [dict(row) for row in KNOWN_MOBILE_OMISSIONS],
+        },
+        issues,
+        EXIT_PARITY_MISMATCH,
+        "mismatch",
+    )
+    return report
+
+
+def _summary_period(document: Dict[str, Any]) -> Dict[str, Any]:
+    """把 `/api/summary` 的 summary 块改写成与 Mobile DTO `period` 同名的形状。
+
+    只是换个 key 名对齐（`period` -> `id`），值一律直取，不做任何换算。
+    """
+    raw = document.get("summary") if isinstance(document.get("summary"), dict) else {}
+    return {
+        "id": raw.get("period"),
+        "date": raw.get("date"),
+        "start_date": raw.get("start_date"),
+        "end_date": raw.get("end_date"),
+        "machine": raw.get("machine"),
+        "account": raw.get("account"),
+        "total_tokens": raw.get("total_tokens"),
+        "input_tokens": raw.get("input_tokens"),
+        "output_tokens": raw.get("output_tokens"),
+    }
+
+
+def _parity_facts(period: Any, slots: Any, coverage: Any) -> Dict[str, Any]:
+    period = period if isinstance(period, dict) else {}
+    coverage = coverage if isinstance(coverage, dict) else {}
+    slot_rows = slots if isinstance(slots, list) else []
+    by_provider = {
+        row.get("provider"): row
+        for row in slot_rows
+        if isinstance(row, dict)
+    }
+
+    facts: Dict[str, Any] = {
+        f"period.{field}": period.get(field)
+        for field in (
+            "id",
+            "date",
+            "start_date",
+            "end_date",
+            "machine",
+            "account",
+            "total_tokens",
+            "input_tokens",
+            "output_tokens",
+        )
+    }
+    for provider in SLOT_PROVIDERS:
+        slot = by_provider.get(provider)
+        slot = slot if isinstance(slot, dict) else {}
+        usage = slot.get("usage") if isinstance(slot.get("usage"), dict) else {}
+        quota = slot.get("quota") if isinstance(slot.get("quota"), dict) else {}
+        windows = quota.get("windows") if isinstance(quota.get("windows"), list) else []
+        prefix = f"provider_slots[{provider}]"
+        for field in ("status", "total_tokens", "input_tokens", "output_tokens", "cache_tokens"):
+            facts[f"{prefix}.usage.{field}"] = usage.get(field)
+        for field in ("status", "reason", "last_verified_at", "source_id", "source_type"):
+            facts[f"{prefix}.quota.{field}"] = quota.get(field)
+        facts[f"{prefix}.quota.window_count"] = len(windows)
+    for field in (
+        "status",
+        "total_tokens",
+        "attributed_tokens",
+        "other_provider_tokens",
+        "unattributed_tokens",
+    ):
+        facts[f"provider_usage_coverage.{field}"] = coverage.get(field)
+    return facts
+
+
+def render_parity(report: Dict[str, Any]) -> str:
+    lines = [
+        "verify-cloud parity",
+        _rule(),
+        f"数据源              : {report['source']}",
+        f"/api/summary 生成时间       : {_show(report['summary_generated_at'])}",
+        f"/api/mobile/summary 生成时间: {_show(report['mobile_generated_at'])}",
+        f"比对字段数          : {len(report['compared_fields'])}",
+        f"不一致字段数        : {len(report['differences'])}",
+        "",
+        "已知的有意差异（不参与比对）",
+    ]
+    for row in report["known_differences"]:
+        lines.append(f"  {row['field']}：{row['reason']}")
+    if report["differences"]:
+        lines.extend([
+            "",
+            "逐字段差异",
+            f"  {'字段':<48}{'/api/summary':<28}/api/mobile/summary",
+        ])
+        for row in report["differences"]:
+            lines.append(
+                f"  {row['field']:<48}{_show(row['summary']):<28}{_show(row['mobile'])}"
+            )
+    lines.extend(_render_issues(report))
+    return "\n".join(lines)
+
+
 # --- 通用工具 ---------------------------------------------------------------
 
 
@@ -721,6 +887,7 @@ def register_parser(subparsers) -> None:
         ("summary", "打印周期用量关键口径"),
         ("limits", "打印当前额度窗口，逐条标注 official / confidence / status"),
         ("health", "打印各来源最后上报时间、新鲜度、覆盖范围与准确性状态"),
+        ("parity", "比对 /api/summary 与 /api/mobile/summary 对同一周期的口径"),
     ):
         sub = commands.add_parser(name, help=description)
         _add_common_arguments(sub)
@@ -777,6 +944,13 @@ def _dispatch(args, source, params: Dict[str, Any]) -> Dict[str, Any]:
             requested=params,
             source_label=source.label,
         )
+    if args.verify_command == "parity":
+        return build_parity_report(
+            source.read(ENDPOINT_SUMMARY, params),
+            source.read(ENDPOINT_MOBILE_SUMMARY, params),
+            requested=params,
+            source_label=source.label,
+        )
     raise ReadSourceError(f"未知子命令: {args.verify_command}")
 
 
@@ -787,4 +961,6 @@ def _render(report: Dict[str, Any]) -> str:
         return render_limits(report)
     if report["command"] == "health":
         return render_health(report)
+    if report["command"] == "parity":
+        return render_parity(report)
     raise ReadSourceError(f"未知子命令: {report['command']}")

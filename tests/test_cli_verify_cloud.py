@@ -317,5 +317,103 @@ class TestVerifyCloudHealth(unittest.TestCase):
         self.assertNotIn("source_count_mismatch", out)
 
 
+class TestVerifyCloudParity(unittest.TestCase):
+    maxDiff = None
+
+    def test_consistent_endpoints_exit_ok(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", str(HEALTHY)])
+
+        self.assertEqual(code, 0)
+        self.assertIn("核对通过", out)
+
+    def test_version_fields_absent_from_mobile_are_not_reported_as_a_difference(self) -> None:
+        """`/api/mobile/summary` 刻意不带版本字段，这是设计，不是口径不一致。"""
+        summary = json.loads((HEALTHY / "summary.json").read_text(encoding="utf-8"))
+        mobile = json.loads((HEALTHY / "mobile_summary.json").read_text(encoding="utf-8"))
+        self.assertIn("version_health", summary)
+        self.assertTrue(all("version" in row for row in summary["source_status"]))
+        self.assertNotIn("version_health", mobile)
+        self.assertTrue(all("version" not in row for row in mobile["sources"]))
+
+        code, out, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", str(HEALTHY), "--json"])
+        report = json.loads(out)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(report["differences"], [])
+        self.assertIn(
+            "source_status[].version",
+            [row["field"] for row in report["known_differences"]],
+        )
+
+    def test_inconsistent_endpoints_exit_non_zero_and_list_every_differing_field(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", str(PARITY_MISMATCH), "--json"])
+        report = json.loads(out)
+
+        self.assertEqual(code, 4)
+        self.assertEqual(report["status"], "mismatch")
+        self.assertEqual(
+            sorted(row["field"] for row in report["differences"]),
+            [
+                "period.total_tokens",
+                "provider_slots[claude].quota.reason",
+                "provider_slots[claude].quota.status",
+                "provider_slots[claude].quota.window_count",
+                "provider_slots[codex].usage.total_tokens",
+                "provider_usage_coverage.attributed_tokens",
+            ],
+        )
+        by_field = {row["field"]: row for row in report["differences"]}
+        self.assertEqual(by_field["period.total_tokens"]["summary"], 900000)
+        self.assertEqual(by_field["period.total_tokens"]["mobile"], 880000)
+
+    def test_human_output_shows_both_sides_of_every_difference(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", str(PARITY_MISMATCH)])
+
+        self.assertEqual(code, 4)
+        self.assertIn("period.total_tokens", out)
+        self.assertIn("900000", out)
+        self.assertIn("880000", out)
+        self.assertIn("provider_slots[codex].usage.total_tokens", out)
+        self.assertIn("provider_slots[claude].quota.status", out)
+        self.assertNotIn("核对通过", out)
+
+    def test_compared_field_set_is_pinned(self) -> None:
+        _, out, _ = run_cli(["verify-cloud", "parity", "--fixture-dir", str(HEALTHY), "--json"])
+        report = json.loads(out)
+
+        expected = [
+            "period.account",
+            "period.date",
+            "period.end_date",
+            "period.id",
+            "period.input_tokens",
+            "period.machine",
+            "period.output_tokens",
+            "period.start_date",
+            "period.total_tokens",
+            "provider_usage_coverage.attributed_tokens",
+            "provider_usage_coverage.other_provider_tokens",
+            "provider_usage_coverage.status",
+            "provider_usage_coverage.total_tokens",
+            "provider_usage_coverage.unattributed_tokens",
+        ]
+        for provider in ("claude", "codex"):
+            for leaf in (
+                "quota.last_verified_at",
+                "quota.reason",
+                "quota.source_id",
+                "quota.source_type",
+                "quota.status",
+                "quota.window_count",
+                "usage.cache_tokens",
+                "usage.input_tokens",
+                "usage.output_tokens",
+                "usage.status",
+                "usage.total_tokens",
+            ):
+                expected.append(f"provider_slots[{provider}].{leaf}")
+        self.assertEqual(report["compared_fields"], sorted(expected))
+
+
 if __name__ == "__main__":
     unittest.main()
