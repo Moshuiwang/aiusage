@@ -21,7 +21,7 @@
 
 - **Cloudflare**:真实账号操作只在 `/Users/wangzhipeng/Documents/ops` 中执行。先读取该目录的 `AGENTS.md`，由 Ops 选择受保护且具备目标资源权限的凭据；不读、不打印任何密钥值。
 - **D1 查询**:由 Ops 在其受保护环境中执行只读查询；应用项目不得复制凭据或在本目录伪造账号侧结果。D1 的 UNION/compound SELECT 项数有限，拆短或用标量子查询。
-- **SSH**:`~/.ssh/config` 已有 `vpn2`、`108.129.165.139`(eu-west EC2)。VPN2 的 canonical SQLite 在 `/home/ubuntu/ai-usage-widget/data/usage.sqlite`,只读访问可能需 `sudo -n`(`ssh vpn2 'sqlite3 -readonly <path> "<SQL>" || sudo -n sqlite3 -readonly <path> "<SQL>"'`)。
+- **SSH**:`~/.ssh/config` 已有 `vpn2` 和 eu-west EC2 两个条目(主机名以 `~/.ssh/config` 为准,不在文档中记录公网 IP)。VPN2 的 canonical SQLite 在 `/home/ubuntu/ai-usage-widget/data/usage.sqlite`,只读访问可能需 `sudo -n`(`ssh vpn2 'sqlite3 -readonly <path> "<SQL>" || sudo -n sqlite3 -readonly <path> "<SQL>"'`)。
 - **HTTP 直连 Native(workers.dev)**:本机有 HTTPS 代理且 workers.dev 有 BIC,curl 要 `env -u HTTPS_PROXY -u http_proxy ... curl -A "<浏览器UA>"`。生产入口 `aiusage.chunbai.com` 正常可达。
 - **关键对象名**:入口 worker = `aiusage-api`(仓库根 `wrangler.toml`,代码 `cloudflare/aiusage-api-worker.js`,路由 `aiusage.chunbai.com/*`);Native worker = `aiusage-native-staging`(`cloudflare/native-worker/`,URL `https://aiusage-native-staging.chunbai.workers.dev`);D1 = `aiusage-prod-db`。
 - 注意:仓库根 `wrangler.toml` 的 D1/KV/R2 绑定是 dev 资源,但入口 worker 代码不使用它们;`SHADOW_INGEST_URL` 是 secret(不在 toml,跨 deploy 保留)。
@@ -50,7 +50,7 @@
 - 验收:两表始终 ≤7 天;`source health`(每源最新一条)与 `max(collected_at)` 新鲜度仍正确;D1 体积远低于 500MB。**禁止动 `usage_daily` 等业务数据表。**
 
 ### C.【#10】EC2 legacy 安全清理 ★真实凭据暴露
-- 隐患:EC2(`108.129.165.139`)上 legacy 的 `ai-usage-pusher.service` systemd unit 里 `Environment=AI_USAGE_INGEST_TOKEN=...` **明文硬编码了 ingest token**(`/etc/systemd/system/` 下,可读目录的用户都能看到)。该 unit 已 disabled/inactive、被 `linux-wang` 取代。
+- 隐患:eu-west EC2(主机名见 `~/.ssh/config`)上 legacy 的 `ai-usage-pusher.service` systemd unit 里 `Environment=AI_USAGE_INGEST_TOKEN=...` **明文硬编码了 ingest token**(`/etc/systemd/system/` 下,可读目录的用户都能看到)。该 unit 已 disabled/inactive、被 `linux-wang` 取代。
 - 步骤:① 轮换这个 ingest token —— 注意现在 ingest 入口是 Native worker,token 校验在 Native(`AIUSAGE_TOKEN`),轮换要**同时**更新 Native worker 的 token + 全部 5 个活跃 pusher 的 `/etc/ai-usage-widget/token.env`,协调好别让上报中断;② 删掉 legacy unit + 其 home 配置 `/home/wangzhipeng/ai-usage-widget/config/sources.local.json`。
 - 验收:systemd unit 里无明文 token;5 个活跃 pusher 推送仍 `accepted`;legacy unit 已移除。
 

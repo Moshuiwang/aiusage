@@ -76,8 +76,10 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         package = (
             ROOT
             / "docs"
+            / "archive"
             / "task-packages"
             / "v2"
+            / "completed"
             / "TP-V2-083-cloudflare-entrypoint-migration.md"
         ).read_text(encoding="utf-8")
 
@@ -111,12 +113,21 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("带 session cookie 后 /static/dashboard.js 和 /static/dashboard.css 必须是 200", handoff)
 
     def test_cloudflare_task_package_is_indexed(self) -> None:
-        index = (ROOT / "docs" / "task-packages" / "v2" / "INDEX.md").read_text(encoding="utf-8")
+        index = (
+            ROOT
+            / "docs"
+            / "archive"
+            / "task-packages"
+            / "v2"
+            / "INDEX-done.md"
+        ).read_text(encoding="utf-8")
         package = (
             ROOT
             / "docs"
+            / "archive"
             / "task-packages"
             / "v2"
+            / "completed"
             / "TP-V2-083-cloudflare-entrypoint-migration.md"
         ).read_text(encoding="utf-8")
 
