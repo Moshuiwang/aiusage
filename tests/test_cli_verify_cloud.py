@@ -123,5 +123,103 @@ class TestVerifyCloudSummary(unittest.TestCase):
         self.assertEqual(report["coverage"]["status"], "complete")
 
 
+class TestVerifyCloudLimits(unittest.TestCase):
+    """额度输出必须让「可信官方额度」和「降级态」一眼可分（AGENTS.md 官方额度不变量）。"""
+
+    def tearDown(self) -> None:
+        for directory in getattr(self, "_temp_dirs", []):
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def _scenario(self, scenario: Path, mutate=None) -> str:
+        directory = copy_scenario(scenario, mutate)
+        self._temp_dirs = getattr(self, "_temp_dirs", [])
+        self._temp_dirs.append(directory)
+        return directory
+
+    def test_all_official_windows_are_marked_trusted_and_exit_code_is_ok(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", str(HEALTHY)])
+
+        self.assertEqual(code, 0)
+        self.assertIn("可信官方额度", out)
+        self.assertNotIn("降级", out)
+        self.assertIn("42.0", out)
+        self.assertIn("2026-06-08T00:00:00+08:00", out)
+
+    def test_every_degraded_confidence_and_status_is_labelled_and_exits_data_issue(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", str(DEGRADED)])
+
+        self.assertEqual(code, 3)
+        self.assertIn("可信官方额度", out)
+        self.assertIn("降级", out)
+        for reason in ("confidence_estimated", "confidence_missing", "status_unsupported"):
+            with self.subTest(reason=reason):
+                self.assertIn(reason, out)
+
+    def test_degraded_windows_never_print_percentages_or_reset_time(self) -> None:
+        """降级窗口的百分比和 reset 时间一律不展示，否则本地估算会冒充官方额度。"""
+        _, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", str(DEGRADED)])
+
+        self.assertNotIn("61.0", out)
+        self.assertNotIn("39.0", out)
+        self.assertIn("42.0", out)
+
+    def test_trusted_and_degraded_rows_carry_different_verdicts_in_json(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", str(DEGRADED), "--json"])
+        report = json.loads(out)
+
+        self.assertEqual(code, 3)
+        self.assertEqual(report["command"], "limits")
+        self.assertEqual(report["status"], "data_issue")
+        self.assertEqual(report["trusted_count"], 1)
+        self.assertEqual(report["degraded_count"], 3)
+
+        by_key = {(row["provider"], row["window"]): row for row in report["windows"]}
+        trusted = by_key[("claude", "week")]
+        self.assertEqual(trusted["trust"], "trusted_official")
+        self.assertEqual(trusted["degrade_reasons"], [])
+        self.assertEqual(trusted["used_percent"], 42.0)
+        self.assertEqual(trusted["reset_at"], "2026-06-08T00:00:00+08:00")
+
+        estimated = by_key[("codex", "5h-block")]
+        self.assertEqual(estimated["trust"], "degraded")
+        self.assertIn("confidence_estimated", estimated["degrade_reasons"])
+        self.assertIsNone(estimated["used_percent"])
+        self.assertIsNone(estimated["remaining_percent"])
+        self.assertIsNone(estimated["reset_at"])
+
+        failed = by_key[("claude", "unknown")]
+        self.assertIn("confidence_missing", failed["degrade_reasons"])
+        self.assertIn("status_provider_failed", failed["degrade_reasons"])
+
+        unsupported = by_key[("codex", "unknown")]
+        self.assertIn("status_unsupported", unsupported["degrade_reasons"])
+
+    def test_healthy_json_keeps_every_window_trusted(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", str(HEALTHY), "--json"])
+        report = json.loads(out)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(report["degraded_count"], 0)
+        self.assertEqual(report["trusted_count"], 2)
+        self.assertEqual(report["issues"], [])
+        self.assertEqual(
+            sorted(row["trust"] for row in report["windows"]),
+            ["trusted_official", "trusted_official"],
+        )
+
+    def test_provider_without_usable_quota_is_named(self) -> None:
+        _, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", str(DEGRADED)])
+
+        self.assertIn("provider_quota_unavailable", out)
+
+    def test_empty_limit_list_is_a_data_issue_not_a_pass(self) -> None:
+        directory = self._scenario(HEALTHY, lambda payload: payload.update({"limits": []}))
+
+        code, out, _ = run_cli(["verify-cloud", "limits", "--fixture-dir", directory])
+
+        self.assertEqual(code, 3)
+        self.assertIn("limit_windows_missing", out)
+
+
 if __name__ == "__main__":
     unittest.main()

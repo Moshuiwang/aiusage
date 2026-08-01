@@ -358,6 +358,160 @@ def render_summary(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# --- limits 核对 ------------------------------------------------------------
+
+#: 只有三项同时成立才算可信官方额度（AGENTS.md 不变量，本模块只判定不重算）。
+TRUST_OFFICIAL = "trusted_official"
+TRUST_DEGRADED = "degraded"
+
+TRUST_LABELS = {
+    TRUST_OFFICIAL: "可信官方额度",
+    TRUST_DEGRADED: "降级",
+}
+
+
+def build_limits_report(
+    document: Dict[str, Any],
+    *,
+    requested: Dict[str, Any],
+    source_label: str,
+) -> Dict[str, Any]:
+    """逐条标注额度窗口的 official / confidence / status，并判定可信还是降级。"""
+    issues: List[Dict[str, str]] = []
+    raw_windows = document.get("limits")
+    windows: List[Dict[str, Any]] = []
+    if not isinstance(raw_windows, list):
+        issues.append(_issue("limit_windows_missing", "响应里没有 limits 列表，无法核对额度窗口"))
+    else:
+        windows = [_limit_row(row) for row in raw_windows if isinstance(row, dict)]
+        if not windows:
+            issues.append(_issue("limit_windows_missing", "读模型没有返回任何额度窗口，当前没有可核对的官方额度"))
+
+    trusted = [row for row in windows if row["trust"] == TRUST_OFFICIAL]
+    degraded = [row for row in windows if row["trust"] == TRUST_DEGRADED]
+    for row in degraded:
+        issues.append(_issue(
+            "limit_window_degraded",
+            f"{_show(row['provider'])}/{_show(row['window'])} 不能当官方额度展示："
+            f"{', '.join(row['degrade_reasons'])}",
+        ))
+
+    provider_quota = _provider_quota_rows(document)
+    for row in provider_quota:
+        if row["status"] != "available":
+            issues.append(_issue(
+                "provider_quota_unavailable",
+                f"{_show(row['provider'])} 当前没有可信官方额度：{_show(row['reason'])}",
+            ))
+
+    return _finish_report(
+        {
+            "command": "limits",
+            "source": source_label,
+            "generated_at": document.get("generated_at"),
+            "timezone": document.get("timezone"),
+            "requested": dict(requested),
+            "trusted_count": len(trusted),
+            "degraded_count": len(degraded),
+            "provider_quota": provider_quota,
+            "windows": windows,
+        },
+        issues,
+        EXIT_DATA_ISSUE,
+        "data_issue",
+    )
+
+
+def _limit_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    official = row.get("official")
+    confidence = row.get("confidence")
+    status = row.get("status")
+    reasons: List[str] = []
+    if official is not True:
+        reasons.append("not_official")
+    if confidence != "observed":
+        reasons.append(f"confidence_{_show(confidence)}")
+    if status != "ok":
+        reasons.append(f"status_{_show(status)}")
+    trusted = not reasons
+    return {
+        "provider": row.get("provider"),
+        "window": row.get("window"),
+        "source_id": row.get("source_id"),
+        "source_type": row.get("source_type"),
+        "official": official,
+        "confidence": confidence,
+        "status": status,
+        "trust": TRUST_OFFICIAL if trusted else TRUST_DEGRADED,
+        "degrade_reasons": reasons,
+        # 降级窗口一律不带百分比和 reset 时间：这些数字只有在官方额度可信时才有意义，
+        # 原样透出等于让本地估算冒充官方额度。
+        "used_percent": row.get("used_percent") if trusted else None,
+        "remaining_percent": row.get("remaining_percent") if trusted else None,
+        "reset_at": row.get("reset_at") if trusted else None,
+        "window_duration_minutes": row.get("window_duration_minutes") if trusted else None,
+        "observed_at": row.get("observed_at"),
+    }
+
+
+def _provider_quota_rows(document: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw_slots = document.get("provider_slots")
+    if not isinstance(raw_slots, list):
+        return []
+    rows = []
+    for slot in raw_slots:
+        if not isinstance(slot, dict):
+            continue
+        quota = slot.get("quota") if isinstance(slot.get("quota"), dict) else {}
+        windows = quota.get("windows") if isinstance(quota.get("windows"), list) else []
+        rows.append({
+            "provider": slot.get("provider"),
+            "status": quota.get("status"),
+            "reason": quota.get("reason"),
+            "last_verified_at": quota.get("last_verified_at"),
+            "source_id": quota.get("source_id"),
+            "source_type": quota.get("source_type"),
+            "window_count": len(windows),
+        })
+    return rows
+
+
+def render_limits(report: Dict[str, Any]) -> str:
+    lines = [
+        "verify-cloud limits",
+        _rule(),
+        f"数据源          : {report['source']}",
+        f"读模型生成时间  : {_show(report['generated_at'])}",
+        # 计数行刻意不复用「可信官方额度」「降级」这两个判定词：
+        # 判定词只出现在窗口逐条判定里，扫一眼就知道哪几条不能信。
+        f"可信窗口数      : {report['trusted_count']}",
+        f"不可信窗口数    : {report['degraded_count']}",
+        "",
+        "provider 额度可用性",
+        f"  {'provider':<10}{'状态':<12}{'原因':<16}{'最近一次官方核对':<28}来源",
+    ]
+    for row in report["provider_quota"]:
+        lines.append(
+            f"  {_show(row['provider']):<10}{_show(row['status']):<12}{_show(row['reason']):<16}"
+            f"{_show(row['last_verified_at']):<28}{_show(row['source_type'])}"
+        )
+    lines.extend([
+        "",
+        "额度窗口（逐条标注 official / confidence / status）",
+        f"  {'判定':<14}{'provider':<10}{'window':<12}{'official':<10}{'confidence':<12}"
+        f"{'status':<16}{'已用%':>8}{'剩余%':>8}  {'重置时间':<28}{'观测时间':<28}来源类型",
+    ])
+    for row in report["windows"]:
+        lines.append(
+            f"  {TRUST_LABELS[row['trust']]:<14}{_show(row['provider']):<10}{_show(row['window']):<12}"
+            f"{_show(row['official']):<10}{_show(row['confidence']):<12}{_show(row['status']):<16}"
+            f"{_show(row['used_percent']):>8}{_show(row['remaining_percent']):>8}  "
+            f"{_show(row['reset_at']):<28}{_show(row['observed_at']):<28}{_show(row['source_type'])}"
+        )
+    lines.extend(_render_issues(report))
+    return "\n".join(lines)
+
+
 # --- 通用工具 ---------------------------------------------------------------
 
 
@@ -412,6 +566,7 @@ def register_parser(subparsers) -> None:
     commands = parser.add_subparsers(dest="verify_command", required=True)
     for name, description in (
         ("summary", "打印周期用量关键口径"),
+        ("limits", "打印当前额度窗口，逐条标注 official / confidence / status"),
     ):
         sub = commands.add_parser(name, help=description)
         _add_common_arguments(sub)
@@ -458,10 +613,15 @@ def _dispatch(args, source, params: Dict[str, Any]) -> Dict[str, Any]:
     if args.verify_command == "summary":
         document = source.read(ENDPOINT_SUMMARY, params)
         return build_summary_report(document, requested=params, source_label=source.label)
+    if args.verify_command == "limits":
+        document = source.read(ENDPOINT_SUMMARY, params)
+        return build_limits_report(document, requested=params, source_label=source.label)
     raise ReadSourceError(f"未知子命令: {args.verify_command}")
 
 
 def _render(report: Dict[str, Any]) -> str:
     if report["command"] == "summary":
         return render_summary(report)
+    if report["command"] == "limits":
+        return render_limits(report)
     raise ReadSourceError(f"未知子命令: {report['command']}")
