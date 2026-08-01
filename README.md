@@ -254,20 +254,20 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 
 ## 关键文件
 
-- [AGENTS.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/AGENTS.md)：每次会话自动读取的最小硬规则和文档路由。
-- [project-map.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/project-map.md)：项目地图、文档索引、客户端当前/目标目录映射。
-- [status.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/status.md)：当前阶段、有效决策和下一步。
-- [architecture/architecture.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/architecture.md)：当前真实架构、模块 owner 和禁止事项。
-- [architecture/database.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/database.md)：当前 Cloudflare D1 / 本地 SQLite 边界和表结构索引。
-- [architecture/interfaces.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/architecture/interfaces.md)：当前 HTTP / summary / mobile 接口索引。
-- [product-brief.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
-- [task-packages/README.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/README.md)：任务包目录入口。
-- [task-packages/RULES.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
-- [task-packages/v2/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/task-packages/v2/INDEX.md)：V2 当前任务包索引；`done` 包链接到归档区。
-- [archive/INDEX.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/archive/INDEX.md)：历史设计稿、已完成任务包和 review 记录索引。
-- [operations.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
-- [schedulers.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/schedulers.md)：各平台终端定时任务配置文档。
-- [subscription-usage-source.md](file:///Users/wangzhipeng/Documents/ai-usage-widget/docs/subscription-usage-source.md)：limits/quota 数据源方向。
+- [AGENTS.md](./AGENTS.md)：每次会话自动读取的最小硬规则和文档路由。
+- [project-map.md](./docs/project-map.md)：项目地图、文档索引、客户端当前/目标目录映射。
+- [status.md](./docs/status.md)：当前阶段、有效决策和下一步。
+- [architecture/architecture.md](./docs/architecture/architecture.md)：当前真实架构、模块 owner 和禁止事项。
+- [architecture/database.md](./docs/architecture/database.md)：当前 Cloudflare D1 / 本地 SQLite 边界和表结构索引。
+- [architecture/interfaces.md](./docs/architecture/interfaces.md)：当前 HTTP / summary / mobile 接口索引。
+- [product-brief.md](./docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
+- [task-packages/README.md](./docs/task-packages/README.md)：任务包目录入口。
+- [task-packages/RULES.md](./docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
+- [task-packages/v2/INDEX.md](./docs/task-packages/v2/INDEX.md)：V2 当前任务包索引；`done` 包链接到归档区。
+- [archive/INDEX.md](./docs/archive/INDEX.md)：历史设计稿、已完成任务包和 review 记录索引。
+- [operations.md](./docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
+- [schedulers.md](./docs/schedulers.md)：各平台终端定时任务配置文档。
+- [subscription-usage-source.md](./docs/subscription-usage-source.md)：limits/quota 数据源方向。
 
 ## 快照方向
 

@@ -7,6 +7,7 @@ ai-usage-widget/
 config/sources.local.json
 config/limits.local.json
 *.local.json
+*.local.md
 /data/latest.json
 /data/usage.sqlite
 /data/usage.sqlite-shm
