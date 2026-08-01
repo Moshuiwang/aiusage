@@ -6,6 +6,10 @@ from typing import Any, Dict, Iterable, List, Optional
 
 LIMIT_STALE_AFTER_MINUTES = 120
 
+# Issue #61：固定的 provider 槽位。用量与额度是两个独立字段，DTO 只裁剪 snapshot 的事实，
+# 不重算口径；额度缺失时只保留「最近一次验证时间」，不带任何百分比或 reset 时间。
+SLOT_PROVIDERS = ("claude", "codex")
+
 
 def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
     summary = _dict(snapshot.get("summary"))
@@ -97,7 +101,51 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "windows": windows,
             "providers": limit_providers,
         },
+        "provider_slots": _provider_slots(snapshot.get("provider_slots")),
         "metadata": _mobile_metadata(snapshot, windows, candidate_windows, generated_at),
+    }
+
+
+def _provider_slots(rows: Any) -> List[Dict[str, Any]]:
+    by_provider = {
+        str(row.get("provider") or ""): row
+        for row in _list(rows)
+        if isinstance(row, dict)
+    }
+    return [_provider_slot(provider, by_provider.get(provider)) for provider in SLOT_PROVIDERS]
+
+
+def _provider_slot(provider: str, row: Any) -> Dict[str, Any]:
+    row = _dict(row)
+    usage = _dict(row.get("usage"))
+    quota = _dict(row.get("quota"))
+    total_tokens = _int(usage.get("total_tokens"))
+    usage_status = str(usage.get("status") or "") or ("available" if total_tokens > 0 else "missing")
+    quota_status = "available" if str(quota.get("status") or "") == "available" else "missing"
+    if quota_status == "available":
+        reason = None
+        quota_windows = [window for window in _list(quota.get("windows")) if isinstance(window, dict)]
+    else:
+        raw_reason = quota.get("reason")
+        reason = raw_reason if isinstance(raw_reason, str) and raw_reason else "no_data"
+        quota_windows = []
+    return {
+        "provider": provider,
+        "usage": {
+            "status": usage_status,
+            "total_tokens": total_tokens,
+            "input_tokens": _int(usage.get("input_tokens")),
+            "output_tokens": _int(usage.get("output_tokens")),
+            "cache_tokens": _int(usage.get("cache_tokens")),
+        },
+        "quota": {
+            "status": quota_status,
+            "reason": reason,
+            "last_verified_at": quota.get("last_verified_at") or None,
+            "source_id": quota.get("source_id") or None,
+            "source_type": quota.get("source_type") or None,
+            "windows": quota_windows,
+        },
     }
 
 

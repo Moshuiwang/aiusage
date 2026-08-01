@@ -20,6 +20,12 @@ from .snapshot_source_health import build_source_status
 from .snapshot_trends import cap_today_hourly_to_period_totals, codex_hourly_context, fill_today_hourly_residual, hourly_trend
 
 
+# Issue #61：Popover / 客户端固定展示的 provider 槽位。用量与额度分别是两个独立字段，
+# 任一缺失都不影响另一个，缺失的额度只暴露「最近一次验证时间」，绝不暴露历史百分比或过期 reset。
+SLOT_PROVIDERS = ("claude", "codex")
+LIMIT_STALE_AFTER_MINUTES = 120
+
+
 def build_snapshot(
     db_path: str,
     output_path: str,
@@ -162,6 +168,7 @@ def build_snapshot(
     machine_totals: Dict[str, Dict[str, Any]] = {}
     account_totals = {}
     agent_totals = {}
+    provider_usage: Dict[str, Dict[str, int]] = {}
     trend_dates = date_axis(start_date, end_date, rows)
     trend_by_agent = {}
     trend_by_token_type = {
@@ -222,6 +229,7 @@ def build_snapshot(
         user_entry["source_ids"].add(source_id)
         account_totals[account] = account_totals.get(account, 0) + tot
         agent_totals[agent] = agent_totals.get(agent, 0) + tot
+        _accumulate_provider_usage(provider_usage, agent, inp, out, cc, cr, tot)
         trend_by_agent.setdefault(agent, {day: 0 for day in trend_dates})
         trend_by_agent[agent][date] = trend_by_agent[agent].get(date, 0) + tot
         cache_tokens = cc + cr
@@ -373,6 +381,7 @@ def build_snapshot(
     )
 
     # 6. 组装完整快照 (v1 schema)
+    limit_status = _build_limit_status(all_limits, ref_time)
     metadata = _snapshot_metadata(ref_time, limits, "origin_direct", "origin_sqlite")
     metadata["codex_hourly"] = {
         "drift": codex_hourly_context_data["drift"],
@@ -401,7 +410,8 @@ def build_snapshot(
         "trend": trend,
         "source_status": source_status,
         "limits": limits,
-        "limit_status": _build_limit_status(all_limits, ref_time),
+        "limit_status": limit_status,
+        "provider_slots": _build_provider_slots(provider_usage, all_limits, limit_status, ref_time),
         "account_hourly": account_hourly,
         "ai_accounts": ai_accounts,
         "metadata": metadata,
@@ -658,6 +668,158 @@ def _build_limit_status(limits: list[dict[str, Any]], ref_time: datetime) -> lis
             "status": status,
         })
     return result
+
+
+def _slot_provider_key(value: Any) -> str:
+    provider = str(value or "").strip().lower()
+    if provider in {"claude", "anthropic"}:
+        return "claude"
+    if provider in {"codex", "openai"}:
+        return "codex"
+    return provider
+
+
+def _usage_provider_key(agent: Any) -> str:
+    name = str(agent or "").strip().lower()
+    if "claude" in name:
+        return "claude"
+    if "codex" in name or "openai" in name or "gpt" in name:
+        return "codex"
+    return ""
+
+
+def _accumulate_provider_usage(
+    provider_usage: Dict[str, Dict[str, int]],
+    agent: Any,
+    input_tokens: int,
+    output_tokens: int,
+    cache_creation_tokens: int,
+    cache_read_tokens: int,
+    total_tokens: int,
+) -> None:
+    provider = _usage_provider_key(agent)
+    if not provider:
+        return
+    entry = provider_usage.setdefault(
+        provider,
+        {"total_tokens": 0, "input_tokens": 0, "output_tokens": 0, "cache_tokens": 0},
+    )
+    entry["total_tokens"] += int(total_tokens or 0)
+    entry["input_tokens"] += int(input_tokens or 0)
+    entry["output_tokens"] += int(output_tokens or 0)
+    entry["cache_tokens"] += int(cache_creation_tokens or 0) + int(cache_read_tokens or 0)
+
+
+def _build_provider_slots(
+    provider_usage: Dict[str, Dict[str, int]],
+    all_limits: list[dict[str, Any]],
+    limit_status: list[dict[str, Any]],
+    ref_time: datetime,
+) -> list[dict[str, Any]]:
+    """每个固定槽位分别给出用量与额度，两者互不影响（Issue #61）。"""
+    status_by_provider: dict[str, dict[str, Any]] = {}
+    for row in limit_status:
+        status_by_provider[_slot_provider_key(row.get("provider"))] = row
+    rows_by_provider: dict[str, list[dict[str, Any]]] = {}
+    for limit in all_limits:
+        rows_by_provider.setdefault(_slot_provider_key(limit.get("provider")), []).append(limit)
+    return [
+        {
+            "provider": provider,
+            "usage": _provider_usage_slot(provider_usage.get(provider)),
+            "quota": _provider_quota_slot(
+                rows_by_provider.get(provider, []),
+                status_by_provider.get(provider),
+                ref_time,
+            ),
+        }
+        for provider in SLOT_PROVIDERS
+    ]
+
+
+def _provider_usage_slot(totals: Optional[Dict[str, int]]) -> dict[str, Any]:
+    totals = totals or {}
+    total_tokens = int(totals.get("total_tokens", 0))
+    return {
+        "status": "available" if total_tokens > 0 else "missing",
+        "total_tokens": total_tokens,
+        "input_tokens": int(totals.get("input_tokens", 0)),
+        "output_tokens": int(totals.get("output_tokens", 0)),
+        "cache_tokens": int(totals.get("cache_tokens", 0)),
+    }
+
+
+def _provider_quota_slot(
+    rows: list[dict[str, Any]],
+    status_row: Optional[dict[str, Any]],
+    ref_time: datetime,
+) -> dict[str, Any]:
+    last_verified_at = _last_verified_at(rows)
+
+    def missing(reason: str, source_id: Any = None, source_type: Any = None) -> dict[str, Any]:
+        # 缺失态只暴露「最近一次验证时间」和来源标识，绝不带任何百分比或 reset 时间。
+        return {
+            "status": "missing",
+            "reason": reason,
+            "last_verified_at": last_verified_at,
+            "source_id": source_id or None,
+            "source_type": source_type or None,
+            "windows": [],
+        }
+
+    if status_row is None:
+        return missing("no_data" if not rows else "unverified")
+
+    source_id = status_row.get("source_id")
+    source_type = status_row.get("source_type")
+    state = str(status_row.get("status") or "")
+    if state != "ok":
+        return missing(state or "unverified", source_id, source_type)
+
+    windows = [
+        row
+        for row in rows
+        if str(row.get("source_id") or "") == str(source_id or "")
+        and _effective_limit_window(row)
+        and not _limit_window_expired(row, ref_time)
+        and not _limit_window_stale(row, ref_time)
+    ]
+    if not windows:
+        return missing("unverified", source_id, source_type)
+    return {
+        "status": "available",
+        "reason": None,
+        "last_verified_at": last_verified_at,
+        "source_id": source_id or None,
+        "source_type": source_type or None,
+        "windows": windows,
+    }
+
+
+def _last_verified_at(rows: list[dict[str, Any]]) -> Optional[str]:
+    best: Optional[str] = None
+    best_timestamp = float("-inf")
+    for row in rows:
+        observed_at = row.get("observed_at")
+        if not observed_at:
+            continue
+        timestamp = _limit_timestamp(observed_at)
+        if timestamp > best_timestamp:
+            best_timestamp = timestamp
+            best = str(observed_at)
+    return best
+
+
+def _limit_window_stale(limit: dict[str, Any], ref_time: datetime) -> bool:
+    observed = parse_datetime(str(limit.get("observed_at") or ""))
+    if observed is None:
+        return True
+    if observed.tzinfo is not None and ref_time.tzinfo is not None:
+        observed = observed.astimezone(ref_time.tzinfo)
+    try:
+        return (ref_time - observed).total_seconds() > LIMIT_STALE_AFTER_MINUTES * 60
+    except TypeError:
+        return True
 
 
 def _limit_timestamp(value: Any) -> float:
@@ -1228,6 +1390,7 @@ def _empty_snapshot(
         "source_status": [],
         "limits": [],
         "limit_status": [],
+        "provider_slots": _build_provider_slots({}, [], [], ref_time),
         "account_hourly": _empty_account_hourly_summary(),
         "ai_accounts": [],
         "metadata": {

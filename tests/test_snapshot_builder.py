@@ -1689,3 +1689,278 @@ class TestSnapshotBuilder(unittest.TestCase):
         self.assertEqual(status["os_user"], "wang")
         self.assertEqual(status["platform"], "linux")
         self.assertEqual(status["display_name"], "VM-0-3-ubuntu · wang")
+
+
+class TestSnapshotProviderSlots(unittest.TestCase):
+    """Issue #61：/api/summary 把 Claude 用量与 Claude 额度作为两个独立字段返回。"""
+
+    def setUp(self) -> None:
+        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
+        self.out_fd, self.out_path = tempfile.mkstemp(suffix=".json")
+        self.date_str = "2026-06-01"
+        self.timezone_str = "Asia/Shanghai"
+        self.current_time = "2026-06-01T10:55:00+08:00"
+        self.source_reports = [
+            {
+                "source_id": "mac-local",
+                "report_type": "daily",
+                "command": "ccusage daily --json",
+                "status": "ok",
+                "error_type": None,
+                "error_message": None,
+            },
+            {
+                "source_id": "linux-server",
+                "report_type": "daily",
+                "command": "ccusage daily --json",
+                "status": "ok",
+                "error_type": None,
+                "error_message": None,
+            },
+        ]
+
+    def tearDown(self) -> None:
+        os.close(self.db_fd)
+        os.close(self.out_fd)
+        for path in [self.db_path, self.out_path]:
+            if os.path.exists(path):
+                os.remove(path)
+
+    def _claude_item(self) -> UsageItem:
+        return UsageItem(
+            source_id="mac-local",
+            machine="macbook",
+            account="wang",
+            agent="claude",
+            date=self.date_str,
+            input_tokens=1000,
+            output_tokens=500,
+            cache_creation_tokens=100,
+            cache_read_tokens=200,
+            total_tokens=1800,
+            total_cost=0.05,
+            metadata={"machine": "macbook", "account": "wang"},
+            model_breakdowns=[],
+        )
+
+    def _codex_item(self) -> UsageItem:
+        return UsageItem(
+            source_id="linux-server",
+            machine="ubuntu-node",
+            account="root",
+            agent="codex",
+            date=self.date_str,
+            input_tokens=2000,
+            output_tokens=1000,
+            cache_creation_tokens=0,
+            cache_read_tokens=0,
+            total_tokens=3000,
+            total_cost=0.08,
+            metadata={"machine": "ubuntu-node", "account": "root"},
+            model_breakdowns=[],
+        )
+
+    def _write_usage(self, items) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=items,
+        )
+
+    def _build(self) -> dict:
+        build_snapshot(
+            db_path=self.db_path,
+            output_path=self.out_path,
+            date_str=self.date_str,
+            timezone_str=self.timezone_str,
+            current_time_str=self.current_time,
+        )
+        with open(self.out_path, "r", encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def _slot(self, snapshot: dict, provider: str) -> dict:
+        return next(row for row in snapshot["provider_slots"] if row["provider"] == provider)
+
+    def test_provider_slots_expose_claude_usage_and_quota_as_independent_fields(self) -> None:
+        self._write_usage([self._claude_item(), self._codex_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=31.5,
+                    remaining_percent=68.5,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["usage"]["status"], "available")
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+        self.assertEqual(claude["usage"]["input_tokens"], 1000)
+        self.assertEqual(claude["usage"]["output_tokens"], 500)
+        self.assertEqual(claude["usage"]["cache_tokens"], 300)
+        self.assertEqual(claude["quota"]["status"], "available")
+        self.assertIsNone(claude["quota"]["reason"])
+        self.assertEqual(claude["quota"]["source_id"], "claude-main")
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-06-01T10:46:00+08:00")
+        self.assertEqual(
+            [(row["window"], row["used_percent"], row["reset_at"]) for row in claude["quota"]["windows"]],
+            [("week", 31.5, "2026-06-09T00:00:00+08:00")],
+        )
+
+    def test_provider_slots_keep_claude_usage_when_official_quota_is_stale(self) -> None:
+        self._write_usage([self._claude_item(), self._codex_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=78.25,
+                    remaining_percent=21.75,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-05-30T10:00:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-05-30T10:00:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["usage"]["status"], "available")
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "stale")
+        self.assertEqual(claude["quota"]["windows"], [])
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-05-30T10:00:00+08:00")
+        serialized = json.dumps(claude["quota"], sort_keys=True)
+        for leaked in ("used_percent", "remaining_percent", "reset_at", "78.25", "2026-06-09"):
+            self.assertNotIn(leaked, serialized)
+
+    def test_provider_slots_hide_expired_official_quota_but_keep_last_verified_at(self) -> None:
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="session",
+                    used_percent=91.0,
+                    remaining_percent=9.0,
+                    reset_at="2026-06-01T10:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T09:00:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T09:00:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "expired")
+        self.assertEqual(claude["quota"]["windows"], [])
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-06-01T09:00:00+08:00")
+        serialized = json.dumps(claude["quota"], sort_keys=True)
+        for leaked in ("used_percent", "91.0", "2026-06-01T10:00:00+08:00"):
+            self.assertNotIn(leaked, serialized)
+
+    def test_provider_slots_keep_claude_quota_when_claude_usage_is_absent(self) -> None:
+        self._write_usage([self._codex_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=31.5,
+                    remaining_percent=68.5,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["usage"]["status"], "missing")
+        self.assertEqual(claude["usage"]["total_tokens"], 0)
+        self.assertEqual(claude["quota"]["status"], "available")
+        self.assertEqual([row["window"] for row in claude["quota"]["windows"]], ["week"])
+
+    def test_provider_slots_report_missing_usage_and_missing_quota_without_facts(self) -> None:
+        self._write_usage([self._codex_item()])
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["usage"]["status"], "missing")
+        self.assertEqual(claude["usage"]["total_tokens"], 0)
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "no_data")
+        self.assertEqual(claude["quota"]["windows"], [])
+        self.assertIsNone(claude["quota"]["last_verified_at"])
+        self.assertIsNone(claude["quota"]["source_id"])
+
+    def test_codex_limit_window_never_occupies_claude_quota_slot(self) -> None:
+        self._write_usage([self._claude_item(), self._codex_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="codex",
+                    source_id="codex-main",
+                    window="session",
+                    used_percent=41.2,
+                    remaining_percent=58.8,
+                    reset_at="2026-06-01T14:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:45:00+08:00",
+                    source_type="runtime_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:45:00+08:00",
+        )
+
+        snapshot = self._build()
+        claude = self._slot(snapshot, "claude")
+        codex = self._slot(snapshot, "codex")
+
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "no_data")
+        self.assertIsNone(claude["quota"]["source_id"])
+        self.assertEqual(claude["quota"]["windows"], [])
+        self.assertNotIn("codex-main", json.dumps(claude, sort_keys=True))
+        self.assertEqual(codex["quota"]["status"], "available")
+        self.assertEqual(codex["quota"]["source_id"], "codex-main")
+        self.assertEqual([row["window"] for row in codex["quota"]["windows"]], ["session"])
