@@ -1,4 +1,13 @@
 import type { Env } from "./index";
+import {
+  COLLECTOR_RELEASE_FIELD,
+  UNSUPPORTED_ERROR_TYPE,
+  VersionContractError,
+  evaluateCollectorRelease,
+  normalizeCollectorRelease,
+  publicVersionView,
+  unsupportedMessage,
+} from "./version-contract";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -25,6 +34,7 @@ type IngestRequest = {
   codex_hourly_status?: AnyRecord;
   usage_hourly_facts?: AnyRecord[];
   usage_ledger_runs?: AnyRecord[];
+  collector_release: AnyRecord | null;
   collection_status: string;
   error_type: string | null;
   error_message: string | null;
@@ -105,6 +115,13 @@ export class WriteValidationError extends Error {
 
 export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ body: AnyRecord; rowsWritten: number }> {
   const req = validateIngestPayload(payload);
+  // 版本兼容判定在任何写库动作之前完成：明确不兼容就返回明确错误，
+  // 不静默 200 也不静默丢数据。版本未知只标记为未核实，照常接收。
+  const versionState = evaluateCollectorRelease(req.collector_release);
+  if (!versionState.accepted) {
+    throw new WriteValidationError(400, UNSUPPORTED_ERROR_TYPE, unsupportedMessage(versionState));
+  }
+  const versionView = publicVersionView(versionState);
   const hourlyFacts = filterFactsByLedgerCoverage(req, normalizeFacts(req));
   const acceptedAt = req.observed_at || acceptedAtFromEnv(env);
   const superseded = await sourceHasNewerReport(env.AIUSAGE_DB, req.source_id, acceptedAt);
@@ -119,6 +136,7 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
         accepted_at: acceptedAt,
         facts_accepted: 0,
         message: "Data accepted successfully",
+        version: versionView,
       },
     };
   }
@@ -136,7 +154,14 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
 
   const report = sourceReport(req, hourlyFacts);
   const reportState = await latestSourceReportState(env.AIUSAGE_DB, report);
-  const reportStatements = collectionReportStatements(env.AIUSAGE_DB, acceptedAt, env.AIUSAGE_TIMEZONE ?? req.timezone, "ok", report);
+  const reportStatements = collectionReportStatements(
+    env.AIUSAGE_DB,
+    acceptedAt,
+    env.AIUSAGE_TIMEZONE ?? req.timezone,
+    "ok",
+    report,
+    versionState.collector_version as string | null,
+  );
   const shouldWriteReport = !reportState.hasExisting || reportState.changed;
   if (shouldWriteReport) {
     writeStatements.push(...reportStatements);
@@ -158,6 +183,7 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
       accepted_at: acceptedAt,
       facts_accepted: hourlyFacts.length,
       message: "Data accepted successfully",
+      version: versionView,
     },
   };
 }
@@ -535,11 +561,14 @@ function collectionReportStatements(
   timezone: string,
   status: string,
   report: AnyRecord,
+  collectorVersion: string | null,
 ): D1PreparedStatement[] {
   return [
+    // collector_version 只写采集端真实上报的版本；没上报就留 NULL，
+    // 读模型据此把该来源判成 unknown，而不是冒充某个版本。
     db.prepare(
       "INSERT INTO collection_runs (collected_at, timezone, collector_version, status) VALUES (?, ?, ?, ?)",
-    ).bind(collectedAt, timezone, "0.1.0", status),
+    ).bind(collectedAt, timezone, collectorVersion, status),
     db.prepare(`
       INSERT INTO source_reports (
         run_id, source_id, report_type, command, status, ccusage_version,
@@ -624,6 +653,17 @@ function validateIngestPayload(payload: unknown): IngestRequest {
       throw new WriteValidationError(400, "http_schema_invalid", `${key} must be an object`);
     }
   }
+  // 采集端版本块：缺整块只降级为 null，不抛错；出现不合法值才明确拒绝。
+  // 错误信息只带字段名，不回显值，避免疑似凭据进入日志或错误响应。
+  let collectorRelease: AnyRecord | null;
+  try {
+    collectorRelease = normalizeCollectorRelease(payload[COLLECTOR_RELEASE_FIELD]);
+  } catch (exc) {
+    if (exc instanceof VersionContractError) {
+      throw new WriteValidationError(400, "http_schema_invalid", exc.message);
+    }
+    throw exc;
+  }
   return {
     schema_version: Number(payload.schema_version),
     source_id: String(payload.source_id),
@@ -642,6 +682,7 @@ function validateIngestPayload(payload: unknown): IngestRequest {
     codex_hourly_status: isRecord(payload.codex_hourly_status) ? payload.codex_hourly_status : undefined,
     usage_hourly_facts: Array.isArray(usageHourlyFacts) ? usageHourlyFacts.filter(isRecord) : undefined,
     usage_ledger_runs: Array.isArray(usageLedgerRuns) ? usageLedgerRuns.filter(isRecord) : undefined,
+    collector_release: collectorRelease,
     collection_status: String(payload.collection_status || "ok"),
     error_type: payload.error_type ? String(payload.error_type) : null,
     error_message: payload.error_message ? String(payload.error_message) : null,
@@ -1154,25 +1195,6 @@ async function syncHourlyFactModels(db: D1Database, fact: UsageHourlyFact, exist
     });
   }
   return written;
-}
-
-async function insertCollectionRun(db: D1Database, collectedAt: string, timezone: string, status: string): Promise<number> {
-  const result = await db.prepare(
-    "INSERT INTO collection_runs (collected_at, timezone, collector_version, status) VALUES (?, ?, ?, ?)",
-  ).bind(collectedAt, timezone, "0.1.0", status).run();
-  return Number(result.meta.last_row_id);
-}
-
-async function insertSourceReport(db: D1Database, runId: number, report: AnyRecord): Promise<void> {
-  await db.prepare(`
-    INSERT INTO source_reports (
-      run_id, source_id, report_type, command, status, ccusage_version,
-      first_period, last_period, error_type, error_message
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    runId, report.source_id, report.report_type, report.command, report.status,
-    report.ccusage_version, report.first_period, report.last_period, report.error_type, report.error_message,
-  ).run();
 }
 
 async function latestSourceReportState(db: D1Database, report: AnyRecord): Promise<SourceReportState> {
