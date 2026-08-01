@@ -230,6 +230,90 @@ class TestIngestContract(unittest.TestCase):
 
         self.assertIn("usage_hourly_facts[0].agent", str(context.exception))
 
+    def test_accepts_collector_release_and_flattens_it(self) -> None:
+        data = self.valid_data.copy()
+        data["collector_release"] = {
+            "collector_version": "0.3.0",
+            "config_schema_version": 1,
+            "parser_schema_version": 2,
+            "release_channel": "stable",
+            "build_sha": "0a1b2c3d4e5",
+            "last_upgrade": {
+                "status": "succeeded",
+                "from_version": "0.2.0",
+                "to_version": "0.3.0",
+                "finished_at": "2026-08-01T09:00:00+08:00",
+            },
+        }
+
+        req = validate_ingest_payload(data)
+
+        self.assertEqual(req.collector_release["collector_version"], "0.3.0")
+        self.assertEqual(req.collector_release["release_channel"], "stable")
+        self.assertEqual(req.collector_release["last_upgrade_status"], "succeeded")
+        self.assertEqual(req.collector_release["last_upgrade_from_version"], "0.2.0")
+
+    def test_missing_collector_release_degrades_instead_of_failing(self) -> None:
+        """缺整块版本信息只降级为未知，既不 500 也不静默当成合规"""
+        data = self.valid_data.copy()
+        data.pop("collector_release", None)
+
+        req = validate_ingest_payload(data)
+
+        self.assertIsNone(req.collector_release)
+
+    def test_partial_collector_release_keeps_known_fields_and_nulls_the_rest(self) -> None:
+        data = self.valid_data.copy()
+        data["collector_release"] = {"collector_version": "0.3.0"}
+
+        req = validate_ingest_payload(data)
+
+        self.assertEqual(req.collector_release["collector_version"], "0.3.0")
+        self.assertIsNone(req.collector_release["build_sha"])
+        self.assertIsNone(req.collector_release["last_upgrade_status"])
+
+    def test_rejects_non_object_collector_release(self) -> None:
+        data = self.valid_data.copy()
+        data["collector_release"] = []
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertEqual(context.exception.error_type, "http_schema_invalid")
+        self.assertIn("collector_release", str(context.exception))
+
+    def test_rejects_unknown_key_inside_collector_release(self) -> None:
+        data = self.valid_data.copy()
+        data["collector_release"] = {"collector_version": "0.3.0", "auth_token": "whatever"}
+
+        with self.assertRaises(IngestValidationError) as context:
+            validate_ingest_payload(data)
+
+        self.assertIn("auth_token", str(context.exception))
+
+    def test_rejects_credential_or_path_shaped_version_values_without_echoing_them(self) -> None:
+        fake_token = "sk-ant-api03-FAKEfakeFAKEfake0123456789"
+        fake_path = "/opt/ai-usage/releases/current/bin/collector"
+        cases = [
+            ("collector_version", fake_token),
+            ("collector_version", fake_path),
+            ("build_sha", fake_token),
+            ("build_sha", fake_path),
+            ("release_channel", fake_path),
+        ]
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                data = self.valid_data.copy()
+                data["collector_release"] = {field: value}
+
+                with self.assertRaises(IngestValidationError) as context:
+                    validate_ingest_payload(data)
+
+                message = str(context.exception)
+                self.assertEqual(context.exception.error_type, "http_schema_invalid")
+                self.assertIn(f"collector_release.{field}", message)
+                self.assertNotIn(value, message)
+
     def test_rejects_sensitive_strings_inside_mswusage_report(self) -> None:
         data = self.valid_data.copy()
         data["mswusage_codex_hourly_report"] = {

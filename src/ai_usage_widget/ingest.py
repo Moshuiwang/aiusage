@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from .auth import TokenAuthenticator
+from .version_contract import (
+    COLLECTOR_RELEASE_FIELD,
+    VersionContractError,
+    normalize_collector_release,
+)
 
 
 class IngestValidationError(ValueError):
@@ -33,6 +38,7 @@ class IngestRequest:
     codex_hourly_status: Optional[Dict[str, Any]] = None
     usage_hourly_facts: Optional[List[Dict[str, Any]]] = None
     usage_ledger_runs: Optional[List[Dict[str, Any]]] = None
+    collector_release: Optional[Dict[str, Any]] = None
     machine: Optional[str] = None
     collection_status: str = "ok"
     error_type: Optional[str] = None
@@ -180,7 +186,14 @@ def validate_ingest_payload(
                     error_type="http_schema_invalid",
                 )
 
-    # 6. 构建并返回 IngestRequest
+    # 6. 采集端版本块：缺整块只降级为 None，不抛错；出现不合法值才明确拒绝。
+    #    错误信息只带字段名，不回显值，避免疑似凭据进入日志或错误响应。
+    try:
+        collector_release = normalize_collector_release(payload.get(COLLECTOR_RELEASE_FIELD))
+    except VersionContractError as exc:
+        raise IngestValidationError(str(exc), error_type="http_schema_invalid") from exc
+
+    # 7. 构建并返回 IngestRequest
     return IngestRequest(
         schema_version=schema_version,
         source_id=str(payload["source_id"]),
@@ -200,6 +213,7 @@ def validate_ingest_payload(
         codex_hourly_status=codex_hourly_status,
         usage_hourly_facts=usage_hourly_facts,
         usage_ledger_runs=usage_ledger_runs,
+        collector_release=collector_release,
         collection_status=str(payload.get("collection_status") or "ok"),
         error_type=str(payload["error_type"]) if payload.get("error_type") else None,
         error_message=str(payload["error_message"]) if payload.get("error_message") else None,
