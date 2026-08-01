@@ -18,8 +18,10 @@
   "entry_probe": {
     "url": "https://aiusage.example.invalid/api/health",
     "status": 200,
-    "headers": {"content-type": "application/json"},
-    "body": "{\"status\":\"ok\"}"
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"status\": \"ok\", \"generated_at\": \"2026-08-01T12:00:00+08:00\", \"backend_mode\": \"origin_direct\", \"canonical_store\": \"origin_sqlite\"}"
   },
   "system_timezone": "Asia/Shanghai",
   "observed_identity": {
@@ -35,10 +37,19 @@
       "installed_at": "2026-08-01T00:00:00+00:00"
     }
   },
-  "python_path": ["/opt/ai-usage/current/src"],
+  "python_path": [
+    "/opt/ai-usage/current/src"
+  ],
   "imported_from": "/opt/ai-usage/current/src/ai_usage_widget/__init__.py",
   "timer": {
     "unit": "ai-usage-pusher.timer",
     "show_output": "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\nNextElapseUSecRealtime=n/a\nNextElapseUSecMonotonic=n/a\n"
-  }
+  },
+  "unit_environment": {
+    "PYTHONPATH": "/opt/ai-usage/releases/2026-08-01T00-00-00Z/src",
+    "LANG": "C.UTF-8"
+  },
+  "unit_pythonpath_package_roots": [
+    "/opt/ai-usage/releases/2026-08-01T00-00-00Z/src"
+  ]
 }

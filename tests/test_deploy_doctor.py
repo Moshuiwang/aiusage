@@ -5,8 +5,10 @@ import io
 import json
 import os
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from unittest import mock
 
@@ -42,8 +44,196 @@ EXPECTED_EXIT_CODES = {
 }
 
 
+# Issue 八类之外新增的 reason code。八类仍然一一对应、互不相同，
+# 这些只是把原本被硬塞进八类的情况拆出来，避免结论互相污染。
+EXPECTED_ADDITIONAL_EXIT_CODES = {
+    "entry_redirected_to_portal": 12,
+    "entry_route_unexpected": 17,
+    "precheck_incomplete": 18,
+}
+
+HEALTH_JSON = json.dumps(
+    {
+        "status": "ok",
+        "generated_at": "2026-08-01T12:00:00+08:00",
+        "backend_mode": "origin_direct",
+        "canonical_store": "origin_sqlite",
+    }
+)
+LOGIN_PAGE_HTML = "<html><body>Sign in to continue</body></html>"
+
+
 def _load_case(name: str) -> dict:
     return json.loads((FIXTURES_DIR / f"case_{name}.json").read_text(encoding="utf-8"))
+
+
+class _RecordingServer:
+    """本地回环 HTTP server，只用于固定 doctor 的传输层行为，不访问外网。"""
+
+    def __init__(self, responder) -> None:
+        self.requests: list[tuple[str, str | None]] = []
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler 约定
+                outer.requests.append((self.path, self.headers.get("Authorization")))
+                responder(self)
+
+            def log_message(self, *args) -> None:
+                pass
+
+        self.server = HTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    @property
+    def origin(self) -> str:
+        return f"http://127.0.0.1:{self.port}"
+
+    def shutdown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+
+
+def _respond(handler, status: int, body: str, content_type: str, location: str | None = None) -> None:
+    handler.send_response(status)
+    handler.send_header("Content-Type", content_type)
+    if location:
+        handler.send_header("Location", location)
+    handler.end_headers()
+    handler.wfile.write(body.encode("utf-8"))
+
+
+class EntryProbeTransportTests(unittest.TestCase):
+    """P0-1 / P1-1：跨主机 302 既不能把 token 带走，也不能被当成健康。"""
+
+    def setUp(self) -> None:
+        self.idp = _RecordingServer(
+            lambda handler: _respond(handler, 200, LOGIN_PAGE_HTML, "text/html")
+        )
+        self.addCleanup(self.idp.shutdown)
+        idp_origin = self.idp.origin
+        self.entry = _RecordingServer(
+            lambda handler: _respond(
+                handler, 302, "", "text/html", location=f"{idp_origin}/idp-login"
+            )
+        )
+        self.addCleanup(self.entry.shutdown)
+
+    def _probe(self) -> "deploy_doctor.EntryProbe":
+        return deploy_doctor.default_probe(
+            f"{self.entry.origin}/api/health",
+            {"Authorization": "Bearer SUPER-SECRET-TOKEN", "User-Agent": "AIUsagePusher/1.0"},
+            5.0,
+        )
+
+    def test_probe_never_forwards_authorization_to_the_redirect_target(self) -> None:
+        self._probe()
+
+        self.assertEqual(len(self.entry.requests), 1)
+        self.assertEqual(self.entry.requests[0][1], "Bearer SUPER-SECRET-TOKEN")
+        # 第三方 IdP / captive portal 绝不能拿到生产 ingest token。
+        for path, authorization in self.idp.requests:
+            self.assertIsNone(authorization, f"token leaked to redirect target at {path}")
+
+    def test_probe_records_the_redirect_as_a_visible_fact(self) -> None:
+        probe = self._probe()
+
+        self.assertTrue(probe.redirected)
+        self.assertIn("/idp-login", probe.redirect_location)
+        self.assertEqual(probe.status, 302)
+
+    def test_redirected_entry_is_never_reported_as_healthy(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment(
+            device_config={"server_url": f"{self.entry.origin}/ingest"},
+            entry_probe=self._probe(),
+        )
+
+        check = deploy_doctor._check_entry(environment)
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "entry_redirected_to_portal")
+        self.assertEqual(deploy_doctor.exit_code_for_reason(check.reason_code), 12)
+        self.assertNotIn("SUPER-SECRET-TOKEN", check.detail + check.remediation)
+
+
+class EntryHealthContractTests(unittest.TestCase):
+    """P1-1：200 必须真的是本产品的 /api/health 响应，不能是随便一个 200。"""
+
+    def _check(self, status: int, body: str, headers: dict | None = None):
+        environment = deploy_doctor.DoctorEnvironment(
+            device_config={"server_url": "https://aiusage.example.invalid/ingest"},
+            entry_probe=deploy_doctor.EntryProbe(
+                url="https://aiusage.example.invalid/api/health",
+                status=status,
+                headers=headers or {"content-type": "application/json"},
+                body=body,
+            ),
+        )
+        return deploy_doctor._check_entry(environment)
+
+    def test_real_health_payload_is_accepted(self) -> None:
+        check = self._check(200, HEALTH_JSON)
+
+        self.assertTrue(check.ok, check.detail)
+
+    def test_200_login_page_is_rejected(self) -> None:
+        check = self._check(200, LOGIN_PAGE_HTML, {"content-type": "text/html"})
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "entry_route_unexpected")
+
+    def test_200_json_without_the_health_contract_is_rejected(self) -> None:
+        check = self._check(200, json.dumps({"hello": "world"}))
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "entry_route_unexpected")
+
+    def test_200_health_error_payload_is_rejected(self) -> None:
+        check = self._check(200, json.dumps({"status": "error", "error_type": "auth_required"}))
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "entry_route_unexpected")
+
+
+class EntryStatusClassificationTests(unittest.TestCase):
+    """P1-2：收到了 HTTP 响应就不能叫「网络不可达」。"""
+
+    def _reason(self, **probe_kwargs) -> str:
+        environment = deploy_doctor.DoctorEnvironment(
+            device_config={"server_url": "https://aiusage.example.invalid/ingest"},
+            entry_probe=deploy_doctor.EntryProbe(
+                url="https://aiusage.example.invalid/api/health", **probe_kwargs
+            ),
+        )
+        return deploy_doctor._check_entry(environment).reason_code
+
+    def test_404_is_a_route_problem_not_a_network_problem(self) -> None:
+        self.assertEqual(self._reason(status=404, body="not found"), "entry_route_unexpected")
+
+    def test_500_is_a_route_problem_not_a_network_problem(self) -> None:
+        self.assertEqual(self._reason(status=500, body="boom"), "entry_route_unexpected")
+
+    def test_429_without_guard_markers_is_a_route_problem(self) -> None:
+        self.assertEqual(self._reason(status=429, body="slow down"), "entry_route_unexpected")
+
+    def test_route_problem_has_its_own_exit_code(self) -> None:
+        self.assertEqual(deploy_doctor.exit_code_for_reason("entry_route_unexpected"), 17)
+        self.assertNotEqual(
+            deploy_doctor.exit_code_for_reason("entry_route_unexpected"),
+            deploy_doctor.exit_code_for_reason("network_unreachable"),
+        )
+
+    def test_no_response_at_all_is_still_network_unreachable(self) -> None:
+        self.assertEqual(self._reason(status=None, error="URLError"), "network_unreachable")
+
+    def test_403_is_still_an_entry_guard_problem(self) -> None:
+        self.assertEqual(self._reason(status=403, body="blocked"), "entry_blocked_by_waf")
+
+    def test_401_is_still_a_token_problem(self) -> None:
+        self.assertEqual(self._reason(status=401, body="{}"), "auth_token_invalid")
 
 
 class DeployDoctorReasonCodeTests(unittest.TestCase):
@@ -97,6 +287,26 @@ class DeployDoctorReasonCodeTests(unittest.TestCase):
 
         self.assertEqual(actual, EXPECTED_EXIT_CODES)
         self.assertEqual(deploy_doctor.exit_code_for_reason(deploy_doctor.REASON_OK), 0)
+
+    def test_additional_reason_codes_never_collide_with_the_eight(self) -> None:
+        additional = set(deploy_doctor.ADDITIONAL_REASON_CODES)
+
+        self.assertEqual(additional & EXPECTED_REASON_CODES, set())
+        self.assertEqual(additional, set(EXPECTED_ADDITIONAL_EXIT_CODES))
+        self.assertEqual(
+            set(deploy_doctor.ALL_REASON_CODES),
+            EXPECTED_REASON_CODES | additional,
+        )
+        self.assertEqual(len(deploy_doctor.ALL_REASON_CODES), 11)
+
+    def test_every_reason_code_has_a_registered_exit_code(self) -> None:
+        expected = {**EXPECTED_EXIT_CODES, **EXPECTED_ADDITIONAL_EXIT_CODES}
+        actual = {
+            reason: deploy_doctor.exit_code_for_reason(reason)
+            for reason in deploy_doctor.ALL_REASON_CODES
+        }
+
+        self.assertEqual(actual, expected)
 
     def test_network_block_and_auth_reasons_are_three_separate_categories(self) -> None:
         categories = {
@@ -271,6 +481,226 @@ class TimerScopeTests(unittest.TestCase):
         self.assertEqual(timer_check.reason_code, "timer_without_future_trigger")
         self.assertIn("user", timer_check.detail)
         self.assertIn("--timer-scope", timer_check.remediation)
+
+
+class UnitPythonPathTests(unittest.TestCase):
+    """P1-3：要检查的是 timer 那个 unit 里的 PYTHONPATH，不是操作者 shell 里的。"""
+
+    def _environment(self, **overrides) -> "deploy_doctor.DoctorEnvironment":
+        defaults = dict(
+            device_config={},
+            release_dir="/opt/ai-usage/current",
+            timer_unit="ai-usage-pusher.timer",
+            unit_environment={"PYTHONPATH": "/opt/ai-usage/current/src"},
+            unit_pythonpath_package_roots=["/opt/ai-usage/current/src"],
+        )
+        defaults.update(overrides)
+        return deploy_doctor.DoctorEnvironment(**defaults)
+
+    def test_unit_pythonpath_matching_the_release_dir_is_ok(self) -> None:
+        check = deploy_doctor._check_pythonpath(self._environment())
+
+        self.assertTrue(check.ok, check.detail)
+
+    def test_unit_pythonpath_pointing_at_a_stale_tree_is_a_mismatch(self) -> None:
+        check = deploy_doctor._check_pythonpath(
+            self._environment(
+                unit_environment={"PYTHONPATH": "/home/wangzp/ai-usage-widget/src"},
+                unit_pythonpath_package_roots=["/home/wangzp/ai-usage-widget/src"],
+            )
+        )
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "pythonpath_import_mismatch")
+        self.assertIn("/opt/ai-usage/current/src", check.detail)
+
+    def test_unit_pythonpath_without_an_importable_package_is_a_mismatch(self) -> None:
+        check = deploy_doctor._check_pythonpath(
+            self._environment(unit_pythonpath_package_roots=[])
+        )
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "pythonpath_import_mismatch")
+
+    def test_operator_shell_pythonpath_is_not_used_when_the_unit_is_known(self) -> None:
+        # 操作者 shell 里手敲对了，不能掩盖 unit 里写错的那一份。
+        check = deploy_doctor._check_pythonpath(
+            self._environment(
+                unit_environment={"PYTHONPATH": "/home/wangzp/stale/src"},
+                unit_pythonpath_package_roots=["/home/wangzp/stale/src"],
+                python_path=["/opt/ai-usage/current/src"],
+                imported_from="/opt/ai-usage/current/src/ai_usage_widget/__init__.py",
+            )
+        )
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.reason_code, "pythonpath_import_mismatch")
+
+    def test_unreadable_unit_environment_is_unknown_not_ok(self) -> None:
+        check = deploy_doctor._check_pythonpath(
+            self._environment(unit_environment=None, unit_pythonpath_package_roots=[])
+        )
+
+        self.assertFalse(check.ok)
+        self.assertEqual(check.status, "unknown")
+        self.assertEqual(check.reason_code, "precheck_incomplete")
+
+    def test_unit_without_pythonpath_is_ok_because_the_package_is_installed(self) -> None:
+        check = deploy_doctor._check_pythonpath(
+            self._environment(unit_environment={}, unit_pythonpath_package_roots=[])
+        )
+
+        self.assertTrue(check.ok, check.detail)
+
+    def test_without_a_timer_unit_the_check_is_skipped_not_silently_green(self) -> None:
+        check = deploy_doctor._check_pythonpath(
+            deploy_doctor.DoctorEnvironment(device_config={})
+        )
+
+        self.assertEqual(check.status, "skipped")
+
+    def test_collect_environment_reads_the_service_unit_environment(self) -> None:
+        recorded: list[list[str]] = []
+
+        def runner(argv):
+            recorded.append(list(argv))
+            if "ai-usage-pusher.service" in argv:
+                return "Environment=PYTHONPATH=/opt/ai-usage/current/src LANG=C\n"
+            return "LoadState=loaded\nUnitFileState=enabled\nNextElapseUSecRealtime=Sat\n"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "device.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "source_id": "s",
+                        "os_user": "u",
+                        "platform": "linux",
+                        "timezone": "UTC",
+                        "server_url": "https://aiusage.example.invalid/ingest",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = deploy_doctor.collect_environment(
+                config_path=str(config_path),
+                timer_unit="ai-usage-pusher.timer",
+                env={},
+                probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
+                command_runner=runner,
+            )
+
+        self.assertTrue(
+            any("ai-usage-pusher.service" in argv for argv in recorded),
+            recorded,
+        )
+        self.assertEqual(environment.unit_environment, {"PYTHONPATH": "/opt/ai-usage/current/src", "LANG": "C"})
+
+
+class UnknownCheckAggregationTests(unittest.TestCase):
+    def test_an_unknown_check_makes_the_report_not_ok_with_its_own_exit_code(self) -> None:
+        fixture = _load_case("healthy")
+        fixture["timer"]["unit"] = "ai-usage-pusher.timer"
+        fixture["unit_environment"] = None
+        environment = deploy_doctor.DoctorEnvironment.from_fixture(fixture)
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertFalse(report.ok)
+        self.assertEqual(report.reason_code, "precheck_incomplete")
+        self.assertEqual(report.exit_code, 18)
+        self.assertIn("pythonpath_alignment", report.to_dict()["unknown_checks"])
+
+    def test_a_real_failure_outranks_an_unknown_check(self) -> None:
+        fixture = _load_case("entry_blocked_by_waf")
+        fixture["unit_environment"] = None
+        environment = deploy_doctor.DoctorEnvironment.from_fixture(fixture)
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertEqual(report.reason_code, "entry_blocked_by_waf")
+
+
+class MacTimerBoundaryTests(unittest.TestCase):
+    """P1-4：Mac 上没有 systemd，doctor 既不能崩，也不能假装检查过了。"""
+
+    def test_mac_fixture_never_claims_systemd_only_properties(self) -> None:
+        fixture = _load_case("healthy_mac")
+        serialized = json.dumps(fixture)
+
+        for systemd_only in ("LoadState", "UnitFileState", "NextElapseUSec"):
+            self.assertNotIn(systemd_only, serialized)
+
+    def test_darwin_timer_check_is_an_explicit_unknown(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment(
+            device_config={"platform": "darwin"},
+            timer_unit="com.chunbai.aiusage.pusher.mac-wangzhipeng",
+            timer_supported=False,
+        )
+
+        check = deploy_doctor._check_timer(environment)
+
+        self.assertEqual(check.status, "unknown")
+        self.assertEqual(check.reason_code, "precheck_incomplete")
+        self.assertIn("launchd", check.detail)
+
+    def test_collect_environment_on_darwin_does_not_shell_out_to_systemctl(self) -> None:
+        calls: list[list[str]] = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "device.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "source_id": "mac",
+                        "os_user": "wangzhipeng",
+                        "platform": "mac",
+                        "timezone": "Asia/Shanghai",
+                        "server_url": "https://aiusage.example.invalid/ingest",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with mock.patch.object(deploy_doctor.sys, "platform", "darwin"):
+                environment = deploy_doctor.collect_environment(
+                    config_path=str(config_path),
+                    timer_unit="com.chunbai.aiusage.pusher.mac",
+                    env={},
+                    probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
+                    command_runner=lambda argv: calls.append(list(argv)) or "",
+                )
+
+        self.assertEqual(calls, [])
+        self.assertFalse(environment.timer_supported)
+
+    def test_a_systemctl_that_does_not_exist_is_unknown_not_doctor_failed(self) -> None:
+        def runner(argv):
+            raise FileNotFoundError("systemctl")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "device.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "source_id": "s",
+                        "os_user": "u",
+                        "platform": "linux",
+                        "timezone": "UTC",
+                        "server_url": "https://aiusage.example.invalid/ingest",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = deploy_doctor.collect_environment(
+                config_path=str(config_path),
+                timer_unit="ai-usage-pusher.timer",
+                env={},
+                probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
+                command_runner=runner,
+            )
+
+        check = deploy_doctor._check_timer(environment)
+        self.assertEqual(check.status, "unknown")
 
 
 class DoctorPreconditionTests(unittest.TestCase):
@@ -463,6 +893,29 @@ class DeployDoctorReadOnlyTests(unittest.TestCase):
 
         self.assertNotIn(FAKE_TOKEN, serialized)
         self.assertIn("***", serialized)
+
+    def test_fixture_replay_also_masks_declared_secret_values(self) -> None:
+        """P2：`--environment-fixture` 回放路径的遮蔽此前是失效的。"""
+        fixture = _load_case("healthy")
+        fixture["secret_values"] = [FAKE_TOKEN]
+        environment = deploy_doctor.DoctorEnvironment.from_fixture(fixture)
+
+        self.assertEqual(environment.secret_values, (FAKE_TOKEN,))
+        report = deploy_doctor.DoctorReport(
+            ok=False,
+            reason_code="auth_token_invalid",
+            exit_code=13,
+            checks=(
+                deploy_doctor.DoctorCheck(
+                    name="entry_reachability",
+                    ok=False,
+                    reason_code="auth_token_invalid",
+                    detail=f"token={FAKE_TOKEN}",
+                ),
+            ),
+            secret_values=environment.secret_values,
+        )
+        self.assertNotIn(FAKE_TOKEN, json.dumps(report.to_dict(), ensure_ascii=False))
 
     def test_collected_report_carries_the_token_value_as_a_masked_secret(self) -> None:
         report = self._run()

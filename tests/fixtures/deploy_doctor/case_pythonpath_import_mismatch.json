@@ -18,8 +18,10 @@
   "entry_probe": {
     "url": "https://aiusage.example.invalid/api/health",
     "status": 200,
-    "headers": {"content-type": "application/json"},
-    "body": "{\"status\":\"ok\"}"
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"status\": \"ok\", \"generated_at\": \"2026-08-01T12:00:00+08:00\", \"backend_mode\": \"origin_direct\", \"canonical_store\": \"origin_sqlite\"}"
   },
   "system_timezone": "Asia/Shanghai",
   "observed_identity": {
@@ -35,10 +37,19 @@
       "installed_at": "2026-08-01T00:00:00+00:00"
     }
   },
-  "python_path": ["/opt/ai-usage/current/src"],
+  "python_path": [
+    "/home/wangzp/ai-usage-scratch/src"
+  ],
   "imported_from": "/home/wangzp/ai-usage-scratch/src/ai_usage_widget/__init__.py",
   "timer": {
     "unit": "ai-usage-pusher.timer",
     "show_output": "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\nNextElapseUSecRealtime=Sat 2026-08-01 12:30:00 CST\nNextElapseUSecMonotonic=0\n"
-  }
+  },
+  "unit_environment": {
+    "PYTHONPATH": "/home/wangzp/ai-usage-scratch/src",
+    "LANG": "C.UTF-8"
+  },
+  "unit_pythonpath_package_roots": [
+    "/home/wangzp/ai-usage-scratch/src"
+  ]
 }

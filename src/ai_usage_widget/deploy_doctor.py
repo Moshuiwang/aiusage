@@ -18,6 +18,7 @@ from __future__ import annotations
 import getpass
 import json
 import os
+import shlex
 import socket
 import sys
 import urllib.error
@@ -45,6 +46,7 @@ REASON_PYTHONPATH_IMPORT_MISMATCH = "pythonpath_import_mismatch"
 REASON_TIMER_WITHOUT_FUTURE_TRIGGER = "timer_without_future_trigger"
 
 #: Issue #57 要求互相区分的八类部署问题，顺序即检查顺序里的严重度顺序。
+#: **这八个必须保持一一对应、互不相同**，新增情况一律进 ADDITIONAL_REASON_CODES。
 DIAGNOSTIC_REASON_CODES: Tuple[str, ...] = (
     REASON_NETWORK_UNREACHABLE,
     REASON_ENTRY_BLOCKED_BY_WAF,
@@ -56,6 +58,23 @@ DIAGNOSTIC_REASON_CODES: Tuple[str, ...] = (
     REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
 )
 
+#: 入口被门户 / IdP 302 接管。补救动作和 WAF 拦截同一类（放行入口，别动 token），
+#: 但必须能机器区分，否则操作者看不出「我根本没连到自家 origin」。
+REASON_ENTRY_REDIRECTED_TO_PORTAL = "entry_redirected_to_portal"
+#: 收到了完整 HTTP 响应，但它不是本产品的 /api/health 契约（404 / 5xx / 被接管的 200）。
+#: 网络明明是通的，不能报成 network_unreachable 把用户引去查一个没问题的 DNS。
+REASON_ENTRY_ROUTE_UNEXPECTED = "entry_route_unexpected"
+#: 事实没采到：既不是通过也不是失败。宁可明确说不知道，也不假绿。
+REASON_PRECHECK_INCOMPLETE = "precheck_incomplete"
+
+ADDITIONAL_REASON_CODES: Tuple[str, ...] = (
+    REASON_ENTRY_REDIRECTED_TO_PORTAL,
+    REASON_ENTRY_ROUTE_UNEXPECTED,
+    REASON_PRECHECK_INCOMPLETE,
+)
+
+ALL_REASON_CODES: Tuple[str, ...] = DIAGNOSTIC_REASON_CODES + ADDITIONAL_REASON_CODES
+
 CATEGORY_OK = "ok"
 CATEGORY_NETWORK = "network"
 CATEGORY_ENTRY_GUARD = "entry_guard"
@@ -63,17 +82,22 @@ CATEGORY_AUTH = "auth"
 CATEGORY_IDENTITY = "identity"
 CATEGORY_RUNTIME = "runtime"
 CATEGORY_SCHEDULE = "schedule"
+CATEGORY_ORIGIN = "origin"
+CATEGORY_INCOMPLETE = "incomplete"
 
 REASON_CATEGORIES: Dict[str, str] = {
     REASON_OK: CATEGORY_OK,
     REASON_NETWORK_UNREACHABLE: CATEGORY_NETWORK,
     REASON_ENTRY_BLOCKED_BY_WAF: CATEGORY_ENTRY_GUARD,
+    REASON_ENTRY_REDIRECTED_TO_PORTAL: CATEGORY_ENTRY_GUARD,
     REASON_AUTH_TOKEN_INVALID: CATEGORY_AUTH,
     REASON_DEVICE_IDENTITY_MISMATCH: CATEGORY_IDENTITY,
     REASON_TIMEZONE_MISMATCH: CATEGORY_IDENTITY,
     REASON_RUNTIME_RELEASE_UNVERSIONED: CATEGORY_RUNTIME,
     REASON_PYTHONPATH_IMPORT_MISMATCH: CATEGORY_RUNTIME,
     REASON_TIMER_WITHOUT_FUTURE_TRIGGER: CATEGORY_SCHEDULE,
+    REASON_ENTRY_ROUTE_UNEXPECTED: CATEGORY_ORIGIN,
+    REASON_PRECHECK_INCOMPLETE: CATEGORY_INCOMPLETE,
 }
 
 #: 退出码按「用户下一步动作」分组。入口拦截 (12) 与 token 无效 (13) 必须分开：
@@ -86,7 +110,15 @@ CATEGORY_EXIT_CODES: Dict[str, int] = {
     CATEGORY_IDENTITY: 14,
     CATEGORY_RUNTIME: 15,
     CATEGORY_SCHEDULE: 16,
+    CATEGORY_ORIGIN: 17,
+    CATEGORY_INCOMPLETE: 18,
 }
+
+#: 单项检查的四态。`ok` 之外还要区分 unknown（事实没采到）和 skipped（本次不适用）。
+STATUS_OK = "ok"
+STATUS_FAILED = "failed"
+STATUS_UNKNOWN = "unknown"
+STATUS_SKIPPED = "skipped"
 
 #: doctor 自身跑不起来（配置读不出来等），既不是体检通过也不属于八类之一。
 EXIT_DOCTOR_ERROR = 1
@@ -143,6 +175,10 @@ class EntryProbe:
     headers: Mapping[str, str] = field(default_factory=dict)
     body: str = ""
     error: Optional[str] = None
+    #: 是否发生了重定向。探测不跟随重定向，这里只是把事实记下来，
+    #: 否则操作者根本看不出自己连的其实不是自家 origin。
+    redirected: bool = False
+    redirect_location: str = ""
 
     @classmethod
     def from_dict(cls, data: Optional[Mapping[str, Any]]) -> "EntryProbe":
@@ -154,6 +190,8 @@ class EntryProbe:
             headers={str(key).lower(): str(value) for key, value in dict(headers).items()},
             body=str(data.get("body") or ""),
             error=str(data["error"]) if data.get("error") else None,
+            redirected=bool(data.get("redirected")),
+            redirect_location=str(data.get("redirect_location") or ""),
         )
 
 
@@ -171,10 +209,17 @@ class DoctorEnvironment:
     release_manifest: Optional[Mapping[str, Any]] = None
     python_path: Sequence[str] = ()
     imported_from: Optional[str] = None
+    #: timer 对应 service unit 里的 `Environment=`。这才是 Issue 里出事故的那一份
+    #: PYTHONPATH；`None` 表示没采到（未知），`{}` 表示 unit 确实没设环境变量。
+    unit_environment: Optional[Mapping[str, str]] = None
+    #: unit PYTHONPATH 里真正含有可导入 ai_usage_widget 的目录（只读探测得到）。
+    unit_pythonpath_package_roots: Sequence[str] = ()
     timer_unit: Optional[str] = None
     timer_properties: Mapping[str, str] = field(default_factory=dict)
     #: systemd manager 作用域：BIAI 现网采集 timer 是 system-level 的。
     timer_scope: str = TIMER_SCOPE_USER
+    #: 本平台是否支持当前的 timer 检查实现（只实现了 systemd；macOS launchd 未实现）。
+    timer_supported: bool = True
     reference_time: Optional[str] = None
     #: 本次运行中已知的凭据值，仅用于输出前遮蔽，绝不进入报告。
     secret_values: Tuple[str, ...] = ()
@@ -201,10 +246,20 @@ class DoctorEnvironment:
             release_manifest=release.get("manifest"),
             python_path=[str(item) for item in (data.get("python_path") or [])],
             imported_from=data.get("imported_from"),
+            unit_environment=(
+                {str(key): str(value) for key, value in dict(data["unit_environment"]).items()}
+                if isinstance(data.get("unit_environment"), dict)
+                else None
+            ),
+            unit_pythonpath_package_roots=[
+                str(item) for item in (data.get("unit_pythonpath_package_roots") or [])
+            ],
             timer_unit=timer.get("unit"),
             timer_properties=dict(timer_properties or {}),
             timer_scope=str(timer.get("scope") or TIMER_SCOPE_USER),
+            timer_supported=bool(timer.get("supported", True)),
             reference_time=data.get("reference_time"),
+            secret_values=tuple(str(item) for item in (data.get("secret_values") or [])),
         )
 
 
@@ -231,11 +286,18 @@ class DoctorCheck:
     reason_code: str
     detail: str
     remediation: str = ""
+    #: 四态之一：ok / failed / unknown / skipped。不传时按 ok 推导。
+    status: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            object.__setattr__(self, "status", STATUS_OK if self.ok else STATUS_FAILED)
 
     def to_dict(self, secret_values: Sequence[str] = ()) -> Dict[str, Any]:
         return {
             "name": self.name,
             "ok": self.ok,
+            "status": self.status,
             "reason_code": self.reason_code,
             "category": category_for_reason(self.reason_code),
             "detail": mask_secrets(self.detail, secret_values),
@@ -259,7 +321,15 @@ class DoctorReport:
             "reason_code": self.reason_code,
             "category": category_for_reason(self.reason_code),
             "exit_code": self.exit_code,
-            "failed_reason_codes": [check.reason_code for check in self.checks if not check.ok],
+            "failed_reason_codes": [
+                check.reason_code for check in self.checks if check.status == STATUS_FAILED
+            ],
+            "unknown_checks": [
+                check.name for check in self.checks if check.status == STATUS_UNKNOWN
+            ],
+            "skipped_checks": [
+                check.name for check in self.checks if check.status == STATUS_SKIPPED
+            ],
             "checks": [check.to_dict(self.secret_values) for check in self.checks],
         }
 
@@ -312,6 +382,32 @@ def _fail(name: str, reason_code: str, detail: str, remediation: str) -> DoctorC
         reason_code=reason_code,
         detail=detail,
         remediation=remediation,
+        status=STATUS_FAILED,
+    )
+
+
+def _unknown(name: str, detail: str, remediation: str) -> DoctorCheck:
+    """事实没采到。不算通过（ok=False），但也不冒充某一类具体故障。"""
+
+    return DoctorCheck(
+        name=name,
+        ok=False,
+        reason_code=REASON_PRECHECK_INCOMPLETE,
+        detail=detail,
+        remediation=remediation,
+        status=STATUS_UNKNOWN,
+    )
+
+
+def _skipped(name: str, detail: str) -> DoctorCheck:
+    """本次运行不适用（例如没指定 timer 单元），不影响整体结论。"""
+
+    return DoctorCheck(
+        name=name,
+        ok=True,
+        reason_code=REASON_OK,
+        detail=detail,
+        status=STATUS_SKIPPED,
     )
 
 
@@ -366,6 +462,16 @@ def _check_entry(environment: DoctorEnvironment) -> DoctorCheck:
             f"入口 {target} 无法建立连接（{probe.error or 'no_response'}）",
             "先确认设备出网、DNS 与代理，再谈 token；不要轮换凭据。",
         )
+    if probe.redirected:
+        # 探测不跟随重定向，所以 token 没有被带到下一跳。
+        return _fail(
+            "entry_reachability",
+            REASON_ENTRY_REDIRECTED_TO_PORTAL,
+            f"入口 {target} 返回 {probe.status} 重定向到 {redact_url(probe.redirect_location)}，"
+            "请求被门户 / IdP 接管，根本没到本产品 origin",
+            "放行采集端到 /api/health 与 /ingest 的直连（或给它单独的服务令牌通道）；"
+            "不要轮换 ingest token，探测已阻止把它发给重定向目标。",
+        )
     if _looks_like_entry_guard(probe):
         return _fail(
             "entry_reachability",
@@ -381,14 +487,39 @@ def _check_entry(environment: DoctorEnvironment) -> DoctorCheck:
             f"入口 {target} 返回 {probe.status}，{token_hint}但被拒绝",
             f"检查环境变量 {environment.token_env or '<未配置>'} 里的 ingest token 是否有效。",
         )
-    if probe.status in {200, 204}:
-        return _ok("entry_reachability", f"入口 {target} 可达且认证通过（{probe.status}）")
+    if probe.status == 200 and looks_like_health_payload(probe.body):
+        return _ok("entry_reachability", f"入口 {target} 返回了本产品的 /api/health 响应（200）")
+    if probe.status == 200:
+        return _fail(
+            "entry_reachability",
+            REASON_ENTRY_ROUTE_UNEXPECTED,
+            f"入口 {target} 返回 200，但响应体不是本产品的 /api/health 契约"
+            "（缺 status=ok 或 backend_mode）",
+            "确认域名/路由指向本产品 origin；若被登录门户就地接管，先放行采集端请求身份。",
+        )
     return _fail(
         "entry_reachability",
-        REASON_NETWORK_UNREACHABLE,
-        f"入口 {target} 返回非预期状态 {probe.status}，端到端链路不可用",
-        "先查服务端与入口链路，确认后再重试；这不是 token 问题。",
+        REASON_ENTRY_ROUTE_UNEXPECTED,
+        f"入口 {target} 返回 {probe.status}，网络是通的但这不是本产品的 /api/health 响应",
+        "查域名解析目标、入口路由与 origin 服务状态；这既不是网络不通，也不是 token 问题。",
     )
+
+
+def looks_like_health_payload(body: str) -> bool:
+    """确认这确实是本产品 `/api/health` 的响应，而不是随便一个 200。
+
+    origin (`server_services.build_health_response`) 与 Cloudflare Worker
+    (`buildHealthResponse`) 两侧都返回 `status: "ok"` + `backend_mode`，
+    这是跨实现的共同契约。captive portal / IdP 登录页给不出这个形状。
+    """
+
+    try:
+        data = json.loads(body or "")
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    return str(data.get("status")) == "ok" and bool(data.get("backend_mode"))
 
 
 def _check_device_identity(environment: DoctorEnvironment) -> DoctorCheck:
@@ -512,34 +643,101 @@ def _import_root(imported_from: str) -> Path:
 
 
 def _check_pythonpath(environment: DoctorEnvironment) -> DoctorCheck:
+    """检查 **timer 那个 unit** 里的 PYTHONPATH，而不是操作者 shell 里的。
+
+    Issue #57 的原始事故是 unit 里 `Environment=PYTHONPATH=` 指向了另一棵树；
+    操作者手敲对了环境变量再跑 doctor，恰恰会把这个故障掩盖掉。
+    """
+
+    if environment.timer_unit:
+        if environment.unit_environment is None:
+            return _unknown(
+                "pythonpath_alignment",
+                f"没能读到 {environment.timer_unit} 对应 service 的 Environment，"
+                "无法确认 unit 里的 PYTHONPATH",
+                "确认能执行 systemctl show <service> --property=Environment（注意 --timer-scope）。",
+            )
+        return _check_unit_pythonpath(environment)
+
+    # 没有 timer 单元可查时，退回到「本进程」这一层，并明确标注它只是弱检查。
     entries = [entry for entry in (environment.python_path or []) if entry]
-    if not entries:
-        return _ok("pythonpath_alignment", "未设置 PYTHONPATH，按已安装包导入")
-    if not environment.imported_from:
-        return _ok("pythonpath_alignment", "无法确认实际导入目录，跳过比对")
+    if not entries or not environment.imported_from:
+        return _skipped(
+            "pythonpath_alignment",
+            "未指定 --timer-unit，无法检查 unit 里的 PYTHONPATH（本项未执行）",
+        )
     actual_root = _import_root(str(environment.imported_from))
     declared = {Path(entry).resolve() for entry in entries}
     if actual_root in declared:
-        return _ok("pythonpath_alignment", f"PYTHONPATH 与实际导入目录一致（{actual_root}）")
+        return _ok(
+            "pythonpath_alignment",
+            f"当前进程 PYTHONPATH 与实际导入目录一致（{actual_root}）；"
+            "unit 里的那一份未检查，需要 --timer-unit",
+        )
     return _fail(
         "pythonpath_alignment",
         REASON_PYTHONPATH_IMPORT_MISMATCH,
-        f"PYTHONPATH={os.pathsep.join(entries)} 与实际导入目录 {actual_root} 不一致",
+        f"当前进程 PYTHONPATH={os.pathsep.join(entries)} 与实际导入目录 {actual_root} 不一致",
         "让 PYTHONPATH 指向真正被导入的 release 目录，否则改代码不会生效。",
+    )
+
+
+def _check_unit_pythonpath(environment: DoctorEnvironment) -> DoctorCheck:
+    unit_environment = environment.unit_environment or {}
+    raw = str(unit_environment.get("PYTHONPATH") or "")
+    entries = [entry for entry in raw.split(os.pathsep) if entry]
+    if not entries:
+        return _ok(
+            "pythonpath_alignment",
+            f"{environment.timer_unit} 对应 service 未设置 PYTHONPATH，按已安装包导入",
+        )
+
+    package_roots = {Path(entry).resolve() for entry in environment.unit_pythonpath_package_roots}
+    if not package_roots:
+        return _fail(
+            "pythonpath_alignment",
+            REASON_PYTHONPATH_IMPORT_MISMATCH,
+            f"unit PYTHONPATH={raw} 里没有一个目录含可导入的 ai_usage_widget，"
+            "timer 跑起来会导入到别的副本或直接失败",
+            "把 unit 的 Environment=PYTHONPATH 指向真正部署的 release src 目录。",
+        )
+
+    if environment.release_dir:
+        expected = (Path(environment.release_dir) / "src").resolve()
+        declared = {Path(entry).resolve() for entry in entries}
+        if expected not in declared:
+            return _fail(
+                "pythonpath_alignment",
+                REASON_PYTHONPATH_IMPORT_MISMATCH,
+                f"unit PYTHONPATH={raw} 与部署的 release 目录 {expected} 不一致，"
+                "timer 实际导入的不是本次部署的代码",
+                "把 unit 的 Environment=PYTHONPATH 改成 <release>/src 后 daemon-reload。",
+            )
+
+    return _ok(
+        "pythonpath_alignment",
+        f"{environment.timer_unit} 对应 service 的 PYTHONPATH 指向可导入的部署目录（{raw}）",
     )
 
 
 def _check_timer(environment: DoctorEnvironment) -> DoctorCheck:
     if not environment.timer_unit:
-        return _ok("timer_schedule", "未指定定时任务单元，跳过检查")
+        return _skipped("timer_schedule", "未指定 --timer-unit，本项未执行")
     properties = environment.timer_properties or {}
     unit = environment.timer_unit
     scope = environment.timer_scope or TIMER_SCOPE_USER
-    if not properties:
-        return _fail(
+    if not environment.timer_supported:
+        # 本机是 Linux 开发机，没有 Mac 可验收，所以不假实现 launchd 分支。
+        return _unknown(
             "timer_schedule",
-            REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
-            f"在 {scope} scope 下查询不到 {unit} 的单元状态，无法证明还会再触发",
+            f"本平台的定时任务由 launchd 管理，doctor 尚未实现 launchd 检查，"
+            f"{unit} 的未来触发未经验证",
+            "在 Mac 侧用 launchctl print gui/$(id -u)/<label> 人工确认（需回 Mac 侧执行）。",
+        )
+    if not properties:
+        return _unknown(
+            "timer_schedule",
+            f"在 {scope} scope 下没能读到 {unit} 的单元状态，无法判断它是否还会触发",
             f"确认 systemd {scope} manager 可访问；单元装在另一个 scope 时改用 --timer-scope。",
         )
     load_state = str(properties.get("LoadState", "")).strip().casefold()
@@ -594,10 +792,17 @@ _CHECKS: Tuple[Callable[["DoctorEnvironment"], DoctorCheck], ...] = (
 
 def diagnose(environment: DoctorEnvironment) -> DoctorReport:
     checks = tuple(check(environment) for check in _CHECKS)
-    failed = [check for check in checks if not check.ok]
-    reason_code = failed[0].reason_code if failed else REASON_OK
+    failures = [check for check in checks if check.status == STATUS_FAILED]
+    unknowns = [check for check in checks if check.status == STATUS_UNKNOWN]
+    # 真实故障优先于「没采到」：不能让一个未知项盖住一个已知坏掉的 timer。
+    if failures:
+        reason_code = failures[0].reason_code
+    elif unknowns:
+        reason_code = REASON_PRECHECK_INCOMPLETE
+    else:
+        reason_code = REASON_OK
     return DoctorReport(
-        ok=not failed,
+        ok=not failures and not unknowns,
         reason_code=reason_code,
         exit_code=exit_code_for_reason(reason_code),
         checks=checks,
@@ -623,10 +828,24 @@ def derive_probe_url(server_url: str) -> str:
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "/api/health", "", ""))
 
 
-def default_probe(url: str, headers: Mapping[str, str], timeout: float) -> EntryProbe:  # pragma: no cover - 真实网络路径
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """禁止跟随重定向。
+
+    CPython 的默认 `HTTPRedirectHandler` 跟随 3xx 时只会剥掉 Content-Length /
+    Content-Type，`Authorization` 原样带到新主机。入口前挂了 captive portal 或
+    Cloudflare Access 时，一跳就能把生产 ingest token 交给第三方。
+    doctor 是只读预检，没有任何跟随重定向的理由。
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
+        return None
+
+
+def default_probe(url: str, headers: Mapping[str, str], timeout: float) -> EntryProbe:
     request = urllib.request.Request(url, headers=dict(headers), method="GET")
+    opener = urllib.request.build_opener(_NoRedirectHandler)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with opener.open(request, timeout=timeout) as response:
             body = response.read(4096).decode("utf-8", errors="replace")
             return EntryProbe(
                 url=url,
@@ -639,13 +858,17 @@ def default_probe(url: str, headers: Mapping[str, str], timeout: float) -> Entry
             body = exc.read(4096).decode("utf-8", errors="replace")
         except Exception:
             body = ""
+        response_headers = {key.lower(): value for key, value in (exc.headers or {}).items()}
+        location = response_headers.get("location", "")
         return EntryProbe(
             url=url,
             status=exc.code,
-            headers={key.lower(): value for key, value in (exc.headers or {}).items()},
+            headers=response_headers,
             body=body,
+            redirected=bool(300 <= int(exc.code) < 400 and location),
+            redirect_location=location,
         )
-    except Exception as exc:
+    except Exception as exc:  # pragma: no cover - 真实网络故障路径
         return EntryProbe(url=url, error=exc.__class__.__name__)
 
 
@@ -716,8 +939,12 @@ def collect_environment(
     ]
 
     timer_properties: Dict[str, str] = {}
-    if timer_unit:
-        output = runner(
+    unit_environment: Optional[Dict[str, str]] = None
+    unit_package_roots: List[str] = []
+    timer_supported = sys.platform.startswith("linux")
+    if timer_unit and timer_supported:
+        timer_output = _run_systemctl(
+            runner,
             [
                 "systemctl",
                 f"--{timer_scope}",
@@ -728,9 +955,27 @@ def collect_environment(
                 "--property=ActiveState",
                 "--property=NextElapseUSecRealtime",
                 "--property=NextElapseUSecMonotonic",
-            ]
+            ],
         )
-        timer_properties = parse_systemctl_show(output or "")
+        timer_properties = parse_systemctl_show(timer_output) if timer_output is not None else {}
+
+        service_output = _run_systemctl(
+            runner,
+            [
+                "systemctl",
+                f"--{timer_scope}",
+                "show",
+                _service_unit_name(str(timer_unit)),
+                "--property=Environment",
+            ],
+        )
+        if service_output is not None:
+            properties = parse_systemctl_show(service_output)
+            if "Environment" in properties:
+                unit_environment = parse_unit_environment(properties["Environment"])
+                unit_package_roots = _pythonpath_roots_with_package(
+                    unit_environment.get("PYTHONPATH", "")
+                )
 
     return DoctorEnvironment(
         device_config=device_config,
@@ -743,12 +988,64 @@ def collect_environment(
         release_manifest=release_manifest,
         python_path=python_path,
         imported_from=str(Path(__file__).resolve().parent / "__init__.py"),
+        unit_environment=unit_environment,
+        unit_pythonpath_package_roots=unit_package_roots,
         timer_unit=timer_unit,
         timer_properties=timer_properties,
         timer_scope=timer_scope,
+        timer_supported=timer_supported,
         reference_time=reference_time,
         secret_values=secret_values,
     )
+
+
+def _service_unit_name(timer_unit: str) -> str:
+    """同 basename 的 timer/service 由 systemd 自动配对，PYTHONPATH 写在 service 上。"""
+
+    return timer_unit.removesuffix(".timer") + ".service"
+
+
+def _run_systemctl(runner: CommandRunner, argv: Sequence[str]) -> Optional[str]:
+    """执行 systemctl 并容忍它根本不存在。
+
+    拿不到输出返回 None（未知），不是「timer 坏了」，也不能让整个 doctor 崩掉。
+    """
+
+    try:
+        return runner(list(argv)) or ""
+    except OSError:
+        return None
+
+
+def parse_unit_environment(value: str) -> Dict[str, str]:
+    """解析 `systemctl show --property=Environment` 的 `K=V K=V` 值。"""
+
+    environment: Dict[str, str] = {}
+    try:
+        tokens = shlex.split(value or "")
+    except ValueError:
+        tokens = (value or "").split()
+    for token in tokens:
+        if "=" not in token:
+            continue
+        key, _, item = token.partition("=")
+        environment[key.strip()] = item
+    return environment
+
+
+def _pythonpath_roots_with_package(pythonpath: str) -> List[str]:
+    """PYTHONPATH 里真正含有可导入 ai_usage_widget 的目录（只读探测）。"""
+
+    roots = []
+    for entry in str(pythonpath or "").split(os.pathsep):
+        if not entry:
+            continue
+        try:
+            if (Path(entry) / "ai_usage_widget" / "__init__.py").exists():
+                roots.append(entry)
+        except OSError:
+            continue
+    return roots
 
 
 def _known_secret_values(token_value: str, server_url: str) -> Tuple[str, ...]:
@@ -851,8 +1148,15 @@ __all__ = [
     "EXIT_DOCTOR_ERROR",
     "DoctorPreconditionError",
     "EntryProbe",
+    "ADDITIONAL_REASON_CODES",
+    "ALL_REASON_CODES",
     "REASON_CATEGORIES",
     "REASON_OK",
+    "REASON_PRECHECK_INCOMPLETE",
+    "STATUS_FAILED",
+    "STATUS_OK",
+    "STATUS_SKIPPED",
+    "STATUS_UNKNOWN",
     "SECRET_MASK",
     "TIMER_SCOPES",
     "TIMER_SCOPE_SYSTEM",
@@ -864,8 +1168,10 @@ __all__ = [
     "exit_code_for_reason",
     "has_future_trigger",
     "is_unit_enabled",
+    "looks_like_health_payload",
     "mask_secrets",
     "parse_systemctl_show",
+    "parse_unit_environment",
     "redact_url",
     "run_deploy_doctor",
 ]

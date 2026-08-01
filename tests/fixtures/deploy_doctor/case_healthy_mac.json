@@ -17,8 +17,10 @@
   "entry_probe": {
     "url": "https://aiusage.example.invalid/api/health",
     "status": 200,
-    "headers": {"content-type": "application/json"},
-    "body": "{\"status\":\"ok\"}"
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"status\": \"ok\", \"generated_at\": \"2026-08-01T12:00:00+08:00\", \"backend_mode\": \"origin_direct\", \"canonical_store\": \"origin_sqlite\"}"
   },
   "system_timezone": "Asia/Shanghai",
   "observed_identity": {
@@ -35,13 +37,5 @@
     }
   },
   "python_path": [],
-  "imported_from": null,
-  "timer": {
-    "unit": "com.chunbai.aiusage.pusher.mac-wangzhipeng",
-    "properties": {
-      "LoadState": "loaded",
-      "UnitFileState": "enabled",
-      "NextElapseUSecRealtime": "Sat 2026-08-01 12:30:00 CST"
-    }
-  }
+  "imported_from": null
 }

@@ -36,10 +36,19 @@
       "installed_at": "2026-08-01T00:00:00+00:00"
     }
   },
-  "python_path": ["/opt/ai-usage/current/src"],
+  "python_path": [
+    "/opt/ai-usage/current/src"
+  ],
   "imported_from": "/opt/ai-usage/current/src/ai_usage_widget/__init__.py",
   "timer": {
     "unit": "ai-usage-pusher.timer",
     "show_output": "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\nNextElapseUSecRealtime=Sat 2026-08-01 12:30:00 CST\nNextElapseUSecMonotonic=0\n"
-  }
+  },
+  "unit_environment": {
+    "PYTHONPATH": "/opt/ai-usage/releases/2026-08-01T00-00-00Z/src",
+    "LANG": "C.UTF-8"
+  },
+  "unit_pythonpath_package_roots": [
+    "/opt/ai-usage/releases/2026-08-01T00-00-00Z/src"
+  ]
 }
