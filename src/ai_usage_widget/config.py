@@ -63,6 +63,24 @@ def _validate_source(source: Dict[str, Any]) -> None:
                 raise ConfigError(f"{source['source_id']} {key} is required")
 
 
+SUPPORTED_PLATFORMS = ("darwin", "linux", "windows")
+
+
+def normalize_platform(value: Any) -> str:
+    """设备平台的唯一规范化口径：大小写无关，`mac` 等价于 `darwin`。
+
+    doctor 等下游检查必须复用本函数，不要各自再定义一份，
+    否则一台写 `platform: "mac"` 的合法 Mac 会被判成身份写错。
+    """
+
+    platform = str(value or "").strip().lower()
+    if platform == "mac":
+        platform = "darwin"
+    if platform not in SUPPORTED_PLATFORMS:
+        raise ConfigError(f"Unsupported device platform: {platform}")
+    return platform
+
+
 @dataclass
 class DeviceConfig:
     schema_version: int
@@ -97,11 +115,7 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
             raise ConfigError(f"Missing required device config field: {field}")
 
     # 3. 平台转换与校验
-    platform = str(data["platform"]).lower()
-    if platform == "mac":
-        platform = "darwin"
-    if platform not in {"darwin", "linux", "windows"}:
-        raise ConfigError(f"Unsupported device platform: {platform}")
+    platform = normalize_platform(data["platform"])
 
     return DeviceConfig(
         schema_version=int(data.get("schema_version", 1)),

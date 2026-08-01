@@ -13,7 +13,7 @@ from .backup import backup_sqlite
 from .config import ConfigError, load_config, validate_device_config
 from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider, ClaudeOAuthWithCliFallbackProvider
 from .codex_limits_provider import CodexAppServerRPCProvider, CodexWhamProvider, CodexWhamWithRPCFallbackProvider
-from .deploy_doctor import EXIT_DOCTOR_ERROR, run_deploy_doctor
+from .deploy_doctor import EXIT_DOCTOR_ERROR, TIMER_SCOPES, TIMER_SCOPE_USER, run_deploy_doctor
 from .lock import FileLock, LockAlreadyHeld
 from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
 from .limits_doctor import run_limits_doctor
@@ -61,7 +61,13 @@ def main(argv: list[str] | None = None) -> int:
     doctor_parser.add_argument("--config", default="config/sources.local.json", help="设备推送配置")
     doctor_parser.add_argument("--environment-fixture", default=None, help="离线重放用的环境事实 JSON")
     doctor_parser.add_argument("--release-dir", default=None, help="运行中的 release 目录（含 release.json）")
-    doctor_parser.add_argument("--timer-unit", default=None, help="要检查的 systemd user timer 单元名")
+    doctor_parser.add_argument("--timer-unit", default=None, help="要检查的 systemd timer 单元名")
+    doctor_parser.add_argument(
+        "--timer-scope",
+        choices=list(TIMER_SCOPES),
+        default=TIMER_SCOPE_USER,
+        help="timer 所在的 systemd manager 作用域（BIAI 多用户采集器是 system）",
+    )
     doctor_parser.add_argument("--timeout", type=float, default=10.0)
 
     sync_parser = subparsers.add_parser("sync-widget", help="Copy latest.json into the local Widget container")
@@ -206,6 +212,7 @@ def main(argv: list[str] | None = None) -> int:
                 environment_fixture=args.environment_fixture,
                 release_dir=args.release_dir,
                 timer_unit=args.timer_unit,
+                timer_scope=args.timer_scope,
                 timeout=args.timeout,
             )
         except (OSError, ValueError, json.JSONDecodeError) as exc:

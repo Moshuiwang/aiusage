@@ -28,6 +28,7 @@ from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+from .config import ConfigError, normalize_platform
 from .http_identity import PRODUCT_USER_AGENT
 from .timezones import get_timezone
 
@@ -89,6 +90,10 @@ CATEGORY_EXIT_CODES: Dict[str, int] = {
 
 #: doctor 自身跑不起来（配置读不出来等），既不是体检通过也不属于八类之一。
 EXIT_DOCTOR_ERROR = 1
+
+TIMER_SCOPE_USER = "user"
+TIMER_SCOPE_SYSTEM = "system"
+TIMER_SCOPES = (TIMER_SCOPE_USER, TIMER_SCOPE_SYSTEM)
 
 _NO_TRIGGER_SENTINELS = {"", "n/a", "0", "infinity", "-"}
 _ENABLED_UNIT_STATES = {"enabled", "enabled-runtime", "static", "generated", "linked"}
@@ -159,6 +164,8 @@ class DoctorEnvironment:
     imported_from: Optional[str] = None
     timer_unit: Optional[str] = None
     timer_properties: Mapping[str, str] = field(default_factory=dict)
+    #: systemd manager 作用域：BIAI 现网采集 timer 是 system-level 的。
+    timer_scope: str = TIMER_SCOPE_USER
     reference_time: Optional[str] = None
     #: 本次运行中已知的凭据值，仅用于输出前遮蔽，绝不进入报告。
     secret_values: Tuple[str, ...] = ()
@@ -187,6 +194,7 @@ class DoctorEnvironment:
             imported_from=data.get("imported_from"),
             timer_unit=timer.get("unit"),
             timer_properties=dict(timer_properties or {}),
+            timer_scope=str(timer.get("scope") or TIMER_SCOPE_USER),
             reference_time=data.get("reference_time"),
         )
 
@@ -376,20 +384,40 @@ def _check_entry(environment: DoctorEnvironment) -> DoctorCheck:
 
 def _check_device_identity(environment: DoctorEnvironment) -> DoctorCheck:
     config = environment.device_config
-    missing = [key for key in ("source_id", "machine", "os_user", "platform") if not config.get(key)]
+    observed = environment.observed_identity or {}
+    # machine 可以缺省：config.py 的 owner 口径会兜底成本机主机名。
+    # os_user 则必须显式写对，跨 OS 用户采集会直接污染归属。
+    missing = [
+        key
+        for key in ("source_id", "os_user", "platform")
+        if not config.get(key) or str(config.get(key)).strip().lower() == "unknown"
+    ]
     if missing:
         return _fail(
             "device_identity",
             REASON_DEVICE_IDENTITY_MISMATCH,
             f"设备身份缺失字段: {', '.join(sorted(missing))}",
-            "补齐设备配置里的 source_id / machine / os_user / platform。",
+            "补齐设备配置里的 source_id / os_user / platform。",
         )
-    observed = environment.observed_identity or {}
+    try:
+        configured_platform = normalize_platform(config.get("platform"))
+    except ConfigError as exc:
+        return _fail(
+            "device_identity",
+            REASON_DEVICE_IDENTITY_MISMATCH,
+            f"设备身份 platform 不受支持: {exc}",
+            "platform 只能是 darwin(mac) / linux / windows。",
+        )
+    configured = {
+        "machine": config.get("machine") or observed.get("machine"),
+        "os_user": config.get("os_user"),
+        "platform": configured_platform,
+    }
     differences: List[str] = []
     for key in ("machine", "os_user", "platform"):
         actual = observed.get(key)
-        if actual and str(config.get(key)) != str(actual):
-            differences.append(f"{key}: 配置={config.get(key)} 实际={actual}")
+        if actual and str(configured.get(key)) != str(actual):
+            differences.append(f"{key}: 配置={configured.get(key)} 实际={actual}")
     if differences:
         return _fail(
             "device_identity",
@@ -497,19 +525,29 @@ def _check_timer(environment: DoctorEnvironment) -> DoctorCheck:
         return _ok("timer_schedule", "未指定定时任务单元，跳过检查")
     properties = environment.timer_properties or {}
     unit = environment.timer_unit
+    scope = environment.timer_scope or TIMER_SCOPE_USER
     if not properties:
         return _fail(
             "timer_schedule",
             REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
-            f"查询不到 {unit} 的单元状态，无法证明还会再触发",
-            "确认单元已安装到本用户的 systemd，并重新 enable --now。",
+            f"在 {scope} scope 下查询不到 {unit} 的单元状态，无法证明还会再触发",
+            f"确认 systemd {scope} manager 可访问；单元装在另一个 scope 时改用 --timer-scope。",
         )
     load_state = str(properties.get("LoadState", "")).strip().casefold()
+    if load_state == "not-found":
+        # 单元装在另一个 scope（BIAI 采集器是 system-level）时最常见，
+        # 让用户先换 scope 再说重装，避免把健康 timer 拆掉重来。
+        return _fail(
+            "timer_schedule",
+            REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
+            f"{scope} scope 下不存在单元 {unit}，该 scope 没有未来触发",
+            f"先确认单元装在 user 还是 system scope（改用 --timer-scope），确实缺失再安装单元。",
+        )
     if load_state and load_state != "loaded":
         return _fail(
             "timer_schedule",
             REASON_TIMER_WITHOUT_FUTURE_TRIGGER,
-            f"{unit} LoadState={load_state or 'unknown'}，单元未加载，不会再触发",
+            f"{unit} 在 {scope} scope 下 LoadState={load_state}，单元未加载，不会再触发",
             "重新安装单元文件并 daemon-reload。",
         )
     if not is_unit_enabled(properties):
@@ -620,6 +658,7 @@ def collect_environment(
     config_path: str,
     release_dir: str | None = None,
     timer_unit: str | None = None,
+    timer_scope: str = TIMER_SCOPE_USER,
     env: Mapping[str, str] | None = None,
     probe: ProbeFn | None = None,
     command_runner: CommandRunner | None = None,
@@ -628,6 +667,8 @@ def collect_environment(
 ) -> DoctorEnvironment:
     """只读地采集判定所需的事实。这里不写任何文件。"""
 
+    if timer_scope not in TIMER_SCOPES:
+        raise ValueError(f"timer_scope must be one of {TIMER_SCOPES}")
     resolved_env = dict(env if env is not None else os.environ)
     probe_fn = probe or default_probe
     runner = command_runner or default_command_runner
@@ -643,10 +684,13 @@ def collect_environment(
     secret_values = _known_secret_values(token_value, server_url)
 
     probe_url = derive_probe_url(server_url)
+    if not probe_url:
+        # 没有可用的 server_url 是配置错误，不能报成「网络不可达」去误导用户查网络。
+        raise ValueError(f"device config server_url is missing or not http(s): {config_path}")
     headers = {"User-Agent": PRODUCT_USER_AGENT, "Accept": "application/json"}
     if token_value:
         headers["Authorization"] = f"Bearer {token_value}"
-    entry_probe = probe_fn(probe_url, headers, timeout) if probe_url else EntryProbe(error="no_server_url")
+    entry_probe = probe_fn(probe_url, headers, timeout)
 
     resolved_release_dir = release_dir or resolved_env.get("AI_USAGE_RELEASE_DIR")
     release_manifest = (
@@ -662,7 +706,7 @@ def collect_environment(
         output = runner(
             [
                 "systemctl",
-                "--user",
+                f"--{timer_scope}",
                 "show",
                 str(timer_unit),
                 "--property=LoadState",
@@ -687,6 +731,7 @@ def collect_environment(
         imported_from=str(Path(__file__).resolve().parent / "__init__.py"),
         timer_unit=timer_unit,
         timer_properties=timer_properties,
+        timer_scope=timer_scope,
         reference_time=reference_time,
         secret_values=secret_values,
     )
@@ -709,7 +754,8 @@ def _known_secret_values(token_value: str, server_url: str) -> Tuple[str, ...]:
 
 
 def _system_timezone(env: Mapping[str, str]) -> Optional[str]:
-    configured = env.get("TZ")
+    # POSIX 允许 TZ 带前导冒号（TZ=":Asia/Shanghai"），去掉后才是 IANA 时区名。
+    configured = (env.get("TZ") or "").strip().lstrip(":")
     if configured:
         return configured
     try:
@@ -756,6 +802,7 @@ def run_deploy_doctor(
     environment_fixture: str | None = None,
     release_dir: str | None = None,
     timer_unit: str | None = None,
+    timer_scope: str = TIMER_SCOPE_USER,
     env: Mapping[str, str] | None = None,
     probe: ProbeFn | None = None,
     command_runner: CommandRunner | None = None,
@@ -772,6 +819,7 @@ def run_deploy_doctor(
         config_path=config_path,
         release_dir=release_dir,
         timer_unit=timer_unit,
+        timer_scope=timer_scope,
         env=env,
         probe=probe,
         command_runner=command_runner,
@@ -791,6 +839,9 @@ __all__ = [
     "REASON_CATEGORIES",
     "REASON_OK",
     "SECRET_MASK",
+    "TIMER_SCOPES",
+    "TIMER_SCOPE_SYSTEM",
+    "TIMER_SCOPE_USER",
     "category_for_reason",
     "collect_environment",
     "derive_probe_url",

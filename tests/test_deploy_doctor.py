@@ -138,6 +138,150 @@ class DeployDoctorCliTests(unittest.TestCase):
         self.assertEqual(payload["reason_code"], "ok")
 
 
+class DeviceIdentityNormalizationTests(unittest.TestCase):
+    """身份判定必须沿用 config.py 的规范化口径，不能自己重定义，否则健康设备被误判。"""
+
+    def _environment(self, **overrides) -> "deploy_doctor.DoctorEnvironment":
+        fixture = _load_case("healthy")
+        for key, value in overrides.items():
+            if key == "device_config":
+                fixture["device_config"] = {**fixture["device_config"], **value}
+            else:
+                fixture[key] = value
+        return deploy_doctor.DoctorEnvironment.from_fixture(fixture)
+
+    def test_mac_platform_alias_is_not_reported_as_an_identity_mismatch(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment.from_fixture(_load_case("healthy_mac"))
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertTrue(report.ok, [check.detail for check in report.checks if not check.ok])
+
+    def test_uppercase_platform_is_normalized_before_comparison(self) -> None:
+        environment = self._environment(device_config={"platform": "Linux"})
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertTrue(report.ok, [check.detail for check in report.checks if not check.ok])
+
+    def test_config_without_machine_falls_back_to_the_observed_machine(self) -> None:
+        fixture = _load_case("healthy")
+        fixture["device_config"].pop("machine")
+        environment = deploy_doctor.DoctorEnvironment.from_fixture(fixture)
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertTrue(report.ok, [check.detail for check in report.checks if not check.ok])
+
+    def test_unknown_os_user_is_still_an_identity_problem(self) -> None:
+        environment = self._environment(device_config={"os_user": "unknown"})
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertEqual(report.reason_code, "device_identity_mismatch")
+
+    def test_unsupported_platform_is_still_an_identity_problem(self) -> None:
+        environment = self._environment(device_config={"platform": "android"})
+
+        report = deploy_doctor.diagnose(environment)
+
+        self.assertEqual(report.reason_code, "device_identity_mismatch")
+
+
+class TimerScopeTests(unittest.TestCase):
+    """BIAI 现网采集 timer 是 system-level 的，写死 --user 会把健康 timer 判成坏的。"""
+
+    def _collect(self, scope: str, show_output: str = "") -> tuple[list, "deploy_doctor.DoctorEnvironment"]:
+        recorded: list[list[str]] = []
+
+        def runner(argv):
+            recorded.append(list(argv))
+            return show_output
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "device.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "source_id": "linux-biai-wangzp",
+                        "machine": "biai-collector-01",
+                        "os_user": "wangzp",
+                        "platform": "linux",
+                        "timezone": "Asia/Shanghai",
+                        "server_url": "https://aiusage.example.invalid/ingest",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            environment = deploy_doctor.collect_environment(
+                config_path=str(config_path),
+                timer_unit="ai-usage-pusher-linux-biai-wangzp.timer",
+                timer_scope=scope,
+                env={},
+                probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
+                command_runner=runner,
+            )
+        return recorded, environment
+
+    def test_user_scope_queries_the_user_manager(self) -> None:
+        recorded, _ = self._collect("user")
+
+        self.assertEqual(recorded[0][:3], ["systemctl", "--user", "show"])
+
+    def test_system_scope_queries_the_system_manager(self) -> None:
+        recorded, _ = self._collect("system")
+
+        self.assertEqual(recorded[0][:3], ["systemctl", "--system", "show"])
+
+    def test_unit_missing_in_the_selected_scope_points_at_the_scope(self) -> None:
+        _, environment = self._collect(
+            "user", show_output="LoadState=not-found\nUnitFileState=\nActiveState=inactive\n"
+        )
+
+        report = deploy_doctor.diagnose(environment)
+
+        # 这里跑在真实机器上，身份检查会不会失败取决于本机 hostname，
+        # 所以只断言被测的 timer 检查本身。
+        timer_check = next(check for check in report.checks if check.name == "timer_schedule")
+        self.assertFalse(timer_check.ok)
+        self.assertEqual(timer_check.reason_code, "timer_without_future_trigger")
+        self.assertIn("user", timer_check.detail)
+        self.assertIn("--timer-scope", timer_check.remediation)
+
+
+class DoctorPreconditionTests(unittest.TestCase):
+    def test_doctor_refuses_to_run_without_a_usable_server_url(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "device.json"
+            config_path.write_text(
+                json.dumps({"source_id": "x", "os_user": "wangzp", "platform": "linux"}),
+                encoding="utf-8",
+            )
+
+            with self.assertRaises(ValueError) as context:
+                deploy_doctor.run_deploy_doctor(config_path=str(config_path), env={})
+
+        self.assertIn("server_url", str(context.exception))
+
+    def test_cli_reports_doctor_failed_instead_of_a_misleading_network_verdict(self) -> None:
+        buffer = io.StringIO()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "device.json"
+            config_path.write_text(json.dumps({"source_id": "x"}), encoding="utf-8")
+
+            with redirect_stdout(buffer):
+                code = cli.main(["doctor", "--config", str(config_path)])
+
+        payload = json.loads(buffer.getvalue())
+        self.assertEqual(code, deploy_doctor.EXIT_DOCTOR_ERROR)
+        self.assertEqual(payload["reason_code"], "doctor_failed")
+        self.assertNotEqual(code, EXPECTED_EXIT_CODES["network_unreachable"])
+
+    def test_tz_with_a_leading_colon_is_still_a_valid_timezone_name(self) -> None:
+        self.assertEqual(deploy_doctor._system_timezone({"TZ": ":Asia/Shanghai"}), "Asia/Shanghai")
+
+
 FAKE_TOKEN = "fake-ingest-token-DO-NOT-LEAK-9f3a"
 FAKE_URL_PASSWORD = "sup3r-secret-url-password"
 

@@ -172,7 +172,15 @@ tail -n 50 ~/Library/Logs/ai-usage-widget/limits-push.stderr.log
 Linux 服务器（如 Ubuntu/CentOS）推荐使用 **systemd** 定时器。
 
 ### 3.1 Service 配置文件
-在 `~/.config/systemd/user/ai-usage-pusher.service` 中配置：
+
+> **模板由代码生成，不要手写。** `src/ai_usage_widget/deploy_units.py` 是 timer /
+> service / calendar drop-in / launchd plist 的唯一生成入口，
+> `tests/test_deploy_units.py` 会把仓库里已提交的模板与生成结果逐字节比对。
+> 要改模板就改该模块，然后运行 `python3 -m ai_usage_widget.deploy_units --write`
+> 重新生成（不带 `--write` 即漂移检查，有漂移退出 1）。
+> 生成的 service 用 `EnvironmentFile=` 读取 token，**不再把 token 明文写进 unit**。
+
+下面这份是历史手写示例，只用于理解字段含义；新设备请用生成器输出：
 
 ```ini
 [Unit]
@@ -183,16 +191,16 @@ After=network.target
 Type=oneshot
 WorkingDirectory=%h/ai-usage-widget
 Environment=PYTHONPATH=%h/ai-usage-widget/src
-Environment=AI_USAGE_INGEST_TOKEN="admin-secret-token"
+EnvironmentFile=%h/.config/ai-usage/ingest.env
 ExecStart=/usr/bin/python3 -m ai_usage_widget.cli push --config %h/ai-usage-widget/config/sources.local.json --lock-file %h/.cache/ai_usage_pusher.lock
 StandardOutput=append:%h/.local/state/ai_usage_pusher.log
 StandardError=append:%h/.local/state/ai_usage_pusher.err
 ```
 
 ### 3.2 Timer 配置文件
-仓库中的 `deploy/systemd-user/ai-usage-pusher.timer` 是唯一模板。部署时复制到
-`~/.config/systemd/user/ai-usage-pusher.timer`；不要用现场 drop-in 改成
-`OnUnitActiveSec`，也不要手写另一份定时口径。
+仓库中的 `deploy/systemd-user/ai-usage-pusher.timer` 是唯一模板（由
+`deploy_units.py` 生成）。部署时复制到 `~/.config/systemd/user/ai-usage-pusher.timer`；
+不要用现场 drop-in 改成 `OnUnitActiveSec`，也不要手写另一份定时口径。
 
 BIAI 现有 system-level 多用户 timer 必须保留各自基础 unit 的 `Unit=` 映射，只把
 `deploy/systemd/ai-usage-pusher-calendar.conf` 复制到各 timer 的 drop-in 目录。
@@ -224,6 +232,42 @@ systemctl --user start ai-usage-pusher.service
 验收 timer 时不能把 `active/running` 直接判成失败：`Persistent=true` 可能在重启后立即补跑。
 此时先有界等待对应 service 完成，再要求 timer 为 `active/waiting`、下一次触发时间非空且在未来，
 最后从 D1 做一次 source report 写后读。
+
+### 3.3.1 离线诊断：`doctor`
+
+部署或排障时先跑只读预检，它不写任何文件、不打印 token：
+
+```bash
+PYTHONPATH=%h/ai-usage-widget/src \
+python3 -m ai_usage_widget.cli doctor \
+  --config %h/ai-usage-widget/config/sources.local.json \
+  --release-dir %h/ai-usage-widget \
+  --timer-unit ai-usage-pusher.timer \
+  --timer-scope user
+```
+
+**BIAI 那五个 system-level timer 必须加 `--timer-scope system`**，否则查的是用户级
+manager，会把健康 timer 报成 `timer_without_future_trigger`。
+
+输出是 JSON，`reason_code` 是机器可读结论，退出码按下一步动作分组：
+
+| 退出码 | reason_code | 该做什么 |
+| --- | --- | --- |
+| 0 | `ok` | 预检通过 |
+| 11 | `network_unreachable` | 查出网 / DNS / 代理，**不要轮换 token** |
+| 12 | `entry_blocked_by_waf` | 放行采集端请求身份或来源 IP，**不要轮换 token** |
+| 13 | `auth_token_invalid` | 换 ingest token |
+| 14 | `device_identity_mismatch` / `timezone_mismatch` | 修设备身份或时区 |
+| 15 | `runtime_release_unversioned` / `pythonpath_import_mismatch` | 修运行目录版本与 PYTHONPATH |
+| 16 | `timer_without_future_trigger` | 修定时任务（先确认 scope 对不对） |
+| 1 | `doctor_failed` | 配置读不出来，doctor 自身跑不了 |
+
+离线重放（不访问网络，用于回归和演练）：
+
+```bash
+python3 -m ai_usage_widget.cli doctor \
+  --environment-fixture tests/fixtures/deploy_doctor/case_entry_blocked_by_waf.json
+```
 
 ### 3.4 Official Limits Collector
 
