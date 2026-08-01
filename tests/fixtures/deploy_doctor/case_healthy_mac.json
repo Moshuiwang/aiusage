@@ -1,0 +1,41 @@
+{
+  "case": "healthy_mac",
+  "expected_reason_code": "ok",
+  "reference_time": "2026-08-01T04:00:00+00:00",
+  "device_config": {
+    "schema_version": 1,
+    "source_id": "mac-wangzhipeng",
+    "host": "aiusage.example.invalid",
+    "os_user": "wangzhipeng",
+    "platform": "mac",
+    "timezone": "Asia/Shanghai",
+    "server_url": "https://aiusage.example.invalid/ingest",
+    "timeout_seconds": 30,
+    "token_env": "AI_USAGE_INGEST_TOKEN"
+  },
+  "token_present": true,
+  "entry_probe": {
+    "url": "https://aiusage.example.invalid/api/health",
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": "{\"status\": \"ok\", \"generated_at\": \"2026-08-01T12:00:00+08:00\", \"backend_mode\": \"origin_direct\", \"canonical_store\": \"origin_sqlite\"}"
+  },
+  "system_timezone": "Asia/Shanghai",
+  "observed_identity": {
+    "machine": "macbook-air-m2",
+    "os_user": "wangzhipeng",
+    "platform": "darwin"
+  },
+  "release": {
+    "path": "/Users/shared/ai-usage/releases/2026-08-01T00-00-00Z",
+    "manifest": {
+      "version": "2026.08.01-1",
+      "revision": "06fa591",
+      "installed_at": "2026-08-01T00:00:00+00:00"
+    }
+  },
+  "python_path": [],
+  "imported_from": null
+}

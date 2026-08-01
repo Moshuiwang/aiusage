@@ -13,6 +13,16 @@ from .backup import backup_sqlite
 from .config import ConfigError, load_config, validate_device_config
 from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider, ClaudeOAuthWithCliFallbackProvider
 from .codex_limits_provider import CodexAppServerRPCProvider, CodexWhamProvider, CodexWhamWithRPCFallbackProvider
+from .deploy_doctor import (
+    EXIT_DOCTOR_ERROR,
+    TIMER_SCOPES,
+    TIMER_SCOPE_USER,
+    DoctorPreconditionError,
+    run_deploy_doctor,
+)
+from . import deploy_release as deploy_release_module
+from .deploy_release import ReleaseError, ReleasePlan, install_release, rollback_release
+from .deploy_units import CollectorUnitSpec
 from .lock import FileLock, LockAlreadyHeld
 from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
 from .limits_doctor import run_limits_doctor
@@ -52,6 +62,69 @@ def main(argv: list[str] | None = None) -> int:
         help="Incremental Usage Ledger lookback window",
     )
     push_parser.add_argument("--ledger-coverage-start", default=None, help="Authoritative full-rescan coverage start")
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="采集端部署只读预检：网络入口、入口防护、认证、设备身份、时区、运行目录版本、PYTHONPATH 与定时任务",
+    )
+    doctor_parser.add_argument("--config", default="config/sources.local.json", help="设备推送配置")
+    doctor_parser.add_argument("--environment-fixture", default=None, help="离线重放用的环境事实 JSON")
+    doctor_parser.add_argument("--release-dir", default=None, help="运行中的 release 目录（含 release.json）")
+    doctor_parser.add_argument("--timer-unit", default=None, help="要检查的 systemd timer 单元名")
+    doctor_parser.add_argument(
+        "--timer-scope",
+        choices=list(TIMER_SCOPES),
+        default=TIMER_SCOPE_USER,
+        help="timer 所在的 systemd manager 作用域（BIAI 多用户采集器是 system）",
+    )
+    doctor_parser.add_argument("--timeout", type=float, default=10.0)
+
+    install_collector_parser = subparsers.add_parser(
+        "install-collector",
+        help="幂等安装/升级采集端 release，并生成、启用 timer 与 service（重复执行不产生重复 timer）",
+    )
+    install_collector_parser.add_argument("--root", required=True, help="部署根目录")
+    install_collector_parser.add_argument("--version", required=True, help="release 版本号，发布后不复用")
+    install_collector_parser.add_argument("--revision", required=True, help="对应的代码 revision")
+    install_collector_parser.add_argument("--source-id", required=True, help="来源标识，决定单元名")
+    install_collector_parser.add_argument(
+        "--source-dir",
+        default=str(Path(__file__).resolve().parents[1]),
+        help="要打进 release 的源码目录（默认当前仓库 src）",
+    )
+    install_collector_parser.add_argument(
+        "--unit-dir",
+        default=str(Path.home() / ".config/systemd/user"),
+        help="systemd 单元目录",
+    )
+    install_collector_parser.add_argument(
+        "--device-config",
+        default=None,
+        help="首次安装用来生成设备配置的 JSON；已存在的配置永远不会被覆盖",
+    )
+    install_collector_parser.add_argument(
+        "--timer-scope", choices=list(TIMER_SCOPES), default=TIMER_SCOPE_USER
+    )
+    install_collector_parser.add_argument("--on-calendar", default="*:0/30")
+    install_collector_parser.add_argument("--python", default="/usr/bin/python3")
+    install_collector_parser.add_argument("--dry-run", action="store_true", help="只回报计划，不改任何文件")
+
+    rollback_collector_parser = subparsers.add_parser(
+        "rollback-collector",
+        help="回滚到上一个采集端 release 与 timer（不修改用户配置）",
+    )
+    rollback_collector_parser.add_argument("--root", required=True, help="部署根目录")
+    rollback_collector_parser.add_argument(
+        "--unit-dir",
+        default=str(Path.home() / ".config/systemd/user"),
+        help="systemd 单元目录",
+    )
+    rollback_collector_parser.add_argument(
+        "--timer-scope",
+        choices=list(TIMER_SCOPES),
+        default=None,
+        help="默认沿用上一个 release 记录的 scope",
+    )
 
     sync_parser = subparsers.add_parser("sync-widget", help="Copy latest.json into the local Widget container")
     sync_parser.add_argument("--input", default="data/latest.json")
@@ -187,6 +260,71 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         print(output, file=sys.stderr)
         return 1
+
+    if args.command == "doctor":
+        try:
+            report = run_deploy_doctor(
+                config_path=args.config,
+                environment_fixture=args.environment_fixture,
+                release_dir=args.release_dir,
+                timer_unit=args.timer_unit,
+                timer_scope=args.timer_scope,
+                timeout=args.timeout,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            # DoctorPreconditionError 的消息由代码写死、不含配置内容，可以安全外显；
+            # 其他异常只给类型，避免把配置或凭据回显进日志。
+            detail = (
+                str(exc)
+                if isinstance(exc, DoctorPreconditionError)
+                else "doctor 前置检查失败，未能采集到判定所需事实"
+            )
+            print(json.dumps({
+                "doctor": "deploy",
+                "ok": False,
+                "reason_code": "doctor_failed",
+                "category": "doctor",
+                "exit_code": EXIT_DOCTOR_ERROR,
+                "error_type": exc.__class__.__name__,
+                "detail": detail,
+                "checks": [],
+                "failed_reason_codes": [],
+            }, ensure_ascii=False, sort_keys=True))
+            return EXIT_DOCTOR_ERROR
+        print(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
+        return report.exit_code
+
+    if args.command == "install-collector":
+        try:
+            plan = _collector_release_plan_from_args(args)
+            result = install_release(plan, dry_run=args.dry_run)
+        except (ConfigError, ReleaseError, OSError, ValueError, json.JSONDecodeError) as exc:
+            print(json.dumps({
+                "success": False,
+                "error_type": exc.__class__.__name__,
+                "error_message": str(exc),
+            }, ensure_ascii=False, sort_keys=True))
+            return 1
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("success") else 1
+
+    if args.command == "rollback-collector":
+        try:
+            result = rollback_release(
+                Path(args.root).expanduser(),
+                Path(args.unit_dir).expanduser(),
+                command_runner=deploy_release_module.default_command_runner,
+                timer_scope=args.timer_scope,
+            )
+        except (ReleaseError, OSError, ValueError) as exc:
+            print(json.dumps({
+                "success": False,
+                "error_type": exc.__class__.__name__,
+                "error_message": str(exc),
+            }, ensure_ascii=False, sort_keys=True))
+            return 1
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("success") else 1
 
     if args.command == "sync-widget":
         try:
@@ -448,6 +586,34 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
             elif claude_cli_provider:
                 providers[runtime_key] = _tag_provider(claude_cli_provider, provider_name="claude", source_id=runtime_key)
     return providers
+
+
+def _collector_release_plan_from_args(args) -> ReleasePlan:
+    root = Path(args.root).expanduser()
+    device_config = None
+    if args.device_config:
+        with open(Path(args.device_config).expanduser(), "r", encoding="utf-8") as handle:
+            device_config = json.load(handle)
+        # 种子配置必须先过 owner 模块的校验，别把一份坏配置装到新设备上。
+        validate_device_config(device_config)
+    return ReleasePlan(
+        root=root,
+        unit_dir=Path(args.unit_dir).expanduser(),
+        source_dir=Path(args.source_dir).expanduser(),
+        version=args.version,
+        revision=args.revision,
+        unit_spec=CollectorUnitSpec(
+            source_id=args.source_id,
+            release_dir=str(root / "current"),
+            config_path=str(root / "config" / "device.json"),
+            env_file=str(root / "secrets" / "ingest.env"),
+            lock_file=str(root / "run" / "pusher.lock"),
+            python_executable=args.python,
+            on_calendar=args.on_calendar,
+        ),
+        device_config=device_config,
+        timer_scope=args.timer_scope,
+    )
 
 
 def _usage_ledger_since(mode: str, lookback_hours: float, now: datetime) -> datetime | None:
