@@ -4,7 +4,12 @@ import json
 import os
 import unittest
 
-from ai_usage_widget.config import ConfigError, validate_device_config, DeviceConfig
+from ai_usage_widget.config import (
+    ConfigError,
+    DeviceConfig,
+    normalize_platform,
+    validate_device_config,
+)
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
@@ -56,6 +61,35 @@ class TestDeviceConfig(unittest.TestCase):
         with self.assertRaises(ConfigError) as context:
             validate_device_config(data)
         self.assertIn("platform", str(context.exception).lower())
+
+    def test_platform_alias_and_case_are_normalized(self) -> None:
+        """平台别名的口径只有 normalize_platform 一份，doctor 等下游必须复用它"""
+        for raw, expected in [
+            ("mac", "darwin"),
+            ("Mac", "darwin"),
+            ("MAC", "darwin"),
+            ("Linux", "linux"),
+            ("WINDOWS", "windows"),
+            ("darwin", "darwin"),
+        ]:
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_platform(raw), expected)
+
+    def test_surrounding_whitespace_in_platform_is_accepted_and_trimmed(self) -> None:
+        """明确决定：手写 JSON 里的前后空白属于笔误而不是语义差异，规范化掉而不是报错。
+
+        这是相对最初实现的一次放宽，用例把它钉死，避免以后被无声改回去。
+        """
+        self.assertEqual(normalize_platform("  linux  "), "linux")
+        self.assertEqual(normalize_platform("\tmac\n"), "darwin")
+
+        data = self.fixtures["linux"].copy()
+        data["platform"] = "  linux  "
+        self.assertEqual(validate_device_config(data).platform, "linux")
+
+    def test_platform_that_is_only_whitespace_is_still_rejected(self) -> None:
+        with self.assertRaises(ConfigError):
+            normalize_platform("   ")
 
     def test_reject_ssh_fields(self) -> None:
         """验证配置中包含 SSH 字段时被拒绝"""
