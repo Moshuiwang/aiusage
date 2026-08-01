@@ -2081,3 +2081,259 @@ class TestSnapshotProviderSlots(unittest.TestCase):
         self.assertIsNone(claude["quota"]["last_verified_at"])
         self.assertIsNone(claude["quota"]["source_id"])
         self.assertEqual(claude["quota"]["windows"], [])
+
+    def test_last_verified_at_only_counts_successful_official_observations(self) -> None:
+        """同一来源里 confidence != observed 的行不是一次成功核对，不能推新最近验证时间。"""
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=78.25,
+                    remaining_percent=21.75,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:00:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="5h",
+                    used_percent=44.0,
+                    remaining_percent=56.0,
+                    reset_at="2026-06-01T14:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:54:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="estimated",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:54:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["quota"]["status"], "available")
+        self.assertEqual([row["window"] for row in claude["quota"]["windows"]], ["week"])
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-06-01T10:00:00+08:00")
+
+    def test_last_verified_at_ignores_failed_official_probes(self) -> None:
+        """provider 每轮失败都不算「核对过」，不能把最近验证时间一路往前推。"""
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=78.25,
+                    remaining_percent=21.75,
+                    reset_at="2026-06-09T00:00:00+08:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T08:00:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="5h",
+                    used_percent=0.0,
+                    remaining_percent=0.0,
+                    reset_at="2026-06-01T14:00:00+08:00",
+                    window_duration_minutes=300,
+                    observed_at="2026-06-01T10:54:00+08:00",
+                    source_type="oauth_usage_api",
+                    confidence="missing",
+                    status="provider_failed",
+                ),
+            ],
+            seen_at="2026-06-01T10:54:00+08:00",
+        )
+
+        claude = self._slot(self._build(), "claude")
+
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["reason"], "unavailable")
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-06-01T08:00:00+08:00")
+
+    def _claude_fact(self, agent: str, ai_provider: str = "claude") -> UsageHourlyFact:
+        return UsageHourlyFact(
+            fact_id=f"fact-{ai_provider}-{agent}",
+            source_id="mac-local",
+            machine_id="macbook",
+            machine_name="macbook",
+            host="macbook",
+            os_user="wang",
+            platform="darwin",
+            ai_provider=ai_provider,
+            ai_account_id=f"{ai_provider}-main",
+            ai_account_label=f"{ai_provider}-main",
+            ai_account_display_name=None,
+            ai_account_subscription=None,
+            agent=agent,
+            client="cli",
+            window_start=f"{self.date_str}T09:00:00+08:00",
+            window_end=f"{self.date_str}T10:00:00+08:00",
+            timezone=self.timezone_str,
+            input_tokens=1000,
+            output_tokens=500,
+            cache_creation_tokens=100,
+            cache_read_tokens=200,
+            reasoning_output_tokens=0,
+            total_tokens=1800,
+            event_count=1,
+            session_count=1,
+            attribution_confidence="observed",
+            provenance="test",
+            metadata={"machine": "macbook", "account": "wang"},
+        )
+
+    def _write_facts(self, facts, items=()) -> None:
+        write_sqlite(
+            path=self.db_path,
+            collected_at="2026-06-01T10:50:00+08:00",
+            timezone=self.timezone_str,
+            run_status="success",
+            source_reports=self.source_reports,
+            items=list(items),
+            hourly_facts=facts,
+        )
+
+    def test_usage_slots_attribute_aggregate_agent_by_canonical_ai_provider(self) -> None:
+        """pusher 只有聚合行时会把 agent 写成 'all'，权威归属在 ai_provider 上。"""
+        self._write_facts([self._claude_fact(agent="all")])
+
+        snapshot = self._build()
+        claude = self._slot(snapshot, "claude")
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 1800)
+        self.assertEqual(claude["usage"]["status"], "available")
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+
+    def test_usage_slots_attribute_unknown_agent_by_canonical_ai_provider(self) -> None:
+        """源数据缺 agent 时 pusher 会写 'unknown'，同样不能因此丢掉 Claude 用量。"""
+        self._write_facts([self._claude_fact(agent="unknown")])
+
+        snapshot = self._build()
+        claude = self._slot(snapshot, "claude")
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 1800)
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+
+    def test_usage_slots_attribute_anthropic_provider_to_claude(self) -> None:
+        self._write_facts([self._claude_fact(agent="unknown", ai_provider="anthropic")])
+
+        snapshot = self._build()
+
+        self.assertEqual(self._slot(snapshot, "claude")["usage"]["total_tokens"], 1800)
+
+    def test_unattributable_usage_is_reported_instead_of_silently_missing(self) -> None:
+        """没有 canonical provider、agent 又是聚合名时，不能静默读成「Claude 没有用量」。"""
+        legacy_all = UsageItem(
+            source_id="mac-local",
+            machine="macbook",
+            account="wang",
+            agent="all",
+            date=self.date_str,
+            input_tokens=1000,
+            output_tokens=500,
+            cache_creation_tokens=100,
+            cache_read_tokens=200,
+            total_tokens=1800,
+            total_cost=None,
+            metadata={"machine": "macbook", "account": "wang"},
+            model_breakdowns=[],
+        )
+        self._write_facts([], items=[legacy_all])
+
+        snapshot = self._build()
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 1800)
+        self.assertEqual(self._slot(snapshot, "claude")["usage"]["status"], "missing")
+        self.assertEqual(
+            snapshot["provider_usage_coverage"],
+            {
+                "status": "partial",
+                "total_tokens": 1800,
+                "attributed_tokens": 0,
+                "unattributed_tokens": 1800,
+            },
+        )
+
+    def test_provider_usage_coverage_accounts_for_every_summary_token(self) -> None:
+        legacy_all = UsageItem(
+            source_id="linux-server",
+            machine="ubuntu-node",
+            account="root",
+            agent="all",
+            date=self.date_str,
+            input_tokens=200,
+            output_tokens=100,
+            cache_creation_tokens=0,
+            cache_read_tokens=0,
+            total_tokens=300,
+            total_cost=None,
+            metadata={"machine": "ubuntu-node", "account": "root"},
+            model_breakdowns=[],
+        )
+        self._write_facts(
+            [
+                self._claude_fact(agent="all"),
+                self._claude_fact(agent="antigravity", ai_provider="antigravity"),
+            ],
+            items=[legacy_all],
+        )
+
+        snapshot = self._build()
+        coverage = snapshot["provider_usage_coverage"]
+
+        self.assertEqual(coverage["total_tokens"], snapshot["summary"]["total_tokens"])
+        self.assertEqual(
+            coverage["attributed_tokens"] + coverage["unattributed_tokens"],
+            snapshot["summary"]["total_tokens"],
+        )
+        self.assertEqual(coverage["unattributed_tokens"], 300)
+        self.assertEqual(coverage["status"], "partial")
+        self.assertEqual(self._slot(snapshot, "claude")["usage"]["total_tokens"], 1800)
+
+    def test_naive_limit_timestamps_fail_closed_instead_of_crashing(self) -> None:
+        """缺时区的 reset_at / observed_at 无法判断新鲜度，必须 fail closed 而不是让 /api/summary 500。"""
+        self._write_usage([self._claude_item()])
+        write_limit_windows(
+            self.db_path,
+            [
+                LimitWindow(
+                    provider="claude",
+                    source_id="claude-main",
+                    window="week",
+                    used_percent=78.25,
+                    remaining_percent=21.75,
+                    reset_at="2026-06-09T00:00:00",
+                    window_duration_minutes=10080,
+                    observed_at="2026-06-01T10:46:00",
+                    source_type="oauth_usage_api",
+                    confidence="observed",
+                    status="ok",
+                ),
+            ],
+            seen_at="2026-06-01T10:46:00",
+        )
+
+        snapshot = self._build()
+        claude = self._slot(snapshot, "claude")
+
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+        self.assertEqual(claude["quota"]["status"], "missing")
+        serialized = json.dumps(claude["quota"], sort_keys=True)
+        for leaked in ("used_percent", "remaining_percent", "reset_at", "78.25"):
+            self.assertNotIn(leaked, serialized)

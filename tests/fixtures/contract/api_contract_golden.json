@@ -1001,6 +1001,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -1243,6 +1267,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -1843,6 +1868,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -2007,6 +2056,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -2518,6 +2568,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -2782,6 +2856,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -3694,6 +3769,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -3858,6 +3957,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -4369,6 +4469,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -4633,6 +4757,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -5545,6 +5670,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -5709,6 +5858,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -6220,6 +6370,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -6484,6 +6658,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -7396,6 +7571,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -7560,6 +7759,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -8071,6 +8271,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -8339,6 +8563,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -8851,6 +9076,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -9119,6 +9368,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -9719,6 +9969,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -9883,6 +10157,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -10482,6 +10757,30 @@
               "length": 2,
               "type": "array"
             },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -10646,6 +10945,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -11447,7 +11747,7 @@
                     "quota": {
                       "fields": {
                         "last_verified_at": {
-                          "type": "str"
+                          "type": "null"
                         },
                         "reason": {
                           "type": "str"
@@ -11593,6 +11893,30 @@
               ],
               "length": 2,
               "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
             },
             "schema_version": {
               "type": "int",
@@ -11858,6 +12182,7 @@
             "limits",
             "metadata",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
@@ -12682,7 +13007,7 @@
                     "quota": {
                       "fields": {
                         "last_verified_at": {
-                          "type": "str"
+                          "type": "null"
                         },
                         "reason": {
                           "type": "str"
@@ -12828,6 +13153,30 @@
               ],
               "length": 2,
               "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
             },
             "schema_version": {
               "type": "int",
@@ -12993,6 +13342,7 @@
             "metadata",
             "period",
             "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",

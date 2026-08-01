@@ -102,7 +102,20 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
             "providers": limit_providers,
         },
         "provider_slots": _provider_slots(snapshot.get("provider_slots")),
+        "provider_usage_coverage": _provider_usage_coverage(snapshot.get("provider_usage_coverage")),
         "metadata": _mobile_metadata(snapshot, windows, candidate_windows, generated_at),
+    }
+
+
+def _provider_usage_coverage(value: Any) -> Dict[str, Any]:
+    coverage = _dict(value)
+    unattributed = _int(coverage.get("unattributed_tokens"))
+    raw_status = coverage.get("status")
+    return {
+        "status": raw_status if isinstance(raw_status, str) and raw_status else ("complete" if unattributed == 0 else "partial"),
+        "total_tokens": _int(coverage.get("total_tokens")),
+        "attributed_tokens": _int(coverage.get("attributed_tokens")),
+        "unattributed_tokens": unattributed,
     }
 
 
@@ -120,12 +133,9 @@ def _provider_slot(provider: str, row: Any) -> Dict[str, Any]:
     usage = _dict(row.get("usage"))
     quota = _dict(row.get("quota"))
     total_tokens = _int(usage.get("total_tokens"))
+    # 口径由 snapshot_builder 定义，这里不重算：snapshot 没给 status 就是 missing。
     raw_usage_status = usage.get("status")
-    usage_status = (
-        raw_usage_status
-        if isinstance(raw_usage_status, str) and raw_usage_status
-        else ("available" if total_tokens > 0 else "missing")
-    )
+    usage_status = raw_usage_status if isinstance(raw_usage_status, str) and raw_usage_status else "missing"
     quota_status = "available" if quota.get("status") == "available" else "missing"
     if quota_status == "available":
         reason = None

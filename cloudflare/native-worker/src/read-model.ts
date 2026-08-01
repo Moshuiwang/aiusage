@@ -87,6 +87,8 @@ const localEstimateSourceTypes = new Set([
 // 任一缺失都不影响另一个；缺失的额度只暴露「最近一次验证时间」，绝不暴露历史百分比或过期 reset。
 // 与 src/ai_usage_widget/snapshot_builder.py 的 SLOT_PROVIDERS 保持逐字一致。
 const slotProviders = ["claude", "codex"] as const;
+// pusher 真实会写出来的「跨 agent 聚合」与「来源不明」两个 agent 名，不代表任何 provider。
+const aggregateAgentNames = new Set(["", "all", "unknown"]);
 const limitStaleAfterMs = 120 * 60 * 1000;
 
 type ProviderUsageTotals = {
@@ -141,6 +143,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   );
   const factRows = (await fetchFactRows(db, startDate, endDate, request.timezone))
     .filter((row) => accountHourlyRowMatchesFilter(row, request.machine, request.account));
+  const canonicalProviderTokens = providerTokensByItem(filteredAccountHourlyRows);
   const costsByItem = factCostsByItem(factRows);
   const rows = accountHourlyRowsToDailyRows(filteredAccountHourlyRows).map((row) => ({
     ...row,
@@ -238,7 +241,11 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     userEntry.source_ids.add(row.source_id);
     accountTotals.set(account, (accountTotals.get(account) ?? 0) + total);
     agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
-    accumulateProviderUsage(providerUsage, row.agent, input, output, cacheCreation, cacheRead, total);
+    accumulateProviderUsage(
+      providerUsage,
+      canonicalProviderTokens.get(itemKey(row.source_id, row.date, row.agent)),
+      row.agent, input, output, cacheCreation, cacheRead, total,
+    );
 
     if (!trendByAgent.has(row.agent)) {
       trendByAgent.set(row.agent, new Map(trendDates.map((day) => [day, 0])));
@@ -386,6 +393,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     limits,
     limit_status: limitStatus,
     provider_slots: buildProviderSlots(providerUsage, allLimits, limitStatus, refTime),
+    provider_usage_coverage: buildProviderUsageCoverage(providerUsage, totalTokens),
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
@@ -1361,7 +1369,11 @@ function limitSourceQuality(sourceType: string): number {
 
 function limitWindowExpired(limit: LimitRow, refTime: Date): boolean {
   const reset = parseDate(limit.reset_at);
-  return !!reset && reset.getTime() <= refTime.getTime();
+  if (!reset) return false;
+  // 没有时区标记就判断不了是否已 reset，按已过期处理（fail closed）。
+  // 与 observedStale 同一套策略，也与 Python 侧一致。
+  if (!hasTimezoneDesignator(limit.reset_at)) return true;
+  return reset.getTime() <= refTime.getTime();
 }
 
 function slotProviderKey(value: unknown): string {
@@ -1371,15 +1383,44 @@ function slotProviderKey(value: unknown): string {
   return provider;
 }
 
+// agent 名字只是**兜底**归属，权威字段是 usage_hourly_facts.ai_provider。
+// `all` / `unknown` 表示「跨 agent / 来源不明」，不能被硬塞进任何一个 provider 槽位。
+// 与 src/ai_usage_widget/snapshot_builder.py 的 _usage_provider_key 保持一致。
 function usageProviderKey(agent: unknown): string {
   const name = str(agent).trim().toLowerCase();
+  if (aggregateAgentNames.has(name)) return "";
+  const key = slotProviderKey(name);
+  if ((slotProviders as readonly string[]).includes(key)) return key;
   if (name.includes("claude")) return "claude";
   if (name.includes("codex") || name.includes("openai") || name.includes("gpt")) return "codex";
-  return "";
+  return name;
+}
+
+// 按 canonical ai_provider 把每个 (source_id, date, agent) 的用量拆开。ledger 行整条替换
+// 同 key 的行，所以分项之和恒等于该 item 的总量，归属是精确切分而不是估算。
+function providerTokensByItem(rows: Record<string, unknown>[]): Map<string, Map<string, ProviderUsageTotals>> {
+  const result = new Map<string, Map<string, ProviderUsageTotals>>();
+  for (const row of rows) {
+    const date = localDateFromWindowStart(row.window_start);
+    if (!date) continue;
+    const key = itemKey(str(row.source_id), date, str(row.agent));
+    const provider = slotProviderKey(row.ai_provider);
+    const byProvider = result.get(key) ?? new Map<string, ProviderUsageTotals>();
+    const entry = byProvider.get(provider)
+      ?? { total_tokens: 0, input_tokens: 0, output_tokens: 0, cache_tokens: 0 };
+    entry.total_tokens += int(row.total_tokens);
+    entry.input_tokens += int(row.input_tokens);
+    entry.output_tokens += int(row.output_tokens);
+    entry.cache_tokens += int(row.cache_creation_tokens) + int(row.cache_read_tokens);
+    byProvider.set(provider, entry);
+    result.set(key, byProvider);
+  }
+  return result;
 }
 
 function accumulateProviderUsage(
   providerUsage: Map<string, ProviderUsageTotals>,
+  canonicalBreakdown: Map<string, ProviderUsageTotals> | undefined,
   agent: unknown,
   inputTokens: number,
   outputTokens: number,
@@ -1387,15 +1428,56 @@ function accumulateProviderUsage(
   cacheReadTokens: number,
   totalTokens: number,
 ): void {
-  const provider = usageProviderKey(agent);
-  if (!provider) return;
+  if (canonicalBreakdown && canonicalBreakdown.size) {
+    for (const [provider, totals] of canonicalBreakdown) {
+      addProviderUsage(
+        providerUsage, provider,
+        totals.input_tokens, totals.output_tokens, totals.cache_tokens, totals.total_tokens,
+      );
+    }
+    return;
+  }
+  addProviderUsage(
+    providerUsage, usageProviderKey(agent),
+    inputTokens, outputTokens, cacheCreationTokens + cacheReadTokens, totalTokens,
+  );
+}
+
+function addProviderUsage(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  provider: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheTokens: number,
+  totalTokens: number,
+): void {
+  // provider === "" 表示无法归属，同样要入账，否则用量会静默消失。
   const entry = providerUsage.get(provider)
     ?? { total_tokens: 0, input_tokens: 0, output_tokens: 0, cache_tokens: 0 };
   entry.total_tokens += totalTokens;
   entry.input_tokens += inputTokens;
   entry.output_tokens += outputTokens;
-  entry.cache_tokens += cacheCreationTokens + cacheReadTokens;
+  entry.cache_tokens += cacheTokens;
   providerUsage.set(provider, entry);
+}
+
+// provider_slots 只有固定两个槽位，这里说明还有多少用量没能归属到任何 provider。
+// 没有它，「所有槽位都是 missing」就分不清「确实没有用量」和「有用量但归不了属」。
+function buildProviderUsageCoverage(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  totalTokens: number,
+): Record<string, unknown> {
+  const unattributed = providerUsage.get("")?.total_tokens ?? 0;
+  let attributed = 0;
+  for (const [provider, totals] of providerUsage) {
+    if (provider) attributed += totals.total_tokens;
+  }
+  return {
+    status: unattributed === 0 ? "complete" : "partial",
+    total_tokens: totalTokens,
+    attributed_tokens: attributed,
+    unattributed_tokens: unattributed,
+  };
 }
 
 function buildProviderSlots(
@@ -1469,15 +1551,16 @@ function providerQuotaSlot(
   };
 }
 
-// 最近一次**官方**验证时间。本地估算（ccusage daily/blocks、active cache 等）不是官方验证，
-// 不能借这个字段把「刚刚算过」伪装成「官方额度刚刚核对过」；已选定来源时只看该来源，
-// 保证 (source_id, source_type, last_verified_at) 指向同一条记录。与 Python 侧一致。
+// 最近一次**成功的官方核对**时间。本地估算、失败的探测（provider_failed）、
+// confidence != observed 的观测都不算核对，否则展示层会把「刚刚算过 / 刚刚失败过」
+// 读成「官方额度刚刚核对过」。已选定来源时只看该来源，保证
+// (source_id, source_type, last_verified_at) 指向同一条记录。与 Python 侧一致。
 function lastVerifiedAtOf(rows: LimitRow[], sourceId?: unknown): string | null {
   let best: string | null = null;
   let bestTime = Number.NEGATIVE_INFINITY;
   for (const row of rows) {
     if (!row.observed_at) continue;
-    if (localEstimateSourceTypes.has(row.source_type)) continue;
+    if (!effectiveLimitWindow(row)) continue;
     if (sourceId !== undefined && str(row.source_id) !== str(sourceId)) continue;
     const time = parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY;
     if (time > bestTime) {
@@ -1489,10 +1572,14 @@ function lastVerifiedAtOf(rows: LimitRow[], sourceId?: unknown): string | null {
 }
 
 function limitWindowStale(limit: LimitRow, refTime: Date): boolean {
-  // 没有时区标记的观测时间无法判断新鲜度，按不可信处理（fail closed），
-  // 不让年龄不明的记录冒充当前官方额度。Python 侧同样处理。
-  if (!hasTimezoneDesignator(limit.observed_at)) return true;
-  const observed = parseDate(limit.observed_at);
+  return observedStale(limit.observed_at, refTime);
+}
+
+// 观测时间超过阈值就是陈旧。没有时区标记时无法判断年龄，按陈旧处理（fail closed），
+// 不让年龄不明的记录冒充当前官方额度。Python 侧 _observed_stale 同一套策略。
+function observedStale(observedAt: unknown, refTime: Date): boolean {
+  if (!hasTimezoneDesignator(observedAt)) return true;
+  const observed = parseDate(str(observedAt));
   if (!observed) return true;
   return refTime.getTime() - observed.getTime() > limitStaleAfterMs;
 }
@@ -1528,8 +1615,7 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
     })[0];
     const latestSuccess = Math.max(...successful.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
     const latestFailure = Math.max(...failures.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
-    const observed = parseDate(freshest.observed_at);
-    const stale = !observed || refTime.getTime() - observed.getTime() > 120 * 60 * 1000;
+    const stale = observedStale(freshest.observed_at, refTime);
     const unexpired = successful.some((row) => !limitWindowExpired(row, refTime));
     return {
       provider,

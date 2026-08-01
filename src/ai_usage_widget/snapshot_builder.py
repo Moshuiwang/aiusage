@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .limits import LOCAL_ESTIMATE_SOURCE_TYPES, LimitWindow
+from .limits import LimitWindow
 from .snapshot_filters import (
     daily_row_matches_filter,
     identity_matches_filter,
@@ -23,6 +23,8 @@ from .snapshot_trends import cap_today_hourly_to_period_totals, codex_hourly_con
 # Issue #61：Popover / 客户端固定展示的 provider 槽位。用量与额度分别是两个独立字段，
 # 任一缺失都不影响另一个，缺失的额度只暴露「最近一次验证时间」，绝不暴露历史百分比或过期 reset。
 SLOT_PROVIDERS = ("claude", "codex")
+# pusher 真实会写出来的「跨 agent 聚合」与「来源不明」两个 agent 名，不代表任何 provider。
+AGGREGATE_AGENT_NAMES = frozenset({"", "all", "unknown"})
 LIMIT_STALE_AFTER_MINUTES = 120
 
 
@@ -133,6 +135,7 @@ def build_snapshot(
         row for row in account_hourly_rows
         if _account_hourly_row_matches_filter(row, machine_filter, account_filter)
     ]
+    provider_tokens_by_item = _provider_tokens_by_item(account_hourly_rows, timezone_str)
     ledger_daily_rows = _account_hourly_rows_to_daily_rows(account_hourly_rows, timezone_str)
     rows = _apply_ledger_daily_rows(rows, ledger_daily_rows)
     ledger_hourly_rows = _account_hourly_rows_to_hourly_rows(account_hourly_rows, timezone_str) if period_id == "today" else []
@@ -229,7 +232,11 @@ def build_snapshot(
         user_entry["source_ids"].add(source_id)
         account_totals[account] = account_totals.get(account, 0) + tot
         agent_totals[agent] = agent_totals.get(agent, 0) + tot
-        _accumulate_provider_usage(provider_usage, agent, inp, out, cc, cr, tot)
+        _accumulate_provider_usage(
+            provider_usage,
+            provider_tokens_by_item.get((source_id, date, agent)),
+            agent, inp, out, cc, cr, tot,
+        )
         trend_by_agent.setdefault(agent, {day: 0 for day in trend_dates})
         trend_by_agent[agent][date] = trend_by_agent[agent].get(date, 0) + tot
         cache_tokens = cc + cr
@@ -412,6 +419,7 @@ def build_snapshot(
         "limits": limits,
         "limit_status": limit_status,
         "provider_slots": _build_provider_slots(provider_usage, all_limits, limit_status, ref_time),
+        "provider_usage_coverage": _build_provider_usage_coverage(provider_usage, total_tokens),
         "account_hourly": account_hourly,
         "ai_accounts": ai_accounts,
         "metadata": metadata,
@@ -656,8 +664,7 @@ def _build_limit_status(limits: list[dict[str, Any]], ref_time: datetime) -> lis
         freshest = max(trusted_rows, key=lambda row: (_limit_timestamp(row.get("observed_at")), str(row.get("source_type") or "")))
         latest_success = max((_limit_timestamp(row.get("observed_at")) for row in successful), default=float("-inf"))
         latest_failure = max((_limit_timestamp(row.get("observed_at")) for row in failures), default=float("-inf"))
-        observed = parse_datetime(str(freshest.get("observed_at") or ""))
-        stale = observed is None or (ref_time - observed.astimezone(ref_time.tzinfo)).total_seconds() > 120 * 60
+        stale = _observed_stale(freshest.get("observed_at"), ref_time)
         unexpired = any(not _limit_window_expired(row, ref_time) for row in successful)
         status = "unavailable" if latest_failure > latest_success else ("stale" if stale else ("ok" if unexpired else "expired"))
         result.append({
@@ -680,16 +687,57 @@ def _slot_provider_key(value: Any) -> str:
 
 
 def _usage_provider_key(agent: Any) -> str:
+    """agent 名字只是**兜底**归属，权威字段是 usage_hourly_facts.ai_provider。
+
+    `all`（只有聚合行）和 `unknown`（源数据缺 agent）都是 pusher 会真实写出来的名字，
+    它们表示「跨 agent / 来源不明」，不能被硬塞进任何一个 provider 槽位。
+    """
     name = str(agent or "").strip().lower()
+    if name in AGGREGATE_AGENT_NAMES:
+        return ""
+    key = _slot_provider_key(name)
+    if key in SLOT_PROVIDERS:
+        return key
     if "claude" in name:
         return "claude"
     if "codex" in name or "openai" in name or "gpt" in name:
         return "codex"
-    return ""
+    return name
+
+
+def _provider_tokens_by_item(rows: list[Any], timezone_str: str) -> dict[tuple[str, str, str], dict[str, dict[str, int]]]:
+    """按 canonical `ai_provider` 把每个 (source_id, date, agent) 的用量拆开。
+
+    ledger 行会整条替换同 key 的 legacy usage_daily 行，所以这里的分项之和恒等于
+    该 item 的总量，归属是精确切分而不是估算。
+    """
+    result: dict[tuple[str, str, str], dict[str, dict[str, int]]] = {}
+    for row in rows:
+        (
+            _fact_id, source_id, _machine_id, _machine_name, _os_user, ai_provider,
+            _ai_account_id, _account_label, _display_name, _subscription, agent, _client,
+            window_start, _window_end, inp, out, cc, cr, _reasoning, tot,
+            _event_count, _session_count, _confidence, _provenance,
+        ) = row
+        local_date = _local_date(str(window_start or ""), timezone_str)
+        if local_date is None:
+            continue
+        key = (str(source_id), local_date, str(agent))
+        provider = _slot_provider_key(ai_provider)
+        entry = result.setdefault(key, {}).setdefault(
+            provider,
+            {"total_tokens": 0, "input_tokens": 0, "output_tokens": 0, "cache_tokens": 0},
+        )
+        entry["total_tokens"] += int(tot or 0)
+        entry["input_tokens"] += int(inp or 0)
+        entry["output_tokens"] += int(out or 0)
+        entry["cache_tokens"] += int(cc or 0) + int(cr or 0)
+    return result
 
 
 def _accumulate_provider_usage(
     provider_usage: Dict[str, Dict[str, int]],
+    canonical_breakdown: Optional[Dict[str, Dict[str, int]]],
     agent: Any,
     input_tokens: int,
     output_tokens: int,
@@ -697,9 +745,36 @@ def _accumulate_provider_usage(
     cache_read_tokens: int,
     total_tokens: int,
 ) -> None:
-    provider = _usage_provider_key(agent)
-    if not provider:
+    if canonical_breakdown:
+        for provider, totals in canonical_breakdown.items():
+            _add_provider_usage(
+                provider_usage,
+                provider,
+                totals["input_tokens"],
+                totals["output_tokens"],
+                totals["cache_tokens"],
+                totals["total_tokens"],
+            )
         return
+    _add_provider_usage(
+        provider_usage,
+        _usage_provider_key(agent),
+        input_tokens,
+        output_tokens,
+        int(cache_creation_tokens or 0) + int(cache_read_tokens or 0),
+        total_tokens,
+    )
+
+
+def _add_provider_usage(
+    provider_usage: Dict[str, Dict[str, int]],
+    provider: str,
+    input_tokens: int,
+    output_tokens: int,
+    cache_tokens: int,
+    total_tokens: int,
+) -> None:
+    # provider == "" 表示无法归属，同样要入账，否则用量会静默消失。
     entry = provider_usage.setdefault(
         provider,
         {"total_tokens": 0, "input_tokens": 0, "output_tokens": 0, "cache_tokens": 0},
@@ -707,7 +782,29 @@ def _accumulate_provider_usage(
     entry["total_tokens"] += int(total_tokens or 0)
     entry["input_tokens"] += int(input_tokens or 0)
     entry["output_tokens"] += int(output_tokens or 0)
-    entry["cache_tokens"] += int(cache_creation_tokens or 0) + int(cache_read_tokens or 0)
+    entry["cache_tokens"] += int(cache_tokens or 0)
+
+
+def _build_provider_usage_coverage(
+    provider_usage: Dict[str, Dict[str, int]],
+    total_tokens: int,
+) -> dict[str, Any]:
+    """provider_slots 只有固定两个槽位，这里说明还有多少用量没能归属到任何 provider。
+
+    没有它，`所有槽位都是 missing` 就分不清「确实没有用量」和「有用量但归不了属」。
+    """
+    unattributed = int(provider_usage.get("", {}).get("total_tokens", 0))
+    attributed = sum(
+        int(totals.get("total_tokens", 0))
+        for provider, totals in provider_usage.items()
+        if provider
+    )
+    return {
+        "status": "complete" if unattributed == 0 else "partial",
+        "total_tokens": int(total_tokens or 0),
+        "attributed_tokens": attributed,
+        "unattributed_tokens": unattributed,
+    }
 
 
 def _build_provider_slots(
@@ -798,11 +895,13 @@ def _provider_quota_slot(
 
 
 def _last_verified_at(rows: list[dict[str, Any]], source_id: Any = None) -> Optional[str]:
-    """最近一次**官方**验证时间。
+    """最近一次**成功的官方核对**时间。
 
-    本地估算（ccusage daily/blocks、active cache 等）不是官方验证，不能借这个字段
-    把「刚刚算过」伪装成「官方额度刚刚核对过」。已经选定来源时只看该来源，
-    保证 (source_id, source_type, last_verified_at) 指向同一条记录。
+    三条路径都不算核对：本地估算（ccusage daily/blocks、active cache）、失败的探测
+    （status=provider_failed）、以及 confidence != observed 的观测。任何一条漏过去，
+    展示层都会把「刚刚算过 / 刚刚失败过」读成「官方额度刚刚核对过」。
+    已经选定来源时只看该来源，保证 (source_id, source_type, last_verified_at)
+    指向同一条记录。
     """
     best: Optional[str] = None
     best_timestamp = float("-inf")
@@ -810,7 +909,9 @@ def _last_verified_at(rows: list[dict[str, Any]], source_id: Any = None) -> Opti
         observed_at = row.get("observed_at")
         if not observed_at:
             continue
-        if str(row.get("source_type") or "") in LOCAL_ESTIMATE_SOURCE_TYPES:
+        # 只有「成功读到官方额度」才算一次核对：失败的探测（provider_failed）和
+        # confidence != observed 的观测都不能把最近验证时间往前推。
+        if not _effective_limit_window(row):
             continue
         if source_id is not None and str(row.get("source_id") or "") != str(source_id or ""):
             continue
@@ -822,11 +923,18 @@ def _last_verified_at(rows: list[dict[str, Any]], source_id: Any = None) -> Opti
 
 
 def _limit_window_stale(limit: dict[str, Any], ref_time: datetime) -> bool:
-    observed = parse_datetime(str(limit.get("observed_at") or ""))
+    return _observed_stale(limit.get("observed_at"), ref_time)
+
+
+def _observed_stale(observed_at: Any, ref_time: datetime) -> bool:
+    """观测时间超过阈值就是陈旧。时区形式对不上时无法判断年龄，按陈旧处理（fail closed）。
+
+    这里和 `_limit_window_expired` 用同一套时区策略：额度相关的时间判定只要判不了，
+    一律往「不可信」倒，绝不让年龄不明的记录冒充当前官方额度。Worker 侧同样处理。
+    """
+    observed = parse_datetime(str(observed_at or ""))
     if observed is None:
         return True
-    # 观测时间和参考时间的时区形式不一致时无法判断新鲜度，按不可信处理（fail closed），
-    # 不让年龄不明的记录冒充当前官方额度。Worker 侧同样处理。
     if (observed.tzinfo is None) != (ref_time.tzinfo is None):
         return True
     if observed.tzinfo is not None:
@@ -888,7 +996,11 @@ def _limit_window_expired(limit: dict[str, Any], ref_time: datetime) -> bool:
     reset_at = parse_datetime(str(limit.get("reset_at") or ""))
     if reset_at is None:
         return False
-    if reset_at.tzinfo is not None and ref_time.tzinfo is not None:
+    # 时区形式对不上就判断不了是否已 reset，按已过期处理（fail closed）。
+    # 此前这里直接比较会抛 TypeError，让 /api/summary 整个 500。
+    if (reset_at.tzinfo is None) != (ref_time.tzinfo is None):
+        return True
+    if reset_at.tzinfo is not None:
         reset_at = reset_at.astimezone(ref_time.tzinfo)
     return reset_at <= ref_time
 
@@ -1403,6 +1515,7 @@ def _empty_snapshot(
         "limits": [],
         "limit_status": [],
         "provider_slots": _build_provider_slots({}, [], [], ref_time),
+        "provider_usage_coverage": _build_provider_usage_coverage({}, 0),
         "account_hourly": _empty_account_hourly_summary(),
         "ai_accounts": [],
         "metadata": {

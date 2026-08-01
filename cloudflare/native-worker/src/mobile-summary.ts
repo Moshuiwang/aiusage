@@ -73,7 +73,22 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
       providers: limitProviders,
     },
     provider_slots: providerSlots(snapshot.provider_slots),
+    provider_usage_coverage: providerUsageCoverage(snapshot.provider_usage_coverage),
     metadata: mobileMetadata(snapshot, windows, candidateWindows, generatedAt),
+  };
+}
+
+function providerUsageCoverage(value: unknown): AnyRecord {
+  const coverage = dict(value);
+  const unattributed = int(coverage.unattributed_tokens);
+  const rawStatus = coverage.status;
+  return {
+    status: typeof rawStatus === "string" && rawStatus
+      ? rawStatus
+      : (unattributed === 0 ? "complete" : "partial"),
+    total_tokens: int(coverage.total_tokens),
+    attributed_tokens: int(coverage.attributed_tokens),
+    unattributed_tokens: unattributed,
   };
 }
 
@@ -91,9 +106,8 @@ function providerSlot(provider: string, row: AnyRecord | undefined): AnyRecord {
   const usage = dict(source.usage);
   const quota = dict(source.quota);
   const totalTokens = int(usage.total_tokens);
-  const usageStatus = typeof usage.status === "string" && usage.status
-    ? usage.status
-    : (totalTokens > 0 ? "available" : "missing");
+  // 口径由 read-model 定义，这里不重算：snapshot 没给 status 就是 missing。
+  const usageStatus = typeof usage.status === "string" && usage.status ? usage.status : "missing";
   const quotaStatus = quota.status === "available" ? "available" : "missing";
   const rawReason = quota.reason;
   const reason = quotaStatus === "available"

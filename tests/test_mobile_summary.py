@@ -864,5 +864,34 @@ class TestMobileSummaryProviderSlots(unittest.TestCase):
             self.assertNotIn(leaked, serialized)
 
 
+
+class TestMobileSummaryProviderSlotsDoNotRedefineUsage(unittest.TestCase):
+    """mobile DTO 只裁剪不重算口径：snapshot 没给 usage.status 就是 missing，不自己判定。"""
+
+    def test_missing_usage_status_is_not_recomputed_from_token_count(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-06-01T10:55:00+08:00",
+            "summary": {"period": "today", "total_tokens": 1800},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [],
+            "limit_status": [],
+            "provider_slots": [
+                {
+                    "provider": "claude",
+                    "usage": {"total_tokens": 1800, "input_tokens": 1000, "output_tokens": 500, "cache_tokens": 300},
+                    "quota": {"status": "missing", "reason": "no_data", "last_verified_at": None,
+                              "source_id": None, "source_type": None, "windows": []},
+                },
+            ],
+        })
+
+        claude = next(row for row in summary["provider_slots"] if row["provider"] == "claude")
+        self.assertEqual(claude["usage"]["status"], "missing")
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+
+
 if __name__ == "__main__":
     unittest.main()

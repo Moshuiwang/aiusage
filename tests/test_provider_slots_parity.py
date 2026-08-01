@@ -7,15 +7,13 @@
   在 Miniflare D1 上重放同一份 fixture，比对同一个 golden。
 
 golden 里的值最初是按验收标准逐条手写的，不是从任一侧实现导出的；两侧都必须匹配它。
-``UPDATE_PROVIDER_SLOTS_GOLDEN=1 python3 -m unittest tests.test_provider_slots_parity``
-会用 Python 侧的当前输出覆盖 golden —— 这是逃生口，只有在**预期本身**确实要改并且
-改动经过复核时才允许用；不得用它把实现漂移洗白成新预期。
+重新生成是**独立动作**，走 ``python3 scripts/gen_provider_slots_golden.py``，不在测试里做，
+免得测试变红时被顺手用掉。生成后必须逐条复核 diff：改 golden 等于改验收预期。
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import tempfile
 import unittest
@@ -45,15 +43,35 @@ class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
     maxDiff = None
 
     def test_python_read_model_matches_provider_slots_golden(self) -> None:
-        records = _collect_records()
-        if os.environ.get("UPDATE_PROVIDER_SLOTS_GOLDEN") == "1":
-            GOLDEN_PATH.write_text(
-                json.dumps(records, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-
         expected = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
-        self.assertEqual(records, expected)
+        self.assertEqual(_collect_records(), expected)
+
+    def test_every_scenario_keeps_usage_accounting_consistent_with_summary(self) -> None:
+        """槽位与 summary 不能互相矛盾：归属 + 未归属必须等于该周期的总量。"""
+        for record in json.loads(GOLDEN_PATH.read_text(encoding="utf-8")):
+            with self.subTest(record=record["name"]):
+                coverage = record["provider_usage_coverage"]
+                self.assertEqual(
+                    coverage["attributed_tokens"] + coverage["unattributed_tokens"],
+                    coverage["total_tokens"],
+                )
+                self.assertEqual(
+                    coverage["status"],
+                    "complete" if coverage["unattributed_tokens"] == 0 else "partial",
+                )
+                slot_tokens = sum(row["usage"]["total_tokens"] for row in record["provider_slots"])
+                self.assertLessEqual(slot_tokens, coverage["attributed_tokens"])
+
+    def test_aggregate_agent_usage_lands_in_the_canonical_provider_slot(self) -> None:
+        """agent='all' 但 ai_provider='claude' 时，用量必须进 Claude 槽位（11 号 fixture 锁死）。"""
+        golden = {record["name"]: record for record in json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))}
+
+        for endpoint in ("summary", "mobile-summary"):
+            record = golden[f"11-aggregate-agent-with-canonical-provider:{endpoint}"]
+            claude = next(row for row in record["provider_slots"] if row["provider"] == "claude")
+            self.assertEqual(claude["usage"]["status"], "available")
+            self.assertEqual(claude["usage"]["total_tokens"], 3100)
+            self.assertEqual(record["provider_usage_coverage"]["unattributed_tokens"], 0)
 
     def test_golden_covers_all_four_usage_and_quota_combinations(self) -> None:
         golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
@@ -102,6 +120,9 @@ class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
                 "07-provider-failed-after-success.sql",
                 "08-stale-official-with-local-estimate.sql",
                 "09-local-estimate-only.sql",
+                "10-estimated-observation-newer-than-official.sql",
+                "11-aggregate-agent-with-canonical-provider.sql",
+                "12-naive-limit-timestamps.sql",
             ],
         )
 
@@ -147,6 +168,7 @@ def _collect_records() -> list[dict[str, Any]]:
                 "scenario": scenario,
                 "request": {"method": "GET", "path": path, "auth": True},
                 "provider_slots": payloads[endpoint]["provider_slots"],
+                "provider_usage_coverage": payloads[endpoint]["provider_usage_coverage"],
             })
     return records
 

@@ -456,6 +456,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 4700,
+          "status": "complete",
+          "total_tokens": 4700,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -1257,6 +1263,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 4700,
+          "status": "complete",
+          "total_tokens": 4700,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
@@ -2178,6 +2190,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 7800,
+          "status": "complete",
+          "total_tokens": 7800,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -2831,6 +2849,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 7800,
+          "status": "complete",
+          "total_tokens": 7800,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
@@ -3572,6 +3596,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 10800,
+          "status": "complete",
+          "total_tokens": 10800,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -4561,6 +4591,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 10800,
+          "status": "complete",
+          "total_tokens": 10800,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
@@ -5619,6 +5655,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 12100,
+          "status": "complete",
+          "total_tokens": 12100,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -6319,6 +6361,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 12100,
+          "status": "complete",
+          "total_tokens": 12100,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
@@ -6811,6 +6859,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 5100,
+          "status": "complete",
+          "total_tokens": 5100,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -7235,6 +7289,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 1600,
+          "status": "complete",
+          "total_tokens": 1600,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
@@ -7706,6 +7766,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 5100,
+          "status": "complete",
+          "total_tokens": 5100,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -8130,6 +8196,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 1600,
+          "status": "complete",
+          "total_tokens": 1600,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
@@ -8802,6 +8874,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 7800,
+          "status": "complete",
+          "total_tokens": 7800,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "source_status": [
           {
@@ -9455,6 +9533,12 @@
             }
           }
         ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 7800,
+          "status": "complete",
+          "total_tokens": 7800,
+          "unattributed_tokens": 0
+        },
         "schema_version": 1,
         "sources": [
           {
