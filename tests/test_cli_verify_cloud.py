@@ -612,5 +612,121 @@ class TestVerifyCloudFixturesStayBoundToReadModel(unittest.TestCase):
         self.assertIn((False, "unknown", "unsupported"), states)
 
 
+class TestVerifyCloudJsonSchema(unittest.TestCase):
+    """`--json` 是给机器判定用的，字段集合必须钉死：增、删、改名都要红。
+
+    只断言「某几个键存在」挡不住字段悄悄增加，下游按旧结构解析就会漏掉新状态。
+    """
+
+    maxDiff = None
+
+    def _report(self, command: str, scenario: Path) -> dict:
+        code, out, _ = run_cli(["verify-cloud", command, "--fixture-dir", str(scenario), "--json"])
+        self.assertIn(code, (0, 3, 4))
+        return json.loads(out)
+
+    def test_summary_json_schema_is_pinned(self) -> None:
+        report = self._report("summary", DEGRADED)
+
+        self.assertEqual(sorted(report), [
+            "command", "coverage", "exit_code", "generated_at", "issues", "period",
+            "provider_slots", "requested", "source", "status", "timezone", "totals",
+        ])
+        self.assertEqual(sorted(report["period"]), [
+            "account", "date", "end_date", "id", "machine", "start_date",
+        ])
+        self.assertEqual(sorted(report["totals"]), [
+            "cache_creation_tokens", "cache_read_tokens", "input_tokens",
+            "output_tokens", "total_tokens",
+        ])
+        self.assertEqual(sorted(report["coverage"]), [
+            "attributed_tokens", "other_provider_tokens", "status",
+            "total_tokens", "unattributed_tokens",
+        ])
+        self.assertEqual(sorted(report["requested"]), ["account", "date", "machine", "period"])
+        for row in report["provider_slots"]:
+            self.assertEqual(sorted(row), [
+                "cache_tokens", "input_tokens", "output_tokens", "provider",
+                "quota_last_verified_at", "quota_reason", "quota_source_id",
+                "quota_source_type", "quota_status", "quota_window_count",
+                "total_tokens", "usage_status",
+            ])
+        for row in report["issues"]:
+            self.assertEqual(sorted(row), ["code", "detail"])
+
+    def test_limits_json_schema_is_pinned(self) -> None:
+        report = self._report("limits", DEGRADED)
+
+        self.assertEqual(sorted(report), [
+            "command", "degraded_count", "exit_code", "generated_at", "issues",
+            "provider_quota", "requested", "source", "status", "timezone",
+            "trusted_count", "windows",
+        ])
+        for row in report["windows"]:
+            self.assertEqual(sorted(row), [
+                "confidence", "degrade_reasons", "observed_at", "official", "provider",
+                "remaining_percent", "reset_at", "source_id", "source_type", "status",
+                "trust", "used_percent", "window", "window_duration_minutes",
+            ])
+        for row in report["provider_quota"]:
+            self.assertEqual(sorted(row), [
+                "last_verified_at", "provider", "reason", "source_id",
+                "source_type", "status", "window_count",
+            ])
+
+    def test_health_json_schema_is_pinned(self) -> None:
+        report = self._report("health", DEGRADED)
+
+        self.assertEqual(sorted(report), [
+            "backend_mode", "canonical_store", "command", "exit_code", "generated_at",
+            "issues", "limits_health", "requested", "snapshot_updated_at", "source",
+            "source_total", "sources", "status", "status_counts", "version_counts",
+        ])
+        self.assertEqual(sorted(report["limits_health"]), [
+            "effective_window_count", "latest_observed_at",
+            "raw_window_count", "stale_window_count",
+        ])
+        for row in report["sources"]:
+            self.assertEqual(sorted(row), [
+                "accuracy_status", "collector_version", "coverage", "display_name",
+                "last_observed_at", "machine", "os_user", "platform", "source_id",
+                "status", "version_state",
+            ])
+            for item in row["coverage"]:
+                self.assertEqual(sorted(item), ["agent", "end", "start", "status"])
+
+    def test_parity_json_schema_is_pinned(self) -> None:
+        report = self._report("parity", PARITY_MISMATCH)
+
+        self.assertEqual(sorted(report), [
+            "command", "compared_fields", "differences", "exit_code", "issues",
+            "known_differences", "mobile_generated_at", "requested", "source",
+            "status", "summary_generated_at",
+        ])
+        for row in report["differences"]:
+            self.assertEqual(sorted(row), ["field", "mobile", "summary"])
+        for row in report["known_differences"]:
+            self.assertEqual(sorted(row), ["field", "reason"])
+
+    def test_every_command_reports_its_own_exit_code_inside_the_json(self) -> None:
+        expected = {
+            (str(HEALTHY), "summary"): 0,
+            (str(HEALTHY), "limits"): 0,
+            (str(HEALTHY), "health"): 0,
+            (str(HEALTHY), "parity"): 0,
+            (str(DEGRADED), "summary"): 3,
+            (str(DEGRADED), "limits"): 3,
+            (str(DEGRADED), "health"): 3,
+            (str(PARITY_MISMATCH), "parity"): 4,
+        }
+        for (scenario, command), code in expected.items():
+            with self.subTest(scenario=Path(scenario).name, command=command):
+                actual, out, _ = run_cli([
+                    "verify-cloud", command, "--fixture-dir", scenario, "--json",
+                ])
+                self.assertEqual(actual, code)
+                self.assertEqual(json.loads(out)["exit_code"], code)
+
+
 if __name__ == "__main__":
     unittest.main()
