@@ -65,6 +65,36 @@ class TestSnapshotSourceHealth(unittest.TestCase):
 
         self.assertEqual([row["source_id"] for row in source_status], ["linux-dev-wang"])
 
+    def test_build_source_status_keeps_machine_separate_from_network_host(self) -> None:
+        source_status = build_source_status(
+            status_rows=[("tz-wang", "ok", "2026-06-01T10:40:00+08:00", None)],
+            source_identities={
+                "tz-wang": {
+                    "machine": "tz",
+                    "host": "wrong-network-host",
+                    "os_user": "wang",
+                    "platform": "linux",
+                }
+            },
+            sources_config=None,
+            ref_time=datetime.fromisoformat("2026-06-01T10:50:00+08:00"),
+        )
+
+        self.assertEqual(
+            source_status[0],
+            {
+                "source_id": "tz-wang",
+                "status": "ok",
+                "observed_at": "2026-06-01T10:40:00+08:00",
+                "error_message": None,
+                "machine": "tz",
+                "host": "wrong-network-host",
+                "os_user": "wang",
+                "platform": "linux",
+                "display_name": "tz · wang",
+            },
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

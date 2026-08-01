@@ -124,20 +124,27 @@ def _source_status_entry(
     result = dict(status)
     identity = identity or {}
     source_config = source_config or {}
-    host = identity.get("host") or identity.get("machine") or source_config.get("host") or source_config.get("host_label")
+    identity_machine = identity.get("machine")
+    identity_host = identity.get("host")
+    config_machine = source_config.get("machine")
+    config_host = source_config.get("host") or source_config.get("host_label")
+    machine = identity_machine or config_machine or identity_host or config_host
+    host = identity_host or config_host or identity_machine or config_machine
     os_user = identity.get("os_user") or source_config.get("os_user") or source_config.get("account")
     platform = identity.get("platform") or source_config.get("platform")
 
+    if machine:
+        result["machine"] = str(machine)
     if host:
         result["host"] = str(host)
     if os_user:
         result["os_user"] = str(os_user)
     if platform:
         result["platform"] = str(platform)
-    if host and os_user:
-        result["display_name"] = f"{host} · {os_user}"
-    elif host:
-        result["display_name"] = str(host)
+    if machine and os_user:
+        result["display_name"] = f"{machine} · {os_user}"
+    elif machine:
+        result["display_name"] = str(machine)
     else:
         result["display_name"] = str(result.get("source_id") or "unknown-source")
     return result
