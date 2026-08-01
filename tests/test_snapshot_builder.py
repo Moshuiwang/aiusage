@@ -2266,6 +2266,7 @@ class TestSnapshotProviderSlots(unittest.TestCase):
                 "status": "partial",
                 "total_tokens": 1800,
                 "attributed_tokens": 0,
+                "other_provider_tokens": 0,
                 "unattributed_tokens": 1800,
             },
         )
@@ -2297,14 +2298,42 @@ class TestSnapshotProviderSlots(unittest.TestCase):
         snapshot = self._build()
         coverage = snapshot["provider_usage_coverage"]
 
+        slot_tokens = sum(row["usage"]["total_tokens"] for row in snapshot["provider_slots"])
+
         self.assertEqual(coverage["total_tokens"], snapshot["summary"]["total_tokens"])
+        # 要守的不变量是：用户能看到的（槽位之和）+ 明确点名的余量 == 总量。
+        # attributed_tokens 必须就是槽位之和，任何进不了槽位的 token 都要被单独点名。
+        self.assertEqual(coverage["attributed_tokens"], slot_tokens)
         self.assertEqual(
-            coverage["attributed_tokens"] + coverage["unattributed_tokens"],
+            slot_tokens + coverage["other_provider_tokens"] + coverage["unattributed_tokens"],
             snapshot["summary"]["total_tokens"],
         )
+        self.assertEqual(coverage["other_provider_tokens"], 1800)
         self.assertEqual(coverage["unattributed_tokens"], 300)
         self.assertEqual(coverage["status"], "partial")
         self.assertEqual(self._slot(snapshot, "claude")["usage"]["total_tokens"], 1800)
+
+    def test_third_party_provider_usage_is_named_instead_of_hidden_in_attributed(self) -> None:
+        """antigravity 有 canonical provider 但没有固定槽位，不能藏进 attributed 里当作已展示。"""
+        self._write_facts([
+            self._claude_fact(agent="claude"),
+            self._claude_fact(agent="antigravity", ai_provider="antigravity"),
+        ])
+
+        snapshot = self._build()
+        coverage = snapshot["provider_usage_coverage"]
+        slot_tokens = sum(row["usage"]["total_tokens"] for row in snapshot["provider_slots"])
+
+        self.assertEqual(snapshot["summary"]["total_tokens"], 3600)
+        self.assertEqual(slot_tokens, 1800)
+        self.assertEqual(coverage["attributed_tokens"], 1800)
+        self.assertEqual(coverage["other_provider_tokens"], 1800)
+        self.assertEqual(coverage["unattributed_tokens"], 0)
+        self.assertEqual(coverage["status"], "partial")
+        self.assertEqual(
+            slot_tokens + coverage["other_provider_tokens"] + coverage["unattributed_tokens"],
+            snapshot["summary"]["total_tokens"],
+        )
 
     def test_naive_limit_timestamps_fail_closed_instead_of_crashing(self) -> None:
         """缺时区的 reset_at / observed_at 无法判断新鲜度，必须 fail closed 而不是让 /api/summary 500。"""

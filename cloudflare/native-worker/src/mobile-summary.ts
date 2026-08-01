@@ -80,14 +80,16 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
 
 function providerUsageCoverage(value: unknown): AnyRecord {
   const coverage = dict(value);
+  const other = int(coverage.other_provider_tokens);
   const unattributed = int(coverage.unattributed_tokens);
   const rawStatus = coverage.status;
   return {
     status: typeof rawStatus === "string" && rawStatus
       ? rawStatus
-      : (unattributed === 0 ? "complete" : "partial"),
+      : (other === 0 && unattributed === 0 ? "complete" : "partial"),
     total_tokens: int(coverage.total_tokens),
     attributed_tokens: int(coverage.attributed_tokens),
+    other_provider_tokens: other,
     unattributed_tokens: unattributed,
   };
 }

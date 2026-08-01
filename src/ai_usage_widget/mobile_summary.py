@@ -109,12 +109,18 @@ def build_mobile_summary(snapshot: Dict[str, Any]) -> Dict[str, Any]:
 
 def _provider_usage_coverage(value: Any) -> Dict[str, Any]:
     coverage = _dict(value)
+    other = _int(coverage.get("other_provider_tokens"))
     unattributed = _int(coverage.get("unattributed_tokens"))
     raw_status = coverage.get("status")
     return {
-        "status": raw_status if isinstance(raw_status, str) and raw_status else ("complete" if unattributed == 0 else "partial"),
+        "status": (
+            raw_status
+            if isinstance(raw_status, str) and raw_status
+            else ("complete" if other == 0 and unattributed == 0 else "partial")
+        ),
         "total_tokens": _int(coverage.get("total_tokens")),
         "attributed_tokens": _int(coverage.get("attributed_tokens")),
+        "other_provider_tokens": other,
         "unattributed_tokens": unattributed,
     }
 

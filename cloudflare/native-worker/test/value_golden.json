@@ -458,6 +458,7 @@
         ],
         "provider_usage_coverage": {
           "attributed_tokens": 4700,
+          "other_provider_tokens": 0,
           "status": "complete",
           "total_tokens": 4700,
           "unattributed_tokens": 0
@@ -1265,6 +1266,7 @@
         ],
         "provider_usage_coverage": {
           "attributed_tokens": 4700,
+          "other_provider_tokens": 0,
           "status": "complete",
           "total_tokens": 4700,
           "unattributed_tokens": 0
@@ -2191,8 +2193,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 7800,
-          "status": "complete",
+          "attributed_tokens": 6700,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 7800,
           "unattributed_tokens": 0
         },
@@ -2850,8 +2853,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 7800,
-          "status": "complete",
+          "attributed_tokens": 6700,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 7800,
           "unattributed_tokens": 0
         },
@@ -3597,8 +3601,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 10800,
-          "status": "complete",
+          "attributed_tokens": 9700,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 10800,
           "unattributed_tokens": 0
         },
@@ -4592,8 +4597,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 10800,
-          "status": "complete",
+          "attributed_tokens": 9700,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 10800,
           "unattributed_tokens": 0
         },
@@ -5656,8 +5662,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 12100,
-          "status": "complete",
+          "attributed_tokens": 11000,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 12100,
           "unattributed_tokens": 0
         },
@@ -6362,8 +6369,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 12100,
-          "status": "complete",
+          "attributed_tokens": 11000,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 12100,
           "unattributed_tokens": 0
         },
@@ -6861,6 +6869,7 @@
         ],
         "provider_usage_coverage": {
           "attributed_tokens": 5100,
+          "other_provider_tokens": 0,
           "status": "complete",
           "total_tokens": 5100,
           "unattributed_tokens": 0
@@ -7291,6 +7300,7 @@
         ],
         "provider_usage_coverage": {
           "attributed_tokens": 1600,
+          "other_provider_tokens": 0,
           "status": "complete",
           "total_tokens": 1600,
           "unattributed_tokens": 0
@@ -7768,6 +7778,7 @@
         ],
         "provider_usage_coverage": {
           "attributed_tokens": 5100,
+          "other_provider_tokens": 0,
           "status": "complete",
           "total_tokens": 5100,
           "unattributed_tokens": 0
@@ -8198,6 +8209,7 @@
         ],
         "provider_usage_coverage": {
           "attributed_tokens": 1600,
+          "other_provider_tokens": 0,
           "status": "complete",
           "total_tokens": 1600,
           "unattributed_tokens": 0
@@ -8875,8 +8887,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 7800,
-          "status": "complete",
+          "attributed_tokens": 6700,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 7800,
           "unattributed_tokens": 0
         },
@@ -9534,8 +9547,9 @@
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 7800,
-          "status": "complete",
+          "attributed_tokens": 6700,
+          "other_provider_tokens": 1100,
+          "status": "partial",
           "total_tokens": 7800,
           "unattributed_tokens": 0
         },

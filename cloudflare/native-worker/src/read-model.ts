@@ -1461,21 +1461,31 @@ function addProviderUsage(
   providerUsage.set(provider, entry);
 }
 
-// provider_slots 只有固定两个槽位，这里说明还有多少用量没能归属到任何 provider。
-// 没有它，「所有槽位都是 missing」就分不清「确实没有用量」和「有用量但归不了属」。
+// 把「用户能看到的」和「看不到的」分开点名。固定槽位只有 claude / codex，
+// 进不了槽位的 token 分两类各自报出来：other_provider_tokens（有 canonical provider
+// 但没槽位，例如 antigravity）、unattributed_tokens（连 provider 都定不了）。
+// 恒等式：attributed + other_provider + unattributed == total，attributed 就是槽位之和。
+// 与 src/ai_usage_widget/snapshot_builder.py 的 _build_provider_usage_coverage 一致。
 function buildProviderUsageCoverage(
   providerUsage: Map<string, ProviderUsageTotals>,
   totalTokens: number,
 ): Record<string, unknown> {
-  const unattributed = providerUsage.get("")?.total_tokens ?? 0;
   let attributed = 0;
+  for (const provider of slotProviders) {
+    attributed += providerUsage.get(provider)?.total_tokens ?? 0;
+  }
+  const unattributed = providerUsage.get("")?.total_tokens ?? 0;
+  let other = 0;
   for (const [provider, totals] of providerUsage) {
-    if (provider) attributed += totals.total_tokens;
+    if (provider && !(slotProviders as readonly string[]).includes(provider)) {
+      other += totals.total_tokens;
+    }
   }
   return {
-    status: unattributed === 0 ? "complete" : "partial",
+    status: other === 0 && unattributed === 0 ? "complete" : "partial",
     total_tokens: totalTokens,
     attributed_tokens: attributed,
+    other_provider_tokens: other,
     unattributed_tokens: unattributed,
   };
 }

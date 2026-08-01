@@ -71,6 +71,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 4700,
       "unattributed_tokens": 0
@@ -154,6 +155,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 4700,
       "unattributed_tokens": 0
@@ -207,6 +209,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -260,6 +263,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -328,6 +332,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 1600,
       "unattributed_tokens": 0
@@ -396,6 +401,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 1600,
       "unattributed_tokens": 0
@@ -449,6 +455,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 1600,
       "unattributed_tokens": 0
@@ -502,6 +509,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 1600,
       "unattributed_tokens": 0
@@ -570,6 +578,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 4700,
       "unattributed_tokens": 0
@@ -638,6 +647,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 4700,
       "unattributed_tokens": 0
@@ -691,6 +701,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -744,6 +755,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -797,6 +809,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -850,6 +863,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -903,6 +917,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -956,6 +971,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1009,6 +1025,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1062,6 +1079,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1130,6 +1148,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1198,6 +1217,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1251,6 +1271,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1304,6 +1325,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1357,6 +1379,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1410,6 +1433,7 @@
     ],
     "provider_usage_coverage": {
       "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
       "status": "complete",
       "total_tokens": 3100,
       "unattributed_tokens": 0
@@ -1420,5 +1444,113 @@
       "path": "/api/mobile/summary?date=2026-06-03&period=today"
     },
     "scenario": "12-naive-limit-timestamps"
+  },
+  {
+    "name": "13-third-party-provider-without-slot:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 1100,
+      "status": "partial",
+      "total_tokens": 4200,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "13-third-party-provider-without-slot"
+  },
+  {
+    "name": "13-third-party-provider-without-slot:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 1100,
+      "status": "partial",
+      "total_tokens": 4200,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "13-third-party-provider-without-slot"
   }
 ]

@@ -47,20 +47,40 @@ class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
         self.assertEqual(_collect_records(), expected)
 
     def test_every_scenario_keeps_usage_accounting_consistent_with_summary(self) -> None:
-        """槽位与 summary 不能互相矛盾：归属 + 未归属必须等于该周期的总量。"""
+        """槽位与 summary 不能互相矛盾。
+
+        要守的不变量是**用户能看到的**那份：槽位之和 + 明确点名的余量 == 该周期总量。
+        固定槽位只有 claude / codex，任何进不了槽位的 token（第三方 provider、
+        完全无法归属）都必须被单独点名，不能藏在 attributed_tokens 里冒充「已展示」。
+        """
         for record in json.loads(GOLDEN_PATH.read_text(encoding="utf-8")):
             with self.subTest(record=record["name"]):
                 coverage = record["provider_usage_coverage"]
+                slot_tokens = sum(row["usage"]["total_tokens"] for row in record["provider_slots"])
+                self.assertEqual(coverage["attributed_tokens"], slot_tokens)
                 self.assertEqual(
-                    coverage["attributed_tokens"] + coverage["unattributed_tokens"],
+                    slot_tokens + coverage["other_provider_tokens"] + coverage["unattributed_tokens"],
                     coverage["total_tokens"],
                 )
                 self.assertEqual(
                     coverage["status"],
-                    "complete" if coverage["unattributed_tokens"] == 0 else "partial",
+                    "complete"
+                    if coverage["other_provider_tokens"] == 0 and coverage["unattributed_tokens"] == 0
+                    else "partial",
                 )
-                slot_tokens = sum(row["usage"]["total_tokens"] for row in record["provider_slots"])
-                self.assertLessEqual(slot_tokens, coverage["attributed_tokens"])
+
+    def test_third_party_provider_tokens_are_named_not_hidden(self) -> None:
+        """13 号 fixture：antigravity 有 provider 却没有槽位，必须被点名（两个端点都要）。"""
+        golden = {record["name"]: record for record in json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))}
+
+        for endpoint in ("summary", "mobile-summary"):
+            record = golden[f"13-third-party-provider-without-slot:{endpoint}"]
+            coverage = record["provider_usage_coverage"]
+            slot_tokens = sum(row["usage"]["total_tokens"] for row in record["provider_slots"])
+            self.assertEqual(slot_tokens, 3100)
+            self.assertEqual(coverage["other_provider_tokens"], 1100)
+            self.assertEqual(coverage["status"], "partial")
+            self.assertEqual(coverage["total_tokens"], 4200)
 
     def test_aggregate_agent_usage_lands_in_the_canonical_provider_slot(self) -> None:
         """agent='all' 但 ai_provider='claude' 时，用量必须进 Claude 槽位（11 号 fixture 锁死）。"""
@@ -123,6 +143,7 @@ class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
                 "10-estimated-observation-newer-than-official.sql",
                 "11-aggregate-agent-with-canonical-provider.sql",
                 "12-naive-limit-timestamps.sql",
+                "13-third-party-provider-without-slot.sql",
             ],
         )
 

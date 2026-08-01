@@ -789,20 +789,32 @@ def _build_provider_usage_coverage(
     provider_usage: Dict[str, Dict[str, int]],
     total_tokens: int,
 ) -> dict[str, Any]:
-    """provider_slots 只有固定两个槽位，这里说明还有多少用量没能归属到任何 provider。
+    """把「用户能看到的」和「看不到的」分开点名。
 
-    没有它，`所有槽位都是 missing` 就分不清「确实没有用量」和「有用量但归不了属」。
+    固定槽位只有 claude / codex，进不了槽位的 token 有两类，各自单独报出来：
+
+    - `other_provider_tokens`：有 canonical provider 但没有槽位（例如 antigravity）；
+    - `unattributed_tokens`：连 provider 都定不了（聚合行 / 来源不明）。
+
+    恒等式：`attributed_tokens + other_provider_tokens + unattributed_tokens == total_tokens`，
+    其中 `attributed_tokens` 就是槽位之和。任何一类被折叠进 attributed，都会变成
+    「Popover 槽位加起来对不上标题总量、DTO 却说归属完整」的静默矛盾。
     """
-    unattributed = int(provider_usage.get("", {}).get("total_tokens", 0))
     attributed = sum(
+        int(provider_usage.get(provider, {}).get("total_tokens", 0))
+        for provider in SLOT_PROVIDERS
+    )
+    unattributed = int(provider_usage.get("", {}).get("total_tokens", 0))
+    other = sum(
         int(totals.get("total_tokens", 0))
         for provider, totals in provider_usage.items()
-        if provider
+        if provider and provider not in SLOT_PROVIDERS
     )
     return {
-        "status": "complete" if unattributed == 0 else "partial",
+        "status": "complete" if other == 0 and unattributed == 0 else "partial",
         "total_tokens": int(total_tokens or 0),
         "attributed_tokens": attributed,
+        "other_provider_tokens": other,
         "unattributed_tokens": unattributed,
     }
 
