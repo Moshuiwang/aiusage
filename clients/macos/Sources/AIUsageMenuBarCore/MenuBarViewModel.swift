@@ -66,7 +66,8 @@ public enum MenuBarViewModel {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
-        let currentProviderWindows = currentProviderWindows(summary.providerSlots, now: now)
+        let displaySlots = fixedProviderSlots(summary.providerSlots)
+        let currentProviderWindows = currentProviderWindows(displaySlots, now: now)
         let primaryLimit = currentProviderWindows
             .sorted { lhs, rhs in
                 if lhs.usedPercent == rhs.usedPercent {
@@ -101,7 +102,7 @@ public enum MenuBarViewModel {
             limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(
-                from: summary.providerSlots,
+                from: displaySlots,
                 generatedAt: summary.generatedAt,
                 now: now
             ),
@@ -269,17 +270,66 @@ public enum MenuBarViewModel {
         }
     }
 
+    private static func fixedProviderSlots(_ slots: [MobileProviderSlot]) -> [MobileProviderSlot] {
+        let fixedProviders = ["claude", "codex"]
+        var slotsByProvider: [String: MobileProviderSlot] = [:]
+
+        for slot in slots {
+            let provider = canonicalProvider(slot.provider)
+            guard fixedProviders.contains(provider), slotsByProvider[provider] == nil else { continue }
+            slotsByProvider[provider] = MobileProviderSlot(
+                provider: provider,
+                usage: slot.usage,
+                quota: slot.quota
+            )
+        }
+
+        return fixedProviders.map { provider in
+            slotsByProvider[provider] ?? MobileProviderSlot(
+                provider: provider,
+                usage: .missing,
+                quota: .missing()
+            )
+        }
+    }
+
     private static func currentProviderWindows(_ slots: [MobileProviderSlot], now: Date) -> [MobileLimitWindow] {
-        slots.flatMap { slot -> [MobileLimitWindow] in
-            guard slot.quota.status == "available" else { return [] }
-            return slot.quota.windows.filter { window in
-                window.isOfficialObserved &&
-                (slot.quota.sourceID == nil || slot.quota.sourceID == window.sourceID) &&
+        slots.flatMap { trustedProviderWindows(for: $0, now: now) }
+    }
+
+    private static func trustedProviderWindows(
+        for slot: MobileProviderSlot,
+        now: Date
+    ) -> [MobileLimitWindow] {
+        guard slot.quota.status == "available" else { return [] }
+
+        let candidates = slot.quota.windows.filter { window in
+            window.isOfficialObserved &&
                 !isLocalEstimate(window.sourceType) &&
                 !isExpired(resetAt: window.resetAt, now: now) &&
                 !isStale(observedAt: window.observedAt, now: now)
-            }
         }
+        guard !candidates.isEmpty else { return [] }
+
+        let sourceID = slot.quota.sourceID ?? preferredSourceID(candidates)
+        guard let sourceID else { return [] }
+        return candidates.filter { $0.sourceID == sourceID }
+    }
+
+    private static func preferredSourceID(_ windows: [MobileLimitWindow]) -> String? {
+        let grouped = Dictionary(grouping: windows, by: \.sourceID)
+        return grouped.keys.sorted { lhs, rhs in
+            let lhsWindows = grouped[lhs] ?? []
+            let rhsWindows = grouped[rhs] ?? []
+            let lhsLatest = lhsWindows.compactMap { parseDate($0.observedAt) }.max() ?? .distantPast
+            let rhsLatest = rhsWindows.compactMap { parseDate($0.observedAt) }.max() ?? .distantPast
+            if lhsLatest != rhsLatest { return lhsLatest > rhsLatest }
+
+            let lhsQuality = lhsWindows.map { sourceQuality($0.sourceType) }.max() ?? 0
+            let rhsQuality = rhsWindows.map { sourceQuality($0.sourceType) }.max() ?? 0
+            if lhsQuality != rhsQuality { return lhsQuality > rhsQuality }
+            return lhs < rhs
+        }.first
     }
 
     private static func isLocalEstimate(_ sourceType: String?) -> Bool {
@@ -338,7 +388,6 @@ public enum MenuBarViewModel {
             return lhs == rhs ? $0.provider < $1.provider : lhs < rhs
         }.map { slot in
             let provider = canonicalProvider(slot.provider)
-            let rawWins = slot.quota.windows
             let wins = currentProviderWindows([slot], now: now)
             let bestWindows = bestWindowPerType(wins)
             let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
@@ -348,11 +397,9 @@ public enum MenuBarViewModel {
                 .sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
                 .first
             let outerWindow = sessionWindow ?? otherWindow
-            let freshest = rawWins.max {
-                (parseDate($0.observedAt) ?? .distantPast) < (parseDate($1.observedAt) ?? .distantPast)
-            }
-            let sourceID = slot.quota.sourceID ?? freshest?.sourceID
-            let verifiedAt = slot.quota.lastVerifiedAt ?? freshest?.observedAt
+            let selectedSourceID = wins.map(\.sourceID).first
+            let sourceID = slot.quota.sourceID ?? selectedSourceID
+            let verifiedAt = slot.quota.lastVerifiedAt ?? wins.compactMap(\.observedAt).max()
             let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
             switch provider {
             case "claude":

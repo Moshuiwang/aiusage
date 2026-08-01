@@ -32,8 +32,46 @@ final class ProviderSlotViewModelTests: XCTestCase {
             now: try date("2026-06-02T11:00:00+08:00")
         )
 
-        XCTAssertTrue(state.quotaRings.isEmpty)
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        XCTAssertTrue(state.quotaRings.allSatisfy { ring in
+            ring.outerPctText == "--" && ring.innerPctText == "--" &&
+                ring.outerTimeText == "--" && ring.innerTimeText == "--"
+        })
         XCTAssertTrue(state.providerUsageCoverageText?.contains("未知") == true)
+    }
+
+    func testPartialProviderResponseKeepsBothFixedSlotsAndDegradesMissingProvider() throws {
+        let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
+        let claude = try XCTUnwrap(record.providerSlots.first { $0.provider == "claude" })
+        let state = MenuBarViewModel.build(
+            from: try summary(for: record, providerSlots: [claude]),
+            selectedPeriodID: "today",
+            now: try date("2026-06-03T11:10:00+08:00")
+        )
+
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
+        XCTAssertEqual(codex.usageText, "用量不可用")
+        XCTAssertEqual(codex.outerPctText, "--")
+        XCTAssertEqual(codex.innerPctText, "--")
+        XCTAssertEqual(codex.outerTimeText, "--")
+        XCTAssertEqual(codex.innerTimeText, "--")
+    }
+
+    func testCompleteCoverageWithoutStatisticsIsNotComplete() throws {
+        let coverageData = Data(#"{"status":"complete"}"#.utf8)
+        let coverage = try JSONDecoder().decode(MobileProviderUsageCoverage.self, from: coverageData)
+
+        XCTAssertEqual(coverage.status, "complete")
+        XCTAssertFalse(coverage.isComplete)
+
+        let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
+        let state = MenuBarViewModel.build(
+            from: try summary(for: record, coverage: coverage),
+            selectedPeriodID: "today",
+            now: try date("2026-06-03T11:10:00+08:00")
+        )
+        XCTAssertTrue(state.providerUsageCoverageText?.contains("归属") == true)
     }
 
     func testClaudeUsageAndQuotaAreDisplayedFromProviderSlot() throws {
@@ -189,6 +227,100 @@ final class ProviderSlotViewModelTests: XCTestCase {
         }
     }
 
+    func testDegradedQuotaStatusesNeverExposeStrongConclusion() throws {
+        let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
+        let sourceWindow = try XCTUnwrap(record.providerSlots.first { $0.provider == "claude" }?.quota.windows.first)
+
+        for quotaStatus in ["missing", "stale", "unsupported", "failed"] {
+            let slot = MobileProviderSlot(
+                provider: "claude",
+                usage: .missing,
+                quota: MobileProviderQuota(
+                    status: quotaStatus,
+                    reason: quotaStatus,
+                    lastVerifiedAt: sourceWindow.observedAt,
+                    sourceID: sourceWindow.sourceID,
+                    sourceType: sourceWindow.sourceType,
+                    windows: [sourceWindow]
+                )
+            )
+            let state = MenuBarViewModel.build(
+                from: try summary(for: record, providerSlots: [slot]),
+                selectedPeriodID: "today",
+                now: try date("2026-06-03T11:10:00+08:00")
+            )
+            let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+            XCTAssertEqual(ring.outerPctText, "--", "status: \(quotaStatus)")
+            XCTAssertEqual(ring.innerPctText, "--", "status: \(quotaStatus)")
+            XCTAssertEqual(ring.outerTimeText, "--", "status: \(quotaStatus)")
+            XCTAssertEqual(ring.innerTimeText, "--", "status: \(quotaStatus)")
+        }
+    }
+
+    func testNilQuotaSourceChoosesOneSourceInsteadOfCombiningWindows() throws {
+        let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
+        let windows = [
+            MobileLimitWindow(
+                sourceID: "biai-source-a", provider: "claude", window: "session",
+                usedPercent: 10, remainingPercent: 90, resetAt: "2026-06-03T16:00:00+08:00",
+                windowDurationMinutes: 300, observedAt: "2026-06-03T11:10:00+08:00",
+                sourceType: "oauth_usage_api", confidence: "observed", status: "ok", official: true
+            ),
+            MobileLimitWindow(
+                sourceID: "biai-source-b", provider: "claude", window: "week",
+                usedPercent: 20, remainingPercent: 80, resetAt: "2026-06-10T00:00:00+08:00",
+                windowDurationMinutes: 10080, observedAt: "2026-06-03T11:20:00+08:00",
+                sourceType: "oauth_usage_api", confidence: "observed", status: "ok", official: true
+            ),
+        ]
+        let slot = MobileProviderSlot(
+            provider: "claude",
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: "available", reason: nil, lastVerifiedAt: nil, sourceID: nil,
+                sourceType: "oauth_usage_api", windows: windows
+            )
+        )
+
+        let state = MenuBarViewModel.build(
+            from: try summary(for: record, providerSlots: [slot]),
+            selectedPeriodID: "today",
+            now: try date("2026-06-03T11:30:00+08:00")
+        )
+        let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+
+        XCTAssertEqual(ring.outerPctText, "--")
+        XCTAssertEqual(ring.innerPctText, "20%")
+        XCTAssertEqual(ring.sourceText, "BIAI · source-b")
+    }
+
+    func testEveryOwnerScenarioKeepsFixedSlotsAndFailsClosedForDegradedQuota() throws {
+        let records = try allGoldenRecords()
+        XCTAssertEqual(records.count, 13)
+
+        for record in records {
+            let state = MenuBarViewModel.build(
+                from: try summary(for: record),
+                selectedPeriodID: "today",
+                now: try date("2026-06-03T12:00:00+08:00")
+            )
+            XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"], record.name)
+
+            for slot in record.providerSlots {
+                let ring = try XCTUnwrap(state.quotaRings.first { $0.id == slot.provider }, record.name)
+                let hasTrustedOwnerWindow = slot.quota.status == "available" && slot.quota.windows.contains {
+                    $0.official && $0.confidence == "observed" && $0.status == "ok"
+                }
+                if !hasTrustedOwnerWindow {
+                    XCTAssertEqual(ring.outerPctText, "--", record.name)
+                    XCTAssertEqual(ring.innerPctText, "--", record.name)
+                    XCTAssertEqual(ring.outerTimeText, "--", record.name)
+                    XCTAssertEqual(ring.innerTimeText, "--", record.name)
+                }
+            }
+        }
+    }
+
     private struct GoldenRecord: Decodable {
         let name: String
         let providerSlots: [MobileProviderSlot]
@@ -202,9 +334,13 @@ final class ProviderSlotViewModelTests: XCTestCase {
     }
 
     private func goldenRecord(named name: String) throws -> GoldenRecord {
+        let records = try allGoldenRecords()
+        return try XCTUnwrap(records.first { $0.name == name }, "Missing owner fixture record: \(name)")
+    }
+
+    private func allGoldenRecords() throws -> [GoldenRecord] {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "provider-slots-owner-fixture", withExtension: "json"))
-        let records = try JSONDecoder().decode([GoldenRecord].self, from: Data(contentsOf: url))
-        return try XCTUnwrap(records.first { $0.name == name })
+        return try JSONDecoder().decode([GoldenRecord].self, from: Data(contentsOf: url))
     }
 
     private func loadLegacyFixture() throws -> MobileSummary {
@@ -214,7 +350,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
 
     private func summary(
         for record: GoldenRecord,
-        providerSlots: [MobileProviderSlot]? = nil
+        providerSlots: [MobileProviderSlot]? = nil,
+        coverage: MobileProviderUsageCoverage? = nil
     ) throws -> MobileSummary {
         let base = try loadLegacyFixture()
         return MobileSummary(
@@ -228,7 +365,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
             breakdown: base.breakdown,
             limits: base.limits,
             providerSlots: providerSlots ?? record.providerSlots,
-            providerUsageCoverage: record.coverage
+            providerUsageCoverage: coverage ?? record.coverage
         )
     }
 

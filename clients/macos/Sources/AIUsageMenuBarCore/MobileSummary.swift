@@ -417,6 +417,7 @@ public struct MobileProviderUsageCoverage: Codable, Equatable, Sendable {
     public let attributedTokens: Int
     public let otherProviderTokens: Int
     public let unattributedTokens: Int
+    private let hasCompleteStatistics: Bool
 
     public static let unknown = MobileProviderUsageCoverage(
         status: "unknown",
@@ -427,7 +428,8 @@ public struct MobileProviderUsageCoverage: Codable, Equatable, Sendable {
     )
 
     public var isComplete: Bool {
-        status == "complete" &&
+        hasCompleteStatistics &&
+            status == "complete" &&
             attributedTokens == totalTokens &&
             otherProviderTokens == 0 &&
             unattributedTokens == 0
@@ -445,15 +447,33 @@ public struct MobileProviderUsageCoverage: Codable, Equatable, Sendable {
         self.attributedTokens = attributedTokens
         self.otherProviderTokens = otherProviderTokens
         self.unattributedTokens = unattributedTokens
+        self.hasCompleteStatistics = true
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
-        totalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens) ?? 0
-        attributedTokens = try container.decodeIfPresent(Int.self, forKey: .attributedTokens) ?? 0
-        otherProviderTokens = try container.decodeIfPresent(Int.self, forKey: .otherProviderTokens) ?? 0
-        unattributedTokens = try container.decodeIfPresent(Int.self, forKey: .unattributedTokens) ?? 0
+        let decodedTotalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens)
+        let decodedAttributedTokens = try container.decodeIfPresent(Int.self, forKey: .attributedTokens)
+        let decodedOtherProviderTokens = try container.decodeIfPresent(Int.self, forKey: .otherProviderTokens)
+        let decodedUnattributedTokens = try container.decodeIfPresent(Int.self, forKey: .unattributedTokens)
+        totalTokens = decodedTotalTokens ?? 0
+        attributedTokens = decodedAttributedTokens ?? 0
+        otherProviderTokens = decodedOtherProviderTokens ?? 0
+        unattributedTokens = decodedUnattributedTokens ?? 0
+        hasCompleteStatistics = decodedTotalTokens != nil &&
+            decodedAttributedTokens != nil &&
+            decodedOtherProviderTokens != nil &&
+            decodedUnattributedTokens != nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encode(totalTokens, forKey: .totalTokens)
+        try container.encode(attributedTokens, forKey: .attributedTokens)
+        try container.encode(otherProviderTokens, forKey: .otherProviderTokens)
+        try container.encode(unattributedTokens, forKey: .unattributedTokens)
     }
 
     enum CodingKeys: String, CodingKey {

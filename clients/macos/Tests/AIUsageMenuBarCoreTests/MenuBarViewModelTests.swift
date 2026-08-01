@@ -21,7 +21,11 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.sources.map(\.title), ["wang", "wang"])
         XCTAssertEqual(state.sources.first?.subtitle, "linux-dev · linux · 10:40 更新")
         XCTAssertTrue(state.limitRows.isEmpty)
-        XCTAssertTrue(state.quotaRings.isEmpty)
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        XCTAssertTrue(state.quotaRings.allSatisfy { ring in
+            ring.outerPctText == "--" && ring.innerPctText == "--" &&
+                ring.outerTimeText == "--" && ring.innerTimeText == "--"
+        })
         XCTAssertTrue(state.providerUsageCoverageText?.contains("未知") == true)
         XCTAssertEqual(state.breakdownSections.map(\.title), ["机器", "账户", "Agent", "模型", "日期"])
         XCTAssertEqual(state.breakdownSections.first?.rows.map(\.title), ["linux-dev", "macbook-pro"])
