@@ -13,6 +13,7 @@ import urllib.error
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from .config import DeviceConfig
+from .http_identity import PRODUCT_USER_AGENT
 from .models import CommandResult
 
 
@@ -22,7 +23,7 @@ class IngestHTTPClient:
         req_data = json.dumps(data).encode("utf-8")
         req_headers = headers.copy()
         req_headers["Content-Type"] = "application/json"
-        req_headers.setdefault("User-Agent", "AIUsagePusher/1.0")
+        req_headers.setdefault("User-Agent", PRODUCT_USER_AGENT)
 
         req = urllib.request.Request(url, data=req_data, headers=req_headers, method="POST")
         try:
@@ -421,7 +422,7 @@ class DevicePusher:
                 payload.setdefault("usage_ledger_runs", []).append(ledger_run)
 
         # 4. 读取认证 Token 并准备 headers
-        headers = {"User-Agent": "AIUsagePusher/1.0"}
+        headers = {"User-Agent": PRODUCT_USER_AGENT}
         if self.config.token_env:
             token = os.environ.get(self.config.token_env)
             if token:
@@ -485,7 +486,7 @@ class DevicePusher:
             "error_message": error_message,
             "usage_daily": [],
         }
-        headers = {"User-Agent": "AIUsagePusher/1.0"}
+        headers = {"User-Agent": PRODUCT_USER_AGENT}
         if self.config.token_env:
             token = os.environ.get(self.config.token_env)
             if token:

@@ -4,6 +4,8 @@ import json
 from typing import Any, Dict
 from urllib import error, request
 
+from .http_identity import PRODUCT_USER_AGENT
+
 
 def push_limits_payload(url: str, token: str, payload: Dict[str, Any], timeout: float = 10.0) -> Dict[str, Any]:
     if not url:
@@ -18,6 +20,7 @@ def push_limits_payload(url: str, token: str, payload: Dict[str, Any], timeout: 
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            "User-Agent": PRODUCT_USER_AGENT,
         },
     )
     try:

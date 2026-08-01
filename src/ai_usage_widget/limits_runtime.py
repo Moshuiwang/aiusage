@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, Protocol
 
@@ -100,12 +100,13 @@ class LimitsRuntime:
                 continue
 
             all_windows.extend(windows)
+            provider_available = any(_is_current_official_window(window, seen_at) for window in windows)
             provider_results.append(
                 ProviderRuntimeResult(
                     provider=provider_name,
-                    status="ok",
+                    status="ok" if provider_available else "unavailable",
                     windows_written=0 if dry_run else len(windows),
-                    error_type=None,
+                    error_type=None if provider_available else "provider_unavailable",
                 )
             )
 
@@ -156,6 +157,19 @@ def _normalize_window_source_id(window: LimitWindow, source_id: str) -> LimitWin
     if window.source_id and window.source_id != window.provider:
         return window
     return replace(window, source_id=source_id)
+
+
+def _is_current_official_window(window: LimitWindow, seen_at: str) -> bool:
+    if not window.is_official:
+        return False
+    try:
+        reset_time = datetime.fromisoformat(window.reset_at.replace("Z", "+00:00"))
+        seen_time = datetime.fromisoformat(seen_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if (reset_time.tzinfo is None) != (seen_time.tzinfo is None):
+        return False
+    return reset_time > seen_time
 
 
 def _failed_window(provider: str, observed_at: str, *, source_id: str | None = None) -> LimitWindow:

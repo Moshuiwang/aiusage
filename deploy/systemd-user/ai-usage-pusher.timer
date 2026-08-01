@@ -1,0 +1,11 @@
+[Unit]
+Description=Run AI Usage Pusher every 30 minutes
+
+[Timer]
+OnCalendar=*:0/30
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target

@@ -57,6 +57,7 @@ class TestCodexLimitsProvider(unittest.TestCase):
 
     def test_wham_current_response_maps_nested_rate_limit_windows(self) -> None:
         payload = {
+            "observed_at": "2026-06-03T10:00:00+08:00",
             "rate_limit": {
                 "primary_window": {
                     "used_percent": 25,

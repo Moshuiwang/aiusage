@@ -27,12 +27,12 @@ class TestCodexAppServerRPCAdapter(unittest.TestCase):
             "rateLimits": {
                 "primary": {
                     "usedPercent": 63,
-                    "resetsAt": 0,
+                    "resetsAt": 1780480800,
                     "windowDurationMins": 300,
                 },
                 "secondary": {
                     "usedPercent": 44,
-                    "resetsAt": 3600,
+                    "resetsAt": 1780920000,
                     "windowDurationMins": 10080,
                 },
             }
@@ -41,7 +41,7 @@ class TestCodexAppServerRPCAdapter(unittest.TestCase):
         windows = parse_codex_rpc_rate_limits(payload, observed_at="2026-06-03T09:31:00+08:00")
 
         self.assertEqual([window.window for window in windows], ["session", "week"])
-        self.assertEqual(windows[0].reset_at, "1970-01-01T00:00:00+00:00")
+        self.assertEqual(windows[0].reset_at, "2026-06-03T10:00:00+00:00")
         self.assertEqual(windows[0].used_percent, 63.0)
         self.assertEqual(windows[0].remaining_percent, 37.0)
         self.assertEqual(windows[0].source_type, "cli_rpc")
@@ -52,8 +52,8 @@ class TestCodexAppServerRPCAdapter(unittest.TestCase):
             "id": "ai-usage-widget-rate-limits",
             "result": {
                 "rateLimits": {
-                    "primary": {"usedPercent": 12, "resetsAt": 0, "windowDurationMins": 300},
-                    "secondary": {"usedPercent": 25, "resetsAt": 3600, "windowDurationMins": 10080},
+                    "primary": {"usedPercent": 12, "resetsAt": 1780480800, "windowDurationMins": 300},
+                    "secondary": {"usedPercent": 25, "resetsAt": 1780920000, "windowDurationMins": 10080},
                 }
             },
         }

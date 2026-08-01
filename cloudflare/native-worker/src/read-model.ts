@@ -9,6 +9,7 @@ export interface SummaryRequest {
   machine?: string | null;
   account?: string | null;
   currentTime?: string | null;
+  backendMode?: string | null;
 }
 
 type DailyRow = {
@@ -371,7 +372,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
-      ...summaryMetadata(refTime, limits, "native_d1_staging", "cloudflare_d1"),
+      ...summaryMetadata(refTime, limits, normalizedBackendMode(request.backendMode), "cloudflare_d1"),
       codex_hourly: {
         drift: codexContext.drift,
       },
@@ -686,6 +687,7 @@ function buildSourceStatus(
     .map((row) => {
       const identity = identities[str(row.source_id)] ?? {};
       const status = statusWithStaleness(str(row.status), str(row.collected_at), refTime, 120);
+      const machine = identity.machine ?? identity.host;
       const host = identity.host ?? identity.machine;
       const osUser = identity.os_user;
       const result: Record<string, unknown> = {
@@ -694,11 +696,12 @@ function buildSourceStatus(
         observed_at: row.collected_at,
         error_message: row.error_message,
       };
+      if (machine) result.machine = String(machine);
       if (host) result.host = String(host);
       if (osUser) result.os_user = String(osUser);
       if (identity.platform) result.platform = String(identity.platform);
-      if (host && osUser) result.display_name = `${host} · ${osUser}`;
-      else if (host) result.display_name = String(host);
+      if (machine && osUser) result.display_name = `${machine} · ${osUser}`;
+      else if (machine) result.display_name = String(machine);
       else result.display_name = str(row.source_id || "unknown-source");
       result.accuracy = sourceAccuracySummary(accuracyBySource.get(str(row.source_id)) ?? []);
       return result;
@@ -1305,6 +1308,11 @@ function summaryMetadata(
     freshness_status: effective.length ? "ok" : "unknown",
     limits_observed_at: observed.length ? observed[observed.length - 1] : null,
   };
+}
+
+function normalizedBackendMode(value: string | null | undefined): string {
+  const configured = String(value ?? "").trim();
+  return configured || "native_d1_unknown";
 }
 
 function compareLimitRank(lhs: LimitRow, rhs: LimitRow): number {

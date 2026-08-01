@@ -875,7 +875,7 @@ function parseLimitWindow(payload: AnyRecord): LimitWindow {
     if (!(field in payload)) throw new WriteValidationError(400, "limit_schema_invalid", `missing required limit field: ${field}`);
   }
   const provider = nonEmptyString(payload, "provider");
-  return {
+  const window = {
     provider,
     source_id: optionalString(payload, "source_id", provider),
     window: nonEmptyString(payload, "window"),
@@ -888,6 +888,13 @@ function parseLimitWindow(payload: AnyRecord): LimitWindow {
     confidence: optionalString(payload, "confidence", "unknown"),
     status: optionalString(payload, "status", "unknown"),
   };
+  if (window.source_type === "active_limits_cache" && (window.confidence === "observed" || window.status === "ok")) {
+    throw new WriteValidationError(400, "limit_schema_invalid", "active_limits_cache cannot claim observed or current status");
+  }
+  if (window.status === "ok" && new Date(window.reset_at).getTime() <= new Date(window.observed_at).getTime()) {
+    throw new WriteValidationError(400, "limit_schema_invalid", "reset_at must be later than observed_at when status is ok");
+  }
+  return window;
 }
 
 function normalizeFacts(req: IngestRequest): UsageHourlyFact[] {

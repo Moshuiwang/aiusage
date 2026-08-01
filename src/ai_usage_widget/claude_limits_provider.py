@@ -546,8 +546,8 @@ def _parse_active_limit_window(
             "window_duration_minutes": duration_minutes,
             "observed_at": observed_at,
             "source_type": "active_limits_cache",
-            "confidence": "observed",
-            "status": _optional_string_field(window_payload, "status", default="ok"),
+            "confidence": "estimated",
+            "status": "unavailable",
         }
     )
 

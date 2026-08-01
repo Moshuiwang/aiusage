@@ -878,6 +878,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -900,6 +903,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",
@@ -2073,6 +2077,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -2095,6 +2102,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",
@@ -3602,6 +3610,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -3624,6 +3635,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",
@@ -5131,6 +5143,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -5153,6 +5168,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",
@@ -6660,6 +6676,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -6682,6 +6701,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",
@@ -7277,6 +7297,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -7299,6 +7322,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",
@@ -9539,6 +9563,9 @@
                     "host": {
                       "type": "str"
                     },
+                    "machine": {
+                      "type": "str"
+                    },
                     "observed_at": {
                       "type": "str"
                     },
@@ -9561,6 +9588,7 @@
                     "display_name",
                     "error_message",
                     "host",
+                    "machine",
                     "observed_at",
                     "os_user",
                     "platform",

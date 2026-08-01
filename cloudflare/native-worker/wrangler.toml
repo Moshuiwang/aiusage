@@ -5,6 +5,7 @@ workers_dev = true
 
 [vars]
 AIUSAGE_TIMEZONE = "Asia/Shanghai"
+AIUSAGE_BACKEND_MODE = "native_d1_production"
 
 [triggers]
 # Cloudflare cron uses UTC; this runs at 03:17 Asia/Shanghai.

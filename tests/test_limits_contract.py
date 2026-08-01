@@ -56,6 +56,24 @@ class TestLimitsContract(unittest.TestCase):
         self.assertFalse(window.is_official)
         self.assertEqual(window.to_snapshot_dict()["official"], False)
 
+    def test_cached_limit_cannot_claim_observed_ok(self) -> None:
+        payload = json.loads((FIXTURES / "limits_official_sample.json").read_text(encoding="utf-8"))
+        payload["source_type"] = "active_limits_cache"
+
+        with self.assertRaises(LimitContractError) as caught:
+            parse_limit_window(payload)
+
+        self.assertEqual(caught.exception.error_type, "limit_schema_invalid")
+
+    def test_expired_limit_cannot_claim_ok(self) -> None:
+        payload = json.loads((FIXTURES / "limits_official_sample.json").read_text(encoding="utf-8"))
+        payload["observed_at"] = "2026-06-09T00:00:00+08:00"
+
+        with self.assertRaises(LimitContractError) as caught:
+            parse_limit_window(payload)
+
+        self.assertEqual(caught.exception.error_type, "limit_schema_invalid")
+
 
 if __name__ == "__main__":
     unittest.main()

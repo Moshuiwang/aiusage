@@ -60,6 +60,7 @@ class TestClaudeLimitsProvider(unittest.TestCase):
         windows = parse_claude_oauth_usage({
             "five_hour": {"utilization": 12.5, "resets_at": "2026-07-18T14:00:00+00:00"},
             "seven_day": {"utilization": 34.0, "resets_at": "2026-07-23T00:00:00+00:00"},
+            "observed_at": "2026-07-18T12:00:00+00:00",
         })
 
         self.assertEqual([window.window for window in windows], ["session", "week"])
@@ -94,6 +95,8 @@ class TestClaudeLimitsProvider(unittest.TestCase):
         self.assertEqual([window.window_duration_minutes for window in windows], [300, 10080])
         self.assertEqual([window.used_percent for window in windows], [10.0, 20.0])
         self.assertEqual([window.source_type for window in windows], ["active_limits_cache", "active_limits_cache"])
+        self.assertEqual([window.confidence for window in windows], ["estimated", "estimated"])
+        self.assertEqual([window.status for window in windows], ["unavailable", "unavailable"])
         self.assertFalse(any(window.is_official for window in windows))
 
     def test_cli_limit_message_parses_session_window(self) -> None:
@@ -171,7 +174,11 @@ class TestClaudeLimitsProvider(unittest.TestCase):
                 fetcher = RecordingOAuthFetcher(error=ClaudeProviderError(error_type, "OAuth unavailable"))
                 cli_reader = RecordingCliReader(cli_text)
 
-                windows = ClaudeLimitsProvider(oauth_fetcher=fetcher, cli_usage_reader=cli_reader).collect()
+                windows = ClaudeLimitsProvider(
+                    oauth_fetcher=fetcher,
+                    cli_usage_reader=cli_reader,
+                    observed_at_provider=lambda: "2026-06-03T10:01:00+08:00",
+                ).collect()
 
                 self.assertEqual([window.source_type for window in windows], ["official_cli", "official_cli"])
                 self.assertEqual(fetcher.calls, 1)

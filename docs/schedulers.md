@@ -190,7 +190,12 @@ StandardError=append:%h/.local/state/ai_usage_pusher.err
 ```
 
 ### 3.2 Timer 配置文件
-在 `~/.config/systemd/user/ai-usage-pusher.timer` 中配置：
+仓库中的 `deploy/systemd-user/ai-usage-pusher.timer` 是唯一模板。部署时复制到
+`~/.config/systemd/user/ai-usage-pusher.timer`；不要用现场 drop-in 改成
+`OnUnitActiveSec`，也不要手写另一份定时口径。
+
+BIAI 现有 system-level 多用户 timer 必须保留各自基础 unit 的 `Unit=` 映射，只把
+`deploy/systemd/ai-usage-pusher-calendar.conf` 复制到各 timer 的 drop-in 目录。
 
 ```ini
 [Unit]
@@ -199,6 +204,8 @@ Description=Run AI Usage Pusher every 30 minutes
 [Timer]
 OnCalendar=*:0/30
 Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=2min
 
 [Install]
 WantedBy=timers.target
@@ -213,6 +220,10 @@ systemctl --user enable --now ai-usage-pusher.timer
 # 测试单次运行 (dry-run 校验)
 systemctl --user start ai-usage-pusher.service
 ```
+
+验收 timer 时不能把 `active/running` 直接判成失败：`Persistent=true` 可能在重启后立即补跑。
+此时先有界等待对应 service 完成，再要求 timer 为 `active/waiting`、下一次触发时间非空且在未来，
+最后从 D1 做一次 source report 写后读。
 
 ### 3.4 Official Limits Collector
 
