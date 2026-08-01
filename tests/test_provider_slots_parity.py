@@ -1,0 +1,140 @@
+"""Issue #61 验收 6：Python 读模型与 Cloudflare Native Worker 在同一 fixture 下产出一致的 provider_slots。
+
+同一份 SQL fixture 有两个消费方：
+
+- 本文件：用 Python 读模型（snapshot_builder + mobile_summary）重放，比对 golden。
+- ``cloudflare/native-worker/test/provider-slots-parity.test.ts``：用 Native Worker
+  在 Miniflare D1 上重放同一份 fixture，比对同一个 golden。
+
+golden 里的值是按验收标准手写的预期，不是从任何一侧实现导出的。任何一侧漂移都会红。
+更新 golden：``UPDATE_PROVIDER_SLOTS_GOLDEN=1 python3 -m unittest tests.test_provider_slots_parity``
+（只有在预期本身确实要改时才允许更新）。
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
+from typing import Any
+
+from ai_usage_widget.mobile_summary import build_mobile_summary
+from ai_usage_widget.snapshot_builder import build_snapshot
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_PATH = REPO_ROOT / "cloudflare" / "migrations" / "0001_initial_schema.sql"
+SCENARIO_DIR = REPO_ROOT / "cloudflare" / "native-worker" / "test" / "provider_slots"
+GOLDEN_PATH = REPO_ROOT / "cloudflare" / "native-worker" / "test" / "provider_slots_golden.json"
+
+TIMEZONE = "Asia/Shanghai"
+FIXED_NOW = "2026-06-03T12:00:00+08:00"
+DATE = "2026-06-03"
+PERIOD = "today"
+ENDPOINTS = (
+    ("summary", "/api/summary?date=2026-06-03&period=today"),
+    ("mobile-summary", "/api/mobile/summary?date=2026-06-03&period=today"),
+)
+
+
+class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
+    maxDiff = None
+
+    def test_python_read_model_matches_provider_slots_golden(self) -> None:
+        records = _collect_records()
+        if os.environ.get("UPDATE_PROVIDER_SLOTS_GOLDEN") == "1":
+            GOLDEN_PATH.write_text(
+                json.dumps(records, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+        expected = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(records, expected)
+
+    def test_golden_covers_all_four_usage_and_quota_combinations(self) -> None:
+        golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
+        combinations = set()
+        for record in golden:
+            claude = next(row for row in record["provider_slots"] if row["provider"] == "claude")
+            combinations.add((claude["usage"]["status"], claude["quota"]["status"]))
+
+        self.assertEqual(
+            combinations,
+            {
+                ("available", "available"),
+                ("available", "missing"),
+                ("missing", "available"),
+                ("missing", "missing"),
+            },
+        )
+
+    def test_golden_missing_quota_never_carries_percentages_or_reset(self) -> None:
+        golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
+        checked = 0
+        for record in golden:
+            for slot in record["provider_slots"]:
+                quota = slot["quota"]
+                if quota["status"] != "missing":
+                    continue
+                checked += 1
+                self.assertEqual(quota["windows"], [])
+                self.assertIn("last_verified_at", quota)
+                serialized = json.dumps(quota, sort_keys=True)
+                for leaked in ("used_percent", "remaining_percent", "reset_at"):
+                    self.assertNotIn(leaked, serialized, f"{record['name']} / {slot['provider']}")
+        self.assertGreater(checked, 0)
+
+    def test_scenario_fixtures_are_offline_sql_replays(self) -> None:
+        scenarios = sorted(path.name for path in SCENARIO_DIR.glob("*.sql"))
+        self.assertEqual(
+            scenarios,
+            [
+                "01-usage-and-quota.sql",
+                "02-usage-without-quota.sql",
+                "03-quota-without-usage.sql",
+                "04-neither.sql",
+                "05-codex-quota-only.sql",
+            ],
+        )
+
+
+def _collect_records() -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for scenario_path in sorted(SCENARIO_DIR.glob("*.sql")):
+        scenario = scenario_path.stem
+        snapshot = _build_snapshot_for(scenario_path)
+        mobile = build_mobile_summary(snapshot)
+        payloads = {"summary": snapshot, "mobile-summary": mobile}
+        for endpoint, path in ENDPOINTS:
+            records.append({
+                "name": f"{scenario}:{endpoint}",
+                "scenario": scenario,
+                "request": {"method": "GET", "path": path, "auth": True},
+                "provider_slots": payloads[endpoint]["provider_slots"],
+            })
+    return records
+
+
+def _build_snapshot_for(scenario_path: Path) -> dict[str, Any]:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        db_path = Path(temp_dir) / "provider-slots.sqlite"
+        output_path = Path(temp_dir) / "snapshot.json"
+        with sqlite3.connect(db_path) as conn:
+            conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+            conn.executescript(scenario_path.read_text(encoding="utf-8"))
+        build_snapshot(
+            db_path=str(db_path),
+            output_path=str(output_path),
+            date_str=DATE,
+            timezone_str=TIMEZONE,
+            current_time_str=FIXED_NOW,
+            period=PERIOD,
+        )
+        return json.loads(output_path.read_text(encoding="utf-8"))
+
+
+if __name__ == "__main__":
+    unittest.main()
