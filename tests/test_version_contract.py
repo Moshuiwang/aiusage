@@ -132,12 +132,45 @@ class TestCollectorReleaseNormalization(unittest.TestCase):
         self.assertIn("auth_token", str(ctx.exception))
 
     def test_a_credential_shaped_unknown_key_is_redacted_instead_of_echoed(self) -> None:
-        for key in (FAKE_TOKEN, FAKE_PATH, "x" * 80):
+        for key in (
+            FAKE_TOKEN,
+            FAKE_PATH,
+            "x" * 80,
+            # 纯字母数字、长度 <= 32 的凭据形态：以前整类漏过白名单，被原样写进 400 响应体和日志。
+            "AKIAIOSFODNN7EXAMPLE",              # AWS Access Key ID
+            "xoxbXXXXXXXXXXXXXXXXXXXXXXXX",      # Slack bot token
+            "AIzaSyDUMMYdummyDUMMYdummy1234",    # Google API key
+            "deadbeefcafe1234deadbeefcafe1234",  # 十六进制密钥
+            "0123456789abcdef0123",              # 纯小写十六进制
+        ):
             with self.subTest(key=key):
                 with self.assertRaises(version_contract.VersionContractError) as ctx:
                     version_contract.normalize_collector_release({key: "x"})
                 self.assertNotIn(key, str(ctx.exception))
                 self.assertNotIn(key, ctx.exception.field)
+
+    def test_a_plain_field_name_is_still_echoed_so_the_error_stays_actionable(self) -> None:
+        for key in ("auth_token", "surprise", "last_upgrade_status"):
+            with self.subTest(key=key):
+                with self.assertRaises(version_contract.VersionContractError) as ctx:
+                    version_contract.normalize_collector_release({key: "x"})
+                self.assertIn(key, str(ctx.exception))
+
+    def test_a_trailing_newline_cannot_smuggle_itself_through_the_whitelist(self) -> None:
+        """`$` 在末尾单个 `\\n` 前也会匹配，白名单声称的严格性因此不成立。
+
+        后果不是形式问题：带换行的版本号会原样落进 `collection_runs.collector_version`
+        和 `/api/summary` 的版本块，同一个版本在库里裂成两个字符串，
+        并且会被裸拼进不兼容时的错误信息。
+        """
+        for raw in (
+            {"collector_version": "0.3.0\n"},
+            {"build_sha": "cafebabe\n"},
+            {"last_upgrade": {"finished_at": "2026-08-01T09:00:00+08:00\n"}},
+        ):
+            with self.subTest(raw=raw):
+                with self.assertRaises(version_contract.VersionContractError):
+                    version_contract.normalize_collector_release(raw)
 
     def test_a_credential_shaped_unknown_key_inside_last_upgrade_is_also_redacted(self) -> None:
         with self.assertRaises(version_contract.VersionContractError) as ctx:

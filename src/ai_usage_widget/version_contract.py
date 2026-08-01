@@ -123,7 +123,13 @@ _TIMESTAMP_RE = re.compile(
 _MAX_SCHEMA_VERSION = 10000
 #: 只有形态明确安全的 key 名才会出现在错误信息里；其余一律脱敏。
 #: JSON key 是完全不受控的任意文本，直接回显等于把疑似凭据写进 HTTP 响应和日志。
-_SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+#:
+#: 这里只放行「普通 snake_case 字段名」形态：纯小写字母分段、单段不超过 16 字符、
+#: 总长不超过 32。大小写混排、含数字、超长单段（AWS Access Key ID、Slack token、
+#: 十六进制密钥等凭据形态）一律脱敏——回显不了字段名只是排障体验降级，
+#: 回显了凭据就是把秘密写进 400 响应体和服务端日志。
+_SAFE_KEY_RE = re.compile(r"[a-z]{1,16}(?:_[a-z]{1,16})*")
+_MAX_SAFE_KEY_LENGTH = 32
 _REDACTED_KEY = "<redacted>"
 
 
@@ -432,7 +438,9 @@ def _compare_keys(left: tuple, right: tuple) -> int:
 
 def _safe_key(key: Any) -> str:
     text = str(key)
-    return text if _SAFE_KEY_RE.match(text) else _REDACTED_KEY
+    if len(text) > _MAX_SAFE_KEY_LENGTH or not _SAFE_KEY_RE.fullmatch(text):
+        return _REDACTED_KEY
+    return text
 
 
 def _semver_or_none(value: Any, field: str) -> Optional[str]:
@@ -442,7 +450,9 @@ def _semver_or_none(value: Any, field: str) -> Optional[str]:
 def _pattern_or_none(value: Any, pattern: "re.Pattern[str]", field: str) -> Optional[str]:
     if value is None:
         return None
-    if not isinstance(value, str) or not pattern.match(value):
+    # 必须用 fullmatch：`re.match` + `$` 会在末尾单个 `\n` 之前匹配，
+    # 带换行的版本号能穿过白名单、原样落库并裂成第二个字符串。
+    if not isinstance(value, str) or not pattern.fullmatch(value):
         raise VersionContractError(f"{field} is not a valid version field value (value omitted)", field=field)
     return value
 
