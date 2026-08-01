@@ -20,7 +20,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from urllib import error as urlerror, parse as urlparse, request as urlrequest
 
 from .http_identity import PRODUCT_USER_AGENT
@@ -73,8 +73,6 @@ class ReadSourceError(Exception):
 class FixtureReadSource:
     """离线重放：从目录里读已经落盘的读模型响应。无网络、无凭据。"""
 
-    kind = "fixture"
-
     def __init__(self, directory: str) -> None:
         self._directory = Path(directory)
 
@@ -96,8 +94,6 @@ class FixtureReadSource:
 
 class HttpReadSource:
     """在线只读：对 `/api/*` 发只读请求，凭据只进请求头。"""
-
-    kind = "http"
 
     def __init__(self, base_url: str, token: str, timeout: float = 15.0) -> None:
         self._base_url = base_url.rstrip("/")

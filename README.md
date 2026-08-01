@@ -113,6 +113,30 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
 curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/health
 ```
 
+云端数据只读核对（无图形界面的环境用它自行判定数值对不对）：
+
+```bash
+# 离线重放：无网络、无凭据，回放已落盘的读模型响应
+PYTHONPATH=src python3 -m ai_usage_widget.cli verify-cloud summary \
+  --fixture-dir tests/fixtures/verify_cloud/healthy
+
+# 在线只读：凭据只从环境变量读，只发只读请求
+export AI_USAGE_READ_TOKEN=...
+PYTHONPATH=src python3 -m ai_usage_widget.cli verify-cloud limits \
+  --base-url https://aiusage.chunbai.com --period today
+```
+
+四个只读子命令：`summary`（周期用量关键口径）、`limits`（额度窗口逐条标注
+official / confidence / status）、`health`（各来源最后上报时间、新鲜度、覆盖范围、
+准确性）、`parity`（比对 `/api/summary` 与 `/api/mobile/summary` 的口径）。
+加 `--json` 输出机器可判定结构。
+
+退出码有语义，可直接进 CI：`0` 核对通过、`3` 数据异常（额度降级 / 来源掉线 /
+用量归属不完整）、`4` 两端口径不一致、`5` 取数失败。
+
+它证明的是**数据正确**，不证明**用户看得到**：Mac Popover / iPhone / Watch 的
+界面验收不能用它替代。
+
 离线 fixture 采集 official limits 并写入 SQLite：
 
 ```bash
