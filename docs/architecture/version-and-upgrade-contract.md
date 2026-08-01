@@ -62,7 +62,7 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 | --- | --- | --- | --- |
 | `app_version` | semver 字符串 | `clients/` | 各呈现端 App 的用户可见版本：Web、iPhone、Apple Watch、macOS 菜单栏、Android。 |
 | `build_number` | 字符串 | `clients/` | 构建号；Web 用部署 build，Apple 平台用 `CFBundleVersion`。 |
-| `data_contract_version` | semver 字符串 | `src/ai_usage_widget/mobile_summary.py` | 呈现端消费的数据合同版本，由 DTO owner 定义，客户端不得自行改写。 |
+| `data_contract_version` | semver 字符串 | `src/ai_usage_widget/mobile_summary.py` | 呈现端消费的数据合同版本，由 DTO owner 定义，客户端不得自行改写。**尚未实现**：`mobile_summary` 当前输出的是 `schema_version`，本轮只定 owner。 |
 
 呈现端的更新渠道（App Store / TestFlight / Web 部署）和用户可见版本入口**不在本轮范围**，
 必须回 Mac 侧另拆 Story 验收。本文只固定字段名和归属，避免各端各写一套。
@@ -102,6 +102,14 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 
 阈值提升属于运维决策，必须先让存量设备升级到位再改常量，否则会一次性拒掉一批生产采集端。
 
+两点必须说清楚，避免被误读：
+
+- **schema 拒绝线只在采集端真的上报了该字段时生效。** 老采集端不报
+  `parser_schema_version` / `config_schema_version` 时，服务端只按 `collector_version` 判定，
+  不会凭空拒绝。要靠 schema 拒绝线拦住老协议，前提是先把 `collector_version` 的最低支持线提上去。
+- **`verified` 只表示「采集端上报了版本号并完成判定」**，不表示「全部版本字段都已核对」。
+  没上报的字段在输出里是 `null`，展示层不能把 `verified: true` 当成「这台设备已核对无误」。
+
 ## release manifest 的校验方式
 
 自升级机制本身（发现更新、分批升级、写后读、自动回滚演练）需要生产凭据和真实采集端，
@@ -130,6 +138,15 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 
 ## 已知缺口
 
+- **生产权威实现（Cloudflare Native Worker + D1）尚未实现本合同。** 上面描述的判定、拒绝、
+  落库和版本读模型目前只存在于 Python 实现里。Worker 侧不判定版本、不拒绝旧采集端、
+  不落 `collector_release`，`/api/summary` 与 `/api/health` 也不返回版本块。
+  在 Worker 跟进之前，「哪台设备还在跑旧采集器」这个用户结果在生产上仍然拿不到。
+- 上一条还有一个附带风险：`cloudflare/native-worker/test/value_golden.json` 由
+  `scripts/gen_value_golden.py` 从 Python 读模型生成，用于 Worker 的 parity 测试。
+  本轮改了 Python 读模型但**没有重新生成它**（重新生成会让 parity 测试立刻变红，
+  因为 Worker 还没有这些字段）。因此 parity 门禁当前处于「两边都没有新字段所以对得上」的
+  假绿状态。Worker 跟进这条 Story 时必须同时重新生成该 golden。
 - 服务端目前只**持久化** `collector_version`（复用 `collection_runs.collector_version` 列）。
   `config_schema_version`、`parser_schema_version`、`release_channel`、`build_sha`、
   `last_upgrade_*` 只在 ingest 当次参与判定并回写到响应里，**尚未落库**，

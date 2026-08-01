@@ -121,6 +121,10 @@ _TIMESTAMP_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$"
 )
 _MAX_SCHEMA_VERSION = 10000
+#: 只有形态明确安全的 key 名才会出现在错误信息里；其余一律脱敏。
+#: JSON key 是完全不受控的任意文本，直接回显等于把疑似凭据写进 HTTP 响应和日志。
+_SAFE_KEY_RE = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+_REDACTED_KEY = "<redacted>"
 
 
 class VersionContractError(ValueError):
@@ -166,9 +170,10 @@ def normalize_collector_release(raw: Any) -> Optional[Dict[str, Any]]:
 
     for key in raw:
         if key not in COLLECTOR_RELEASE_WIRE_FIELDS:
+            safe_key = _safe_key(key)
             raise VersionContractError(
-                f"{COLLECTOR_RELEASE_FIELD} does not accept unknown field: {key}",
-                field=f"{COLLECTOR_RELEASE_FIELD}.{key}",
+                f"{COLLECTOR_RELEASE_FIELD} does not accept unknown field: {safe_key}",
+                field=f"{COLLECTOR_RELEASE_FIELD}.{safe_key}",
             )
 
     normalized: Dict[str, Any] = {field: None for field in COLLECTOR_VERSION_FIELDS}
@@ -197,9 +202,10 @@ def normalize_collector_release(raw: Any) -> Optional[Dict[str, Any]]:
             )
         for key in last_upgrade:
             if key not in COLLECTOR_RELEASE_LAST_UPGRADE_FIELDS:
+                safe_key = _safe_key(key)
                 raise VersionContractError(
-                    f"{COLLECTOR_RELEASE_FIELD}.last_upgrade does not accept unknown field: {key}",
-                    field=f"{COLLECTOR_RELEASE_FIELD}.last_upgrade.{key}",
+                    f"{COLLECTOR_RELEASE_FIELD}.last_upgrade does not accept unknown field: {safe_key}",
+                    field=f"{COLLECTOR_RELEASE_FIELD}.last_upgrade.{safe_key}",
                 )
         normalized["last_upgrade_status"] = _enum_or_none(
             last_upgrade.get("status"),
@@ -351,19 +357,24 @@ def build_version_health(
 
 def local_collector_release(
     *,
-    config_schema_version: int,
+    config_schema_version: Optional[int] = None,
     release_channel: Optional[str] = None,
     build_sha: Optional[str] = None,
     last_upgrade: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """构造本机采集端要上报的 wire 版本块，出站前先自校验一次。"""
+    """构造本机采集端要上报的 wire 版本块，出站前先自校验一次。
+
+    不传 `config_schema_version` 就不带这个字段：版本块里只有代码常量，
+    永远合法，可以作为采集端的最后兜底。
+    """
     block: Dict[str, Any] = {
         "collector_version": COLLECTOR_VERSION,
-        "config_schema_version": int(config_schema_version),
         "parser_schema_version": COLLECTOR_PARSER_SCHEMA_VERSION,
         "release_channel": release_channel or DEFAULT_RELEASE_CHANNEL,
         "last_upgrade": dict(last_upgrade) if last_upgrade else {"status": "never"},
     }
+    if config_schema_version is not None:
+        block["config_schema_version"] = int(config_schema_version)
     if build_sha:
         block["build_sha"] = build_sha
     normalize_collector_release(block)
@@ -383,9 +394,11 @@ def _finish(result: Dict[str, Any], state: str, reason: str, *, verified: bool =
 
 
 def _version_key(value: str) -> tuple:
+    """按 semver 优先级规则拆解版本号。build metadata（`+`）不参与比较。"""
     text = str(value or "")
-    core, _, suffix = text.partition("-")
+    core, separator, rest = text.partition("-")
     core = core.partition("+")[0]
+    prerelease = rest.partition("+")[0] if separator else ""
     parts = []
     for chunk in core.split("."):
         try:
@@ -394,7 +407,17 @@ def _version_key(value: str) -> tuple:
             parts.append(0)
     while len(parts) < 3:
         parts.append(0)
-    return (tuple(parts[:3]), 1 if not suffix else 0, suffix)
+    identifiers = tuple(_identifier_key(item) for item in prerelease.split(".")) if prerelease else ()
+    # 有 prerelease 的版本优先级低于同号正式版；identifiers 逐段比较，
+    # 段数多的一方在前缀相同时优先级更高。
+    return (tuple(parts[:3]), 0 if identifiers else 1, identifiers)
+
+
+def _identifier_key(identifier: str) -> tuple:
+    # semver：纯数字段按数值比较，且优先级低于含字母的段。
+    if identifier.isdigit():
+        return (0, int(identifier), "")
+    return (1, 0, identifier)
 
 
 def _compare_keys(left: tuple, right: tuple) -> int:
@@ -405,6 +428,11 @@ def _compare_keys(left: tuple, right: tuple) -> int:
     if left[2] != right[2]:
         return 1 if left[2] > right[2] else -1
     return 0
+
+
+def _safe_key(key: Any) -> str:
+    text = str(key)
+    return text if _SAFE_KEY_RE.match(text) else _REDACTED_KEY
 
 
 def _semver_or_none(value: Any, field: str) -> Optional[str]:

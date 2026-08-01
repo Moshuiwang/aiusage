@@ -650,19 +650,29 @@ def _local_collector_release(config: DeviceConfig) -> dict[str, Any]:
     """构造本机要上报的采集端版本块。
 
     build_sha 和最后升级结果来自环境变量，未来由自升级 agent 写入。
-    环境里给了不合规的值时**丢掉该覆盖项**并退回安全默认值，
-    既不让疑似凭据出网，也不因为一个环境变量配错就中断整次采集上报。
+    任何一层给了不合规的值就**逐层丢掉该来源**并退回更安全的默认值：
+    既不让疑似凭据出网，也不因为一个环境变量或一项配置写错就中断整次采集上报。
+    最后一层只含代码常量，永远合法。
     """
-    last_upgrade = _last_upgrade_from_env()
-    try:
-        return local_collector_release(
-            config_schema_version=config.schema_version,
-            release_channel=config.release_channel,
-            build_sha=os.environ.get("AI_USAGE_BUILD_SHA"),
-            last_upgrade=last_upgrade,
-        )
-    except VersionContractError:
-        return local_collector_release(config_schema_version=config.schema_version, release_channel=config.release_channel)
+    candidates: list[dict[str, Any]] = [
+        {
+            "config_schema_version": config.schema_version,
+            "release_channel": config.release_channel,
+            "build_sha": os.environ.get("AI_USAGE_BUILD_SHA"),
+            "last_upgrade": _last_upgrade_from_env(),
+        },
+        {
+            "config_schema_version": config.schema_version,
+            "release_channel": config.release_channel,
+        },
+        {},
+    ]
+    for kwargs in candidates:
+        try:
+            return local_collector_release(**kwargs)
+        except VersionContractError:
+            continue
+    raise AssertionError("local_collector_release() 的常量兜底不应失败")
 
 
 def _last_upgrade_from_env() -> dict[str, Any] | None:

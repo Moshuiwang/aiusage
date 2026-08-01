@@ -694,14 +694,19 @@ class TestDevicePusherCollectorRelease(unittest.TestCase):
             timeout_seconds=30,
         )
         self.accepted = {"status": "accepted", "source_id": "mac-local"}
-        for name in list(os.environ):
-            if name.startswith("AI_USAGE_"):
-                del os.environ[name]
-
-    def tearDown(self) -> None:
-        for name in list(os.environ):
-            if name.startswith("AI_USAGE_"):
-                del os.environ[name]
+        # 快照整个 environ 并在用例结束时还原，只清掉本用例关心的变量，
+        # 不把开发机或 CI 上其它 AI_USAGE_* 变量永久删掉。
+        env_patcher = patch.dict(os.environ)
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+        for name in (
+            "AI_USAGE_BUILD_SHA",
+            "AI_USAGE_LAST_UPGRADE_STATUS",
+            "AI_USAGE_LAST_UPGRADE_FROM_VERSION",
+            "AI_USAGE_LAST_UPGRADE_TO_VERSION",
+            "AI_USAGE_LAST_UPGRADE_FINISHED_AT",
+        ):
+            os.environ.pop(name, None)
 
     def _push_ok(self, config=None):
         executor = FakeExecutor([
@@ -800,3 +805,15 @@ class TestDevicePusherCollectorRelease(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertEqual(result["error_type"], version_contract.UNSUPPORTED_ERROR_TYPE)
         self.assertIn("未写入", result["error_message"])
+
+    def test_out_of_range_config_schema_version_does_not_break_the_whole_push(self) -> None:
+        config = replace(self.config, schema_version=999999)
+
+        payload = self._push_ok(config).last_json
+
+        self.assertEqual(payload["collection_status"], "ok")
+        self.assertEqual(
+            payload["collector_release"]["collector_version"],
+            version_contract.COLLECTOR_VERSION,
+        )
+        self.assertNotIn("config_schema_version", payload["collector_release"])

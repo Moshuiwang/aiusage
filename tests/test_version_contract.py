@@ -51,6 +51,31 @@ class TestVersionCompare(unittest.TestCase):
         self.assertEqual(version_contract.compare_versions("1.2.3-beta.1", "1.2.3"), -1)
         self.assertEqual(version_contract.compare_versions("1.2.3", "1.2.3-beta.1"), 1)
 
+    def test_prerelease_numbers_compare_numerically_not_lexically(self) -> None:
+        self.assertEqual(version_contract.compare_versions("0.4.0-beta.2", "0.4.0-beta.10"), -1)
+        self.assertEqual(version_contract.compare_versions("0.4.0-beta.10", "0.4.0-beta.2"), 1)
+        self.assertEqual(version_contract.compare_versions("0.4.0-beta.9", "0.4.0-beta.10"), -1)
+
+    def test_prerelease_precedence_follows_semver_rules(self) -> None:
+        self.assertEqual(version_contract.compare_versions("1.0.0-alpha", "1.0.0-beta"), -1)
+        self.assertEqual(version_contract.compare_versions("1.0.0-alpha", "1.0.0-alpha.1"), -1)
+        self.assertEqual(version_contract.compare_versions("1.0.0-1", "1.0.0-alpha"), -1)
+
+    def test_build_metadata_does_not_affect_precedence(self) -> None:
+        self.assertEqual(version_contract.compare_versions("1.2.3+build.9", "1.2.3"), 0)
+        self.assertEqual(version_contract.compare_versions("1.2.3-beta.1+build.9", "1.2.3-beta.1"), 0)
+
+    def test_a_beta_channel_device_behind_the_beta_target_is_not_called_ahead(self) -> None:
+        result = version_contract.evaluate_collector_release(
+            version_contract.normalize_collector_release({"collector_version": "0.4.0-beta.2"}),
+            policy=version_contract.VersionPolicy(
+                min_supported_collector_version="0.2.0",
+                target_collector_version="0.4.0-beta.10",
+            ),
+        )
+
+        self.assertEqual(result["state"], "update_available")
+
 
 class TestCollectorReleaseNormalization(unittest.TestCase):
     def test_full_release_block_is_flattened_into_canonical_fields(self) -> None:
@@ -105,6 +130,21 @@ class TestCollectorReleaseNormalization(unittest.TestCase):
         with self.assertRaises(version_contract.VersionContractError) as ctx:
             version_contract.normalize_collector_release({"collector_version": "0.3.0", "auth_token": "x"})
         self.assertIn("auth_token", str(ctx.exception))
+
+    def test_a_credential_shaped_unknown_key_is_redacted_instead_of_echoed(self) -> None:
+        for key in (FAKE_TOKEN, FAKE_PATH, "x" * 80):
+            with self.subTest(key=key):
+                with self.assertRaises(version_contract.VersionContractError) as ctx:
+                    version_contract.normalize_collector_release({key: "x"})
+                self.assertNotIn(key, str(ctx.exception))
+                self.assertNotIn(key, ctx.exception.field)
+
+    def test_a_credential_shaped_unknown_key_inside_last_upgrade_is_also_redacted(self) -> None:
+        with self.assertRaises(version_contract.VersionContractError) as ctx:
+            version_contract.normalize_collector_release({"last_upgrade": {FAKE_TOKEN: "x"}})
+
+        self.assertNotIn(FAKE_TOKEN, str(ctx.exception))
+        self.assertNotIn(FAKE_TOKEN, ctx.exception.field)
 
     def test_token_shaped_value_is_rejected_and_never_echoed_back(self) -> None:
         with self.assertRaises(version_contract.VersionContractError) as ctx:
@@ -320,6 +360,13 @@ class TestLocalCollectorRelease(unittest.TestCase):
     def test_local_release_rejects_unsafe_overrides_before_they_leave_the_device(self) -> None:
         with self.assertRaises(version_contract.VersionContractError):
             version_contract.local_collector_release(config_schema_version=1, build_sha=FAKE_TOKEN)
+
+    def test_local_release_without_any_config_input_is_still_a_valid_block(self) -> None:
+        block = version_contract.local_collector_release()
+
+        self.assertNotIn("config_schema_version", block)
+        self.assertEqual(block["collector_version"], version_contract.COLLECTOR_VERSION)
+        self.assertIsNotNone(version_contract.normalize_collector_release(block))
 
     def test_parser_schema_version_stays_aligned_with_the_real_parser(self) -> None:
         self.assertEqual(
