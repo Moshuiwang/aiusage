@@ -1,6 +1,11 @@
 type AnyRecord = Record<string, unknown>;
 const LIMIT_STALE_AFTER_MS = 120 * 60 * 1000;
 
+// Issue #61：固定的 provider 槽位。DTO 只裁剪 snapshot 的事实，不重算口径；
+// 额度缺失时只保留「最近一次验证时间」，不带任何百分比或 reset 时间。
+// 与 src/ai_usage_widget/mobile_summary.py 的 SLOT_PROVIDERS 保持逐字一致。
+const slotProviders = ["claude", "codex"];
+
 export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
   const summary = dict(snapshot.summary);
   const trend = dict(snapshot.trend);
@@ -67,7 +72,52 @@ export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
       windows,
       providers: limitProviders,
     },
+    provider_slots: providerSlots(snapshot.provider_slots),
     metadata: mobileMetadata(snapshot, windows, candidateWindows, generatedAt),
+  };
+}
+
+function providerSlots(rows: unknown): AnyRecord[] {
+  const byProvider = new Map<string, AnyRecord>();
+  for (const row of list<AnyRecord>(rows)) {
+    if (row === null || typeof row !== "object" || Array.isArray(row)) continue;
+    byProvider.set(str(row.provider), row);
+  }
+  return slotProviders.map((provider) => providerSlot(provider, byProvider.get(provider)));
+}
+
+function providerSlot(provider: string, row: AnyRecord | undefined): AnyRecord {
+  const source = dict(row);
+  const usage = dict(source.usage);
+  const quota = dict(source.quota);
+  const totalTokens = int(usage.total_tokens);
+  const usageStatus = str(usage.status) || (totalTokens > 0 ? "available" : "missing");
+  const quotaStatus = str(quota.status) === "available" ? "available" : "missing";
+  const rawReason = quota.reason;
+  const reason = quotaStatus === "available"
+    ? null
+    : (typeof rawReason === "string" && rawReason ? rawReason : "no_data");
+  const quotaWindows = quotaStatus === "available"
+    ? list<AnyRecord>(quota.windows).filter((window) =>
+      window !== null && typeof window === "object" && !Array.isArray(window))
+    : [];
+  return {
+    provider,
+    usage: {
+      status: usageStatus,
+      total_tokens: totalTokens,
+      input_tokens: int(usage.input_tokens),
+      output_tokens: int(usage.output_tokens),
+      cache_tokens: int(usage.cache_tokens),
+    },
+    quota: {
+      status: quotaStatus,
+      reason,
+      last_verified_at: quota.last_verified_at || null,
+      source_id: quota.source_id || null,
+      source_type: quota.source_type || null,
+      windows: quotaWindows,
+    },
   };
 }
 

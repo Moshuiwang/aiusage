@@ -83,6 +83,19 @@ const localEstimateSourceTypes = new Set([
   "session_log_estimate",
 ]);
 
+// Issue #61：客户端固定展示的 provider 槽位。用量与额度分别是两个独立字段，
+// 任一缺失都不影响另一个；缺失的额度只暴露「最近一次验证时间」，绝不暴露历史百分比或过期 reset。
+// 与 src/ai_usage_widget/snapshot_builder.py 的 SLOT_PROVIDERS 保持逐字一致。
+const slotProviders = ["claude", "codex"] as const;
+const limitStaleAfterMs = 120 * 60 * 1000;
+
+type ProviderUsageTotals = {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
+};
+
 export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
   const refTime = nowInTimezone(request.timezone, request.currentTime);
   const [periodId, startDate, endDate] = periodBounds(request.date, request.period);
@@ -178,6 +191,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   }>();
   const accountTotals = new Map<string, number>();
   const agentTotals = new Map<string, number>();
+  const providerUsage = new Map<string, ProviderUsageTotals>();
   const trendDates = dateAxis(startDate, endDate, rows);
   const trendByAgent = new Map<string, Map<string, number>>();
   const trendByTokenType = {
@@ -224,6 +238,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     userEntry.source_ids.add(row.source_id);
     accountTotals.set(account, (accountTotals.get(account) ?? 0) + total);
     agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
+    accumulateProviderUsage(providerUsage, row.agent, input, output, cacheCreation, cacheRead, total);
 
     if (!trendByAgent.has(row.agent)) {
       trendByAgent.set(row.agent, new Map(trendDates.map((day) => [day, 0])));
@@ -344,6 +359,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     };
   }
 
+  const limitStatus = buildLimitStatus(allLimits, refTime);
   const snapshot: Record<string, unknown> = {
     schema_version: 1,
     generated_at: toOffsetIso(refTime),
@@ -368,7 +384,8 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     trend,
     source_status: buildSourceStatus(statusRows, accuracyRows, identities, refTime, request.machine, request.account),
     limits,
-    limit_status: buildLimitStatus(allLimits, refTime),
+    limit_status: limitStatus,
+    provider_slots: buildProviderSlots(providerUsage, allLimits, limitStatus, refTime),
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
@@ -1345,6 +1362,130 @@ function limitSourceQuality(sourceType: string): number {
 function limitWindowExpired(limit: LimitRow, refTime: Date): boolean {
   const reset = parseDate(limit.reset_at);
   return !!reset && reset.getTime() <= refTime.getTime();
+}
+
+function slotProviderKey(value: unknown): string {
+  const provider = str(value).trim().toLowerCase();
+  if (provider === "claude" || provider === "anthropic") return "claude";
+  if (provider === "codex" || provider === "openai") return "codex";
+  return provider;
+}
+
+function usageProviderKey(agent: unknown): string {
+  const name = str(agent).trim().toLowerCase();
+  if (name.includes("claude")) return "claude";
+  if (name.includes("codex") || name.includes("openai") || name.includes("gpt")) return "codex";
+  return "";
+}
+
+function accumulateProviderUsage(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  agent: unknown,
+  inputTokens: number,
+  outputTokens: number,
+  cacheCreationTokens: number,
+  cacheReadTokens: number,
+  totalTokens: number,
+): void {
+  const provider = usageProviderKey(agent);
+  if (!provider) return;
+  const entry = providerUsage.get(provider)
+    ?? { total_tokens: 0, input_tokens: 0, output_tokens: 0, cache_tokens: 0 };
+  entry.total_tokens += totalTokens;
+  entry.input_tokens += inputTokens;
+  entry.output_tokens += outputTokens;
+  entry.cache_tokens += cacheCreationTokens + cacheReadTokens;
+  providerUsage.set(provider, entry);
+}
+
+function buildProviderSlots(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  allLimits: LimitRow[],
+  limitStatus: Record<string, unknown>[],
+  refTime: Date,
+): Record<string, unknown>[] {
+  const statusByProvider = new Map<string, Record<string, unknown>>();
+  for (const row of limitStatus) statusByProvider.set(slotProviderKey(row.provider), row);
+  const rowsByProvider = new Map<string, LimitRow[]>();
+  for (const limit of allLimits) {
+    const key = slotProviderKey(limit.provider);
+    rowsByProvider.set(key, [...(rowsByProvider.get(key) ?? []), limit]);
+  }
+  return slotProviders.map((provider) => ({
+    provider,
+    usage: providerUsageSlot(providerUsage.get(provider)),
+    quota: providerQuotaSlot(rowsByProvider.get(provider) ?? [], statusByProvider.get(provider), refTime),
+  }));
+}
+
+function providerUsageSlot(totals: ProviderUsageTotals | undefined): Record<string, unknown> {
+  const total = int(totals?.total_tokens ?? 0);
+  return {
+    status: total > 0 ? "available" : "missing",
+    total_tokens: total,
+    input_tokens: int(totals?.input_tokens ?? 0),
+    output_tokens: int(totals?.output_tokens ?? 0),
+    cache_tokens: int(totals?.cache_tokens ?? 0),
+  };
+}
+
+function providerQuotaSlot(
+  rows: LimitRow[],
+  statusRow: Record<string, unknown> | undefined,
+  refTime: Date,
+): Record<string, unknown> {
+  const lastVerifiedAt = lastVerifiedAtOf(rows);
+  // 缺失态只暴露「最近一次验证时间」和来源标识，绝不带任何百分比或 reset 时间。
+  const missing = (reason: string, sourceId: unknown = null, sourceType: unknown = null) => ({
+    status: "missing",
+    reason,
+    last_verified_at: lastVerifiedAt,
+    source_id: sourceId || null,
+    source_type: sourceType || null,
+    windows: [] as LimitRow[],
+  });
+
+  if (!statusRow) return missing(rows.length ? "unverified" : "no_data");
+
+  const sourceId = statusRow.source_id;
+  const sourceType = statusRow.source_type;
+  const state = str(statusRow.status);
+  if (state !== "ok") return missing(state || "unverified", sourceId, sourceType);
+
+  const windows = rows.filter((row) =>
+    str(row.source_id) === str(sourceId) &&
+    effectiveLimitWindow(row) &&
+    !limitWindowExpired(row, refTime) &&
+    !limitWindowStale(row, refTime));
+  if (!windows.length) return missing("unverified", sourceId, sourceType);
+  return {
+    status: "available",
+    reason: null,
+    last_verified_at: lastVerifiedAt,
+    source_id: sourceId || null,
+    source_type: sourceType || null,
+    windows,
+  };
+}
+
+function lastVerifiedAtOf(rows: LimitRow[]): string | null {
+  let best: string | null = null;
+  let bestTime = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    if (!row.observed_at) continue;
+    const time = parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY;
+    if (time > bestTime) {
+      bestTime = time;
+      best = String(row.observed_at);
+    }
+  }
+  return best;
+}
+
+function limitWindowStale(limit: LimitRow, refTime: Date): boolean {
+  const observed = parseDate(limit.observed_at);
+  if (!observed) return true;
+  return refTime.getTime() - observed.getTime() > limitStaleAfterMs;
 }
 
 function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unknown>[] {
