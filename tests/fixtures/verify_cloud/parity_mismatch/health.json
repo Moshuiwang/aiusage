@@ -1,0 +1,46 @@
+{
+  "backend_mode": "origin_direct",
+  "canonical_store": "origin_sqlite",
+  "database": {
+    "exists": true,
+    "path": "data/usage.sqlite",
+    "size_bytes": 524288
+  },
+  "generated_at": "2026-06-03T12:00:00+08:00",
+  "limits": {
+    "effective_window_count": 2,
+    "latest_observed_at": "2026-06-03T11:55:00+08:00",
+    "raw_window_count": 2,
+    "stale_window_count": 0
+  },
+  "snapshot": {
+    "exists": true,
+    "path": "data/latest.json",
+    "updated_at": "2026-06-03T12:00:00+08:00"
+  },
+  "source_status": {
+    "counts": {
+      "ok": 2
+    },
+    "non_ok": [],
+    "total": 2
+  },
+  "status": "ok",
+  "versions": {
+    "counts": {
+      "current": 2,
+      "rollback_available": 0,
+      "unknown": 0,
+      "unsupported": 0,
+      "update_available": 0
+    },
+    "needs_attention": [],
+    "server": {
+      "api_version": "1.0.0",
+      "ingest_schema_version": 1,
+      "min_supported_collector_version": "0.1.0",
+      "read_model_version": "1.0.0",
+      "target_collector_version": "0.3.0"
+    }
+  }
+}
