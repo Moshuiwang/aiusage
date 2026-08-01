@@ -138,15 +138,31 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 
 ## 已知缺口
 
-- **生产权威实现（Cloudflare Native Worker + D1）尚未实现本合同。** 上面描述的判定、拒绝、
-  落库和版本读模型目前只存在于 Python 实现里。Worker 侧不判定版本、不拒绝旧采集端、
-  不落 `collector_release`，`/api/summary` 与 `/api/health` 也不返回版本块。
-  在 Worker 跟进之前，「哪台设备还在跑旧采集器」这个用户结果在生产上仍然拿不到。
-- 上一条还有一个附带风险：`cloudflare/native-worker/test/value_golden.json` 由
+- **生产权威实现（Cloudflare Native Worker + D1）只实现了本合同的写入侧。** 已经对齐的部分：
+  `/ingest` 接受并校验 `collector_release`、缺块降级为 `unknown`、不合法值明确拒绝、
+  版本不兼容返回 400 `collector_version_unsupported` 且当次上报完全不落库、响应回写 `version` 块，
+  以及把采集端真实上报的版本写进 `collection_runs.collector_version`（没上报就写 NULL）。
+  口径实现见 `cloudflare/native-worker/src/version-contract.ts`，它是 `version_contract.py` 的等价移植。
+- **读取侧（`/api/summary` 的 `source_status[].version`、顶层 `version_health`、`/api/health` 的
+  `versions`）在 Worker 上仍然缺席**，因此「哪台设备还在跑旧采集器」这个用户结果在生产上仍拿不到。
+  卡点是结构性的，不是遗漏：Python 读模型从 `source_reports JOIN collection_runs` 取每个来源的
+  `collector_version`，而 Worker 的读路径按 #40 / #41 两次生产修复（降低 D1 读取量）被硬门禁
+  锁死只能读 `source_report_states`——`cloudflare/native-worker/test/web_surface.test.ts`
+  的「reads current source health from the per-source state model」用例会直接拦住任何在
+  `read-model.ts` / `index.ts` 里回查审计表的写法。而 `source_report_states` 没有版本列。
+  要闭合这条缺口只有一条干净路径：给 `source_report_states` 加 `collector_version` 列
+  （D1-only 表，不影响 `test_d1_schema_migration.py` 的 Python↔D1 逐列相等），由 ingest 写入时
+  一并物化，并由 Ops 在 macOS 侧对生产 D1 执行迁移。**这属于另一个 Story，需要显式授权。**
+- 上一条带来的附带风险仍然存在：`cloudflare/native-worker/test/value_golden.json` 由
   `scripts/gen_value_golden.py` 从 Python 读模型生成，用于 Worker 的 parity 测试。
-  本轮改了 Python 读模型但**没有重新生成它**（重新生成会让 parity 测试立刻变红，
-  因为 Worker 还没有这些字段）。因此 parity 门禁当前处于「两边都没有新字段所以对得上」的
-  假绿状态。Worker 跟进这条 Story 时必须同时重新生成该 golden。
+  它**至今没有重新生成**（重新生成会让 parity 测试立刻变红，因为 Worker 读模型还没有这些字段）。
+  因此 parity 门禁当前仍处于「两边都没有新字段所以对得上」的假绿状态。
+  Worker 读取侧跟进时必须同时重新生成该 golden，并顺带补上一道
+  「golden 与当前 Python 读模型产出不一致就红」的守卫，否则这个假绿会再次沉默地复发。
+- **升级前 Worker 写下的存量行带占位假值 `0.1.0`。** 本轮之前 Worker 无条件往
+  `collection_runs.collector_version` 写死 `"0.1.0"`，而 Python 读模型把这一列当真值读。
+  这些历史行在对应设备下次上报之前，**无法与真正在跑 0.1.0 的设备区分**。
+  不要在读模型里给 `"0.1.0"` 开特例（会误伤真的在跑 0.1.0 的设备）；正确做法是等设备重新上报覆盖。
 - 服务端目前只**持久化** `collector_version`（复用 `collection_runs.collector_version` 列）。
   `config_schema_version`、`parser_schema_version`、`release_channel`、`build_sha`、
   `last_upgrade_*` 只在 ingest 当次参与判定并回写到响应里，**尚未落库**，
