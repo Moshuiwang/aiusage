@@ -1,0 +1,40 @@
+{
+  "case": "runtime_release_unversioned",
+  "expected_reason_code": "runtime_release_unversioned",
+  "reference_time": "2026-08-01T04:00:00+00:00",
+  "device_config": {
+    "schema_version": 1,
+    "source_id": "linux-biai-wangzp",
+    "host": "aiusage.example.invalid",
+    "machine": "biai-collector-01",
+    "os_user": "wangzp",
+    "platform": "linux",
+    "timezone": "Asia/Shanghai",
+    "server_url": "https://aiusage.example.invalid/ingest",
+    "timeout_seconds": 30,
+    "token_env": "AI_USAGE_INGEST_TOKEN"
+  },
+  "token_present": true,
+  "entry_probe": {
+    "url": "https://aiusage.example.invalid/api/health",
+    "status": 200,
+    "headers": {"content-type": "application/json"},
+    "body": "{\"status\":\"ok\"}"
+  },
+  "system_timezone": "Asia/Shanghai",
+  "observed_identity": {
+    "machine": "biai-collector-01",
+    "os_user": "wangzp",
+    "platform": "linux"
+  },
+  "release": {
+    "path": "/home/wangzp/ai-usage-scratch",
+    "manifest": null
+  },
+  "python_path": ["/opt/ai-usage/current/src"],
+  "imported_from": "/opt/ai-usage/current/src/ai_usage_widget/__init__.py",
+  "timer": {
+    "unit": "ai-usage-pusher.timer",
+    "show_output": "LoadState=loaded\nUnitFileState=enabled\nActiveState=active\nNextElapseUSecRealtime=Sat 2026-08-01 12:30:00 CST\nNextElapseUSecMonotonic=0\n"
+  }
+}

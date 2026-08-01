@@ -13,6 +13,7 @@ from .backup import backup_sqlite
 from .config import ConfigError, load_config, validate_device_config
 from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider, ClaudeOAuthWithCliFallbackProvider
 from .codex_limits_provider import CodexAppServerRPCProvider, CodexWhamProvider, CodexWhamWithRPCFallbackProvider
+from .deploy_doctor import EXIT_DOCTOR_ERROR, run_deploy_doctor
 from .lock import FileLock, LockAlreadyHeld
 from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
 from .limits_doctor import run_limits_doctor
@@ -52,6 +53,16 @@ def main(argv: list[str] | None = None) -> int:
         help="Incremental Usage Ledger lookback window",
     )
     push_parser.add_argument("--ledger-coverage-start", default=None, help="Authoritative full-rescan coverage start")
+
+    doctor_parser = subparsers.add_parser(
+        "doctor",
+        help="采集端部署只读预检：网络入口、入口防护、认证、设备身份、时区、运行目录版本、PYTHONPATH 与定时任务",
+    )
+    doctor_parser.add_argument("--config", default="config/sources.local.json", help="设备推送配置")
+    doctor_parser.add_argument("--environment-fixture", default=None, help="离线重放用的环境事实 JSON")
+    doctor_parser.add_argument("--release-dir", default=None, help="运行中的 release 目录（含 release.json）")
+    doctor_parser.add_argument("--timer-unit", default=None, help="要检查的 systemd user timer 单元名")
+    doctor_parser.add_argument("--timeout", type=float, default=10.0)
 
     sync_parser = subparsers.add_parser("sync-widget", help="Copy latest.json into the local Widget container")
     sync_parser.add_argument("--input", default="data/latest.json")
@@ -187,6 +198,31 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         print(output, file=sys.stderr)
         return 1
+
+    if args.command == "doctor":
+        try:
+            report = run_deploy_doctor(
+                config_path=args.config,
+                environment_fixture=args.environment_fixture,
+                release_dir=args.release_dir,
+                timer_unit=args.timer_unit,
+                timeout=args.timeout,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            # 只暴露异常类型，不回显配置内容，避免把凭据写进日志。
+            print(json.dumps({
+                "doctor": "deploy",
+                "ok": False,
+                "reason_code": "doctor_failed",
+                "category": "doctor",
+                "exit_code": EXIT_DOCTOR_ERROR,
+                "error_type": exc.__class__.__name__,
+                "checks": [],
+                "failed_reason_codes": [],
+            }, ensure_ascii=False, sort_keys=True))
+            return EXIT_DOCTOR_ERROR
+        print(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
+        return report.exit_code
 
     if args.command == "sync-widget":
         try:
