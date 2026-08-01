@@ -6,9 +6,11 @@ import sqlite3
 import tempfile
 import unittest
 
+from ai_usage_widget import version_contract
 from ai_usage_widget.auth import TokenAuthenticator
 from ai_usage_widget.pusher import _facts_digest
 from ai_usage_widget.server_services import (
+    ServiceError,
     build_health_response,
     build_mobile_summary_response,
     build_summary_response,
@@ -255,6 +257,258 @@ class TestServerServices(unittest.TestCase):
         self.assertEqual(health["generated_at"], "2026-06-01T11:00:00+08:00")
         self.assertEqual(health["source_status"]["counts"], {"ok": 1, "stale": 1})
         self.assertEqual(health["source_status"]["non_ok"], [{"source_id": "linux-dev", "status": "stale"}])
+
+    def _ingest(self, payload, **kwargs):
+        return handle_ingest_payload(
+            payload,
+            token=self.token,
+            authenticator=self.authenticator,
+            db_path=self.db_path,
+            latest_path=self.out_path,
+            timezone=self.timezone,
+            **kwargs,
+        )
+
+    def _source_report_count(self) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='source_reports'"
+            ).fetchone()
+            if not row or not row[0]:
+                return 0
+            return int(conn.execute("SELECT count(*) FROM source_reports").fetchone()[0])
+
+    def test_ingest_reports_current_version_state_for_an_up_to_date_collector(self) -> None:
+        payload = dict(self.valid_payload)
+        payload["collector_release"] = {
+            "collector_version": version_contract.COLLECTOR_VERSION,
+            "config_schema_version": 1,
+            "parser_schema_version": version_contract.COLLECTOR_PARSER_SCHEMA_VERSION,
+            "release_channel": "stable",
+        }
+
+        response = self._ingest(payload)
+
+        self.assertEqual(response["status"], "accepted")
+        self.assertEqual(response["version"]["state"], "current")
+        self.assertEqual(response["version"]["collector_version"], version_contract.COLLECTOR_VERSION)
+        self.assertEqual(
+            response["version"]["min_supported_collector_version"],
+            version_contract.MIN_SUPPORTED_COLLECTOR_VERSION,
+        )
+
+    def test_ingest_without_collector_release_is_accepted_but_marked_unknown(self) -> None:
+        response = self._ingest(dict(self.valid_payload))
+
+        self.assertEqual(response["status"], "accepted")
+        self.assertEqual(response["version"]["state"], "unknown")
+        self.assertEqual(response["version"]["reason"], "collector_release_missing")
+        self.assertFalse(response["version"]["verified"])
+        self.assertEqual(self._source_report_count(), 1)
+
+    def test_ingest_reports_update_available_without_rejecting_the_data(self) -> None:
+        payload = dict(self.valid_payload)
+        payload["collector_release"] = {"collector_version": "0.2.0"}
+
+        response = self._ingest(
+            payload,
+            version_policy=version_contract.VersionPolicy(
+                min_supported_collector_version="0.1.0",
+                target_collector_version="0.4.0",
+            ),
+        )
+
+        self.assertEqual(response["status"], "accepted")
+        self.assertEqual(response["version"]["state"], "update_available")
+        self.assertEqual(self._source_report_count(), 1)
+
+    def test_unsupported_collector_is_rejected_with_an_explicit_error_not_a_silent_200(self) -> None:
+        payload = dict(self.valid_payload)
+        payload["collector_release"] = {"collector_version": "0.1.0"}
+
+        with self.assertRaises(ServiceError) as context:
+            self._ingest(
+                payload,
+                version_policy=version_contract.VersionPolicy(
+                    min_supported_collector_version="0.2.0",
+                    target_collector_version="0.4.0",
+                ),
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.error_type, version_contract.UNSUPPORTED_ERROR_TYPE)
+        self.assertIn("0.1.0", context.exception.message)
+        self.assertIn("0.2.0", context.exception.message)
+        self.assertIn("未写入", context.exception.message)
+
+    def test_rejected_unsupported_upload_is_not_silently_dropped_into_the_store(self) -> None:
+        payload = dict(self.valid_payload)
+        payload["collector_release"] = {"collector_version": "0.1.0"}
+
+        with self.assertRaises(ServiceError):
+            self._ingest(
+                payload,
+                version_policy=version_contract.VersionPolicy(
+                    min_supported_collector_version="0.2.0",
+                    target_collector_version="0.4.0",
+                ),
+            )
+
+        self.assertEqual(self._source_report_count(), 0)
+
+    def test_health_service_exposes_server_versions_and_devices_needing_attention(self) -> None:
+        with open(self.out_path, "w", encoding="utf-8") as handle:
+            json.dump(
+                {
+                    "source_status": [
+                        {
+                            "source_id": "z-old",
+                            "display_name": "z-old",
+                            "status": "ok",
+                            "version": {"state": "update_available", "collector_version": "0.2.0"},
+                        },
+                        {
+                            "source_id": "a-broken",
+                            "display_name": "a-broken",
+                            "status": "ok",
+                            "version": {"state": "unsupported", "collector_version": "0.1.0"},
+                        },
+                        {
+                            "source_id": "m-fresh",
+                            "display_name": "m-fresh",
+                            "status": "ok",
+                            "version": {"state": "current", "collector_version": "0.3.0"},
+                        },
+                    ]
+                },
+                handle,
+            )
+
+        health = build_health_response(
+            db_path=self.db_path,
+            latest_path=self.out_path,
+            now_provider=lambda: "2026-06-01T11:00:00+08:00",
+        )
+
+        self.assertEqual(
+            set(health["versions"]["server"]),
+            set(version_contract.SERVER_VERSION_FIELDS),
+        )
+        self.assertEqual(health["versions"]["counts"]["unsupported"], 1)
+        self.assertEqual(health["versions"]["counts"]["update_available"], 1)
+        self.assertEqual(health["versions"]["counts"]["current"], 1)
+        self.assertEqual(
+            [row["source_id"] for row in health["versions"]["needs_attention"]],
+            ["a-broken", "z-old"],
+        )
+
+    def test_version_fields_never_leak_a_token_or_absolute_path_into_any_output(self) -> None:
+        fake_token = "sk-ant-api03-FAKEfakeFAKEfake0123456789"
+        fake_path = "/opt/ai-usage/releases/current/bin/collector"
+
+        for value in (fake_token, fake_path):
+            with self.subTest(value=value):
+                payload = dict(self.valid_payload)
+                payload["collector_release"] = {"collector_version": value, "build_sha": value}
+                with self.assertRaises(ServiceError) as context:
+                    self._ingest(payload)
+                self.assertNotIn(value, context.exception.message)
+
+        payload = dict(self.valid_payload)
+        payload["collector_release"] = {
+            "collector_version": version_contract.COLLECTOR_VERSION,
+            "build_sha": "0a1b2c3d4e5",
+        }
+        response = self._ingest(payload)
+
+        rendered = json.dumps(
+            {
+                "ingest": response,
+                "summary": json.loads(
+                    build_summary_response(
+                        db_path=self.db_path,
+                        latest_path=self.out_path,
+                        timezone=self.timezone,
+                        date_str="2026-06-01",
+                        period="today",
+                        machine_filter=None,
+                        account_filter=None,
+                    )
+                ),
+                "health": build_health_response(
+                    db_path=self.db_path,
+                    latest_path=self.out_path,
+                    now_provider=lambda: "2026-06-01T11:00:00+08:00",
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+        self.assertNotIn(fake_token, rendered)
+        self.assertNotIn(fake_path, rendered)
+        self.assertIn(version_contract.COLLECTOR_VERSION, rendered)
+
+    def test_summary_snapshot_lists_outdated_devices_with_deterministic_ordering(self) -> None:
+        for source_id, machine, collector_version in [
+            ("z-old", "linux-dev", "0.2.0"),
+            ("m-current", "macbook-pro", version_contract.COLLECTOR_VERSION),
+            ("a-ahead", "winbox", "0.9.0"),
+        ]:
+            payload = dict(self.valid_payload)
+            payload["source_id"] = source_id
+            payload["machine"] = machine
+            payload["host"] = machine
+            payload["collector_release"] = {"collector_version": collector_version}
+            self._ingest(payload)
+
+        snapshot = json.loads(
+            build_summary_response(
+                db_path=self.db_path,
+                latest_path=self.out_path,
+                timezone=self.timezone,
+                date_str="2026-06-01",
+                period="today",
+                machine_filter=None,
+                account_filter=None,
+            )
+        )
+
+        by_source = {row["source_id"]: row for row in snapshot["source_status"]}
+        self.assertEqual(by_source["z-old"]["version"]["state"], "update_available")
+        self.assertEqual(by_source["z-old"]["version"]["collector_version"], "0.2.0")
+        self.assertEqual(by_source["m-current"]["version"]["state"], "current")
+        self.assertEqual(by_source["a-ahead"]["version"]["state"], "rollback_available")
+
+        health = snapshot["version_health"]
+        self.assertEqual(
+            [row["source_id"] for row in health["needs_attention"]],
+            ["a-ahead", "z-old"],
+        )
+        self.assertEqual(health["counts"]["current"], 1)
+        self.assertEqual(health["counts"]["update_available"], 1)
+        self.assertEqual(health["counts"]["rollback_available"], 1)
+        self.assertEqual(health["server"]["target_collector_version"], version_contract.COLLECTOR_VERSION)
+
+    def test_source_without_reported_version_shows_up_as_unknown_in_the_snapshot(self) -> None:
+        self._ingest(dict(self.valid_payload))
+
+        snapshot = json.loads(
+            build_summary_response(
+                db_path=self.db_path,
+                latest_path=self.out_path,
+                timezone=self.timezone,
+                date_str="2026-06-01",
+                period="today",
+                machine_filter=None,
+                account_filter=None,
+            )
+        )
+
+        self.assertEqual(snapshot["source_status"][0]["version"]["state"], "unknown")
+        self.assertEqual(
+            [row["source_id"] for row in snapshot["version_health"]["needs_attention"]],
+            ["mac-local"],
+        )
 
     def test_limits_ingest_service_preserves_response_shape(self) -> None:
         response = handle_ingest_limits_payload(

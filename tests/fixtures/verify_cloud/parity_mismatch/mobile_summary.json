@@ -1,0 +1,333 @@
+{
+  "breakdown": {
+    "by_agent": [
+      {
+        "contributions": [
+          {
+            "source_id": "linux-dev-wang",
+            "tokens": 600000
+          }
+        ],
+        "id": "claude",
+        "label": "claude",
+        "source_ids": [
+          "linux-dev-wang"
+        ],
+        "tokens": 600000
+      },
+      {
+        "contributions": [
+          {
+            "source_id": "mac-air-wang",
+            "tokens": 300000
+          }
+        ],
+        "id": "codex",
+        "label": "codex",
+        "source_ids": [
+          "mac-air-wang"
+        ],
+        "tokens": 300000
+      }
+    ],
+    "by_date": [
+      {
+        "contributions": [
+          {
+            "source_id": "linux-dev-wang",
+            "tokens": 600000
+          },
+          {
+            "source_id": "mac-air-wang",
+            "tokens": 300000
+          }
+        ],
+        "id": "2026-06-03",
+        "label": "2026-06-03",
+        "source_ids": [
+          "linux-dev-wang",
+          "mac-air-wang"
+        ],
+        "tokens": 900000
+      }
+    ],
+    "by_machine": [
+      {
+        "contributions": [
+          {
+            "source_id": "linux-dev-wang",
+            "tokens": 600000
+          }
+        ],
+        "id": "linux-dev",
+        "label": "linux-dev",
+        "source_ids": [
+          "linux-dev-wang"
+        ],
+        "tokens": 600000
+      },
+      {
+        "contributions": [
+          {
+            "source_id": "mac-air-wang",
+            "tokens": 300000
+          }
+        ],
+        "id": "mac-air",
+        "label": "mac-air",
+        "source_ids": [
+          "mac-air-wang"
+        ],
+        "tokens": 300000
+      }
+    ],
+    "by_model": [],
+    "by_os_user": [
+      {
+        "contributions": [
+          {
+            "source_id": "linux-dev-wang",
+            "tokens": 600000
+          }
+        ],
+        "id": "wang",
+        "label": "wang",
+        "source_ids": [
+          "linux-dev-wang"
+        ],
+        "tokens": 600000
+      },
+      {
+        "contributions": [
+          {
+            "source_id": "mac-air-wang",
+            "tokens": 300000
+          }
+        ],
+        "id": "wangzhipeng",
+        "label": "wangzhipeng",
+        "source_ids": [
+          "mac-air-wang"
+        ],
+        "tokens": 300000
+      }
+    ]
+  },
+  "client": "ios",
+  "generated_at": "2026-06-03T12:00:00+08:00",
+  "limits": {
+    "observed_count": 2,
+    "providers": [
+      {
+        "observed_at": "2026-06-03T11:50:00+08:00",
+        "provider": "claude",
+        "source_id": "linux-dev-wang",
+        "source_type": "oauth_usage_api",
+        "status": "ok"
+      },
+      {
+        "observed_at": "2026-06-03T11:55:00+08:00",
+        "provider": "codex",
+        "source_id": "mac-air-wang",
+        "source_type": "wham_usage_api",
+        "status": "ok"
+      }
+    ],
+    "total_count": 2,
+    "windows": [
+      {
+        "confidence": "observed",
+        "observed_at": "2026-06-03T11:50:00+08:00",
+        "official": true,
+        "provider": "claude",
+        "remaining_percent": 58.0,
+        "reset_at": "2026-06-08T00:00:00+08:00",
+        "source_id": "linux-dev-wang",
+        "source_type": "oauth_usage_api",
+        "status": "ok",
+        "used_percent": 42.0,
+        "window": "week",
+        "window_duration_minutes": 10080
+      },
+      {
+        "confidence": "observed",
+        "observed_at": "2026-06-03T11:55:00+08:00",
+        "official": true,
+        "provider": "codex",
+        "remaining_percent": 82.0,
+        "reset_at": "2026-06-03T16:00:00+08:00",
+        "source_id": "mac-air-wang",
+        "source_type": "wham_usage_api",
+        "status": "ok",
+        "used_percent": 18.0,
+        "window": "session",
+        "window_duration_minutes": 300
+      }
+    ]
+  },
+  "metadata": {
+    "backend_mode": "origin_direct",
+    "canonical_store": "origin_sqlite",
+    "freshness_status": "ok",
+    "limits_observed_at": "2026-06-03T11:55:00+08:00",
+    "read_model_generated_at": "2026-06-03T12:00:00+08:00"
+  },
+  "period": {
+    "account": null,
+    "cache_ratio": 78,
+    "cache_tokens": 700000,
+    "date": "2026-06-03",
+    "end_date": "2026-06-03",
+    "id": "today",
+    "input_tokens": 120000,
+    "machine": null,
+    "output_tokens": 80000,
+    "start_date": "2026-06-03",
+    "total_tokens": 880000
+  },
+  "provider_slots": [
+    {
+      "provider": "claude",
+      "quota": {
+        "last_verified_at": "2026-06-03T11:50:00+08:00",
+        "reason": "unverified",
+        "source_id": "linux-dev-wang",
+        "source_type": "oauth_usage_api",
+        "status": "missing",
+        "windows": []
+      },
+      "usage": {
+        "cache_tokens": 470000,
+        "input_tokens": 80000,
+        "output_tokens": 50000,
+        "status": "available",
+        "total_tokens": 600000
+      }
+    },
+    {
+      "provider": "codex",
+      "quota": {
+        "last_verified_at": "2026-06-03T11:55:00+08:00",
+        "reason": null,
+        "source_id": "mac-air-wang",
+        "source_type": "wham_usage_api",
+        "status": "available",
+        "windows": [
+          {
+            "confidence": "observed",
+            "observed_at": "2026-06-03T11:55:00+08:00",
+            "official": true,
+            "provider": "codex",
+            "remaining_percent": 82.0,
+            "reset_at": "2026-06-03T16:00:00+08:00",
+            "source_id": "mac-air-wang",
+            "source_type": "wham_usage_api",
+            "status": "ok",
+            "used_percent": 18.0,
+            "window": "session",
+            "window_duration_minutes": 300
+          }
+        ]
+      },
+      "usage": {
+        "cache_tokens": 230000,
+        "input_tokens": 40000,
+        "output_tokens": 30000,
+        "status": "available",
+        "total_tokens": 280000
+      }
+    }
+  ],
+  "provider_usage_coverage": {
+    "attributed_tokens": 880000,
+    "other_provider_tokens": 0,
+    "status": "complete",
+    "total_tokens": 900000,
+    "unattributed_tokens": 0
+  },
+  "schema_version": 1,
+  "sources": [
+    {
+      "accuracy": {
+        "agents": [
+          {
+            "agent": "claude",
+            "collector_version": "0.3.0",
+            "coverage": {
+              "end": "2026-06-03T11:58:00+08:00",
+              "start": "2026-06-01T00:00:00+08:00"
+            },
+            "lookback_hours": 48.0,
+            "matching_full_scans": 3,
+            "mode": "full-rescan",
+            "observed_at": "2026-06-03T11:58:00+08:00",
+            "parser_schema_version": 2,
+            "read_errors": 0,
+            "scan_complete": true,
+            "status": "verified",
+            "unresolved_mismatch": 0,
+            "verified_at": "2026-06-03T11:58:00+08:00"
+          }
+        ],
+        "collector_version": "0.3.0",
+        "matching_full_scans": 3,
+        "status": "verified",
+        "verified_at": "2026-06-03T11:58:00+08:00"
+      },
+      "display_name": "linux-dev · wang",
+      "error_message": null,
+      "last_observed_at": "2026-06-03T11:58:00+08:00",
+      "last_pushed_at": "2026-06-03T11:58:00+08:00",
+      "machine": "linux-dev",
+      "os_user": "wang",
+      "platform": "linux",
+      "source_id": "linux-dev-wang",
+      "status": "ok"
+    },
+    {
+      "accuracy": {
+        "agents": [
+          {
+            "agent": "codex",
+            "collector_version": "0.3.0",
+            "coverage": {
+              "end": "2026-06-03T11:59:00+08:00",
+              "start": "2026-06-01T00:00:00+08:00"
+            },
+            "lookback_hours": 48.0,
+            "matching_full_scans": 3,
+            "mode": "full-rescan",
+            "observed_at": "2026-06-03T11:59:00+08:00",
+            "parser_schema_version": 2,
+            "read_errors": 0,
+            "scan_complete": true,
+            "status": "verified",
+            "unresolved_mismatch": 0,
+            "verified_at": "2026-06-03T11:59:00+08:00"
+          }
+        ],
+        "collector_version": "0.3.0",
+        "matching_full_scans": 3,
+        "status": "verified",
+        "verified_at": "2026-06-03T11:59:00+08:00"
+      },
+      "display_name": "mac-air · wangzhipeng",
+      "error_message": null,
+      "last_observed_at": "2026-06-03T11:59:00+08:00",
+      "last_pushed_at": "2026-06-03T11:59:00+08:00",
+      "machine": "mac-air",
+      "os_user": "wangzhipeng",
+      "platform": "darwin",
+      "source_id": "mac-air-wang",
+      "status": "ok"
+    }
+  ],
+  "timezone": "Asia/Shanghai",
+  "trend": {
+    "end_date": "2026-06-03",
+    "granularity": "hour",
+    "period": "today",
+    "points": [],
+    "start_date": "2026-06-03"
+  }
+}

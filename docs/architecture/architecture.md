@@ -10,6 +10,7 @@
 - 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
 - Cloudflare/D1 当前生产事实：[`cloudflare-migration-remaining-work.md`](cloudflare-migration-remaining-work.md)。
+- 版本字段清单、四态判定与升级边界：[`version-and-upgrade-contract.md`](version-and-upgrade-contract.md)；口径以 `version_contract.py` 为准。
 
 ## 当前真实架构
 
@@ -69,6 +70,7 @@ CLI / HTTP handler / clients
 | `snapshot_builder.py` | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。 | 不把口径分散到 Web、Mobile 或 server route。 |
 | `snapshot_periods.py` / `snapshot_filters.py` / `snapshot_trends.py` / `snapshot_source_health.py` | `snapshot_builder.py` 的内部 helper：period/date axis、machine/account filter、trend/hourly residual、source health。 | 不成为新的 API owner，不直接被 Web/Mobile 调用。 |
 | `mobile_summary.py` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
+| `version_contract.py` | 采集端/服务端版本字段口径、四态判定、最低支持版本策略、版本字段安全白名单。 | 不做 HTTP、不写 SQLite、不依赖包内其它模块。 |
 | `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
 | `collector.py` / SSH source | Legacy compatibility only。 | V2 新功能不得依赖这条路径。 |
 

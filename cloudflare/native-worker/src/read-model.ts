@@ -83,6 +83,21 @@ const localEstimateSourceTypes = new Set([
   "session_log_estimate",
 ]);
 
+// Issue #61：客户端固定展示的 provider 槽位。用量与额度分别是两个独立字段，
+// 任一缺失都不影响另一个；缺失的额度只暴露「最近一次验证时间」，绝不暴露历史百分比或过期 reset。
+// 与 src/ai_usage_widget/snapshot_builder.py 的 SLOT_PROVIDERS 保持逐字一致。
+const slotProviders = ["claude", "codex"] as const;
+// pusher 真实会写出来的「跨 agent 聚合」与「来源不明」两个 agent 名，不代表任何 provider。
+const aggregateAgentNames = new Set(["", "all", "unknown"]);
+const limitStaleAfterMs = 120 * 60 * 1000;
+
+type ProviderUsageTotals = {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_tokens: number;
+};
+
 export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
   const refTime = nowInTimezone(request.timezone, request.currentTime);
   const [periodId, startDate, endDate] = periodBounds(request.date, request.period);
@@ -128,6 +143,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   );
   const factRows = (await fetchFactRows(db, startDate, endDate, request.timezone))
     .filter((row) => accountHourlyRowMatchesFilter(row, request.machine, request.account));
+  const canonicalProviderTokens = providerTokensByItem(filteredAccountHourlyRows);
   const costsByItem = factCostsByItem(factRows);
   const rows = accountHourlyRowsToDailyRows(filteredAccountHourlyRows).map((row) => ({
     ...row,
@@ -178,6 +194,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   }>();
   const accountTotals = new Map<string, number>();
   const agentTotals = new Map<string, number>();
+  const providerUsage = new Map<string, ProviderUsageTotals>();
   const trendDates = dateAxis(startDate, endDate, rows);
   const trendByAgent = new Map<string, Map<string, number>>();
   const trendByTokenType = {
@@ -224,6 +241,11 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     userEntry.source_ids.add(row.source_id);
     accountTotals.set(account, (accountTotals.get(account) ?? 0) + total);
     agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
+    accumulateProviderUsage(
+      providerUsage,
+      canonicalProviderTokens.get(itemKey(row.source_id, row.date, row.agent)),
+      row.agent, input, output, cacheCreation, cacheRead, total,
+    );
 
     if (!trendByAgent.has(row.agent)) {
       trendByAgent.set(row.agent, new Map(trendDates.map((day) => [day, 0])));
@@ -344,6 +366,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     };
   }
 
+  const limitStatus = buildLimitStatus(allLimits, refTime);
   const snapshot: Record<string, unknown> = {
     schema_version: 1,
     generated_at: toOffsetIso(refTime),
@@ -368,7 +391,9 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     trend,
     source_status: buildSourceStatus(statusRows, accuracyRows, identities, refTime, request.machine, request.account),
     limits,
-    limit_status: buildLimitStatus(allLimits, refTime),
+    limit_status: limitStatus,
+    provider_slots: buildProviderSlots(providerUsage, allLimits, limitStatus, refTime),
+    provider_usage_coverage: buildProviderUsageCoverage(providerUsage, totalTokens),
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
@@ -1344,7 +1369,233 @@ function limitSourceQuality(sourceType: string): number {
 
 function limitWindowExpired(limit: LimitRow, refTime: Date): boolean {
   const reset = parseDate(limit.reset_at);
-  return !!reset && reset.getTime() <= refTime.getTime();
+  if (!reset) return false;
+  // 没有时区标记就判断不了是否已 reset，按已过期处理（fail closed）。
+  // 与 observedStale 同一套策略，也与 Python 侧一致。
+  if (!hasTimezoneDesignator(limit.reset_at)) return true;
+  return reset.getTime() <= refTime.getTime();
+}
+
+function slotProviderKey(value: unknown): string {
+  const provider = str(value).trim().toLowerCase();
+  if (provider === "claude" || provider === "anthropic") return "claude";
+  if (provider === "codex" || provider === "openai") return "codex";
+  return provider;
+}
+
+// agent 名字只是**兜底**归属，权威字段是 usage_hourly_facts.ai_provider。
+// `all` / `unknown` 表示「跨 agent / 来源不明」，不能被硬塞进任何一个 provider 槽位。
+// 与 src/ai_usage_widget/snapshot_builder.py 的 _usage_provider_key 保持一致。
+function usageProviderKey(agent: unknown): string {
+  const name = str(agent).trim().toLowerCase();
+  if (aggregateAgentNames.has(name)) return "";
+  const key = slotProviderKey(name);
+  if ((slotProviders as readonly string[]).includes(key)) return key;
+  if (name.includes("claude")) return "claude";
+  if (name.includes("codex") || name.includes("openai") || name.includes("gpt")) return "codex";
+  return name;
+}
+
+// 按 canonical ai_provider 把每个 (source_id, date, agent) 的用量拆开。ledger 行整条替换
+// 同 key 的行，所以分项之和恒等于该 item 的总量，归属是精确切分而不是估算。
+function providerTokensByItem(rows: Record<string, unknown>[]): Map<string, Map<string, ProviderUsageTotals>> {
+  const result = new Map<string, Map<string, ProviderUsageTotals>>();
+  for (const row of rows) {
+    const date = localDateFromWindowStart(row.window_start);
+    if (!date) continue;
+    const key = itemKey(str(row.source_id), date, str(row.agent));
+    const provider = slotProviderKey(row.ai_provider);
+    const byProvider = result.get(key) ?? new Map<string, ProviderUsageTotals>();
+    const entry = byProvider.get(provider)
+      ?? { total_tokens: 0, input_tokens: 0, output_tokens: 0, cache_tokens: 0 };
+    entry.total_tokens += int(row.total_tokens);
+    entry.input_tokens += int(row.input_tokens);
+    entry.output_tokens += int(row.output_tokens);
+    entry.cache_tokens += int(row.cache_creation_tokens) + int(row.cache_read_tokens);
+    byProvider.set(provider, entry);
+    result.set(key, byProvider);
+  }
+  return result;
+}
+
+function accumulateProviderUsage(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  canonicalBreakdown: Map<string, ProviderUsageTotals> | undefined,
+  agent: unknown,
+  inputTokens: number,
+  outputTokens: number,
+  cacheCreationTokens: number,
+  cacheReadTokens: number,
+  totalTokens: number,
+): void {
+  if (canonicalBreakdown && canonicalBreakdown.size) {
+    for (const [provider, totals] of canonicalBreakdown) {
+      addProviderUsage(
+        providerUsage, provider,
+        totals.input_tokens, totals.output_tokens, totals.cache_tokens, totals.total_tokens,
+      );
+    }
+    return;
+  }
+  addProviderUsage(
+    providerUsage, usageProviderKey(agent),
+    inputTokens, outputTokens, cacheCreationTokens + cacheReadTokens, totalTokens,
+  );
+}
+
+function addProviderUsage(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  provider: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheTokens: number,
+  totalTokens: number,
+): void {
+  // provider === "" 表示无法归属，同样要入账，否则用量会静默消失。
+  const entry = providerUsage.get(provider)
+    ?? { total_tokens: 0, input_tokens: 0, output_tokens: 0, cache_tokens: 0 };
+  entry.total_tokens += totalTokens;
+  entry.input_tokens += inputTokens;
+  entry.output_tokens += outputTokens;
+  entry.cache_tokens += cacheTokens;
+  providerUsage.set(provider, entry);
+}
+
+// 把「用户能看到的」和「看不到的」分开点名。固定槽位只有 claude / codex，
+// 进不了槽位的 token 分两类各自报出来：other_provider_tokens（有 canonical provider
+// 但没槽位，例如 antigravity）、unattributed_tokens（连 provider 都定不了）。
+// 恒等式：attributed + other_provider + unattributed == total，attributed 就是槽位之和。
+// 与 src/ai_usage_widget/snapshot_builder.py 的 _build_provider_usage_coverage 一致。
+function buildProviderUsageCoverage(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  totalTokens: number,
+): Record<string, unknown> {
+  let attributed = 0;
+  for (const provider of slotProviders) {
+    attributed += providerUsage.get(provider)?.total_tokens ?? 0;
+  }
+  const unattributed = providerUsage.get("")?.total_tokens ?? 0;
+  let other = 0;
+  for (const [provider, totals] of providerUsage) {
+    if (provider && !(slotProviders as readonly string[]).includes(provider)) {
+      other += totals.total_tokens;
+    }
+  }
+  return {
+    status: other === 0 && unattributed === 0 ? "complete" : "partial",
+    total_tokens: totalTokens,
+    attributed_tokens: attributed,
+    other_provider_tokens: other,
+    unattributed_tokens: unattributed,
+  };
+}
+
+function buildProviderSlots(
+  providerUsage: Map<string, ProviderUsageTotals>,
+  allLimits: LimitRow[],
+  limitStatus: Record<string, unknown>[],
+  refTime: Date,
+): Record<string, unknown>[] {
+  const statusByProvider = new Map<string, Record<string, unknown>>();
+  for (const row of limitStatus) statusByProvider.set(slotProviderKey(row.provider), row);
+  const rowsByProvider = new Map<string, LimitRow[]>();
+  for (const limit of allLimits) {
+    const key = slotProviderKey(limit.provider);
+    rowsByProvider.set(key, [...(rowsByProvider.get(key) ?? []), limit]);
+  }
+  return slotProviders.map((provider) => ({
+    provider,
+    usage: providerUsageSlot(providerUsage.get(provider)),
+    quota: providerQuotaSlot(rowsByProvider.get(provider) ?? [], statusByProvider.get(provider), refTime),
+  }));
+}
+
+function providerUsageSlot(totals: ProviderUsageTotals | undefined): Record<string, unknown> {
+  const total = int(totals?.total_tokens ?? 0);
+  return {
+    status: total > 0 ? "available" : "missing",
+    total_tokens: total,
+    input_tokens: int(totals?.input_tokens ?? 0),
+    output_tokens: int(totals?.output_tokens ?? 0),
+    cache_tokens: int(totals?.cache_tokens ?? 0),
+  };
+}
+
+function providerQuotaSlot(
+  rows: LimitRow[],
+  statusRow: Record<string, unknown> | undefined,
+  refTime: Date,
+): Record<string, unknown> {
+  const selectedSourceId = statusRow ? statusRow.source_id : undefined;
+  const lastVerifiedAt = lastVerifiedAtOf(rows, selectedSourceId);
+  // 缺失态只暴露「最近一次验证时间」和来源标识，绝不带任何百分比或 reset 时间。
+  const missing = (reason: string, sourceId: unknown = null, sourceType: unknown = null) => ({
+    status: "missing",
+    reason,
+    last_verified_at: lastVerifiedAt,
+    source_id: sourceId || null,
+    source_type: sourceType || null,
+    windows: [] as LimitRow[],
+  });
+
+  if (!statusRow) return missing(rows.length ? "unverified" : "no_data");
+
+  const sourceId = statusRow.source_id;
+  const sourceType = statusRow.source_type;
+  const state = str(statusRow.status);
+  if (state !== "ok") return missing(state || "unverified", sourceId, sourceType);
+
+  const windows = rows.filter((row) =>
+    str(row.source_id) === str(sourceId) &&
+    effectiveLimitWindow(row) &&
+    !limitWindowStale(row, refTime) &&
+    !limitWindowExpired(row, refTime));
+  if (!windows.length) return missing("unverified", sourceId, sourceType);
+  return {
+    status: "available",
+    reason: null,
+    last_verified_at: lastVerifiedAt,
+    source_id: sourceId || null,
+    source_type: sourceType || null,
+    windows,
+  };
+}
+
+// 最近一次**成功的官方核对**时间。本地估算、失败的探测（provider_failed）、
+// confidence != observed 的观测都不算核对，否则展示层会把「刚刚算过 / 刚刚失败过」
+// 读成「官方额度刚刚核对过」。已选定来源时只看该来源，保证
+// (source_id, source_type, last_verified_at) 指向同一条记录。与 Python 侧一致。
+function lastVerifiedAtOf(rows: LimitRow[], sourceId?: unknown): string | null {
+  let best: string | null = null;
+  let bestTime = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    if (!row.observed_at) continue;
+    if (!effectiveLimitWindow(row)) continue;
+    if (sourceId !== undefined && str(row.source_id) !== str(sourceId)) continue;
+    const time = parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY;
+    if (time > bestTime) {
+      bestTime = time;
+      best = String(row.observed_at);
+    }
+  }
+  return best;
+}
+
+function limitWindowStale(limit: LimitRow, refTime: Date): boolean {
+  return observedStale(limit.observed_at, refTime);
+}
+
+// 观测时间超过阈值就是陈旧。没有时区标记时无法判断年龄，按陈旧处理（fail closed），
+// 不让年龄不明的记录冒充当前官方额度。Python 侧 _observed_stale 同一套策略。
+function observedStale(observedAt: unknown, refTime: Date): boolean {
+  if (!hasTimezoneDesignator(observedAt)) return true;
+  const observed = parseDate(str(observedAt));
+  if (!observed) return true;
+  return refTime.getTime() - observed.getTime() > limitStaleAfterMs;
+}
+
+function hasTimezoneDesignator(value: unknown): boolean {
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(str(value).trim());
 }
 
 function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unknown>[] {
@@ -1374,8 +1625,7 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
     })[0];
     const latestSuccess = Math.max(...successful.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
     const latestFailure = Math.max(...failures.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY), Number.NEGATIVE_INFINITY);
-    const observed = parseDate(freshest.observed_at);
-    const stale = !observed || refTime.getTime() - observed.getTime() > 120 * 60 * 1000;
+    const stale = observedStale(freshest.observed_at, refTime);
     const unexpired = successful.some((row) => !limitWindowExpired(row, refTime));
     return {
       provider,

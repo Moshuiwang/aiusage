@@ -351,6 +351,77 @@
             "status": {
               "type": "str",
               "value": "accepted"
+            },
+            "version": {
+              "fields": {
+                "build_sha": {
+                  "type": "null"
+                },
+                "collector_version": {
+                  "type": "null"
+                },
+                "compatible": {
+                  "type": "bool"
+                },
+                "config_schema_version": {
+                  "type": "null"
+                },
+                "last_upgrade_finished_at": {
+                  "type": "null"
+                },
+                "last_upgrade_from_version": {
+                  "type": "null"
+                },
+                "last_upgrade_status": {
+                  "type": "null"
+                },
+                "last_upgrade_to_version": {
+                  "type": "null"
+                },
+                "min_supported_collector_version": {
+                  "type": "str"
+                },
+                "parser_schema_version": {
+                  "type": "null"
+                },
+                "reason": {
+                  "type": "str"
+                },
+                "release_channel": {
+                  "type": "null"
+                },
+                "rollback_target_version": {
+                  "type": "null"
+                },
+                "state": {
+                  "type": "str"
+                },
+                "target_collector_version": {
+                  "type": "str"
+                },
+                "verified": {
+                  "type": "bool"
+                }
+              },
+              "keys": [
+                "build_sha",
+                "collector_version",
+                "compatible",
+                "config_schema_version",
+                "last_upgrade_finished_at",
+                "last_upgrade_from_version",
+                "last_upgrade_status",
+                "last_upgrade_to_version",
+                "min_supported_collector_version",
+                "parser_schema_version",
+                "reason",
+                "release_channel",
+                "rollback_target_version",
+                "state",
+                "target_collector_version",
+                "verified"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -358,7 +429,8 @@
             "facts_accepted",
             "message",
             "source_id",
-            "status"
+            "status",
+            "version"
           ],
           "type": "object"
         }
@@ -396,6 +468,77 @@
             "status": {
               "type": "str",
               "value": "accepted"
+            },
+            "version": {
+              "fields": {
+                "build_sha": {
+                  "type": "null"
+                },
+                "collector_version": {
+                  "type": "null"
+                },
+                "compatible": {
+                  "type": "bool"
+                },
+                "config_schema_version": {
+                  "type": "null"
+                },
+                "last_upgrade_finished_at": {
+                  "type": "null"
+                },
+                "last_upgrade_from_version": {
+                  "type": "null"
+                },
+                "last_upgrade_status": {
+                  "type": "null"
+                },
+                "last_upgrade_to_version": {
+                  "type": "null"
+                },
+                "min_supported_collector_version": {
+                  "type": "str"
+                },
+                "parser_schema_version": {
+                  "type": "null"
+                },
+                "reason": {
+                  "type": "str"
+                },
+                "release_channel": {
+                  "type": "null"
+                },
+                "rollback_target_version": {
+                  "type": "null"
+                },
+                "state": {
+                  "type": "str"
+                },
+                "target_collector_version": {
+                  "type": "str"
+                },
+                "verified": {
+                  "type": "bool"
+                }
+              },
+              "keys": [
+                "build_sha",
+                "collector_version",
+                "compatible",
+                "config_schema_version",
+                "last_upgrade_finished_at",
+                "last_upgrade_from_version",
+                "last_upgrade_status",
+                "last_upgrade_to_version",
+                "min_supported_collector_version",
+                "parser_schema_version",
+                "reason",
+                "release_channel",
+                "rollback_target_version",
+                "state",
+                "target_collector_version",
+                "verified"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -403,7 +546,8 @@
             "facts_accepted",
             "message",
             "source_id",
-            "status"
+            "status",
+            "version"
           ],
           "type": "object"
         }
@@ -441,6 +585,77 @@
             "status": {
               "type": "str",
               "value": "accepted"
+            },
+            "version": {
+              "fields": {
+                "build_sha": {
+                  "type": "null"
+                },
+                "collector_version": {
+                  "type": "null"
+                },
+                "compatible": {
+                  "type": "bool"
+                },
+                "config_schema_version": {
+                  "type": "null"
+                },
+                "last_upgrade_finished_at": {
+                  "type": "null"
+                },
+                "last_upgrade_from_version": {
+                  "type": "null"
+                },
+                "last_upgrade_status": {
+                  "type": "null"
+                },
+                "last_upgrade_to_version": {
+                  "type": "null"
+                },
+                "min_supported_collector_version": {
+                  "type": "str"
+                },
+                "parser_schema_version": {
+                  "type": "null"
+                },
+                "reason": {
+                  "type": "str"
+                },
+                "release_channel": {
+                  "type": "null"
+                },
+                "rollback_target_version": {
+                  "type": "null"
+                },
+                "state": {
+                  "type": "str"
+                },
+                "target_collector_version": {
+                  "type": "str"
+                },
+                "verified": {
+                  "type": "bool"
+                }
+              },
+              "keys": [
+                "build_sha",
+                "collector_version",
+                "compatible",
+                "config_schema_version",
+                "last_upgrade_finished_at",
+                "last_upgrade_from_version",
+                "last_upgrade_status",
+                "last_upgrade_to_version",
+                "min_supported_collector_version",
+                "parser_schema_version",
+                "reason",
+                "release_channel",
+                "rollback_target_version",
+                "state",
+                "target_collector_version",
+                "verified"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -448,7 +663,8 @@
             "facts_accepted",
             "message",
             "source_id",
-            "status"
+            "status",
+            "version"
           ],
           "type": "object"
         }
@@ -486,6 +702,77 @@
             "status": {
               "type": "str",
               "value": "accepted"
+            },
+            "version": {
+              "fields": {
+                "build_sha": {
+                  "type": "null"
+                },
+                "collector_version": {
+                  "type": "null"
+                },
+                "compatible": {
+                  "type": "bool"
+                },
+                "config_schema_version": {
+                  "type": "null"
+                },
+                "last_upgrade_finished_at": {
+                  "type": "null"
+                },
+                "last_upgrade_from_version": {
+                  "type": "null"
+                },
+                "last_upgrade_status": {
+                  "type": "null"
+                },
+                "last_upgrade_to_version": {
+                  "type": "null"
+                },
+                "min_supported_collector_version": {
+                  "type": "str"
+                },
+                "parser_schema_version": {
+                  "type": "null"
+                },
+                "reason": {
+                  "type": "str"
+                },
+                "release_channel": {
+                  "type": "null"
+                },
+                "rollback_target_version": {
+                  "type": "null"
+                },
+                "state": {
+                  "type": "str"
+                },
+                "target_collector_version": {
+                  "type": "str"
+                },
+                "verified": {
+                  "type": "bool"
+                }
+              },
+              "keys": [
+                "build_sha",
+                "collector_version",
+                "compatible",
+                "config_schema_version",
+                "last_upgrade_finished_at",
+                "last_upgrade_from_version",
+                "last_upgrade_status",
+                "last_upgrade_to_version",
+                "min_supported_collector_version",
+                "parser_schema_version",
+                "reason",
+                "release_channel",
+                "rollback_target_version",
+                "state",
+                "target_collector_version",
+                "verified"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -493,7 +780,8 @@
             "facts_accepted",
             "message",
             "source_id",
-            "status"
+            "status",
+            "version"
           ],
           "type": "object"
         }
@@ -843,6 +1131,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -896,6 +1370,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -908,7 +1453,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -1073,6 +1619,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -1084,11 +1756,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -1526,6 +2201,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -1689,6 +2550,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -2042,6 +2905,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -2095,6 +3144,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -2107,7 +3227,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -2294,6 +3415,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -2305,11 +3552,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -3059,6 +4309,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -3222,6 +4658,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -3575,6 +5013,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -3628,6 +5252,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -3640,7 +5335,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -3827,6 +5523,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -3838,11 +5660,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -4592,6 +6417,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -4755,6 +6766,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -5108,6 +7121,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -5161,6 +7360,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -5173,7 +7443,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -5360,6 +7631,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -5371,11 +7768,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -6125,6 +8525,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -6288,6 +8874,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -6641,6 +9229,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -6694,6 +9468,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -6706,7 +9551,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -6897,6 +9743,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -6908,11 +9880,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -7262,6 +10237,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -7315,6 +10476,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -7327,7 +10559,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -7518,6 +10751,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -7529,11 +10888,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -7971,6 +11333,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -8134,6 +11682,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -8575,6 +12125,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -8738,6 +12474,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -8872,6 +12610,132 @@
             "status": {
               "type": "str",
               "value": "ok"
+            },
+            "versions": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -8882,7 +12746,8 @@
             "limits",
             "snapshot",
             "source_status",
-            "status"
+            "status",
+            "versions"
           ],
           "type": "object"
         }
@@ -9528,6 +13393,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -9581,6 +13632,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -9593,7 +13715,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -9780,6 +13903,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -9791,11 +14040,14 @@
             "limit_status",
             "limits",
             "metadata",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -10604,6 +14856,192 @@
               ],
               "type": "object"
             },
+            "provider_slots": {
+              "items": [
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "available"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
+              "type": "array"
+            },
+            "provider_usage_coverage": {
+              "fields": {
+                "attributed_tokens": {
+                  "type": "int"
+                },
+                "other_provider_tokens": {
+                  "type": "int"
+                },
+                "status": {
+                  "type": "str",
+                  "value": "complete"
+                },
+                "total_tokens": {
+                  "type": "int"
+                },
+                "unattributed_tokens": {
+                  "type": "int"
+                }
+              },
+              "keys": [
+                "attributed_tokens",
+                "other_provider_tokens",
+                "status",
+                "total_tokens",
+                "unattributed_tokens"
+              ],
+              "type": "object"
+            },
             "schema_version": {
               "type": "int",
               "value": 1
@@ -10767,6 +15205,8 @@
             "limits",
             "metadata",
             "period",
+            "provider_slots",
+            "provider_usage_coverage",
             "schema_version",
             "sources",
             "timezone",
@@ -10901,6 +15341,132 @@
             "status": {
               "type": "str",
               "value": "ok"
+            },
+            "versions": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -10911,7 +15477,8 @@
             "limits",
             "snapshot",
             "source_status",
-            "status"
+            "status",
+            "versions"
           ],
           "type": "object"
         }

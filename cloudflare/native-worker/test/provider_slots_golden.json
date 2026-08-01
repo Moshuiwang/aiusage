@@ -1,0 +1,1556 @@
+[
+  {
+    "name": "01-usage-and-quota:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-main",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 4700,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "01-usage-and-quota"
+  },
+  {
+    "name": "01-usage-and-quota:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-main",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 4700,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "01-usage-and-quota"
+  },
+  {
+    "name": "02-usage-without-quota:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "02-usage-without-quota"
+  },
+  {
+    "name": "02-usage-without-quota:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "02-usage-without-quota"
+  },
+  {
+    "name": "03-quota-without-usage:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 1600,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "03-quota-without-usage"
+  },
+  {
+    "name": "03-quota-without-usage:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 1600,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "03-quota-without-usage"
+  },
+  {
+    "name": "04-neither:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 1600,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "04-neither"
+  },
+  {
+    "name": "04-neither:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 1600,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 1600,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "04-neither"
+  },
+  {
+    "name": "05-codex-quota-only:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-main",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 4700,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "05-codex-quota-only"
+  },
+  {
+    "name": "05-codex-quota-only:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-main",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 4700,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 4700,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "05-codex-quota-only"
+  },
+  {
+    "name": "06-expired-official-quota:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T10:30:00+08:00",
+          "reason": "expired",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "06-expired-official-quota"
+  },
+  {
+    "name": "06-expired-official-quota:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T10:30:00+08:00",
+          "reason": "expired",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "06-expired-official-quota"
+  },
+  {
+    "name": "07-provider-failed-after-success:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": "unavailable",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "07-provider-failed-after-success"
+  },
+  {
+    "name": "07-provider-failed-after-success:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": "unavailable",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "07-provider-failed-after-success"
+  },
+  {
+    "name": "08-stale-official-with-local-estimate:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "08-stale-official-with-local-estimate"
+  },
+  {
+    "name": "08-stale-official-with-local-estimate:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "08-stale-official-with-local-estimate"
+  },
+  {
+    "name": "09-local-estimate-only:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "unverified",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "09-local-estimate-only"
+  },
+  {
+    "name": "09-local-estimate-only:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "unverified",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "09-local-estimate-only"
+  },
+  {
+    "name": "10-estimated-observation-newer-than-official:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "10-estimated-observation-newer-than-official"
+  },
+  {
+    "name": "10-estimated-observation-newer-than-official:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "10-estimated-observation-newer-than-official"
+  },
+  {
+    "name": "11-aggregate-agent-with-canonical-provider:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "11-aggregate-agent-with-canonical-provider"
+  },
+  {
+    "name": "11-aggregate-agent-with-canonical-provider:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "11-aggregate-agent-with-canonical-provider"
+  },
+  {
+    "name": "12-naive-limit-timestamps:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "12-naive-limit-timestamps"
+  },
+  {
+    "name": "12-naive-limit-timestamps:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 3100,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "12-naive-limit-timestamps"
+  },
+  {
+    "name": "13-third-party-provider-without-slot:summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 1100,
+      "status": "partial",
+      "total_tokens": 4200,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "13-third-party-provider-without-slot"
+  },
+  {
+    "name": "13-third-party-provider-without-slot:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 3100,
+      "other_provider_tokens": 1100,
+      "status": "partial",
+      "total_tokens": 4200,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "13-third-party-provider-without-slot"
+  }
+]

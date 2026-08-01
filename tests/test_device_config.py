@@ -98,3 +98,32 @@ class TestDeviceConfig(unittest.TestCase):
         with self.assertRaises(ConfigError) as context:
             validate_device_config(data)
         self.assertIn("ssh", str(context.exception).lower())
+
+
+class TestDeviceConfigReleaseChannel(unittest.TestCase):
+    def setUp(self) -> None:
+        path = os.path.join(FIXTURES_DIR, "device_config_linux.json")
+        with open(path, "r", encoding="utf-8") as handle:
+            self.data = json.load(handle)
+
+    def test_release_channel_defaults_to_stable(self) -> None:
+        cfg = validate_device_config(dict(self.data))
+
+        self.assertEqual(cfg.release_channel, "stable")
+
+    def test_release_channel_accepts_declared_channels(self) -> None:
+        for channel in ("stable", "beta", "dev"):
+            with self.subTest(channel=channel):
+                data = dict(self.data)
+                data["release_channel"] = channel
+
+                self.assertEqual(validate_device_config(data).release_channel, channel)
+
+    def test_release_channel_rejects_undeclared_channel(self) -> None:
+        data = dict(self.data)
+        data["release_channel"] = "prod"
+
+        with self.assertRaises(ConfigError) as context:
+            validate_device_config(data)
+
+        self.assertIn("release_channel", str(context.exception))

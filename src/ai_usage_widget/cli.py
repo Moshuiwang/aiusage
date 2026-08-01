@@ -33,6 +33,7 @@ from .mswusage_codex import build_report as build_mswusage_codex_report, read_lo
 from .mswusage_claude import build_report as build_mswusage_claude_report, read_local_claude_jsonl_lines
 from .pusher import DevicePusher
 from .server import run_server
+from .verify_cloud import register_parser as register_verify_cloud_parser, run as run_verify_cloud
 from .widget_sync import sync_latest_to_widget
 
 
@@ -214,7 +215,12 @@ def main(argv: list[str] | None = None) -> int:
     mswusage_claude_parser.add_argument("--lookback-hours", type=float, default=48.0)
     mswusage_claude_parser.add_argument("--coverage-start", default=None)
 
+    register_verify_cloud_parser(subparsers)
+
     args = parser.parse_args(argv)
+    if args.command == "verify-cloud":
+        return run_verify_cloud(args)
+
     if args.command == "collect":
         try:
             config = load_config(args.config)

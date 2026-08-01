@@ -8,6 +8,9 @@ import urllib.error
 from unittest.mock import patch
 from typing import Any, Dict
 
+from dataclasses import replace
+
+from ai_usage_widget import version_contract
 from ai_usage_widget.config import DeviceConfig
 from ai_usage_widget.models import CommandResult
 from ai_usage_widget.pusher import (
@@ -675,3 +678,142 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["collection_status"], "invalid_json")
         self.assertEqual(http_client.last_json["collection_status"], "invalid_json")
+
+
+class TestDevicePusherCollectorRelease(unittest.TestCase):
+    def setUp(self) -> None:
+        self.config = DeviceConfig(
+            schema_version=1,
+            source_id="mac-local",
+            host="macbook-pro.local",
+            machine="macbook-pro",
+            os_user="wangzhipeng",
+            platform="darwin",
+            timezone="Asia/Shanghai",
+            server_url="http://localhost:8000/ingest",
+            timeout_seconds=30,
+        )
+        self.accepted = {"status": "accepted", "source_id": "mac-local"}
+        # 快照整个 environ 并在用例结束时还原，只清掉本用例关心的变量，
+        # 不把开发机或 CI 上其它 AI_USAGE_* 变量永久删掉。
+        env_patcher = patch.dict(os.environ)
+        env_patcher.start()
+        self.addCleanup(env_patcher.stop)
+        for name in (
+            "AI_USAGE_BUILD_SHA",
+            "AI_USAGE_LAST_UPGRADE_STATUS",
+            "AI_USAGE_LAST_UPGRADE_FROM_VERSION",
+            "AI_USAGE_LAST_UPGRADE_TO_VERSION",
+            "AI_USAGE_LAST_UPGRADE_FINISHED_AT",
+        ):
+            os.environ.pop(name, None)
+
+    def _push_ok(self, config=None):
+        executor = FakeExecutor([
+            CommandResult(stdout='{"daily": []}', exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout='{"blocks": []}', exit_code=0),
+            CommandResult(error_type="command_failed", error_message="mswusage codex failed"),
+            CommandResult(error_type="command_failed", error_message="mswusage claude failed"),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data=self.accepted)
+        DevicePusher(config or self.config, executor=executor, http_client=http_client).push()
+        return http_client
+
+    def test_pusher_reports_its_collector_release(self) -> None:
+        http_client = self._push_ok()
+
+        release = http_client.last_json["collector_release"]
+        self.assertEqual(release["collector_version"], version_contract.COLLECTOR_VERSION)
+        self.assertEqual(release["config_schema_version"], 1)
+        self.assertEqual(release["parser_schema_version"], version_contract.COLLECTOR_PARSER_SCHEMA_VERSION)
+        self.assertEqual(release["release_channel"], "stable")
+        self.assertEqual(release["last_upgrade"], {"status": "never"})
+
+    def test_release_channel_comes_from_device_config(self) -> None:
+        config = replace(self.config, release_channel="beta")
+
+        http_client = self._push_ok(config)
+
+        self.assertEqual(http_client.last_json["collector_release"]["release_channel"], "beta")
+
+    def test_build_sha_and_last_upgrade_come_from_environment(self) -> None:
+        os.environ["AI_USAGE_BUILD_SHA"] = "0a1b2c3d4e5"
+        os.environ["AI_USAGE_LAST_UPGRADE_STATUS"] = "failed"
+        os.environ["AI_USAGE_LAST_UPGRADE_FROM_VERSION"] = "0.2.0"
+        os.environ["AI_USAGE_LAST_UPGRADE_TO_VERSION"] = "0.3.0"
+        os.environ["AI_USAGE_LAST_UPGRADE_FINISHED_AT"] = "2026-08-01T09:00:00+08:00"
+
+        release = self._push_ok().last_json["collector_release"]
+
+        self.assertEqual(release["build_sha"], "0a1b2c3d4e5")
+        self.assertEqual(
+            release["last_upgrade"],
+            {
+                "status": "failed",
+                "from_version": "0.2.0",
+                "to_version": "0.3.0",
+                "finished_at": "2026-08-01T09:00:00+08:00",
+            },
+        )
+
+    def test_unsafe_environment_override_is_dropped_instead_of_being_pushed(self) -> None:
+        os.environ["AI_USAGE_BUILD_SHA"] = "sk-ant-api03-FAKEfakeFAKEfake0123456789"
+
+        payload = self._push_ok().last_json
+
+        rendered = json.dumps(payload, ensure_ascii=False)
+        self.assertNotIn("sk-ant-api03", rendered)
+        self.assertNotIn("build_sha", payload["collector_release"])
+        self.assertEqual(
+            payload["collector_release"]["collector_version"],
+            version_contract.COLLECTOR_VERSION,
+        )
+
+    def test_failed_collection_still_reports_the_collector_release(self) -> None:
+        executor = FakeExecutor(
+            CommandResult(exit_code=1, error_type="command_failed", error_message="ccusage not found")
+        )
+        http_client = FakeHTTPClient(status_code=200, response_data=self.accepted)
+
+        DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertEqual(http_client.last_json["collection_status"], "command_failed")
+        self.assertEqual(
+            http_client.last_json["collector_release"]["collector_version"],
+            version_contract.COLLECTOR_VERSION,
+        )
+
+    def test_pusher_surfaces_an_unsupported_version_rejection_as_a_clear_error(self) -> None:
+        executor = FakeExecutor([
+            CommandResult(stdout='{"daily": []}', exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout='{"blocks": []}', exit_code=0),
+            CommandResult(error_type="command_failed", error_message="mswusage codex failed"),
+            CommandResult(error_type="command_failed", error_message="mswusage claude failed"),
+        ])
+        http_client = FakeHTTPClient(
+            status_code=400,
+            response_data={
+                "error_type": version_contract.UNSUPPORTED_ERROR_TYPE,
+                "message": "采集端版本 0.1.0 低于服务端最低支持版本 0.2.0，本次上报未写入，请升级采集端后重试",
+            },
+        )
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client, retry_attempts=1).push()
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_type"], version_contract.UNSUPPORTED_ERROR_TYPE)
+        self.assertIn("未写入", result["error_message"])
+
+    def test_out_of_range_config_schema_version_does_not_break_the_whole_push(self) -> None:
+        config = replace(self.config, schema_version=999999)
+
+        payload = self._push_ok(config).last_json
+
+        self.assertEqual(payload["collection_status"], "ok")
+        self.assertEqual(
+            payload["collector_release"]["collector_version"],
+            version_contract.COLLECTOR_VERSION,
+        )
+        self.assertNotIn("config_schema_version", payload["collector_release"])

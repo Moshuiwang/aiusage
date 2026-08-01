@@ -1,0 +1,86 @@
+{
+  "backend_mode": "origin_direct",
+  "canonical_store": "origin_sqlite",
+  "database": {
+    "exists": true,
+    "path": "data/usage.sqlite",
+    "size_bytes": 524288
+  },
+  "generated_at": "2026-06-03T12:00:00+08:00",
+  "limits": {
+    "effective_window_count": 1,
+    "latest_observed_at": "2026-06-03T11:50:00+08:00",
+    "raw_window_count": 4,
+    "stale_window_count": 3
+  },
+  "snapshot": {
+    "exists": true,
+    "path": "data/latest.json",
+    "updated_at": "2026-06-03T12:00:00+08:00"
+  },
+  "source_status": {
+    "counts": {
+      "never_seen": 1,
+      "ok": 1,
+      "stale": 1
+    },
+    "non_ok": [
+      {
+        "source_id": "mac-air-wang",
+        "status": "stale"
+      },
+      {
+        "source_id": "win-box-wang",
+        "status": "never_seen"
+      }
+    ],
+    "total": 3
+  },
+  "status": "ok",
+  "versions": {
+    "counts": {
+      "current": 1,
+      "rollback_available": 0,
+      "unknown": 1,
+      "unsupported": 1,
+      "update_available": 0
+    },
+    "needs_attention": [
+      {
+        "build_sha": null,
+        "collector_version": "0.0.9",
+        "compatible": false,
+        "display_name": "mac-air · wangzhipeng",
+        "machine": "mac-air",
+        "observed_at": "2026-06-03T07:10:00+08:00",
+        "os_user": "wangzhipeng",
+        "reason": "collector_version_below_minimum",
+        "release_channel": null,
+        "source_id": "mac-air-wang",
+        "state": "unsupported",
+        "status": "stale"
+      },
+      {
+        "build_sha": null,
+        "collector_version": null,
+        "compatible": true,
+        "display_name": "win-box · wang",
+        "machine": "win-box",
+        "observed_at": null,
+        "os_user": "wang",
+        "reason": "collector_release_missing",
+        "release_channel": null,
+        "source_id": "win-box-wang",
+        "state": "unknown",
+        "status": "never_seen"
+      }
+    ],
+    "server": {
+      "api_version": "1.0.0",
+      "ingest_schema_version": 1,
+      "min_supported_collector_version": "0.1.0",
+      "read_model_version": "1.0.0",
+      "target_collector_version": "0.3.0"
+    }
+  }
+}

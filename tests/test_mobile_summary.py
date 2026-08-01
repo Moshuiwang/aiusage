@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 
 from ai_usage_widget.mobile_summary import build_mobile_summary
@@ -738,6 +739,158 @@ class TestMobileSummaryLimits(unittest.TestCase):
 
         self.assertEqual(summary["breakdown"]["by_machine"], [])
         self.assertEqual(summary["sources"], [])
+
+
+class TestMobileSummaryProviderSlots(unittest.TestCase):
+    """Issue #61：/api/mobile/summary 与 /api/summary 用同一份 provider 槽位事实，只裁剪不重算。"""
+
+    def _snapshot(self, provider_slots: object) -> dict:
+        return {
+            "generated_at": "2026-06-01T10:55:00+08:00",
+            "summary": {"period": "today", "total_tokens": 1800},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [],
+            "limit_status": [],
+            "provider_slots": provider_slots,
+        }
+
+    def test_mobile_summary_passes_through_provider_slots_unchanged(self) -> None:
+        slots = [
+            {
+                "provider": "claude",
+                "usage": {
+                    "status": "available",
+                    "total_tokens": 1800,
+                    "input_tokens": 1000,
+                    "output_tokens": 500,
+                    "cache_tokens": 300,
+                },
+                "quota": {
+                    "status": "missing",
+                    "reason": "stale",
+                    "last_verified_at": "2026-05-30T10:00:00+08:00",
+                    "source_id": "claude-main",
+                    "source_type": "oauth_usage_api",
+                    "windows": [],
+                },
+            },
+            {
+                "provider": "codex",
+                "usage": {
+                    "status": "missing",
+                    "total_tokens": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cache_tokens": 0,
+                },
+                "quota": {
+                    "status": "available",
+                    "reason": None,
+                    "last_verified_at": "2026-06-01T10:45:00+08:00",
+                    "source_id": "codex-main",
+                    "source_type": "runtime_api",
+                    "windows": [
+                        {
+                            "source_id": "codex-main",
+                            "provider": "codex",
+                            "window": "session",
+                            "used_percent": 41.2,
+                            "remaining_percent": 58.8,
+                            "reset_at": "2026-06-01T14:00:00+08:00",
+                            "window_duration_minutes": 300,
+                            "observed_at": "2026-06-01T10:45:00+08:00",
+                            "source_type": "runtime_api",
+                            "confidence": "observed",
+                            "status": "ok",
+                            "official": True,
+                        }
+                    ],
+                },
+            },
+        ]
+
+        summary = build_mobile_summary(self._snapshot(slots))
+
+        self.assertEqual(summary["provider_slots"], slots)
+
+    def test_mobile_provider_slots_default_to_missing_when_snapshot_has_none(self) -> None:
+        summary = build_mobile_summary(self._snapshot(None))
+
+        self.assertEqual(
+            [(row["provider"], row["usage"]["status"], row["quota"]["status"]) for row in summary["provider_slots"]],
+            [("claude", "missing", "missing"), ("codex", "missing", "missing")],
+        )
+        claude = summary["provider_slots"][0]
+        self.assertEqual(claude["usage"]["total_tokens"], 0)
+        self.assertEqual(claude["quota"]["reason"], "no_data")
+        self.assertIsNone(claude["quota"]["last_verified_at"])
+        self.assertEqual(claude["quota"]["windows"], [])
+
+    def test_mobile_missing_quota_slot_never_leaks_percentages_or_reset(self) -> None:
+        slots = [
+            {
+                "provider": "claude",
+                "usage": {
+                    "status": "available",
+                    "total_tokens": 1800,
+                    "input_tokens": 1000,
+                    "output_tokens": 500,
+                    "cache_tokens": 300,
+                },
+                "quota": {
+                    "status": "missing",
+                    "reason": "expired",
+                    "last_verified_at": "2026-06-01T09:00:00+08:00",
+                    "source_id": "claude-main",
+                    "source_type": "oauth_usage_api",
+                    "used_percent": 91.0,
+                    "reset_at": "2026-06-01T10:00:00+08:00",
+                    "windows": [],
+                },
+            },
+        ]
+
+        summary = build_mobile_summary(self._snapshot(slots))
+
+        claude = next(row for row in summary["provider_slots"] if row["provider"] == "claude")
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
+        self.assertEqual(claude["quota"]["status"], "missing")
+        self.assertEqual(claude["quota"]["last_verified_at"], "2026-06-01T09:00:00+08:00")
+        serialized = json.dumps(claude["quota"], sort_keys=True)
+        for leaked in ("used_percent", "remaining_percent", "reset_at", "91.0", "2026-06-01T10:00:00+08:00"):
+            self.assertNotIn(leaked, serialized)
+
+
+
+class TestMobileSummaryProviderSlotsDoNotRedefineUsage(unittest.TestCase):
+    """mobile DTO 只裁剪不重算口径：snapshot 没给 usage.status 就是 missing，不自己判定。"""
+
+    def test_missing_usage_status_is_not_recomputed_from_token_count(self) -> None:
+        summary = build_mobile_summary({
+            "generated_at": "2026-06-01T10:55:00+08:00",
+            "summary": {"period": "today", "total_tokens": 1800},
+            "trend": {"points": []},
+            "source_status": [],
+            "groups": {},
+            "items": [],
+            "limits": [],
+            "limit_status": [],
+            "provider_slots": [
+                {
+                    "provider": "claude",
+                    "usage": {"total_tokens": 1800, "input_tokens": 1000, "output_tokens": 500, "cache_tokens": 300},
+                    "quota": {"status": "missing", "reason": "no_data", "last_verified_at": None,
+                              "source_id": None, "source_type": None, "windows": []},
+                },
+            ],
+        })
+
+        claude = next(row for row in summary["provider_slots"] if row["provider"] == "claude")
+        self.assertEqual(claude["usage"]["status"], "missing")
+        self.assertEqual(claude["usage"]["total_tokens"], 1800)
 
 
 if __name__ == "__main__":
