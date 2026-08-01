@@ -448,6 +448,68 @@ class TestServerServices(unittest.TestCase):
         self.assertNotIn(fake_path, rendered)
         self.assertIn(version_contract.COLLECTOR_VERSION, rendered)
 
+    def test_summary_snapshot_lists_outdated_devices_with_deterministic_ordering(self) -> None:
+        for source_id, machine, collector_version in [
+            ("z-old", "linux-dev", "0.2.0"),
+            ("m-current", "macbook-pro", version_contract.COLLECTOR_VERSION),
+            ("a-ahead", "winbox", "0.9.0"),
+        ]:
+            payload = dict(self.valid_payload)
+            payload["source_id"] = source_id
+            payload["machine"] = machine
+            payload["host"] = machine
+            payload["collector_release"] = {"collector_version": collector_version}
+            self._ingest(payload)
+
+        snapshot = json.loads(
+            build_summary_response(
+                db_path=self.db_path,
+                latest_path=self.out_path,
+                timezone=self.timezone,
+                date_str="2026-06-01",
+                period="today",
+                machine_filter=None,
+                account_filter=None,
+            )
+        )
+
+        by_source = {row["source_id"]: row for row in snapshot["source_status"]}
+        self.assertEqual(by_source["z-old"]["version"]["state"], "update_available")
+        self.assertEqual(by_source["z-old"]["version"]["collector_version"], "0.2.0")
+        self.assertEqual(by_source["m-current"]["version"]["state"], "current")
+        self.assertEqual(by_source["a-ahead"]["version"]["state"], "rollback_available")
+
+        health = snapshot["version_health"]
+        self.assertEqual(
+            [row["source_id"] for row in health["needs_attention"]],
+            ["a-ahead", "z-old"],
+        )
+        self.assertEqual(health["counts"]["current"], 1)
+        self.assertEqual(health["counts"]["update_available"], 1)
+        self.assertEqual(health["counts"]["rollback_available"], 1)
+        self.assertEqual(health["server"]["target_collector_version"], version_contract.COLLECTOR_VERSION)
+
+    def test_source_without_reported_version_shows_up_as_unknown_in_the_snapshot(self) -> None:
+        self._ingest(dict(self.valid_payload))
+
+        snapshot = json.loads(
+            build_summary_response(
+                db_path=self.db_path,
+                latest_path=self.out_path,
+                timezone=self.timezone,
+                date_str="2026-06-01",
+                period="today",
+                machine_filter=None,
+                account_filter=None,
+            )
+        )
+
+        self.assertEqual(snapshot["source_status"][0]["version"]["state"], "unknown")
+        self.assertEqual(
+            [row["source_id"] for row in snapshot["version_health"]["needs_attention"]],
+            ["mac-local"],
+        )
+
     def test_limits_ingest_service_preserves_response_shape(self) -> None:
         response = handle_ingest_limits_payload(
             {

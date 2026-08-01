@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from .snapshot_filters import identity_matches_filter
+from .version_contract import VersionPolicy, evaluate_collector_release, public_version_view
 
 
 def build_source_status(
@@ -15,6 +16,8 @@ def build_source_status(
     machine_filter: Optional[str] = None,
     account_filter: Optional[str] = None,
     source_accuracy: Optional[dict[str, list[dict[str, Any]]]] = None,
+    source_versions: Optional[dict[str, dict[str, Any]]] = None,
+    version_policy: Optional[VersionPolicy] = None,
 ) -> list[dict[str, Any]]:
     db_status = {sr[0]: {"status": sr[1], "collected_at": sr[2], "error_message": sr[3]} for sr in status_rows}
     if machine_filter or account_filter:
@@ -42,6 +45,8 @@ def build_source_status(
                 )
                 if source_accuracy is not None:
                     entry["accuracy"] = _accuracy_summary(source_accuracy.get(source_id, []))
+                if source_versions is not None:
+                    entry["version"] = _version_summary(source_versions.get(source_id), version_policy)
                 source_status.append(entry)
                 continue
 
@@ -64,6 +69,8 @@ def build_source_status(
             )
             if source_accuracy is not None:
                 entry["accuracy"] = _accuracy_summary(source_accuracy.get(source_id, []))
+            if source_versions is not None:
+                entry["version"] = _version_summary(source_versions.get(source_id), version_policy)
             source_status.append(entry)
         return source_status
 
@@ -85,8 +92,21 @@ def build_source_status(
         )
         if source_accuracy is not None:
             entry["accuracy"] = _accuracy_summary(source_accuracy.get(source_id, []))
+        if source_versions is not None:
+            entry["version"] = _version_summary(source_versions.get(source_id), version_policy)
         source_status.append(entry)
     return source_status
+
+
+def _version_summary(
+    reported: Optional[dict[str, Any]],
+    policy: Optional[VersionPolicy],
+) -> dict[str, Any]:
+    """把某个来源已知的版本字段判定成对外可见的版本块。
+
+    没有任何版本记录时传 `None`，判定结果是 `unknown`：不当成合规，也不假装是最新版。
+    """
+    return public_version_view(evaluate_collector_release(reported, policy=policy))
 
 
 def _accuracy_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:

@@ -1184,6 +1184,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -1196,7 +1267,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -1361,6 +1433,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -1376,7 +1574,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -2383,6 +2582,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -2395,7 +2665,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -2582,6 +2853,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -2597,7 +2994,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -3916,6 +4314,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -3928,7 +4397,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -4115,6 +4585,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -4130,7 +4726,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -5449,6 +6046,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -5461,7 +6129,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -5648,6 +6317,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -5663,7 +6458,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -6982,6 +7778,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -6994,7 +7861,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -7185,6 +8053,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -7200,7 +8194,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -7603,6 +8598,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -7615,7 +8681,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -7806,6 +8873,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -7821,7 +9014,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -9216,7 +10410,7 @@
                           "type": "str"
                         },
                         "reason": {
-                          "type": "null"
+                          "type": "str"
                         },
                         "release_channel": {
                           "type": "null"
@@ -9996,6 +11190,77 @@
                     "status": {
                       "type": "str",
                       "value": "ok"
+                    },
+                    "version": {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "config_schema_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_finished_at": {
+                          "type": "null"
+                        },
+                        "last_upgrade_from_version": {
+                          "type": "null"
+                        },
+                        "last_upgrade_status": {
+                          "type": "null"
+                        },
+                        "last_upgrade_to_version": {
+                          "type": "null"
+                        },
+                        "min_supported_collector_version": {
+                          "type": "str"
+                        },
+                        "parser_schema_version": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "rollback_target_version": {
+                          "type": "null"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "target_collector_version": {
+                          "type": "str"
+                        },
+                        "verified": {
+                          "type": "bool"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "config_schema_version",
+                        "last_upgrade_finished_at",
+                        "last_upgrade_from_version",
+                        "last_upgrade_status",
+                        "last_upgrade_to_version",
+                        "min_supported_collector_version",
+                        "parser_schema_version",
+                        "reason",
+                        "release_channel",
+                        "rollback_target_version",
+                        "state",
+                        "target_collector_version",
+                        "verified"
+                      ],
+                      "type": "object"
                     }
                   },
                   "keys": [
@@ -10008,7 +11273,8 @@
                     "os_user",
                     "platform",
                     "source_id",
-                    "status"
+                    "status",
+                    "version"
                   ],
                   "type": "object"
                 }
@@ -10195,6 +11461,132 @@
                 "start_date"
               ],
               "type": "object"
+            },
+            "version_health": {
+              "fields": {
+                "counts": {
+                  "fields": {
+                    "current": {
+                      "type": "int"
+                    },
+                    "rollback_available": {
+                      "type": "int"
+                    },
+                    "unknown": {
+                      "type": "int"
+                    },
+                    "unsupported": {
+                      "type": "int"
+                    },
+                    "update_available": {
+                      "type": "int"
+                    }
+                  },
+                  "keys": [
+                    "current",
+                    "rollback_available",
+                    "unknown",
+                    "unsupported",
+                    "update_available"
+                  ],
+                  "type": "object"
+                },
+                "needs_attention": {
+                  "items": [
+                    {
+                      "fields": {
+                        "build_sha": {
+                          "type": "null"
+                        },
+                        "collector_version": {
+                          "type": "null"
+                        },
+                        "compatible": {
+                          "type": "bool"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "release_channel": {
+                          "type": "null"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "state": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        }
+                      },
+                      "keys": [
+                        "build_sha",
+                        "collector_version",
+                        "compatible",
+                        "display_name",
+                        "machine",
+                        "observed_at",
+                        "os_user",
+                        "reason",
+                        "release_channel",
+                        "source_id",
+                        "state",
+                        "status"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "server": {
+                  "fields": {
+                    "api_version": {
+                      "type": "str"
+                    },
+                    "ingest_schema_version": {
+                      "type": "int"
+                    },
+                    "min_supported_collector_version": {
+                      "type": "str"
+                    },
+                    "read_model_version": {
+                      "type": "str"
+                    },
+                    "target_collector_version": {
+                      "type": "str"
+                    }
+                  },
+                  "keys": [
+                    "api_version",
+                    "ingest_schema_version",
+                    "min_supported_collector_version",
+                    "read_model_version",
+                    "target_collector_version"
+                  ],
+                  "type": "object"
+                }
+              },
+              "keys": [
+                "counts",
+                "needs_attention",
+                "server"
+              ],
+              "type": "object"
             }
           },
           "keys": [
@@ -10210,7 +11602,8 @@
             "source_status",
             "summary",
             "timezone",
-            "trend"
+            "trend",
+            "version_health"
           ],
           "type": "object"
         }
@@ -11372,7 +12765,7 @@
                           "type": "str"
                         },
                         "reason": {
-                          "type": "null"
+                          "type": "str"
                         },
                         "release_channel": {
                           "type": "null"

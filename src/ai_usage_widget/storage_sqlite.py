@@ -25,6 +25,7 @@ def write_sqlite(
     usage_hourly_fact_payloads: Optional[List[Dict[str, Any]]] = None,
     accuracy_source_id: Optional[str] = None,
     accuracy_observed_at: Optional[str] = None,
+    collector_version: Optional[str] = None,
 ) -> None:
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -32,7 +33,7 @@ def write_sqlite(
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA busy_timeout=5000;")
         _ensure_schema(conn)
-        run_id = _insert_run(conn, collected_at, timezone, run_status)
+        run_id = _insert_run(conn, collected_at, timezone, run_status, collector_version)
         for report in source_reports:
             _insert_source_report(conn, run_id, report)
         for identity in source_identities or []:
@@ -597,10 +598,18 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 
-def _insert_run(conn: sqlite3.Connection, collected_at: str, timezone: str, status: str) -> int:
+def _insert_run(
+    conn: sqlite3.Connection,
+    collected_at: str,
+    timezone: str,
+    status: str,
+    collector_version: Optional[str] = None,
+) -> int:
+    # collector_version 只写采集端真实上报的版本；没上报就留 NULL，
+    # 让读模型能区分「未知版本」和「真的在跑某个版本」。
     cursor = conn.execute(
         "INSERT INTO collection_runs (collected_at, timezone, collector_version, status) VALUES (?, ?, ?, ?)",
-        (collected_at, timezone, "0.1.0", status),
+        (collected_at, timezone, collector_version, status),
     )
     return int(cursor.lastrowid)
 

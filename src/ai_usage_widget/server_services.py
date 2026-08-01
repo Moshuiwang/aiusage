@@ -116,6 +116,7 @@ def handle_ingest_payload(
             usage_hourly_fact_payloads=req.usage_hourly_facts,
             accuracy_source_id=req.source_id,
             accuracy_observed_at=req.observed_at,
+            collector_version=version_state["collector_version"],
         )
     except Exception as exc:
         raise ServiceError(500, "write_failed", f"Failed to save data: {exc}") from exc
