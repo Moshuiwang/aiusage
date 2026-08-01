@@ -512,6 +512,153 @@ def render_limits(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+# --- health 核对 ------------------------------------------------------------
+
+
+def build_health_report(
+    summary_document: Dict[str, Any],
+    health_document: Dict[str, Any],
+    *,
+    requested: Dict[str, Any],
+    source_label: str,
+) -> Dict[str, Any]:
+    """各来源最后上报时间、新鲜度、覆盖范围与准确性状态。
+
+    `/api/health` 里的 `database.path` / `snapshot.path` 是服务端本机路径，
+    刻意不进报告：核对工具没有理由把服务器文件布局打印到终端或 CI 日志里。
+    """
+    issues: List[Dict[str, str]] = []
+    raw_status = summary_document.get("source_status")
+    sources: List[Dict[str, Any]] = []
+    if not isinstance(raw_status, list):
+        issues.append(_issue("source_status_missing", "响应里没有 source_status，无法核对来源健康"))
+    else:
+        sources = [_health_source_row(row) for row in raw_status if isinstance(row, dict)]
+
+    for row in sources:
+        if row["status"] != "ok":
+            issues.append(_issue(
+                "source_not_ok",
+                f"{_show(row['display_name'])}（{_show(row['source_id'])}）状态为 {_show(row['status'])}，"
+                f"最后上报 {_show(row['last_observed_at'])}",
+            ))
+        if row["version_state"] == "unsupported":
+            issues.append(_issue(
+                "collector_version_unsupported",
+                f"{_show(row['display_name'])} 的采集端版本 {_show(row['collector_version'])} 已不受支持",
+            ))
+
+    health_sources = health_document.get("source_status")
+    health_sources = health_sources if isinstance(health_sources, dict) else {}
+    source_total = health_sources.get("total")
+    # `/api/health` 不吃 machine / account 过滤，带过滤时两端数量本来就该不同，不做交叉核对。
+    filtered = requested.get("machine") is not None or requested.get("account") is not None
+    if not filtered and isinstance(raw_status, list) and source_total != len(sources):
+        issues.append(_issue(
+            "source_count_mismatch",
+            f"/api/health 报告 {_show(source_total)} 个来源，/api/summary 只有 {len(sources)} 个",
+        ))
+
+    versions = health_document.get("versions")
+    versions = versions if isinstance(versions, dict) else {}
+    snapshot = health_document.get("snapshot")
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    limits_health = health_document.get("limits")
+    limits_health = limits_health if isinstance(limits_health, dict) else {}
+
+    return _finish_report(
+        {
+            "command": "health",
+            "source": source_label,
+            "generated_at": health_document.get("generated_at"),
+            "backend_mode": health_document.get("backend_mode"),
+            "canonical_store": health_document.get("canonical_store"),
+            "snapshot_updated_at": snapshot.get("updated_at"),
+            "requested": dict(requested),
+            "source_total": source_total,
+            "status_counts": health_sources.get("counts"),
+            "version_counts": versions.get("counts"),
+            "limits_health": {
+                field: limits_health.get(field)
+                for field in (
+                    "latest_observed_at",
+                    "effective_window_count",
+                    "raw_window_count",
+                    "stale_window_count",
+                )
+            },
+            "sources": sources,
+        },
+        issues,
+        EXIT_DATA_ISSUE,
+        "data_issue",
+    )
+
+
+def _health_source_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    accuracy = row.get("accuracy") if isinstance(row.get("accuracy"), dict) else {}
+    version = row.get("version") if isinstance(row.get("version"), dict) else {}
+    agents = accuracy.get("agents") if isinstance(accuracy.get("agents"), list) else []
+    return {
+        "source_id": row.get("source_id"),
+        "display_name": row.get("display_name"),
+        "machine": row.get("machine"),
+        "os_user": row.get("os_user"),
+        "platform": row.get("platform"),
+        "status": row.get("status"),
+        "last_observed_at": row.get("observed_at"),
+        "accuracy_status": accuracy.get("status"),
+        "version_state": version.get("state"),
+        "collector_version": version.get("collector_version"),
+        "coverage": [_coverage_row(agent) for agent in agents if isinstance(agent, dict)],
+    }
+
+
+def _coverage_row(agent: Dict[str, Any]) -> Dict[str, Any]:
+    coverage = agent.get("coverage") if isinstance(agent.get("coverage"), dict) else {}
+    return {
+        "agent": agent.get("agent"),
+        "status": agent.get("status"),
+        "start": coverage.get("start"),
+        "end": coverage.get("end"),
+    }
+
+
+def render_health(report: Dict[str, Any]) -> str:
+    lines = [
+        "verify-cloud health",
+        _rule(),
+        f"数据源          : {report['source']}",
+        f"健康检查时间    : {_show(report['generated_at'])}",
+        f"快照更新时间    : {_show(report['snapshot_updated_at'])}",
+        f"后端模式        : {_show(report['backend_mode'])} / {_show(report['canonical_store'])}",
+        f"来源总数        : {_show(report['source_total'])}",
+        f"状态分布        : {_show_counts(report['status_counts'])}",
+        f"版本状态分布    : {_show_counts(report['version_counts'])}",
+        "",
+        "官方额度新鲜度",
+        f"  最近一次官方核对: {_show(report['limits_health']['latest_observed_at'])}",
+        f"  有效窗口 / 全部 : {_show(report['limits_health']['effective_window_count'])}"
+        f" / {_show(report['limits_health']['raw_window_count'])}",
+        f"  陈旧窗口        : {_show(report['limits_health']['stale_window_count'])}",
+        "",
+        "各来源",
+        f"  {'source_id':<24}{'新鲜度':<14}{'最后上报':<28}{'准确性':<12}{'版本':<20}覆盖范围",
+    ]
+    for row in report["sources"]:
+        coverage = "; ".join(
+            f"{_show(item['agent'])} {_show(item['start'])}~{_show(item['end'])}"
+            for item in row["coverage"]
+        )
+        lines.append(
+            f"  {_show(row['source_id']):<24}{_show(row['status']):<14}"
+            f"{_show(row['last_observed_at']):<28}{_show(row['accuracy_status']):<12}"
+            f"{_show(row['version_state']):<20}{coverage if coverage else _MISSING_TEXT}"
+        )
+    lines.extend(_render_issues(report))
+    return "\n".join(lines)
+
+
 # --- 通用工具 ---------------------------------------------------------------
 
 
@@ -545,6 +692,12 @@ def _rule() -> str:
     return "".ljust(72, "-")
 
 
+def _show_counts(value: Any) -> str:
+    if not isinstance(value, dict) or not value:
+        return _MISSING_TEXT
+    return ", ".join(f"{key}={value[key]}" for key in sorted(value))
+
+
 def _show(value: Any) -> str:
     if value is None:
         return _MISSING_TEXT
@@ -567,6 +720,7 @@ def register_parser(subparsers) -> None:
     for name, description in (
         ("summary", "打印周期用量关键口径"),
         ("limits", "打印当前额度窗口，逐条标注 official / confidence / status"),
+        ("health", "打印各来源最后上报时间、新鲜度、覆盖范围与准确性状态"),
     ):
         sub = commands.add_parser(name, help=description)
         _add_common_arguments(sub)
@@ -616,6 +770,13 @@ def _dispatch(args, source, params: Dict[str, Any]) -> Dict[str, Any]:
     if args.verify_command == "limits":
         document = source.read(ENDPOINT_SUMMARY, params)
         return build_limits_report(document, requested=params, source_label=source.label)
+    if args.verify_command == "health":
+        return build_health_report(
+            source.read(ENDPOINT_SUMMARY, params),
+            source.read(ENDPOINT_HEALTH, {}),
+            requested=params,
+            source_label=source.label,
+        )
     raise ReadSourceError(f"未知子命令: {args.verify_command}")
 
 
@@ -624,4 +785,6 @@ def _render(report: Dict[str, Any]) -> str:
         return render_summary(report)
     if report["command"] == "limits":
         return render_limits(report)
+    if report["command"] == "health":
+        return render_health(report)
     raise ReadSourceError(f"未知子命令: {report['command']}")

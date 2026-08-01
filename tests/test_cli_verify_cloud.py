@@ -221,5 +221,101 @@ class TestVerifyCloudLimits(unittest.TestCase):
         self.assertIn("limit_windows_missing", out)
 
 
+class TestVerifyCloudHealth(unittest.TestCase):
+    def tearDown(self) -> None:
+        for directory in getattr(self, "_temp_dirs", []):
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def _scenario(self, scenario: Path, mutate=None) -> str:
+        directory = copy_scenario(scenario, mutate)
+        self._temp_dirs = getattr(self, "_temp_dirs", [])
+        self._temp_dirs.append(directory)
+        return directory
+
+    def test_all_sources_fresh_prints_last_report_time_and_exits_ok(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "health", "--fixture-dir", str(HEALTHY)])
+
+        self.assertEqual(code, 0)
+        self.assertIn("linux-dev-wang", out)
+        self.assertIn("mac-air-wang", out)
+        self.assertIn("2026-06-03T11:58:00+08:00", out)
+        self.assertIn("verified", out)
+        self.assertIn("current", out)
+        self.assertIn("核对通过", out)
+
+    def test_stale_and_never_seen_sources_exit_data_issue_and_are_named(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "health", "--fixture-dir", str(DEGRADED)])
+
+        self.assertEqual(code, 3)
+        self.assertIn("stale", out)
+        self.assertIn("never_seen", out)
+        self.assertIn("source_not_ok", out)
+        self.assertIn("collector_version_unsupported", out)
+
+    def test_output_never_leaks_server_filesystem_paths(self) -> None:
+        """`/api/health` 带 database.path / snapshot.path，核对输出不得把它们透出去。"""
+        for extra in ([], ["--json"]):
+            with self.subTest(extra=extra):
+                _, out, _ = run_cli(["verify-cloud", "health", "--fixture-dir", str(HEALTHY), *extra])
+                self.assertNotIn("data/usage.sqlite", out)
+                self.assertNotIn("data/latest.json", out)
+                self.assertNotIn(".sqlite", out)
+
+    def test_json_output_covers_freshness_coverage_and_accuracy(self) -> None:
+        code, out, _ = run_cli(["verify-cloud", "health", "--fixture-dir", str(HEALTHY), "--json"])
+        report = json.loads(out)
+
+        self.assertEqual(code, 0)
+        self.assertEqual(report["command"], "health")
+        self.assertEqual(report["status"], "ok")
+        self.assertEqual(report["source_total"], 2)
+        self.assertEqual(report["status_counts"], {"ok": 2})
+        self.assertEqual(report["limits_health"]["effective_window_count"], 2)
+
+        rows = {row["source_id"]: row for row in report["sources"]}
+        linux = rows["linux-dev-wang"]
+        self.assertEqual(linux["status"], "ok")
+        self.assertEqual(linux["last_observed_at"], "2026-06-03T11:58:00+08:00")
+        self.assertEqual(linux["accuracy_status"], "verified")
+        self.assertEqual(linux["version_state"], "current")
+        self.assertEqual(
+            linux["coverage"],
+            [{
+                "agent": "claude",
+                "status": "verified",
+                "start": "2026-06-01T00:00:00+08:00",
+                "end": "2026-06-03T11:58:00+08:00",
+            }],
+        )
+
+    def test_source_count_disagreement_between_endpoints_is_reported(self) -> None:
+        directory = self._scenario(
+            HEALTHY,
+            lambda payload: payload.__setitem__("source_status", payload["source_status"][:1]),
+        )
+
+        code, out, _ = run_cli(["verify-cloud", "health", "--fixture-dir", directory])
+
+        self.assertEqual(code, 3)
+        self.assertIn("source_count_mismatch", out)
+
+    def test_machine_filter_suppresses_the_source_count_cross_check(self) -> None:
+        """`/api/health` 不吃过滤条件，带过滤时数量本来就会对不上，不能报成异常。"""
+        directory = self._scenario(
+            HEALTHY,
+            lambda payload: (
+                payload.__setitem__("source_status", payload["source_status"][:1]),
+                payload["summary"].__setitem__("machine", "linux-dev"),
+            ),
+        )
+
+        code, out, _ = run_cli([
+            "verify-cloud", "health", "--fixture-dir", directory, "--machine", "linux-dev",
+        ])
+
+        self.assertEqual(code, 0)
+        self.assertNotIn("source_count_mismatch", out)
+
+
 if __name__ == "__main__":
     unittest.main()
