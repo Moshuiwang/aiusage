@@ -152,7 +152,8 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
   }, hourlyFacts, acceptedAt);
   writeStatements.push(...accuracyWriteStatements(env.AIUSAGE_DB, accuracyPlans, hourlyFacts, acceptedAt, req.source_id));
 
-  const report = sourceReport(req, hourlyFacts);
+  const collectorVersion = versionState.collector_version as string | null;
+  const report = sourceReport(req, hourlyFacts, collectorVersion);
   const reportState = await latestSourceReportState(env.AIUSAGE_DB, report);
   const reportStatements = collectionReportStatements(
     env.AIUSAGE_DB,
@@ -160,7 +161,7 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
     env.AIUSAGE_TIMEZONE ?? req.timezone,
     "ok",
     report,
-    versionState.collector_version as string | null,
+    collectorVersion,
   );
   const shouldWriteReport = !reportState.hasExisting || reportState.changed;
   if (shouldWriteReport) {
@@ -591,8 +592,8 @@ function collectionReportStatements(
     db.prepare(`
       INSERT INTO source_report_states (
         source_id, collected_at, report_type, command, status, ccusage_version,
-        first_period, last_period, error_type, error_message
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        first_period, last_period, error_type, error_message, collector_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(source_id) DO UPDATE SET
         collected_at = excluded.collected_at,
         report_type = excluded.report_type,
@@ -602,11 +603,13 @@ function collectionReportStatements(
         first_period = excluded.first_period,
         last_period = excluded.last_period,
         error_type = excluded.error_type,
-        error_message = excluded.error_message
+        error_message = excluded.error_message,
+        collector_version = excluded.collector_version
       WHERE excluded.collected_at >= source_report_states.collected_at
     `).bind(
       report.source_id, collectedAt, report.report_type, report.command, report.status,
       report.ccusage_version, report.first_period, report.last_period, report.error_type, report.error_message,
+      collectorVersion,
     ),
   ];
 }
@@ -1199,7 +1202,8 @@ async function syncHourlyFactModels(db: D1Database, fact: UsageHourlyFact, exist
 
 async function latestSourceReportState(db: D1Database, report: AnyRecord): Promise<SourceReportState> {
   const existing = await db.prepare(`
-    SELECT source_id, report_type, command, status, ccusage_version, first_period, last_period, error_type, error_message
+    SELECT source_id, report_type, command, status, ccusage_version, first_period, last_period, error_type, error_message,
+           collector_version
     FROM source_report_states
     WHERE source_id = ?
   `).bind(report.source_id).first<AnyRecord>();
@@ -1220,7 +1224,7 @@ async function sourceHasNewerReport(db: D1Database, sourceId: string, observedAt
   return !Number.isNaN(latest.getTime()) && latest.getTime() > observed.getTime();
 }
 
-function sourceReport(req: IngestRequest, hourlyFacts: UsageHourlyFact[]): AnyRecord {
+function sourceReport(req: IngestRequest, hourlyFacts: UsageHourlyFact[], collectorVersion: string | null): AnyRecord {
   const periods = hourlyFacts.map((fact) => fact.window_start.slice(0, 10));
   return {
     source_id: req.source_id,
@@ -1232,6 +1236,9 @@ function sourceReport(req: IngestRequest, hourlyFacts: UsageHourlyFact[]): AnyRe
     last_period: periods.length ? periods.sort()[periods.length - 1] : null,
     error_type: req.error_type,
     error_message: req.error_message,
+    // 采集端版本物化进报告状态：设备升级后即使报告内容一字不变，
+    // 也会被 rowMatches 判成 changed，从而把真实版本写进 collection_runs。
+    collector_version: collectorVersion,
   };
 }
 

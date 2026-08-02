@@ -1,4 +1,4 @@
-import { buildMobile, buildSummary } from "./read-model";
+import { buildMobile, buildSummary, buildVersionHealthFromSourceRows } from "./read-model";
 import { STATIC_ASSETS } from "./static-assets";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
@@ -350,6 +350,18 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
     databaseSizeProxy(env.AIUSAGE_DB),
     buildLimitsHealth(env.AIUSAGE_DB),
   ]);
+  // 已知分叉，不要顺手"统一"：下面的 source_status.counts / non_ok 用行上的**原始**
+  // status，而 Python 侧同名字段用的是**过期折算后**的 status——server_services.py 的
+  // counts 直接数 latest.json 里 source_status[].status，那个 status 在
+  // snapshot_source_health.py 就已经过了 _status_with_staleness()。
+  // 也就是说这里是 Worker 单边偏离参考实现，不是"两边都没定"。
+  //
+  // 本次（Issue #63）新增的 versions.needs_attention[].status 走 buildSourceStatus，
+  // 按 120 分钟做过期折算，跟的是 Python 的口径。结果是同一份响应里同一台设备可能
+  // 在 counts 里算 ok、在 needs_attention 里显示 stale。
+  //
+  // counts 的偏离是 #63 之前就有的既有行为，本轮不改（改它会动到与本 Issue 无关的
+  // 既有契约）。已单独立项跟踪。
   const counts: Record<string, number> = {};
   const nonOk: Record<string, string>[] = [];
   for (const row of sourceRows) {
@@ -382,6 +394,8 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
       counts,
       non_ok: nonOk,
     },
+    // 键位与 src/ai_usage_widget/server_services.py 的 `versions` 一致：source_status 与 limits 之间。
+    versions: buildVersionHealthFromSourceRows(sourceRows, env.AIUSAGE_NOW),
     limits: limitsReport,
   };
 }
@@ -391,12 +405,21 @@ function backendMode(env: Env): string {
   return configured || "native_d1_unknown";
 }
 
-async function latestSourceStatuses(db: D1Database): Promise<Array<{ source_id: string | null; status: string | null }>> {
+/**
+ * `/api/health` 需要的来源行：状态计数只用 `status`，`versions` 还需要
+ * `collector_version`（判 state）、`collected_at`（当 observed_at）以及身份字段（拼 display_name）。
+ *
+ * 仍然只扫 `source_report_states`（每来源一行），外加一次按主键的 `source_identities` 关联，
+ * 与原来同量级；**不回头 join `source_reports` × `collection_runs` 取版本**。
+ */
+async function latestSourceStatuses(db: D1Database): Promise<Record<string, string | null>[]> {
   const result = await db.prepare(`
-    SELECT source_id, status
-    FROM source_report_states
-    ORDER BY source_id ASC
-  `).all<{ source_id: string | null; status: string | null }>();
+    SELECT s.source_id, s.status, s.collected_at, s.error_message, s.collector_version,
+           i.host, i.machine, i.os_user, i.platform
+    FROM source_report_states s
+    LEFT JOIN source_identities i ON i.source_id = s.source_id
+    ORDER BY s.source_id ASC
+  `).all<Record<string, string | null>>();
   return result.results ?? [];
 }
 

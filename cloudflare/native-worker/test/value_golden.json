@@ -478,7 +478,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -493,7 +511,25 @@
             "os_user": "bob",
             "platform": "linux",
             "source_id": "linux-dev-bob",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "update_available",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -508,7 +544,25 @@
             "os_user": "cara",
             "platform": "windows",
             "source_id": "workstation-cara",
-            "status": "failed"
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -523,7 +577,25 @@
             "os_user": "dan",
             "platform": "darwin",
             "source_id": "mac-mini-dan",
-            "status": "stale"
+            "status": "stale",
+            "version": {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unknown",
+              "target_collector_version": "0.3.0",
+              "verified": false
+            }
           }
         ],
         "summary": {
@@ -917,6 +989,66 @@
             }
           ],
           "start_date": "2026-06-03"
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 1,
+            "unsupported": 1,
+            "update_available": 1
+          },
+          "needs_attention": [
+            {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "display_name": "workstation-9 \u00b7 cara",
+              "machine": "workstation-9",
+              "observed_at": "2026-06-03T10:00:00+08:00",
+              "os_user": "cara",
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "source_id": "workstation-cara",
+              "state": "unsupported",
+              "status": "failed"
+            },
+            {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "display_name": "linux-dev \u00b7 bob",
+              "machine": "linux-dev",
+              "observed_at": "2026-06-03T11:31:00+08:00",
+              "os_user": "bob",
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "source_id": "linux-dev-bob",
+              "state": "update_available",
+              "status": "ok"
+            },
+            {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "display_name": "mac-mini \u00b7 dan",
+              "machine": "mac-mini",
+              "observed_at": "2026-06-03T08:30:00+08:00",
+              "os_user": "dan",
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "source_id": "mac-mini-dan",
+              "state": "unknown",
+              "status": "stale"
+            }
+          ],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",
@@ -2214,7 +2346,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -2229,7 +2379,25 @@
             "os_user": "bob",
             "platform": "linux",
             "source_id": "linux-dev-bob",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "update_available",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -2244,7 +2412,25 @@
             "os_user": "cara",
             "platform": "windows",
             "source_id": "workstation-cara",
-            "status": "failed"
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -2259,7 +2445,25 @@
             "os_user": "dan",
             "platform": "darwin",
             "source_id": "mac-mini-dan",
-            "status": "stale"
+            "status": "stale",
+            "version": {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unknown",
+              "target_collector_version": "0.3.0",
+              "verified": false
+            }
           }
         ],
         "summary": {
@@ -2421,6 +2625,66 @@
             }
           ],
           "start_date": "2026-05-28"
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 1,
+            "unsupported": 1,
+            "update_available": 1
+          },
+          "needs_attention": [
+            {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "display_name": "workstation-9 \u00b7 cara",
+              "machine": "workstation-9",
+              "observed_at": "2026-06-03T10:00:00+08:00",
+              "os_user": "cara",
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "source_id": "workstation-cara",
+              "state": "unsupported",
+              "status": "failed"
+            },
+            {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "display_name": "linux-dev \u00b7 bob",
+              "machine": "linux-dev",
+              "observed_at": "2026-06-03T11:31:00+08:00",
+              "os_user": "bob",
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "source_id": "linux-dev-bob",
+              "state": "update_available",
+              "status": "ok"
+            },
+            {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "display_name": "mac-mini \u00b7 dan",
+              "machine": "mac-mini",
+              "observed_at": "2026-06-03T08:30:00+08:00",
+              "os_user": "dan",
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "source_id": "mac-mini-dan",
+              "state": "unknown",
+              "status": "stale"
+            }
+          ],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",
@@ -3622,7 +3886,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -3637,7 +3919,25 @@
             "os_user": "bob",
             "platform": "linux",
             "source_id": "linux-dev-bob",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "update_available",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -3652,7 +3952,25 @@
             "os_user": "cara",
             "platform": "windows",
             "source_id": "workstation-cara",
-            "status": "failed"
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -3667,7 +3985,25 @@
             "os_user": "dan",
             "platform": "darwin",
             "source_id": "mac-mini-dan",
-            "status": "stale"
+            "status": "stale",
+            "version": {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unknown",
+              "target_collector_version": "0.3.0",
+              "verified": false
+            }
           }
         ],
         "summary": {
@@ -4151,6 +4487,66 @@
             }
           ],
           "start_date": "2026-05-05"
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 1,
+            "unsupported": 1,
+            "update_available": 1
+          },
+          "needs_attention": [
+            {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "display_name": "workstation-9 \u00b7 cara",
+              "machine": "workstation-9",
+              "observed_at": "2026-06-03T10:00:00+08:00",
+              "os_user": "cara",
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "source_id": "workstation-cara",
+              "state": "unsupported",
+              "status": "failed"
+            },
+            {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "display_name": "linux-dev \u00b7 bob",
+              "machine": "linux-dev",
+              "observed_at": "2026-06-03T11:31:00+08:00",
+              "os_user": "bob",
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "source_id": "linux-dev-bob",
+              "state": "update_available",
+              "status": "ok"
+            },
+            {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "display_name": "mac-mini \u00b7 dan",
+              "machine": "mac-mini",
+              "observed_at": "2026-06-03T08:30:00+08:00",
+              "os_user": "dan",
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "source_id": "mac-mini-dan",
+              "state": "unknown",
+              "status": "stale"
+            }
+          ],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",
@@ -5683,7 +6079,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -5698,7 +6112,25 @@
             "os_user": "bob",
             "platform": "linux",
             "source_id": "linux-dev-bob",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "update_available",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -5713,7 +6145,25 @@
             "os_user": "cara",
             "platform": "windows",
             "source_id": "workstation-cara",
-            "status": "failed"
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -5728,7 +6178,25 @@
             "os_user": "dan",
             "platform": "darwin",
             "source_id": "mac-mini-dan",
-            "status": "stale"
+            "status": "stale",
+            "version": {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unknown",
+              "target_collector_version": "0.3.0",
+              "verified": false
+            }
           }
         ],
         "summary": {
@@ -5862,6 +6330,66 @@
             }
           ],
           "start_date": null
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 1,
+            "unsupported": 1,
+            "update_available": 1
+          },
+          "needs_attention": [
+            {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "display_name": "workstation-9 \u00b7 cara",
+              "machine": "workstation-9",
+              "observed_at": "2026-06-03T10:00:00+08:00",
+              "os_user": "cara",
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "source_id": "workstation-cara",
+              "state": "unsupported",
+              "status": "failed"
+            },
+            {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "display_name": "linux-dev \u00b7 bob",
+              "machine": "linux-dev",
+              "observed_at": "2026-06-03T11:31:00+08:00",
+              "os_user": "bob",
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "source_id": "linux-dev-bob",
+              "state": "update_available",
+              "status": "ok"
+            },
+            {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "display_name": "mac-mini \u00b7 dan",
+              "machine": "mac-mini",
+              "observed_at": "2026-06-03T08:30:00+08:00",
+              "os_user": "dan",
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "source_id": "mac-mini-dan",
+              "state": "unknown",
+              "status": "stale"
+            }
+          ],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",
@@ -6889,7 +7417,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           }
         ],
         "summary": {
@@ -7026,6 +7572,23 @@
             }
           ],
           "start_date": "2026-05-28"
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 0,
+            "unsupported": 0,
+            "update_available": 0
+          },
+          "needs_attention": [],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",
@@ -7798,7 +8361,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           }
         ],
         "summary": {
@@ -7935,6 +8516,23 @@
             }
           ],
           "start_date": "2026-05-28"
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 0,
+            "unsupported": 0,
+            "update_available": 0
+          },
+          "needs_attention": [],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",
@@ -8908,7 +9506,25 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -8923,7 +9539,25 @@
             "os_user": "bob",
             "platform": "linux",
             "source_id": "linux-dev-bob",
-            "status": "ok"
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "update_available",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -8938,7 +9572,25 @@
             "os_user": "cara",
             "platform": "windows",
             "source_id": "workstation-cara",
-            "status": "failed"
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           },
           {
             "accuracy": {
@@ -8953,7 +9605,25 @@
             "os_user": "dan",
             "platform": "darwin",
             "source_id": "mac-mini-dan",
-            "status": "stale"
+            "status": "stale",
+            "version": {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unknown",
+              "target_collector_version": "0.3.0",
+              "verified": false
+            }
           }
         ],
         "summary": {
@@ -9115,6 +9785,66 @@
             }
           ],
           "start_date": "2026-05-28"
+        },
+        "version_health": {
+          "counts": {
+            "current": 1,
+            "rollback_available": 0,
+            "unknown": 1,
+            "unsupported": 1,
+            "update_available": 1
+          },
+          "needs_attention": [
+            {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "display_name": "workstation-9 \u00b7 cara",
+              "machine": "workstation-9",
+              "observed_at": "2026-06-03T10:00:00+08:00",
+              "os_user": "cara",
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "source_id": "workstation-cara",
+              "state": "unsupported",
+              "status": "failed"
+            },
+            {
+              "build_sha": null,
+              "collector_version": "0.2.0",
+              "compatible": true,
+              "display_name": "linux-dev \u00b7 bob",
+              "machine": "linux-dev",
+              "observed_at": "2026-06-03T11:31:00+08:00",
+              "os_user": "bob",
+              "reason": "collector_version_behind_target",
+              "release_channel": null,
+              "source_id": "linux-dev-bob",
+              "state": "update_available",
+              "status": "ok"
+            },
+            {
+              "build_sha": null,
+              "collector_version": null,
+              "compatible": true,
+              "display_name": "mac-mini \u00b7 dan",
+              "machine": "mac-mini",
+              "observed_at": "2026-06-03T08:30:00+08:00",
+              "os_user": "dan",
+              "reason": "collector_release_missing",
+              "release_channel": null,
+              "source_id": "mac-mini-dan",
+              "state": "unknown",
+              "status": "stale"
+            }
+          ],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
         }
       },
       "content_type": "application/json",

@@ -1,8 +1,20 @@
+-- collector_version 必须是**真实设备能写进来的值**：ingest 侧用 semver 白名单校验，
+-- 非 semver 的占位串会被 400 拒掉，永远不可能落库。四行分别铺开版本读模型的四种判定，
+-- 让跨实现 parity 覆盖多条分支，而不是清一色一种状态
+-- （策略常量见 version_contract.py / version-contract.ts：min=0.1.0，target=0.3.0）：
+--   run 1 → 0.3.0 → current（等于 target）
+--   run 2 → 0.2.0 → update_available（低于 target，仍受支持）
+--   run 3 → 0.0.9 → unsupported（低于 min：设备停在旧版本，服务端事后抬高了最低支持线，
+--            存量行留在库里，它的下一次上报才会被 400 拒绝）
+--   run 4 → NULL  → unknown（0007 迁移后全部存量行都是 NULL，直到设备下次上报，
+--            「上线首日全量 unknown」是真实的生产常态）
+-- 第五态 rollback_available 需要版本高于 target 或 last_upgrade 失败，四个来源装不下，
+-- 由 version_read_surface.test.ts 单边覆盖；不为了凑状态新增 seed 来源。
 INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status) VALUES
-  (1, '2026-06-03T11:30:00+08:00', 'Asia/Shanghai', 'value-parity', 'ok'),
-  (2, '2026-06-03T11:31:00+08:00', 'Asia/Shanghai', 'value-parity', 'ok'),
-  (3, '2026-06-03T10:00:00+08:00', 'Asia/Shanghai', 'value-parity', 'partial'),
-  (4, '2026-06-03T08:30:00+08:00', 'Asia/Shanghai', 'value-parity', 'ok');
+  (1, '2026-06-03T11:30:00+08:00', 'Asia/Shanghai', '0.3.0', 'ok'),
+  (2, '2026-06-03T11:31:00+08:00', 'Asia/Shanghai', '0.2.0', 'ok'),
+  (3, '2026-06-03T10:00:00+08:00', 'Asia/Shanghai', '0.0.9', 'partial'),
+  (4, '2026-06-03T08:30:00+08:00', 'Asia/Shanghai', NULL, 'ok');
 
 INSERT INTO source_reports (
   id, run_id, source_id, report_type, command, status, ccusage_version,
@@ -13,16 +25,26 @@ INSERT INTO source_reports (
   (3, 3, 'workstation-cara', 'daily', 'seed.sql', 'failed', NULL, '2026-06-01', '2026-06-01', 'provider_failed', 'Antigravity provider unavailable'),
   (4, 4, 'mac-mini-dan', 'daily', 'seed.sql', 'ok', NULL, '2026-04-10', '2026-04-10', NULL, NULL);
 
+-- collector_version 跟着「该来源最新一次报告」所属的 collection_run 一起物化：
+-- 它记录的是最后一次被服务端成功接收的采集端版本。
+--
+-- 注意两侧选「最新报告」的规则并不相同：Python 读模型用
+-- `r.id IN (SELECT max(id) FROM source_reports GROUP BY source_id)`（snapshot_builder.py），
+-- 这里用 `ROW_NUMBER() OVER (PARTITION BY r.source_id ORDER BY c.collected_at DESC, r.id DESC)`。
+-- 本 fixture 每个 source 恰好只有一条报告，两种定义必然重合，所以现在对得上——
+-- 这是「恰好重合」，不是「口径一致」。将来给某个 source 加第二条报告、且 collected_at
+-- 与 id 的顺序不一致时，必须重新确认两侧选到的是同一行（好在届时 parity 会红，不是静默）。
 INSERT INTO source_report_states (
   source_id, collected_at, report_type, command, status, ccusage_version,
-  first_period, last_period, error_type, error_message
+  first_period, last_period, error_type, error_message, collector_version
 )
 SELECT source_id, collected_at, report_type, command, status, ccusage_version,
-       first_period, last_period, error_type, error_message
+       first_period, last_period, error_type, error_message, collector_version
 FROM (
   SELECT
     r.source_id, c.collected_at, r.report_type, r.command, r.status,
     r.ccusage_version, r.first_period, r.last_period, r.error_type, r.error_message,
+    c.collector_version,
     ROW_NUMBER() OVER (
       PARTITION BY r.source_id
       ORDER BY c.collected_at DESC, r.id DESC

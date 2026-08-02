@@ -1,4 +1,5 @@
 import { buildMobileSummary } from "./mobile-summary";
+import { buildVersionHealth, evaluateCollectorRelease, publicVersionView } from "./version-contract";
 
 export type Period = "today" | "week" | "month" | "all";
 
@@ -106,7 +107,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const statusRows = await all<Record<string, string | null>>(
     db,
     `
-      SELECT source_id, status, collected_at, error_message
+      SELECT source_id, status, collected_at, error_message, collector_version
       FROM source_report_states
       ORDER BY source_id ASC
     `,
@@ -367,6 +368,9 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   }
 
   const limitStatus = buildLimitStatus(allLimits, refTime);
+  const sourceStatus = buildSourceStatus(
+    statusRows, accuracyRows, identities, refTime, request.machine, request.account,
+  );
   const snapshot: Record<string, unknown> = {
     schema_version: 1,
     generated_at: toOffsetIso(refTime),
@@ -389,7 +393,11 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     },
     items,
     trend,
-    source_status: buildSourceStatus(statusRows, accuracyRows, identities, refTime, request.machine, request.account),
+    source_status: sourceStatus,
+    // 键位与 src/ai_usage_widget/snapshot_builder.py 的 `version_health` 一致：紧跟 source_status。
+    // 空库同样走这条路径，此时 sourceStatus 是 []，产出全零 counts 与空 needs_attention，
+    // 对应 Python 降级快照里的 `build_version_health([])`。
+    version_health: buildVersionHealth(sourceStatus),
     limits,
     limit_status: limitStatus,
     provider_slots: buildProviderSlots(providerUsage, allLimits, limitStatus, refTime),
@@ -729,9 +737,54 @@ function buildSourceStatus(
       else if (machine) result.display_name = String(machine);
       else result.display_name = str(row.source_id || "unknown-source");
       result.accuracy = sourceAccuracySummary(accuracyBySource.get(str(row.source_id)) ?? []);
+      result.version = sourceVersionView(row.collector_version);
       return result;
     });
   return rows;
+}
+
+/**
+ * 某个来源的对外版本块。
+ *
+ * 物化下来的只有 `collector_version` 一个字段，其余采集端字段一律为 null——
+ * 与 `snapshot_builder.py` 的 `source_versions = {source_id: {"collector_version": row[4]}}` 逐字一致。
+ * **不得**从 `source_accuracy` 补 `collector_version` / `parser_schema_version`：Python 侧的
+ * `source_versions` 是单键 dict，一旦在这里"丰富"，两套实现立刻分叉。
+ *
+ * 没有版本时传 `null` 而不是 `{collector_version: null}`：前者判成
+ * `collector_release_missing`（Python 侧 `if row[4]` 过滤掉空值的行为），后者是
+ * `collector_version_missing`。0007 迁移后存量行的该列全是 NULL，这是常态路径。
+ */
+function sourceVersionView(collectorVersion: unknown): Record<string, unknown> {
+  const release = collectorVersion ? { collector_version: collectorVersion } : null;
+  return publicVersionView(evaluateCollectorRelease(release));
+}
+
+/**
+ * `/api/health` 的 `versions`。
+ *
+ * 只吃 `source_report_states` + `source_identities` 两张表的行，**不调用 `buildSummary`**：
+ * 那会把 usage_daily / usage_hourly_facts / limit_windows / source_accuracy 全拉进一个
+ * 健康检查端点，是实打实的 D1 读取量回退。
+ *
+ * 版本块与来源条目的成形逻辑复用 `buildSourceStatus`，保证 `/api/health` 的 `versions`
+ * 与 `/api/summary` 的 `version_health` 是同一份产物，不会分叉。
+ */
+export function buildVersionHealthFromSourceRows(
+  rows: Record<string, string | null>[],
+  currentTime?: string | null,
+): Record<string, unknown> {
+  const refTime = nowInTimezone("Asia/Shanghai", currentTime);
+  const identities: Record<string, SourceIdentity> = {};
+  for (const row of rows) {
+    identities[str(row.source_id)] = {
+      host: row.host,
+      machine: row.machine ?? row.host,
+      os_user: row.os_user,
+      platform: row.platform,
+    };
+  }
+  return buildVersionHealth(buildSourceStatus(rows, [], identities, refTime));
 }
 
 function sourceAccuracySummary(rows: Record<string, unknown>[]): Record<string, unknown> {
