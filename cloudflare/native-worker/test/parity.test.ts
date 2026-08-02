@@ -28,6 +28,10 @@ const seedSqlPath = path.join(repoRoot, "cloudflare/native-worker/test/seed.sql"
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const token = "contract-test-token";
 const fixedNow = "2026-06-03T12:00:00+08:00";
+// 与 Python 合同场景 `tests/test_api_contract.py::STALE_COLLECTED_AT` 保持同一个值：
+// 合同 fixture 里必须有一台「超过 120 分钟没上报」的设备，否则过期折算这条口径
+// 在两侧都退化成恒等变换，parity 会一直报绿而实际什么都没守。
+const staleCollectedAt = "2026-06-03T08:00:00+08:00";
 
 const volatileFields = new Set([
   "accepted_at",
@@ -856,6 +860,13 @@ async function seedUsageFixture(db: D1Database): Promise<void> {
     runId: 2,
     now,
     sourceId: "linux-dev-bob",
+    // Issue #77：Python 合同场景把这台设备的采集时刻回拨到 120 分钟阈值以外
+    // （`tests/test_api_contract.py::_backdate_source_collection`，STALE_COLLECTED_AT）。
+    // 这里必须造出同一个场景，否则 Worker 侧这台来源永远新鲜、status 恒为 ok，
+    // 而 golden 说 stale——「过期折算」这条口径就会在 parity 里静音。
+    // 用固定时刻而不是 `new Date()`：它相对真实当前时间、相对 fixedNow(2026-06-03T12:00)、
+    // 相对 provider-failure 用例的 2026-06-03T10:31 都超过 120 分钟，三种参照下都判 stale。
+    collectedAt: staleCollectedAt,
     host: "linux-dev",
     machine: "linux-dev",
     osUser: "bob",
@@ -889,6 +900,8 @@ async function insertUsagePayload(
   row: {
     runId: number;
     now: string;
+    /** 采集时刻。省略即用 `now`（新鲜来源）；传旧时刻可造出「超过 120 分钟没上报」的来源。 */
+    collectedAt?: string;
     sourceId: string;
     host: string;
     machine: string;
@@ -903,6 +916,11 @@ async function insertUsagePayload(
   },
 ): Promise<void> {
   const totalTokens = row.inputTokens + row.outputTokens + row.cacheTokens;
+  // 只回拨采集时刻这一列（其余 first_seen_at / last_seen_at / 用量行仍用 now），
+  // 与 Python 侧 `_backdate_source_collection` 只改 collection_runs.collected_at 同口径。
+  // 读模型的来源健康取 source_report_states.collected_at（read-model.ts buildSummary），
+  // 所以两张表都要跟着回拨，否则场景造不出来。
+  const collectedAt = row.collectedAt ?? row.now;
   const dailyRaw = {
     agent: row.agent,
     period: row.period,
@@ -932,7 +950,7 @@ async function insertUsagePayload(
 
   await db.batch([
     db.prepare("INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status) VALUES (?, ?, ?, ?, ?)")
-      .bind(row.runId, row.now, "Asia/Shanghai", "0.1.0", "ok"),
+      .bind(row.runId, collectedAt, "Asia/Shanghai", "0.1.0", "ok"),
     db.prepare(`
       INSERT INTO source_reports (
         id, run_id, source_id, report_type, command, status, ccusage_version,
@@ -955,7 +973,7 @@ async function insertUsagePayload(
         error_type = excluded.error_type,
         error_message = excluded.error_message
       WHERE excluded.collected_at >= source_report_states.collected_at
-    `).bind(row.sourceId, row.now, "daily", "HTTP Ingest", "ok", null, row.period, row.period, null, null),
+    `).bind(row.sourceId, collectedAt, "daily", "HTTP Ingest", "ok", null, row.period, row.period, null, null),
     db.prepare(`
       INSERT INTO source_identities (
         source_id, host, machine, os_user, platform, first_seen_at, last_seen_at
