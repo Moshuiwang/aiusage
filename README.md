@@ -162,8 +162,7 @@ official / confidence / status）、`health`（各来源最后上报时间、新
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider-fixture tests/fixtures/limits_runtime_fixture.json \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 使用本地 limits config 采集 official limits：
@@ -218,8 +217,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider codex \
   --codex-auth-file /path/to/codex/auth.json \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 显式指定 Codex app-server RPC 采集 rate limits：
@@ -229,8 +227,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider codex \
   --codex-rpc \
   --codex-rpc-sock /path/to/codex-app-server.sock \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 显式指定 Claude auth 文件和 Usage API URL 采集 OAuth usage：
@@ -240,8 +237,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider claude \
   --claude-auth-file /path/to/claude/auth.json \
   --claude-usage-url https://example.invalid/claude/usage \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 显式指定 Claude CLI `/usage` 采集 usage：
@@ -250,25 +246,12 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider claude \
   --claude-cli \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
-采集后同步给 legacy macOS WidgetKit extension：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
-  --config config/sources.local.json \
-  --output data/latest.json \
-  --sqlite data/usage.sqlite \
-  --sync-widget
-```
-
-只同步现有快照：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli sync-widget --input data/latest.json
-```
+> `sync-widget` 与 `collect --sync-widget` 已于 #72 移除。它们把 `latest.json` 同步进
+> macOS WidgetKit extension 容器，而 macOS Widget 已非产品目标（见 `docs/status.md`）。
+> 历史资料在 `docs/archive/legacy/widget-macos.md`。
 
 Legacy macOS SwiftUI 预览：
 
