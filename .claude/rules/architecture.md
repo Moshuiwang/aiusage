@@ -45,7 +45,8 @@ paths:
 | 版本合同：采集端自报 | `version_contract.py`（采集端保留部分） | **留 Python**（`pusher.py`、`config.py` 在用），不冻结 |
 | 设备本机采集与 HTTP 上报 | `pusher.py`、`runners.py`、`mswusage_*.py` | **留 Python**，不冻结 |
 | 采集端 payload 合同 fixture | `pusher.py`（owner 模块产出，**禁止手写**） | **留 Python**。生成 `scripts/gen_collector_payload_fixture.py`，防陈旧守卫 `tests/test_collector_payload_contract.py` |
-| 采集端本地 outbox / 可靠投递 | `collector_store.py` | **已建**（#73）。缓冲不是档案，历史权威永远在 D1。库路径**要求绝对路径**（默认 `~/.ai-usage/collector_outbox.sqlite`）——采集由 LaunchAgent/systemd 拉起时 cwd 是 `/` 或 `$HOME`，相对路径会导致同机开两个库且排空守卫误放行 |
+| 服务端合同 golden：`value_golden.json` / `provider_slots_golden.json` / `api_contract_golden.json` / macOS owner fixture | `cloudflare/native-worker/test/golden/`（收集器即 owner，**禁止手写**） | **权威已转移**（#74 P1）。生成 `npm run cf:golden:gen`，防陈旧守卫 `golden-freshness.test.ts` + `provider-slots-parity.test.ts`。Python 侧的 `gen_value_golden.py` / `gen_provider_slots_golden.py` / `test_value_golden_freshness.py` / `test_provider_slots_parity.py` / `test_api_contract.py` 已删除 |
+| 采集端本地 outbox / 可靠投递 | `collector_store.py` | **已建**（#73）。缓冲不是档案，历史权威永远在 D1。库路径**要求绝对路径**（默认 `~/.ai-usage/collector_outbox.sqlite`）——采集由 LaunchAgent/systemd 拉起时 cwd 是 `/` 或 `$HOME`，相对路径会导致同机开两个库且排空守卫误放行。<br>调用方：用量事实走 `pusher.py`，额度观测走 `limits_push.py::deliver_limits_payload`（#87 接线，`push-limits --config` 才启用）。额度带 TTL + 按槽位集合去重，用量不设 TTL 也绝不去重——两种可靠性语义不同，不要合并。运维入口 `outbox-status` / `outbox-export` / `outbox-drain` |
 | 官方额度 provider / runtime / doctor / scheduler / push | `*_limits_provider.py`、`limits_*.py` | **留 Python**，不冻结。`limits_runtime.py -> snapshot_builder` 依赖边已由 #72 剪断，不得重建 |
 | 部署单元 / 发布 / 体检 | `deploy_units.py`、`deploy_release.py`、`deploy_doctor.py` | **留 Python**，不冻结 |
 | 本地快照线 `widget_sync.py` / `sync-widget` / `latest.json` | 无 | **判死**，随 #72 处置。不得新增消费者 |
