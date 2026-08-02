@@ -45,3 +45,6 @@ mobile/ios-xcode/**/xcuserdata/
 mobile/ios-xcode/**/*.xcuserstate
 reviews/*-request.md
 docs/usage-fact-check-board.md
+
+# wrangler dev --local 的本地状态（含本地 D1 的 SQLite 文件）
+.wrangler/

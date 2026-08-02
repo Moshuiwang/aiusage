@@ -34,7 +34,6 @@ from .mswusage_claude import build_report as build_mswusage_claude_report, read_
 from .pusher import DevicePusher
 from .server import run_server
 from .verify_cloud import register_parser as register_verify_cloud_parser, run as run_verify_cloud
-from .widget_sync import sync_latest_to_widget
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -45,7 +44,6 @@ def main(argv: list[str] | None = None) -> int:
     collect_parser.add_argument("--config", default="config/sources.local.json")
     collect_parser.add_argument("--output", default="data/latest.json")
     collect_parser.add_argument("--sqlite", default="data/usage.sqlite")
-    collect_parser.add_argument("--sync-widget", action="store_true", help="Copy latest.json into the local Widget container")
 
     push_parser = subparsers.add_parser("push", help="Collect local ccusage daily report and push it to the ingest server")
     push_parser.add_argument("--config", default="config/sources.local.json")
@@ -127,10 +125,6 @@ def main(argv: list[str] | None = None) -> int:
         help="默认沿用上一个 release 记录的 scope",
     )
 
-    sync_parser = subparsers.add_parser("sync-widget", help="Copy latest.json into the local Widget container")
-    sync_parser.add_argument("--input", default="data/latest.json")
-    sync_parser.add_argument("--destination", default=None)
-
     server_parser = subparsers.add_parser("server", help="Start the HTTP Ingest and Web API server")
     server_parser.add_argument("--host", default="127.0.0.1")
     server_parser.add_argument("--port", type=int, default=8000)
@@ -157,10 +151,8 @@ def main(argv: list[str] | None = None) -> int:
     limits_parser.add_argument("--claude-usage-url", default=None, help="Explicit Claude OAuth usage URL")
     limits_parser.add_argument("--claude-cli", action="store_true", help="Use explicit Claude CLI /usage fallback")
     limits_parser.add_argument("--sqlite", default=None)
-    limits_parser.add_argument("--latest", default=None)
     limits_parser.add_argument("--timezone", default=None)
     limits_parser.add_argument("--date", default=None, help="Snapshot date in YYYY-MM-DD")
-    limits_parser.add_argument("--no-snapshot", action="store_true", help="Do not rebuild latest snapshot")
     limits_parser.add_argument("--dry-run", action="store_true", help="Collect and validate without writing SQLite or latest snapshot")
     limits_parser.add_argument("--check-config", action="store_true", help="Validate limits config and print a redacted provider plan")
     limits_parser.add_argument("--doctor", action="store_true", help="Run redacted readiness checks before real provider smoke")
@@ -225,9 +217,6 @@ def main(argv: list[str] | None = None) -> int:
         try:
             config = load_config(args.config)
             collect(config, args.output, args.sqlite)
-            if args.sync_widget:
-                destination = sync_latest_to_widget(args.output)
-                print(f"synced widget snapshot: {destination}")
         except (ConfigError, OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
@@ -332,15 +321,6 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("success") else 1
 
-    if args.command == "sync-widget":
-        try:
-            destination = sync_latest_to_widget(args.input, args.destination)
-            print(f"synced widget snapshot: {destination}")
-        except (OSError, ValueError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-        return 0
-
     if args.command == "backup":
         try:
             result = backup_sqlite(args.db, args.backup_dir, keep=args.keep, max_total_mb=args.max_total_mb)
@@ -406,14 +386,11 @@ def main(argv: list[str] | None = None) -> int:
             )
             runtime = LimitsRuntime(
                 db_path=args.sqlite or (limits_config.sqlite_path if limits_config else "data/usage.sqlite"),
-                latest_path=args.latest or (limits_config.latest_path if limits_config else "data/latest.json"),
                 timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
                 providers=providers,
             )
             result = runtime.collect(
                 provider_names=provider_names,
-                rebuild_snapshot=not args.no_snapshot,
-                snapshot_date=args.date,
                 dry_run=args.dry_run,
             )
         except (OSError, ValueError, LimitsConfigError, json.JSONDecodeError) as exc:
@@ -655,13 +632,11 @@ def _run_push_limits(args):
     )
     runtime = LimitsRuntime(
         db_path=limits_config.sqlite_path if limits_config else "data/usage.sqlite",
-        latest_path=limits_config.latest_path if limits_config else "data/latest.json",
         timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
         providers=providers,
     )
     result = runtime.collect(
         provider_names=provider_names,
-        rebuild_snapshot=False,
         dry_run=True,
     )
     payload = {

@@ -28,11 +28,9 @@ class TestCliLimits(unittest.TestCase):
     def tearDown(self) -> None:
         self.default_now.stop()
 
-    def test_collect_limits_fixture_writes_sqlite_and_snapshot(self) -> None:
+    def test_collect_limits_fixture_writes_sqlite(self) -> None:
         db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
-        out_fd, out_path = tempfile.mkstemp(suffix=".json")
         os.close(db_fd)
-        os.close(out_fd)
         try:
             code = cli.main([
                 "collect-limits",
@@ -40,8 +38,6 @@ class TestCliLimits(unittest.TestCase):
                 str(FIXTURES / "limits_runtime_fixture.json"),
                 "--sqlite",
                 db_path,
-                "--latest",
-                out_path,
                 "--date",
                 "2026-06-03",
             ])
@@ -50,18 +46,15 @@ class TestCliLimits(unittest.TestCase):
             with sqlite3.connect(db_path) as conn:
                 rows = conn.execute("SELECT provider, window FROM limit_windows ORDER BY provider").fetchall()
             self.assertEqual(rows, [("claude", "week"), ("codex", "session")])
-
-            with open(out_path, encoding="utf-8") as handle:
-                snapshot = json.load(handle)
-            self.assertEqual(len(snapshot["limits"]), 2)
+            # 原先还断言「latest.json 快照里有 2 条 limits」。collect-limits 已不再重建快照
+            # （依赖 snapshot_builder 的那条边由 #72 剪断），断言的对象不存在了。
+            # limit_windows 写入是这条命令真正的职责，上面已断言。
         finally:
-            for path in [db_path, out_path]:
-                if os.path.exists(path):
-                    os.remove(path)
+            if os.path.exists(db_path):
+                os.remove(db_path)
 
-    def test_collect_limits_dry_run_fixture_does_not_write_sqlite_or_snapshot(self) -> None:
+    def test_collect_limits_dry_run_fixture_does_not_write_sqlite(self) -> None:
         db_path = tempfile.mktemp(suffix=".sqlite")
-        out_path = tempfile.mktemp(suffix=".json")
 
         code = cli.main([
             "collect-limits",
@@ -69,14 +62,13 @@ class TestCliLimits(unittest.TestCase):
             str(FIXTURES / "limits_runtime_fixture.json"),
             "--sqlite",
             db_path,
-            "--latest",
-            out_path,
             "--dry-run",
         ])
 
         self.assertEqual(code, 0)
         self.assertFalse(os.path.exists(db_path))
-        self.assertFalse(os.path.exists(out_path))
+        # 原先还断言「dry-run 不写 latest.json 快照」。collect-limits 已不再重建快照
+        # （依赖 snapshot_builder 的那条边由 #72 剪断），断言的对象不存在了。
 
     def test_collect_limits_reports_runtime_error(self) -> None:
         class BrokenRuntime:
@@ -92,12 +84,12 @@ class TestCliLimits(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_collect_limits_rejects_empty_provider_set(self) -> None:
-        code = cli.main(["collect-limits", "--no-snapshot"])
+        code = cli.main(["collect-limits"])
 
         self.assertEqual(code, 1)
 
     def test_collect_limits_codex_requires_explicit_auth_file(self) -> None:
-        code = cli.main(["collect-limits", "--provider", "codex", "--no-snapshot"])
+        code = cli.main(["collect-limits", "--provider", "codex"])
 
         self.assertEqual(code, 1)
 
@@ -135,7 +127,6 @@ class TestCliLimits(unittest.TestCase):
                     "--codex-rpc",
                     "--sqlite",
                     db_path,
-                    "--no-snapshot",
                 ])
         finally:
             if os.path.exists(db_path):
@@ -144,7 +135,7 @@ class TestCliLimits(unittest.TestCase):
         self.assertEqual(code, 0)
 
     def test_collect_limits_claude_requires_explicit_auth_file_and_usage_url(self) -> None:
-        code = cli.main(["collect-limits", "--provider", "claude", "--no-snapshot"])
+        code = cli.main(["collect-limits", "--provider", "claude"])
 
         self.assertEqual(code, 1)
 
@@ -182,7 +173,6 @@ class TestCliLimits(unittest.TestCase):
                     "--claude-cli",
                     "--sqlite",
                     db_path,
-                    "--no-snapshot",
                 ])
         finally:
             if os.path.exists(db_path):
@@ -234,7 +224,6 @@ class TestCliLimits(unittest.TestCase):
                     "collect-limits",
                     "--limits-config",
                     config_path,
-                    "--no-snapshot",
                 ])
         finally:
             for path in [db_path, config_path]:

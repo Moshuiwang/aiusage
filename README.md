@@ -68,7 +68,27 @@ limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-s
 
 ## 常用命令
 
-运行 Python 测试：
+验证（唯一入口，会按改动面自动裁剪：不动 `cloudflare/` 就不跑 Worker 测试）：
+
+```bash
+scripts/verify.sh                 # 按改动面裁剪
+scripts/verify.sh --full          # 强制全量
+scripts/verify.sh --explain-scope # 只看裁剪判定，不跑测试
+```
+
+本地起**服务端**（Worker + 本地 D1，与生产同款实现）：
+
+```bash
+scripts/dev_worker.sh --seed      # 应用 migrations + 灌示例数据 + 起服务
+```
+
+需要 Node >= 22。完全离线可用（首次 `npm ci` 之后）。
+详见 [`docs/architecture/local-worker-development.md`](docs/architecture/local-worker-development.md)。
+
+> Python 服务端（`cli server`）已按 #67 决策**冻结**，不再是开发入口，随 #74 删除。
+> 采集端仍是 Python，照常开发。
+
+只跑 Python 测试：
 
 ```bash
 PYTHONPATH=src python3 -m unittest discover -s tests -v
@@ -142,8 +162,7 @@ official / confidence / status）、`health`（各来源最后上报时间、新
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider-fixture tests/fixtures/limits_runtime_fixture.json \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 使用本地 limits config 采集 official limits：
@@ -198,8 +217,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider codex \
   --codex-auth-file /path/to/codex/auth.json \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 显式指定 Codex app-server RPC 采集 rate limits：
@@ -209,8 +227,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider codex \
   --codex-rpc \
   --codex-rpc-sock /path/to/codex-app-server.sock \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 显式指定 Claude auth 文件和 Usage API URL 采集 OAuth usage：
@@ -220,8 +237,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider claude \
   --claude-auth-file /path/to/claude/auth.json \
   --claude-usage-url https://example.invalid/claude/usage \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
 显式指定 Claude CLI `/usage` 采集 usage：
@@ -230,25 +246,12 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider claude \
   --claude-cli \
-  --sqlite data/usage.sqlite \
-  --latest data/latest.json
+  --sqlite data/usage.sqlite
 ```
 
-采集后同步给 legacy macOS WidgetKit extension：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
-  --config config/sources.local.json \
-  --output data/latest.json \
-  --sqlite data/usage.sqlite \
-  --sync-widget
-```
-
-只同步现有快照：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli sync-widget --input data/latest.json
-```
+> `sync-widget` 与 `collect --sync-widget` 已于 #72 移除。它们把 `latest.json` 同步进
+> macOS WidgetKit extension 容器，而 macOS Widget 已非产品目标（见 `docs/status.md`）。
+> 历史资料在 `docs/archive/legacy/widget-macos.md`。
 
 Legacy macOS SwiftUI 预览：
 

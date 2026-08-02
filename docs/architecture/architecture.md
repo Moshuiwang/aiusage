@@ -11,6 +11,9 @@
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
 - Cloudflare/D1 当前生产事实：[`cloudflare-migration-remaining-work.md`](cloudflare-migration-remaining-work.md)。
 - 版本字段清单、四态判定与升级边界：[`version-and-upgrade-contract.md`](version-and-upgrade-contract.md)；口径以 `version_contract.py` 为准。
+- **服务端单实现收敛决策（#67，2026-08-02）**：[`server-path-consolidation-decision.md`](server-path-consolidation-decision.md)。
+  服务端路径的权威已转移到 Cloudflare Worker + D1，Python 服务端模块已冻结。
+  **本文下面的「模块 Owner」与「新功能放置规则」两节受该决策约束，冲突时以决策文档为准。**
 
 ## 当前真实架构
 
@@ -58,6 +61,15 @@ CLI / HTTP handler / clients
 - iOS / Android App 的 server URL trust policy 只接受生产服务或显式自托管 HTTPS 域名；HTTP、localhost、内网 IP、裸 IP 默认拒绝。开发调试可以用显式 override。
 
 ## 模块 Owner
+
+> **#67 决策后的读法**：下表描述的是 Python 侧各模块**当前**的职责边界，仍然是读代码时的地图。
+> 但 `server.py`、`server_services.py`、`ingest.py`、`storage_sqlite.py`、`snapshot_builder.py`
+> 及其 `snapshot_*` helper、`mobile_summary.py`、`version_contract.py` 的服务端判定部分
+> **已冻结**：只修迁移阻断问题，不承接新产品字段。服务端的新字段一律加在
+> `cloudflare/native-worker/src/*.ts` + `cloudflare/migrations/`。
+> 冻结名单与「什么能改、什么不能改」的完整口径见
+> [`server-path-consolidation-decision.md`](server-path-consolidation-decision.md)
+> 与 `.claude/rules/architecture.md`。
 
 | 模块 | Owner 职责 | 禁止承载 |
 | --- | --- | --- |
@@ -116,16 +128,22 @@ CLI / HTTP handler / clients
 
 ## 新功能放置规则
 
-- 新增 API：先写 service 函数，再由 `server.py` 调用。
-- 新增展示字段：先进入 `snapshot_builder.py` read model 或 `mobile_summary.py` DTO，不在 dashboard/iOS 里重复聚合。
-- 新增 summary 聚合 helper：保持 `snapshot_builder.py` 为 owner，helper 只承接可复用纯函数或局部计算。
-- 新增 source health 规则：放 `snapshot_source_health.py` helper，由 `snapshot_builder.py` 调用并继续输出同一 `source_status` JSON。
-- 新增 provider：放 provider module + `limits_runtime.py`，不改 daily usage baseline。
+> **#67 决策覆盖**：以下前四条（新增 API、展示字段、summary 聚合 helper、source health 规则）
+> 描述的是**冻结前**的 Python 侧放置规则，已被服务端收敛决策取代。
+> **服务端的新 API 与新展示字段一律放 `cloudflare/native-worker/src/write-model.ts` /
+> `read-model.ts` / `mobile-summary.ts` + `cloudflare/migrations/`，不再进 Python 侧。**
+> 保留原文是为了让读旧代码的人知道那些 Python 结构当初是怎么组织的。
+
+- ~~新增 API：先写 service 函数，再由 `server.py` 调用。~~（冻结，改为 Worker `index.ts` + write/read-model）
+- ~~新增展示字段：先进入 `snapshot_builder.py` read model 或 `mobile_summary.py` DTO~~（冻结，改为 `read-model.ts` / `mobile-summary.ts`）；**不在 dashboard/iOS 里重复聚合**这条依然有效。
+- ~~新增 summary 聚合 helper：保持 `snapshot_builder.py` 为 owner~~（冻结，改为 `read-model.ts`）。
+- ~~新增 source health 规则：放 `snapshot_source_health.py` helper~~（冻结，改为 `read-model.ts`）；继续输出同一 `source_status` JSON 这条依然有效。
+- 新增 provider：放 provider module + `limits_runtime.py`，不改 daily usage baseline。（采集端，未冻结）
 - 新增 limits 展示：只把 official observed quota 作为可信额度；本地估算和 provider failed 只能展示为估算/缺失/失败状态。
 - 新增 App 设置：放 iOS settings / Keychain 层，不写死到视图。
 - 新增 App server trust policy：只在 iOS runtime config 和对应 Swift tests 中收敛，不影响后端 API 和 SQLite。
 - 新增 Widget 配置共享：先按 [`widget-configuration-sharing.md`](widget-configuration-sharing.md) 建立 App Group + Keychain access group，再让 Widget 读取 live 配置。
-- 新增数据写入：通过 `storage_sqlite.py` 边界，不在 route handler 里直接散写 SQL。
+- 新增数据写入：生产走 `cloudflare/migrations/` + `write-model.ts` 边界（`storage_sqlite.py` 已冻结）；无论哪一侧，都不在 route handler 里直接散写 SQL。
 - 新增客户端平台：放入 `clients/<platform>/`；跨端数据合同放 `packages/client-contracts/`；状态色和视觉语义放 `packages/design-tokens/`。
 - 迁移现有 iOS / Web 路径：必须单独开任务包，先保证 SwiftPM、Xcode 或 Web 路由验证，再移动文件。
 

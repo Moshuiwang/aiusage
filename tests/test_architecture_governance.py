@@ -28,6 +28,67 @@ RECOMPUTE_OPERATORS = (ast.Add, ast.Sub, ast.Mult, ast.Div, ast.FloorDiv, ast.Mo
 HTTP_CALL_NAMES = frozenset({"Request", "urlopen", "urlretrieve"})
 
 
+#: 采集端模块。它们跑在用户的 Mac / Linux 机器上，读本机 ccusage / mswusage 与 OS 上下文——
+#: 这是 Worker 沙箱结构上做不到的事，所以采集端永远是 Python（#67 决策）。
+COLLECTOR_MODULE_GLOBS = (
+    "pusher.py",
+    "collector_store.py",
+    "limits_*.py",
+    "mswusage_*.py",
+    "deploy_*.py",
+)
+
+#: 服务端读模型与 HTTP 编排。按 #67 决策服务端权威已转移到 Worker + D1，
+#: 这些 Python 模块已冻结并随 #74 删除。采集端一旦 import 它们，删除就会连带打断采集端——
+#: 那正是「Python / TS / 半迁移三种状态并存」最难收拾的形态。
+SERVER_SIDE_MODULES = frozenset(
+    {"snapshot_builder", "mobile_summary", "server_services", "server"}
+)
+
+#: 包名，用于识别 `from ai_usage_widget.snapshot_builder import ...` 这类**绝对导入**。
+#: 只认相对导入的守卫会被绝对导入直接绕过——AGENTS.md 点名过这个教训。
+PACKAGE_NAME = "ai_usage_widget"
+
+
+def _server_import_violations(tree: ast.AST) -> list[str]:
+    """采集端模块里所有指向服务端读模型的 import。
+
+    四种写法都要认，少认一种就是一条绕过路径::
+
+        import ai_usage_widget.snapshot_builder          # Import, 绝对
+        from ai_usage_widget.snapshot_builder import x   # ImportFrom, 绝对
+        from .snapshot_builder import x                  # ImportFrom, 相对
+        from . import snapshot_builder                   # ImportFrom, 模块名在 names 里
+    """
+    violations: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                if parts[-1] in SERVER_SIDE_MODULES and (
+                    len(parts) == 1 or parts[0] == PACKAGE_NAME
+                ):
+                    violations.append("import " + alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            tail = module.split(".")[-1] if module else ""
+            if tail in SERVER_SIDE_MODULES:
+                violations.append("from " + "." * node.level + module + " import ...")
+            elif node.level and not module:
+                for alias in node.names:
+                    if alias.name in SERVER_SIDE_MODULES:
+                        violations.append("from " + "." * node.level + " import " + alias.name)
+    return violations
+
+
+def _collector_module_paths() -> list[Path]:
+    src = ROOT / "src" / PACKAGE_NAME
+    paths: list[Path] = []
+    for pattern in COLLECTOR_MODULE_GLOBS:
+        paths.extend(sorted(src.glob(pattern)))
+    return paths
+
+
 def _write_literal_violations(source: str) -> list[str]:
     violations = []
     for name in WRITE_METHOD_NAMES:
@@ -178,6 +239,76 @@ class TestVerifyCloudReadOnlyBoundary(unittest.TestCase):
                     [],
                     f"检查没能抓到「{label}」这类违规，守卫已经失效",
                 )
+
+
+class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
+    """采集端不得依赖服务端读模型（#67 Phase 1c / #72）。
+
+    这条边界的实际含义：**Python 服务端可以被删掉，而采集端一行不受影响。**
+
+    #67 决策服务端收敛为 Worker + D1 单实现，`snapshot_builder` / `mobile_summary` /
+    `server_services` / `server` 已冻结并随 #74 删除。而采集端要跑在用户的 Mac / Linux 上
+    读本机 ccusage、mswusage 与 OS 用户上下文——Worker 沙箱结构上做不到，所以它永远是
+    Python。两者之间只应有 HTTP payload 这一条边。
+
+    一旦采集端 import 了服务端模块，#74 的删除就会连带打断采集端，而那时人会倾向于
+    「先把服务端留着」——于是三种状态长期并存，正是决策要消灭的东西。
+    """
+
+    def test_no_collector_module_imports_the_server_read_model(self) -> None:
+        offenders = {}
+        for path in _collector_module_paths():
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            violations = _server_import_violations(tree)
+            if violations:
+                offenders[path.name] = violations
+        self.assertEqual(
+            offenders,
+            {},
+            "采集端模块 import 了服务端读模型；服务端删除时会连带打断采集端",
+        )
+
+    def test_the_collector_module_list_is_not_empty(self) -> None:
+        """防呆：glob 写错时上面那条会因为「一个文件都没扫到」而永远绿。"""
+        names = [p.name for p in _collector_module_paths()]
+        self.assertIn("pusher.py", names)
+        self.assertIn("collector_store.py", names)
+        self.assertGreaterEqual(len(names), 6, "采集端模块扫描结果异常: " + str(names))
+
+    def test_the_import_check_catches_both_absolute_and_relative_forms(self) -> None:
+        """守卫必须挡住**全部四种**导入写法，少认一种就是一条绕过路径。
+
+        AGENTS.md 点名过这个教训：治理断言只变异了相对导入，绝对导入直接穿过去。
+        所以这里逐条往真实源码里注入再检查，而不是只证明「现在是绿的」。
+        """
+        base = (ROOT / "src" / PACKAGE_NAME / "pusher.py").read_text(encoding="utf-8")
+        mutations = (
+            ("绝对 import", "import ai_usage_widget.snapshot_builder"),
+            ("绝对 from-import", "from ai_usage_widget.snapshot_builder import build_snapshot"),
+            ("相对 from-import", "from .snapshot_builder import build_snapshot"),
+            ("相对 from 包 import 模块", "from . import snapshot_builder"),
+            ("绝对 import mobile_summary", "import ai_usage_widget.mobile_summary"),
+            ("相对 import server_services", "from .server_services import build_health_response"),
+        )
+        for label, injected in mutations:
+            with self.subTest(mutation=label):
+                mutated = ast.parse(base + "\n\n" + injected + "\n")
+                self.assertNotEqual(
+                    _server_import_violations(mutated),
+                    [],
+                    "检查没能抓到「" + label + "」，守卫存在绕过路径",
+                )
+
+    def test_the_import_check_does_not_flag_legitimate_imports(self) -> None:
+        """反向：合法导入不许误报，否则噪音会让人把守卫关掉。"""
+        benign = (
+            "import json\n"
+            "from .config import DeviceConfig\n"
+            "from . import models\n"
+            "from ai_usage_widget.version_contract import local_collector_release\n"
+            "import ai_usage_widget.timeutil\n"
+        )
+        self.assertEqual(_server_import_violations(ast.parse(benign)), [])
 
 
 class TestArchitectureGovernance(unittest.TestCase):

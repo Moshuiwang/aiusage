@@ -6,6 +6,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 
+from .collector_store import (
+    DEFAULT_LIMIT_TTL_SECONDS,
+    DEFAULT_MAX_BYTES,
+    DEFAULT_MAX_FLUSH_BATCH,
+    DEFAULT_OUTBOX_PATH,
+    OutboxConfig,
+)
 from .version_contract import DEFAULT_RELEASE_CHANNEL, RELEASE_CHANNELS
 
 
@@ -97,6 +104,9 @@ class DeviceConfig:
     token_env: Optional[str] = None
     ai_accounts: Optional[Dict[str, Dict[str, Any]]] = None
     release_channel: str = DEFAULT_RELEASE_CHANNEL
+    #: 本地 outbox（#73）。``None`` = 这台设备从未启用过，走原来的直推路径，行为零变化。
+    #: 存在但 ``enabled=False`` = 已回退到直推，pusher 会先确认磁盘上没有未排空的数据。
+    outbox: Optional[OutboxConfig] = None
 
 
 def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
@@ -140,4 +150,64 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
         token_env=data.get("token_env"),
         ai_accounts=data.get("ai_accounts") if isinstance(data.get("ai_accounts"), dict) else None,
         release_channel=release_channel,
+        outbox=_parse_outbox(data.get("outbox")),
     )
+
+
+def _parse_outbox(raw: Any) -> Optional[OutboxConfig]:
+    """解析设备配置里的 ``outbox`` 块。
+
+    整块缺失返回 ``None``——那台设备走原来的直推路径，一个字节都不变。
+    写错的配置一律 ``ConfigError`` 当场报错：一个「悄悄用默认值兜底」的 outbox
+    配置错误，表现出来就是「以为在缓冲、其实没有」，故障时才发现历史已经没了。
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError("config.outbox must be an object")
+
+    enabled = raw.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise ConfigError("config.outbox.enabled must be a boolean")
+
+    path = raw.get("path", DEFAULT_OUTBOX_PATH)
+    if not isinstance(path, str) or not path.strip():
+        raise ConfigError("config.outbox.path must be a non-empty string")
+    # 相对路径会让「库文件是哪个」取决于谁用什么 cwd 拉起采集：LaunchAgent 的 cwd 通常
+    # 是 `/` 或 `$HOME`，人工执行时是仓库根。两次运行会开两个库，先前缓冲的数据从此
+    # 无人读取，且账面上看不出任何异常。这正是本 Issue 要消灭的静默丢失，所以在这里
+    # 就拒绝，而不是等到某次真实故障之后才发现。
+    resolved = Path(path.strip()).expanduser()
+    if not resolved.is_absolute():
+        raise ConfigError(
+            "config.outbox.path must be an absolute path (or start with ~); "
+            f"got a relative path: {path}"
+        )
+
+    max_bytes = _positive_int(raw, "max_bytes", DEFAULT_MAX_BYTES)
+    max_flush_batch = _positive_int(raw, "max_flush_batch", DEFAULT_MAX_FLUSH_BATCH)
+
+    limit_ttl_seconds = raw.get("limit_ttl_seconds", DEFAULT_LIMIT_TTL_SECONDS)
+    try:
+        limit_ttl_seconds = float(limit_ttl_seconds)
+    except (TypeError, ValueError):
+        raise ConfigError("config.outbox.limit_ttl_seconds must be a number") from None
+    if limit_ttl_seconds <= 0:
+        raise ConfigError("config.outbox.limit_ttl_seconds must be positive")
+
+    return OutboxConfig(
+        enabled=enabled,
+        path=str(resolved),
+        max_bytes=max_bytes,
+        limit_ttl_seconds=limit_ttl_seconds,
+        max_flush_batch=max_flush_batch,
+    )
+
+
+def _positive_int(raw: Dict[str, Any], key: str, default: int) -> int:
+    value = raw.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ConfigError(f"config.outbox.{key} must be an integer")
+    if value <= 0:
+        raise ConfigError(f"config.outbox.{key} must be positive")
+    return value

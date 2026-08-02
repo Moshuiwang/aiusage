@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Protocol
 
 from .limits import LimitContractError, LimitWindow, parse_limit_window
-from .snapshot_builder import build_snapshot
 from .storage_sqlite import write_limit_windows
 
 
@@ -53,13 +52,11 @@ class LimitsRuntime:
         self,
         *,
         db_path: str,
-        latest_path: str,
         timezone: str,
         providers: Dict[str, LimitsProvider],
         now_provider=None,
     ) -> None:
         self.db_path = db_path
-        self.latest_path = latest_path
         self.timezone = timezone
         self.providers = providers
         self.now_provider = now_provider or _default_now
@@ -68,8 +65,6 @@ class LimitsRuntime:
         self,
         *,
         provider_names: list[str],
-        rebuild_snapshot: bool,
-        snapshot_date: str | None = None,
         dry_run: bool = False,
     ) -> LimitsRuntimeResult:
         if not provider_names:
@@ -119,14 +114,6 @@ class LimitsRuntime:
             )
 
         write_limit_windows(self.db_path, all_windows, seen_at=seen_at)
-        if rebuild_snapshot:
-            build_snapshot(
-                db_path=self.db_path,
-                output_path=self.latest_path,
-                date_str=snapshot_date or seen_at[:10],
-                timezone_str=self.timezone,
-                current_time_str=seen_at,
-            )
 
         return LimitsRuntimeResult(
             success=all(result.status == "ok" for result in provider_results),

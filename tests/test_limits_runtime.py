@@ -67,11 +67,10 @@ class TestLimitsRuntime(unittest.TestCase):
 
         result = LimitsRuntime(
             db_path=self.db_path,
-            latest_path=self.out_path,
             timezone="Asia/Shanghai",
             providers={"codex": codex, "claude": claude},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["codex", "claude"], rebuild_snapshot=True, snapshot_date="2026-06-03")
+        ).collect(provider_names=["codex", "claude"])
 
         self.assertTrue(result.success)
         self.assertEqual(result.windows_written, 2)
@@ -89,12 +88,9 @@ class TestLimitsRuntime(unittest.TestCase):
             ("codex", "session", "runtime_api", "observed", "ok"),
         ])
 
-        with open(self.out_path, encoding="utf-8") as handle:
-            snapshot = json.load(handle)
-        self.assertEqual([(row["provider"], row["window"]) for row in snapshot["limits"]], [
-            ("claude", "week"),
-            ("codex", "session"),
-        ])
+        # 原先这里还断言「latest.json 里能读到 limits」。那条快照重建路径依赖
+        # snapshot_builder（服务端读模型），已按 #72 剪断——采集端不再重建快照，
+        # 断言的对象不存在了。limit_windows 写入是本模块真正的职责，上面已断言。
 
     def test_runtime_collects_multiple_instances_of_same_provider(self) -> None:
         main_window = LimitWindow(
@@ -128,11 +124,10 @@ class TestLimitsRuntime(unittest.TestCase):
 
         result = LimitsRuntime(
             db_path=self.db_path,
-            latest_path=self.out_path,
             timezone="Asia/Shanghai",
             providers={"claude-main": main, "claude-w": work},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["claude-main", "claude-w"], rebuild_snapshot=False)
+        ).collect(provider_names=["claude-main", "claude-w"])
 
         self.assertTrue(result.success)
         self.assertEqual([row.provider for row in result.provider_results], ["claude-main", "claude-w"])
@@ -150,11 +145,10 @@ class TestLimitsRuntime(unittest.TestCase):
     def test_runtime_writes_failed_window_without_local_history_fallback(self) -> None:
         result = LimitsRuntime(
             db_path=self.db_path,
-            latest_path=self.out_path,
             timezone="Asia/Shanghai",
             providers={"codex": FailingProvider()},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["codex"], rebuild_snapshot=False)
+        ).collect(provider_names=["codex"])
 
         self.assertFalse(result.success)
         self.assertEqual(result.provider_results, [
@@ -185,11 +179,10 @@ class TestLimitsRuntime(unittest.TestCase):
 
         result = LimitsRuntime(
             db_path=self.db_path,
-            latest_path=self.out_path,
             timezone="Asia/Shanghai",
             providers={"claude-main": FakeProvider([cached])},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["claude-main"], rebuild_snapshot=False, dry_run=True)
+        ).collect(provider_names=["claude-main"], dry_run=True)
 
         self.assertFalse(result.success)
         self.assertEqual(result.provider_results, [
@@ -227,11 +220,10 @@ class TestLimitsRuntime(unittest.TestCase):
 
         result = LimitsRuntime(
             db_path=self.db_path,
-            latest_path=self.out_path,
             timezone="Asia/Shanghai",
             providers={"codex": FakeProvider([codex_window])},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["codex"], rebuild_snapshot=True, snapshot_date="2026-06-03", dry_run=True)
+        ).collect(provider_names=["codex"], dry_run=True)
 
         self.assertTrue(result.success)
         self.assertEqual(result.windows_written, 0)
@@ -243,11 +235,10 @@ class TestLimitsRuntime(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             LimitsRuntime(
                 db_path=self.db_path,
-                latest_path=self.out_path,
                 timezone="Asia/Shanghai",
                 providers={},
                 now_provider=lambda: "2026-06-03T10:02:00+08:00",
-            ).collect(provider_names=["gemini"], rebuild_snapshot=False)
+            ).collect(provider_names=["gemini"])
 
         self.assertIn("unsupported limits provider", str(ctx.exception))
         with sqlite3.connect(self.db_path) as conn:
@@ -261,11 +252,10 @@ class TestLimitsRuntime(unittest.TestCase):
         with self.assertRaises(ValueError) as ctx:
             LimitsRuntime(
                 db_path=self.db_path,
-                latest_path=self.out_path,
                 timezone="Asia/Shanghai",
                 providers={},
                 now_provider=lambda: "2026-06-03T10:02:00+08:00",
-            ).collect(provider_names=[], rebuild_snapshot=False)
+            ).collect(provider_names=[])
 
         self.assertIn("no limits providers enabled", str(ctx.exception))
         with sqlite3.connect(self.db_path) as conn:
