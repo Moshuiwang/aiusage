@@ -24,6 +24,15 @@ CREATE TABLE IF NOT EXISTS source_reports (
   FOREIGN KEY(run_id) REFERENCES collection_runs(id)
 );
 
+-- Backfilled from 0005: the scheduled audit-retention job must stay proportional
+-- to expired rows on a freshly created database too, not only on one that walked
+-- the migration chain.
+CREATE INDEX IF NOT EXISTS idx_collection_runs_collected_at
+  ON collection_runs(collected_at);
+
+CREATE INDEX IF NOT EXISTS idx_source_reports_run_id
+  ON source_reports(run_id);
+
 -- Read model for ingest-time source-report decisions. Keeping the latest
 -- report per source here avoids re-sorting the full audit history on every
 -- accepted ingest request.
