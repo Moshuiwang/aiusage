@@ -598,7 +598,8 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 行号 | 测试函数 | 守什么 | 归属 | 理由 / 目标 |
 | --- | --- | --- | --- | --- |
 | 155 | `test_initial_d1_migration_matches_sqlite_schema` | D1 首迁与 SQLite schema 逐列一致（镜像守卫） | **废弃 + 迁 W** | 比对对象（`_ensure_schema`）随 `storage_sqlite` 消失，镜像守卫失去意义 → 废弃；但 #74 验收要求 D1 自立的 schema 测试，需**新增**「fresh install schema 列布局快照」用例接替它守的「列不许悄悄漂移」 |
-| 190 | `test_full_migration_chain_matches_fresh_schema_columns` | 全链路迁移与全新安装落到同一列布局 | **留 P** | 不使用 `_ensure_schema`，纯 D1 迁移行为，删除待删模块不打断 |
+| 190 | `test_full_migration_chain_matches_fresh_schema`（#75 前名为 `..._columns`，已扩展到索引维度） | 全链路迁移与全新安装落到同一套表、列与索引 | **留 P** | 不使用 `_ensure_schema`，纯 D1 迁移行为，删除待删模块不打断 |
+| 260 | `test_backfilled_indexes_match_their_owning_migration`（#75 新增） | 回填进 0001 的索引与其 owner 迁移里的定义一致 | **留 P** | 纯 D1 迁移行为。专防「索引名对、表或列错」——`IF NOT EXISTS` 会让迁移链继承 0001 的错误定义，两条路径「一致地错」，上一条守卫看不见 |
 | 228 | `test_collector_version_migration_upgrades_deployed_table_without_data_loss` | 0007 在既有数据上升级不丢数据 | **留 P** | 同上 |
 | 290 | `test_collector_version_migration_rerun_keeps_schema_but_resets_collector_version` | 手工重跑 0007 的特征化（结构可重复、值不保留） | **留 P** | 同上 |
 | 345 | `test_limit_window_migration_keeps_latest_row_for_stable_key` | 额度窗口迁移按稳定 key 保留最新行 | **留 P** | 同上 |
