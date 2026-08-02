@@ -153,12 +153,14 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
   要闭合这条缺口只有一条干净路径：给 `source_report_states` 加 `collector_version` 列
   （D1-only 表，不影响 `test_d1_schema_migration.py` 的 Python↔D1 逐列相等），由 ingest 写入时
   一并物化，并由 Ops 在 macOS 侧对生产 D1 执行迁移。**这属于另一个 Story，需要显式授权。**
-- 上一条带来的附带风险仍然存在：`cloudflare/native-worker/test/value_golden.json` 由
-  `scripts/gen_value_golden.py` 从 Python 读模型生成，用于 Worker 的 parity 测试。
-  它**至今没有重新生成**（重新生成会让 parity 测试立刻变红，因为 Worker 读模型还没有这些字段）。
-  因此 parity 门禁当前仍处于「两边都没有新字段所以对得上」的假绿状态。
-  Worker 读取侧跟进时必须同时重新生成该 golden，并顺带补上一道
-  「golden 与当前 Python 读模型产出不一致就红」的守卫，否则这个假绿会再次沉默地复发。
+- 上一条带来的附带风险**已换了形态**（#74 P1，2026-08-02）：
+  `cloudflare/native-worker/test/value_golden.json` 不再由 Python 读模型生成。
+  生成端与防陈旧守卫都在 Worker 侧（`cloudflare/native-worker/test/golden/` +
+  `golden-freshness.test.ts`，重新生成走 `npm run cf:golden:gen`），
+  golden 记录的是 Worker 自己的输出，陈旧会立刻变红。
+  所以「两边都没有新字段所以对得上」这个假绿形态已经不存在——
+  但**版本列的覆盖缺口本身没有被闭合**：`source_report_states` 仍然没有 `collector_version` 列，
+  上一条描述的那条干净路径仍然待做，仍需显式授权。
 - **升级前 Worker 写下的存量行带占位假值 `0.1.0`。** 本轮之前 Worker 无条件往
   `collection_runs.collector_version` 写死 `"0.1.0"`，而 Python 读模型把这一列当真值读。
   这些历史行在对应设备下次上报之前，**无法与真正在跑 0.1.0 的设备区分**。

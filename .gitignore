@@ -35,6 +35,8 @@ auth.json
 *.local.log
 /.build/
 cloudflare/native-worker/tmp/
+# `npm run cf:golden:gen` 的临时打包产物（正常跑完会自己删，崩了会留下）
+cloudflare/native-worker/test/golden/.gen-entry.mjs
 widget/macos/.build/
 widget/macos/.swiftpm/
 mobile/ios/.build/

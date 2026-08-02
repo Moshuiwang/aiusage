@@ -806,28 +806,195 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -849,8 +1016,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -911,6 +1143,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -957,6 +1198,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -1656,8 +1898,34 @@
                   "type": "array"
                 },
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "agent": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        },
+                        "values": {
+                          "items": [
+                            {
+                              "type": "int"
+                            }
+                          ],
+                          "length": 24,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "agent",
+                        "total_tokens",
+                        "values"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_token_type": {
@@ -2834,28 +3102,280 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "codex"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -2877,8 +3397,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -2939,6 +3524,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -2985,6 +3579,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -5196,28 +5791,280 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "codex"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -5239,8 +6086,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -5301,6 +6213,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -5347,6 +6268,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -7558,28 +8480,280 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "codex"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -7601,8 +8775,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -7663,6 +8902,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -7709,6 +8957,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -9920,28 +11169,195 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -9963,8 +11379,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -10025,6 +11506,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -10071,6 +11561,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -10928,28 +12419,195 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -10971,8 +12629,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -11033,6 +12756,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -11079,6 +12811,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -13981,28 +15714,280 @@
             "account_hourly": {
               "fields": {
                 "by_agent": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_ai_account": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "claude"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "account_id": {
+                          "type": "str"
+                        },
+                        "attribution_confidence": {
+                          "type": "str"
+                        },
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "confidence_breakdown": {
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "total_tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "total_tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "codex"
+                        },
+                        "reasoning_output_tokens": {
+                          "type": "int"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "subscription": {
+                          "type": "null"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_id",
+                        "attribution_confidence",
+                        "cache_tokens",
+                        "confidence_breakdown",
+                        "display_name",
+                        "input_tokens",
+                        "label",
+                        "output_tokens",
+                        "provider",
+                        "reasoning_output_tokens",
+                        "source_ids",
+                        "subscription",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_machine": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "machine_id",
+                        "machine_name",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "by_os_user": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "display_name": {
+                          "type": "str"
+                        },
+                        "machine_id": {
+                          "type": "str"
+                        },
+                        "machine_name": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "display_name",
+                        "machine_id",
+                        "machine_name",
+                        "os_user",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
                   "type": "array"
                 },
                 "confidence_breakdown": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "confidence",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 },
                 "facts": {
@@ -14024,8 +16009,73 @@
               "type": "object"
             },
             "ai_accounts": {
-              "items": [],
-              "length": 0,
+              "items": [
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "claude"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                },
+                {
+                  "fields": {
+                    "account_id": {
+                      "type": "str"
+                    },
+                    "display_name": {
+                      "type": "str"
+                    },
+                    "label": {
+                      "type": "str"
+                    },
+                    "last_seen_at": {
+                      "type": "str"
+                    },
+                    "provider": {
+                      "type": "str",
+                      "value": "codex"
+                    },
+                    "subscription": {
+                      "type": "null"
+                    }
+                  },
+                  "keys": [
+                    "account_id",
+                    "display_name",
+                    "label",
+                    "last_seen_at",
+                    "provider",
+                    "subscription"
+                  ],
+                  "type": "object"
+                }
+              ],
+              "length": 2,
               "type": "array"
             },
             "generated_at": {
@@ -14086,6 +16136,15 @@
                         "name": {
                           "type": "str"
                         },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
                         "total_tokens": {
                           "type": "int"
                         },
@@ -14132,6 +16191,7 @@
                       "keys": [
                         "display_name",
                         "name",
+                        "source_ids",
                         "total_tokens",
                         "users"
                       ],
@@ -14296,7 +16356,7 @@
                     },
                     "status": {
                       "type": "str",
-                      "value": "stale"
+                      "value": "ok"
                     }
                   },
                   "keys": [
@@ -14576,7 +16636,7 @@
                           "type": "str"
                         },
                         "reason": {
-                          "type": "str"
+                          "type": "null"
                         },
                         "source_id": {
                           "type": "str"
@@ -14586,11 +16646,72 @@
                         },
                         "status": {
                           "type": "str",
-                          "value": "missing"
+                          "value": "available"
                         },
                         "windows": {
-                          "items": [],
-                          "length": 0,
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "observed_at": {
+                                  "type": "str"
+                                },
+                                "official": {
+                                  "type": "bool",
+                                  "value": true
+                                },
+                                "provider": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "remaining_percent": {
+                                  "type": "float"
+                                },
+                                "reset_at": {
+                                  "type": "str"
+                                },
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "source_type": {
+                                  "type": "str"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "ok"
+                                },
+                                "used_percent": {
+                                  "type": "float"
+                                },
+                                "window": {
+                                  "type": "str",
+                                  "value": "session"
+                                },
+                                "window_duration_minutes": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "observed_at",
+                                "official",
+                                "provider",
+                                "remaining_percent",
+                                "reset_at",
+                                "source_id",
+                                "source_type",
+                                "status",
+                                "used_percent",
+                                "window",
+                                "window_duration_minutes"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
                           "type": "array"
                         }
                       },
@@ -16028,7 +18149,7 @@
                         },
                         "status": {
                           "type": "str",
-                          "value": "stale"
+                          "value": "ok"
                         }
                       },
                       "keys": [
@@ -16048,8 +18169,73 @@
                   "type": "int"
                 },
                 "windows": {
-                  "items": [],
-                  "length": 0,
+                  "items": [
+                    {
+                      "fields": {
+                        "account_label": {
+                          "type": "str"
+                        },
+                        "confidence": {
+                          "type": "str",
+                          "value": "observed"
+                        },
+                        "observed_at": {
+                          "type": "str"
+                        },
+                        "official": {
+                          "type": "bool",
+                          "value": true
+                        },
+                        "provider": {
+                          "type": "str",
+                          "value": "codex"
+                        },
+                        "remaining_percent": {
+                          "type": "float"
+                        },
+                        "reset_at": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "str"
+                        },
+                        "source_type": {
+                          "type": "str"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "ok"
+                        },
+                        "used_percent": {
+                          "type": "float"
+                        },
+                        "window": {
+                          "type": "str",
+                          "value": "session"
+                        },
+                        "window_duration_minutes": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "account_label",
+                        "confidence",
+                        "observed_at",
+                        "official",
+                        "provider",
+                        "remaining_percent",
+                        "reset_at",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "used_percent",
+                        "window",
+                        "window_duration_minutes"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
                   "type": "array"
                 }
               },
@@ -16230,7 +18416,7 @@
                           "type": "str"
                         },
                         "reason": {
-                          "type": "str"
+                          "type": "null"
                         },
                         "source_id": {
                           "type": "str"
@@ -16240,11 +18426,72 @@
                         },
                         "status": {
                           "type": "str",
-                          "value": "missing"
+                          "value": "available"
                         },
                         "windows": {
-                          "items": [],
-                          "length": 0,
+                          "items": [
+                            {
+                              "fields": {
+                                "confidence": {
+                                  "type": "str",
+                                  "value": "observed"
+                                },
+                                "observed_at": {
+                                  "type": "str"
+                                },
+                                "official": {
+                                  "type": "bool",
+                                  "value": true
+                                },
+                                "provider": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "remaining_percent": {
+                                  "type": "float"
+                                },
+                                "reset_at": {
+                                  "type": "str"
+                                },
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "source_type": {
+                                  "type": "str"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "ok"
+                                },
+                                "used_percent": {
+                                  "type": "float"
+                                },
+                                "window": {
+                                  "type": "str",
+                                  "value": "session"
+                                },
+                                "window_duration_minutes": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "confidence",
+                                "observed_at",
+                                "official",
+                                "provider",
+                                "remaining_percent",
+                                "reset_at",
+                                "source_id",
+                                "source_type",
+                                "status",
+                                "used_percent",
+                                "window",
+                                "window_duration_minutes"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
                           "type": "array"
                         }
                       },

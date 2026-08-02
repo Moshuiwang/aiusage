@@ -194,11 +194,13 @@ describe.sequential("native TS Worker web surface", () => {
     expect(attention.get("boundary-fresh-source")?.status).toBe("ok");
   });
 
-  // Issue #77 的跨实现覆盖：直接拿 Python 产出的合同 golden 比。
-  // golden 里 `health-*` 场景现在带一台超过 120 分钟没上报的设备（tests/test_api_contract.py
-  // 的 `_backdate_source_collection`），所以 counts 的键是 ["ok", "stale"]、non_ok 里有
-  // 一条 status = "stale"。Worker 不折算时只会产出 ["ok"] 和空 non_ok，这里必红。
-  it("reproduces the Python contract golden shape for /api/health source_status", async () => {
+  // Issue #77 的口径覆盖：直接拿已提交的合同 golden 比形状。
+  // #74 P1 之后这份 golden 由 Worker 自己实录（`test/golden/api-contract-golden.ts`），
+  // 不再是 Python 产出——所以这条已经不是跨实现比对，而是「读端点当前输出必须与
+  // 已提交合同一致」的回归。golden 里 `health-*` 场景带一台超过 120 分钟没上报的设备
+  // （收集器的 `staleCollectedAt`），所以 counts 的键含 "stale"、non_ok 里有一条 stale。
+  // Worker 不折算时只会产出 ["ok"] 和空 non_ok，这里必红。
+  it("reproduces the committed contract golden shape for /api/health source_status", async () => {
     const golden = JSON.parse(await readFile(contractGoldenPath, "utf8")) as Array<Record<string, any>>;
     const goldenHealth = golden.find((record) => record.name === "health-after-limits");
     expect(goldenHealth, "golden 里应当有 health-after-limits").toBeTruthy();

@@ -21,8 +21,6 @@ type ContractRecord = {
 type Shape = Record<string, unknown>;
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const goldenPath = path.join(repoRoot, "tests/fixtures/contract/api_contract_golden.json");
-const valueGoldenPath = path.join(repoRoot, "cloudflare/native-worker/test/value_golden.json");
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const seedSqlPath = path.join(repoRoot, "cloudflare/native-worker/test/seed.sql");
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
@@ -33,6 +31,8 @@ const fixedNow = "2026-06-03T12:00:00+08:00";
 // 在两侧都退化成恒等变换，parity 会一直报绿而实际什么都没守。
 const staleCollectedAt = "2026-06-03T08:00:00+08:00";
 
+// 值 golden 的易变字段：与运行时刻绑定，重放必然不同，比对前统一抹掉。
+// 口径与 `test/golden/shape.ts` 同源，那边是 golden 生成端的 owner。
 const volatileFields = new Set([
   "accepted_at",
   "generated_at",
@@ -40,79 +40,6 @@ const volatileFields = new Set([
   "path",
   "size_bytes",
   "updated_at",
-]);
-const enumFields = new Set([
-  "client",
-  "confidence",
-  "error_type",
-  "exists",
-  "granularity",
-  "id",
-  "official",
-  "period",
-  "provider",
-  "schema_version",
-  "status",
-  "success",
-  "window",
-]);
-const floatFields = new Set(["used_percent", "remaining_percent"]);
-
-// #74 P2：`api_contract_golden.json` 是 **shape golden**——非枚举标量只记 type 不记 value，
-// 所以浮点字段（used_percent / remaining_percent）在这份 golden 里只以 {"type":"float"} 出现，
-// 全文没有一处 float 带 value。这里因此不需要（也不该加）浮点容差比较：
-// 数值口径由下一条测试的 value_golden.json 全量深比对守护。
-//
-// 下面这份清单是 web `/api/summary` 7 条记录与 Python golden 之间**仅有的**字段级差异，
-// 根因只有一个 fixture 事实：这份 golden 由 Python server 实录，数据全部经 Python `/ingest`
-// 的 legacy `usage_daily` 路径写入，从不产生 canonical 小时事实与 `ai_accounts` 行；
-// 而 Worker 读模型只读 canonical 事实（见本文件 "does not mix archived ..." 几条）。
-// 于是 golden 在这几棵子树上记录的是空数组，Worker 侧非空——差异全部落在数组 length 上。
-//
-// 必须说清这条清单的**代价**（早先注释写成「字段名、类型、枚举值逐条一致」，那句话不成立）：
-// `walkDiff` 在数组长度不等时 push `|len` 后**直接 return**，不再进入元素比对；
-// 而 golden 这几棵子树是 `{"items": [], "length": 0}`，根本没有元素形状可比。
-// 所以这几棵子树的**元素结构在本条测试里完全没有被比对过**——
-// 例如把 read-model 的 `ai_accounts.label` 改名，本条测试是绿的（已实测）。
-// 覆盖由下一条 `matches Python value golden` 的全量深比对提供：它跑在 canonical seed 上，
-// `ai_accounts` / `account_hourly.by_*` / `confidence_breakdown` / `trend.by_agent` 全部非空，
-// 同一个改名变异在那里会红（也已实测）。这是分工，不是缺口，但不要误以为本条守住了它们。
-//
-// 这不是实现缺陷：同样由 Python 读模型生成、但跑在 canonical seed 上的 value_golden.json，
-// `ai_accounts` 与 `account_hourly.by_*` 同样非空，且 Worker 与它全量深比对通过。
-//
-// 清单是**精确集合**而非模式匹配：多一条、少一条、换个路径、换个差异类型都会红。
-// 等 #74 P1 交出 Worker 侧的 golden 生成器并重新生成 golden，这些差异会消失，
-// 届时本清单会因为「差异不再存在」而变红，正好强制把它删掉。
-const legacyDailyFixtureGaps = [
-  ".response.body.shape.fields.account_hourly.fields.by_agent.items|len",
-  ".response.body.shape.fields.account_hourly.fields.by_agent.length|value",
-  ".response.body.shape.fields.account_hourly.fields.by_ai_account.items|len",
-  ".response.body.shape.fields.account_hourly.fields.by_ai_account.length|value",
-  ".response.body.shape.fields.account_hourly.fields.by_machine.items|len",
-  ".response.body.shape.fields.account_hourly.fields.by_machine.length|value",
-  ".response.body.shape.fields.account_hourly.fields.by_os_user.items|len",
-  ".response.body.shape.fields.account_hourly.fields.by_os_user.length|value",
-  ".response.body.shape.fields.account_hourly.fields.confidence_breakdown.items|len",
-  ".response.body.shape.fields.account_hourly.fields.confidence_breakdown.length|value",
-  ".response.body.shape.fields.ai_accounts.items|len",
-  ".response.body.shape.fields.ai_accounts.length|value",
-];
-// today 期额外多两条：Python 的当日趋势按小时聚合，legacy fixture 没有小时数据，
-// 所以 golden 的 trend.by_agent 是空的；Worker 从 canonical 小时事实聚合出 1 个 agent。
-const todayTrendFixtureGaps = [
-  ...legacyDailyFixtureGaps,
-  ".response.body.shape.fields.trend.fields.by_agent.items|len",
-  ".response.body.shape.fields.trend.fields.by_agent.length|value",
-].sort();
-const knownGoldenGaps = new Map<string, string[]>([
-  ["summary-today-missing-limits", todayTrendFixtureGaps],
-  ["summary-week-missing-limits", legacyDailyFixtureGaps],
-  ["summary-month-missing-limits", legacyDailyFixtureGaps],
-  ["summary-all-missing-limits", legacyDailyFixtureGaps],
-  ["summary-week-machine-filter", legacyDailyFixtureGaps],
-  ["summary-week-account-filter", legacyDailyFixtureGaps],
-  ["summary-week-observed-limits", legacyDailyFixtureGaps],
 ]);
 
 describe.sequential("native TS Worker read-only API parity", () => {
@@ -129,98 +56,12 @@ describe.sequential("native TS Worker read-only API parity", () => {
     await mf.dispose();
   });
 
-  it("keeps authentication and JSON surface contracts for summary read paths", async () => {
-    const golden = JSON.parse(await readFile(goldenPath, "utf8")) as ContractRecord[];
-    const expected = new Map(golden.map((record) => [record.name, record]));
-    const records: ContractRecord[] = [];
-
-    records.push(await record("summary-requires-auth", "/api/summary?date=2026-06-03", false));
-    records.push(await record("mobile-summary-requires-auth", "/api/mobile/summary?date=2026-06-03", false));
-
-    for (const period of ["today", "week", "month", "all"]) {
-      records.push(await record(`summary-${period}-missing-limits`, `/api/summary?date=2026-06-03&period=${period}`, true));
-      records.push(await record(`mobile-summary-${period}-missing-limits`, `/api/mobile/summary?date=2026-06-03&period=${period}`, true));
-    }
-
-    records.push(await record("summary-week-machine-filter", "/api/summary?date=2026-06-03&period=week&machine=macbook-pro", true));
-    records.push(await record("summary-week-account-filter", "/api/summary?date=2026-06-03&period=week&account=alice", true));
-    records.push(await record("mobile-summary-week-machine-filter", "/api/mobile/summary?date=2026-06-03&period=week&machine=linux-dev", true));
-    records.push(await record("mobile-summary-week-account-filter", "/api/mobile/summary?date=2026-06-03&period=week&account=bob", true));
-
-    const db = await mf.getD1Database("AIUSAGE_DB");
-    await seedLimitsFixture(db);
-    records.push(await record("summary-week-observed-limits", "/api/summary?date=2026-06-03&period=week", true));
-    records.push(await record("mobile-summary-week-observed-limits", "/api/mobile/summary?date=2026-06-03&period=week", true));
-
-    // #74 P2：这里曾经只对前 2 条做全字段 toEqual，其余 14 条只校
-    // status / content_type / body.kind——等于那 14 条的字段级合同无人看守：
-    // 少一个字段、字段类型变了、数组长度变了，测试都不会红。Python 平行实现删除后
-    // 这份 golden 是唯一的合同守卫，所以 16 条一律逐字段比对。
-    expect(records.length, "契约记录条数（新增记录必须同时进入全字段比对）").toBe(16);
-    expect(
-      [...knownGoldenGaps.keys()].filter((name) => !records.some((row) => row.name === name)),
-      "已知缺口清单不得引用不存在的记录",
-    ).toEqual([]);
-    for (const actual of records) {
-      const wanted = expected.get(actual.name);
-      expect(wanted, `${actual.name} exists in Python golden`).toBeTruthy();
-      expect(
-        structuralDiff(actual, wanted),
-        `${actual.name} 与 Python golden 的字段级差异必须与已知 fixture 缺口完全一致`,
-      ).toEqual(knownGoldenGaps.get(actual.name) ?? []);
-    }
-  });
-
-  it("matches Python value golden for summary and mobile summary read paths", async () => {
-    const golden = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ContractRecord[];
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
-    const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
-    await applySqlFile(db, seedSqlPath);
-
-    const records: ContractRecord[] = [];
-    for (const period of ["today", "week", "month", "all"]) {
-      records.push(await recordValue(`summary-${period}`, `/api/summary?date=2026-06-03&period=${period}`));
-      records.push(await recordValue(`mobile-summary-${period}`, `/api/mobile/summary?date=2026-06-03&period=${period}`));
-    }
-    records.push(await recordValue("summary-week-machine-filter", "/api/summary?date=2026-06-03&period=week&machine=macbook-pro"));
-    records.push(await recordValue("mobile-summary-week-machine-filter", "/api/mobile/summary?date=2026-06-03&period=week&machine=linux-dev"));
-    records.push(await recordValue("summary-week-account-filter", "/api/summary?date=2026-06-03&period=week&account=alice"));
-    records.push(await recordValue("mobile-summary-week-account-filter", "/api/mobile/summary?date=2026-06-03&period=week&account=bob"));
-    records.push(await recordValue("summary-week-observed-limits", "/api/summary?date=2026-06-03&period=week"));
-    records.push(await recordValue("mobile-summary-week-observed-limits", "/api/mobile/summary?date=2026-06-03&period=week"));
-
-    expect(normalizeStoreMetadata(records)).toEqual(normalizeStoreMetadata(golden));
-
-    const summaryWeek = bodyFor(records, "summary-week");
-    const mobileSummaryWeek = bodyFor(records, "mobile-summary-week");
-    const dbCounts = await tableCounts(db);
-    expect(sortedSourceRows(summaryWeek.source_status), "Native source_status must be covered by value parity").toEqual(
-      sortedSourceRows(bodyFor(golden, "summary-week").source_status),
-    );
-    expect(sortedSourceRows(mobileSummaryWeek.sources), "Native mobile sources must be covered by value parity").toEqual(
-      sortedSourceRows(bodyFor(golden, "mobile-summary-week").sources),
-    );
-    expect((summaryWeek.source_status as unknown[]).length, "source_status must be non-empty").toBeGreaterThan(0);
-    expect((mobileSummaryWeek.sources as unknown[]).length, "mobile sources must be non-empty").toBeGreaterThan(0);
-    expect((summaryWeek.source_status as Shape[]).map((row) => row.status), "source_status covers ok sources").toContain("ok");
-    expect((summaryWeek.source_status as Shape[]).map((row) => row.status), "source_status covers stale sources").toContain("stale");
-    expect((mobileSummaryWeek.sources as Shape[]).map((row) => row.status), "mobile sources covers stale sources").toContain("stale");
-    expect(dbCounts.limit_windows, "D1 limit_windows must be non-empty for limits parity").toBeGreaterThan(0);
-    expect(((mobileSummaryWeek.limits as Shape).windows as Shape[]).length, "mobile limits windows must be covered").toBeGreaterThan(0);
-    expect(((mobileSummaryWeek.limits as Shape).windows as Shape[]).every((row) =>
-      row.official === true && row.confidence === "observed" && row.status === "ok",
-    ), "mobile limits windows are effective only").toBe(true);
-    for (const row of ((summaryWeek.groups as Shape).by_machine as Shape[])) {
-      expect(row.source_ids, `groups.by_machine ${String(row.name)} must expose source_ids`).toEqual(
-        expect.arrayContaining(
-          ((row.users as Shape[]) ?? []).flatMap((user) => (user.source_ids as string[]) ?? []),
-        ),
-      );
-      expect((row.source_ids as unknown[]).length, `groups.by_machine ${String(row.name)} source_ids must be non-empty`).toBeGreaterThan(0);
-    }
-  });
+  // 原先这里有两条 golden 比对（api 合同 shape、value 全量深比对）。
+  // #74 P1 把 golden 的生成端从 Python 读模型搬到 Worker 之后，
+  // 「重新生成 + 与已提交 golden 逐条比对」由 `golden-freshness.test.ts` 统一承担——
+  // 生成器与校验器共用 `test/golden/` 下的同一份收集器，不再各自持有一份重放逻辑。
+  // 本文件保留的是 golden 覆盖不到的**行为不变量**：归档表不参与口径、
+  // 历史回退稳定、小时事实查询有周期边界、额度失败即刻降级。
 
   it("keeps web and shared Apple mobile DTO summaries unchanged when archived legacy usage tables change", async () => {
     await mf.dispose();
@@ -697,27 +538,6 @@ describe.sequential("native TS Worker read-only API parity", () => {
     expect(eight).toEqual(expect.objectContaining({ tokens: 0 }));
   });
 
-  async function record(name: string, requestPath: string, auth: boolean): Promise<ContractRecord> {
-    const headers = auth ? { Authorization: `Bearer ${token}` } : undefined;
-    const response = await mf.dispatchFetch(`http://native.test${requestPath}`, { headers });
-    const contentType = response.headers.get("Content-Type") ?? "";
-    const body = await response.arrayBuffer();
-    return {
-      name,
-      request: {
-        method: "GET",
-        path: requestPath,
-        auth,
-      },
-      response: {
-        status: response.status,
-        content_type: contentType.split(";")[0],
-        location: response.headers.get("Location"),
-        body: bodyContract(contentType, Buffer.from(body)),
-      },
-    };
-  }
-
   async function recordValue(name: string, requestPath: string): Promise<ContractRecord> {
     const response = await mf.dispatchFetch(`http://native.test${requestPath}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -741,76 +561,10 @@ describe.sequential("native TS Worker read-only API parity", () => {
   }
 });
 
-// 逐字段结构化比对：返回排序后的差异路径清单（空数组 = 完全一致）。
-// 差异种类刻意分开标注，"字段存在但值是 null / 空对象 / 空数组" 这类绕过路径分别落在
-// |type（null 与 str 的 type 名不同）、|key（keys 不同）、|len（数组长度不同）上，
-// 不会被当成一致。
-function structuralDiff(actual: unknown, expectedValue: unknown): string[] {
-  const diffs: string[] = [];
-  walkDiff(actual, expectedValue, "", diffs);
-  return diffs.sort();
-}
-
-function walkDiff(actual: unknown, expectedValue: unknown, jsonPath: string, diffs: string[]): void {
-  if (valueKind(actual) !== valueKind(expectedValue)) {
-    diffs.push(`${jsonPath}|type`);
-    return;
-  }
-  if (Array.isArray(actual) && Array.isArray(expectedValue)) {
-    if (actual.length !== expectedValue.length) {
-      diffs.push(`${jsonPath}|len`);
-      return;
-    }
-    actual.forEach((item, index) => walkDiff(item, expectedValue[index], `${jsonPath}[${index}]`, diffs));
-    return;
-  }
-  if (actual !== null && typeof actual === "object") {
-    const left = actual as Record<string, unknown>;
-    const right = expectedValue as Record<string, unknown>;
-    for (const key of [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()) {
-      if (!(key in left) || !(key in right)) {
-        diffs.push(`${jsonPath}.${key}|key`);
-        continue;
-      }
-      walkDiff(left[key], right[key], `${jsonPath}.${key}`, diffs);
-    }
-    return;
-  }
-  if (!Object.is(actual, expectedValue)) diffs.push(`${jsonPath}|value`);
-}
-
-function valueKind(value: unknown): string {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "array";
-  return typeof value;
-}
-
 function bodyFor(records: ContractRecord[], name: string): Shape {
   const record = records.find((item) => item.name === name);
   expect(record, `${name} record exists`).toBeTruthy();
   return record?.response.body as Shape;
-}
-
-function normalizeStoreMetadata(value: unknown, fieldName = ""): unknown {
-  if (Array.isArray(value)) {
-    const normalized = value.map((item) => normalizeStoreMetadata(item));
-    return fieldName === "source_status" || fieldName === "sources" ? sortedSourceRows(normalized) : normalized;
-  }
-  if (value !== null && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-        key,
-        key === "backend_mode" || key === "canonical_store" ? "<store-specific>" : normalizeStoreMetadata(item, key),
-      ]),
-    );
-  }
-  return value;
-}
-
-function sortedSourceRows(value: unknown): unknown[] {
-  return Array.isArray(value)
-    ? [...value].sort((left, right) => String((left as Shape).source_id ?? "").localeCompare(String((right as Shape).source_id ?? "")))
-    : [];
 }
 
 async function bundleWorker(): Promise<string> {
@@ -1073,138 +827,6 @@ async function insertUsagePayload(
       0, 0, totalTokens, null, JSON.stringify(dailyRaw.modelBreakdowns[0]), row.now, row.now,
     ),
   ]);
-}
-
-async function seedLimitsFixture(db: D1Database): Promise<void> {
-  await db.batch([
-    db.prepare(`
-      INSERT INTO limit_windows (
-        source_id, provider, window, used_percent, remaining_percent, reset_at,
-        window_duration_minutes, source_type, confidence, status, observed_at,
-        first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind("codex-main", "codex", "session", 40, 60, "2026-06-03T16:00:00+08:00", 300, "runtime_api", "observed", "ok", "2026-06-03T11:00:00+08:00", "2026-06-03T11:00:00+08:00", "2026-06-03T11:00:00+08:00"),
-    db.prepare(`
-      INSERT INTO limit_windows (
-        source_id, provider, window, used_percent, remaining_percent, reset_at,
-        window_duration_minutes, source_type, confidence, status, observed_at,
-        first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind("claude-weekly", "claude", "week", 0, 0, "2026-06-10T00:00:00+08:00", 10080, "oauth_usage_api", "missing", "provider_failed", "2026-06-03T11:00:00+08:00", "2026-06-03T11:00:00+08:00", "2026-06-03T11:00:00+08:00"),
-  ]);
-}
-
-async function tableCounts(db: D1Database): Promise<Record<string, number>> {
-  const tables = ["limit_windows"];
-  const counts: Record<string, number> = {};
-  for (const table of tables) {
-    const row = await db.prepare(`SELECT count(*) AS count FROM ${table}`).first<{ count: number }>();
-    counts[table] = Number(row?.count ?? 0);
-  }
-  return counts;
-}
-
-function bodyContract(contentType: string, body: Buffer): Shape {
-  if (contentType.includes("application/json")) {
-    return { kind: "json", shape: shape(withoutNativeMachineSourceIdsForContract(JSON.parse(body.toString("utf8")))) };
-  }
-  if (contentType.includes("text/html")) {
-    return { kind: "html", present: body.length > 0 };
-  }
-  if (body.length > 0) {
-    return { kind: "text", present: true };
-  }
-  return { kind: "empty", present: false };
-}
-
-function withoutNativeMachineSourceIdsForContract(value: unknown): unknown {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return value;
-  const payload = value as Record<string, unknown>;
-  const limits = payload.limits as Record<string, unknown> | undefined;
-  const groups = payload.groups as Record<string, unknown> | undefined;
-  const normalized: Record<string, unknown> = { ...payload };
-  if (payload.client === "ios" && limits && Array.isArray(limits.windows)) {
-    normalized.limits = {
-      ...limits,
-      windows: limits.windows.filter((row) => {
-        if (row === null || typeof row !== "object" || Array.isArray(row)) return true;
-        return String((row as Record<string, unknown>).window ?? "").toLowerCase() !== "session";
-      }),
-    };
-  }
-  if (!groups || !Array.isArray(groups.by_machine)) return normalized;
-  return {
-    ...normalized,
-    groups: {
-      ...groups,
-      by_machine: groups.by_machine.map((row) => {
-        if (row === null || typeof row !== "object" || Array.isArray(row)) return row;
-        const { source_ids, ...rest } = row as Record<string, unknown>;
-        return rest;
-      }),
-    },
-  };
-}
-
-function shape(value: unknown, fieldName = ""): Shape {
-  if (volatileFields.has(fieldName) || fieldName.endsWith("_path")) {
-    return { type: typeName(value, fieldName), value: "<masked>" };
-  }
-  if (value !== null && Array.isArray(value)) {
-    return {
-      type: "array",
-      length: value.length,
-      items: uniqueShapes(value.map((item) => shape(item))),
-    };
-  }
-  if (value !== null && typeof value === "object") {
-    const objectValue = value as Record<string, unknown>;
-    const keys = Object.keys(objectValue).sort();
-    return {
-      type: "object",
-      keys,
-      fields: Object.fromEntries(keys.map((key) => [key, shape(objectValue[key], key)])),
-    };
-  }
-  if (enumFields.has(fieldName)) {
-    return { type: typeName(value, fieldName), value };
-  }
-  return { type: typeName(value, fieldName) };
-}
-
-function typeName(value: unknown, fieldName = ""): string {
-  if (value === null) return "null";
-  if (Array.isArray(value)) return "list";
-  if (floatFields.has(fieldName) && typeof value === "number") return "float";
-  switch (typeof value) {
-    case "boolean":
-      return "bool";
-    case "number":
-      return Number.isInteger(value) ? "int" : "float";
-    case "string":
-      return "str";
-    default:
-      return typeof value;
-  }
-}
-
-function uniqueShapes(shapes: Shape[]): Shape[] {
-  const seen = new Set<string>();
-  const result: Shape[] = [];
-  for (const item of shapes) {
-    const serialized = stableStringify(item);
-    if (seen.has(serialized)) continue;
-    seen.add(serialized);
-    result.push(item);
-  }
-  return result;
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => left.localeCompare(right));
-  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`).join(",")}}`;
 }
 
 async function applySchema(db: D1Database): Promise<void> {

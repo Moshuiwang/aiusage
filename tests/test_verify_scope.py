@@ -183,14 +183,47 @@ class TestVerifyScope(unittest.TestCase):
     def test_worker_test_fixture_change_still_runs_python(self) -> None:
         """改 Worker 侧 test/ 下的 golden 与 fixture 必须跑 Python。
 
-        那些文件由 Python 生成、被 Python 防陈旧守卫逐字段比对
-        （test_value_golden_freshness / test_collector_payload_contract）。
+        采集端 payload fixture 由 Python 的 ``pusher.py`` 生成、被
+        ``test_collector_payload_contract`` 逐字段比对；跳过 Python 会漏掉那条守卫。
+        （#74 P1 之后 ``value_golden.json`` 的 owner 已是 Worker 侧，但裁剪判据仍按
+        「整个 cloudflare/native-worker/test/ 目录都可能被 Python 读」保守处理。）
         """
         path = self.repo / "cloudflare" / "native-worker" / "test" / "value_golden.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("[]\n", encoding="utf-8")
         out = self._explain()
         self.assertIn("python=run", out, out)
+
+    def test_worker_owned_contract_golden_outside_cloudflare_runs_worker(self) -> None:
+        """改 `tests/fixtures/contract/` 下的合同 golden 必须跑 Worker 测试。
+
+        #74 P1 之后 `api_contract_golden.json` 的 owner 是 Worker 侧的
+        `golden-freshness.test.ts`，但它的路径不在 `cloudflare/` 下。判据只看
+        `^cloudflare/` 时，单独改这份 golden 会让 Worker 测试被静默跳过——
+        而那是唯一会为「golden 被人手改过 / 已经陈旧」变红的地方。
+        """
+        path = self.repo / "tests" / "fixtures" / "contract" / "api_contract_golden.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("[]\n", encoding="utf-8")
+        out = self._explain()
+        self.assertIn("worker=run", out, out)
+        self.assertIn("python=run", out, out)
+
+    def test_worker_owned_macos_fixture_runs_worker(self) -> None:
+        """改 macOS owner fixture 必须跑 Worker 测试。
+
+        #74 P1 之后这份 fixture 的防手改守卫在 `provider-slots-parity.test.ts`
+        （它必须等于 provider slots golden 的 mobile 半边）。原来的 Python 守卫已删除，
+        判据只看 `^cloudflare/` 时，单独手改这份 fixture 会一路绿到 Mac 侧才炸。
+        """
+        path = (
+            self.repo / "clients" / "macos" / "Tests"
+            / "AIUsageMenuBarCoreTests" / "Fixtures" / "provider-slots-owner-fixture.json"
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("[]\n", encoding="utf-8")
+        out = self._explain()
+        self.assertIn("worker=run", out, out)
 
     def test_mixed_change_runs_both(self) -> None:
         """TS 源码 + Python 混合改动：两边都要跑，不许因为「大部分是 TS」就跳。"""

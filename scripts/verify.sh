@@ -42,7 +42,9 @@ VERIFY_BASE="${AIUSAGE_VERIFY_BASE:-origin/main}"
 if ! git rev-parse --git-dir >/dev/null 2>&1; then
   SCOPE_REASON="不在 git 仓库内，无法判定改动面"
 else
-  WORKTREE_CHANGES="$(git status --porcelain 2>/dev/null | sed 's/^...//' | tr -d '"')"
+  # `-uall`：不带它时 git 会把「新目录下的未跟踪文件」折叠成目录名（`tests/fixtures/`），
+  # 于是任何比目录名更深的判据都匹配不到，该跑的测试被静默跳过。
+  WORKTREE_CHANGES="$(git status --porcelain -uall 2>/dev/null | sed 's/^...//' | tr -d '"')"
   if git rev-parse --verify --quiet "$VERIFY_BASE" >/dev/null 2>&1; then
     COMMITTED_CHANGES="$(git diff --name-only "$VERIFY_BASE"...HEAD 2>/dev/null)"
     CHANGED_FILES="$(printf '%s\n%s\n' "$WORKTREE_CHANGES" "$COMMITTED_CHANGES" | grep -v '^$' | sort -u)"
@@ -64,18 +66,24 @@ elif [ -z "$CHANGED_FILES" ]; then
   SCOPE_DECISION="退回全量：改动面为空（相对 $VERIFY_BASE 无差异，可能是刚合并或 base 不对）"
 else
   # Worker 侧：改动面涉及 cloudflare/ 才跑。
-  if printf '%s\n' "$CHANGED_FILES" | grep -qE '^cloudflare/'; then
-    SCOPE_DECISION="改动面涉及 cloudflare/"
+  #
+  # 例外必须显式列出：#74 P1 之后有两份产物的 owner 是 Worker 侧的测试，
+  # 但它们的路径都不在 cloudflare/ 下——
+  #   - `tests/fixtures/contract/api_contract_golden.json` → `golden-freshness.test.ts`
+  #   - macOS owner fixture → `provider-slots-parity.test.ts`（由 golden 的 mobile 半边派生）
+  # 漏了它们，单独手改那两份文件时 Worker 测试会被静默跳过，
+  # 而那正是唯一会为「被人手改过 / 已经陈旧」变红的地方。
+  if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(cloudflare/|tests/fixtures/contract/|clients/macos/Tests/AIUsageMenuBarCoreTests/Fixtures/)'; then
+    SCOPE_DECISION="改动面涉及 cloudflare/ 或 Worker 拥有的合同 fixture"
   else
     RUN_WORKER=0
     SCOPE_DECISION="改动面不涉及 cloudflare/（相对 $VERIFY_BASE）"
   fi
 
-  # Python 侧：判据**比「不含 cloudflare/」严格得多**，因为有 9 个 Python 测试文件会读
+  # Python 侧：判据**比「不含 cloudflare/」严格得多**，因为仍有 Python 测试会读
   # cloudflare/ 下的内容——migrations/（test_d1_schema_migration）、native-worker/test/ 的
-  # golden 与 fixture（test_value_golden_freshness、test_collector_payload_contract、
-  # test_provider_slots_parity）、aiusage-api-worker.js、worker.ts、README.md、
-  # OPERATIONS_HANDOFF.md（test_cloudflare_deployment 等治理测试）。
+  # 采集端 payload fixture（test_collector_payload_contract）、aiusage-api-worker.js、
+  # worker.ts、README.md、OPERATIONS_HANDOFF.md（test_cloudflare_deployment 等治理测试）。
   # 按「改了 cloudflare/ 就跳 Python」做会静默漏跑这些。
   #
   # 唯一能证明不影响 Python 的范围是 TS 源码目录：实测 tests/ 与 scripts/ 下无一处读
