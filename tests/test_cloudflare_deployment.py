@@ -73,15 +73,6 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         package_json = (ROOT / "package.json").read_text(encoding="utf-8")
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
         readme = (ROOT / "cloudflare" / "README.md").read_text(encoding="utf-8")
-        package = (
-            ROOT
-            / "docs"
-            / "archive"
-            / "task-packages"
-            / "v2"
-            / "completed"
-            / "TP-V2-083-cloudflare-entrypoint-migration.md"
-        ).read_text(encoding="utf-8")
 
         self.assertIn("wrangler deploy", package_json)
         self.assertIn("cf:worker:deploy", package_json)
@@ -93,10 +84,6 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("VPN2 旧后端不再承载 AI Usage 读写链路", root_readme)
         self.assertIn("不要用 `curl -I`", readme)
         self.assertIn("--resolve aiusage.chunbai.com:443:<Cloudflare IP>", readme)
-        self.assertIn("Worker 统一入口回源旧服务", package)
-        self.assertIn("Pages 静态化不作为本轮成功标准", package)
-        self.assertIn("Status: completed", package)
-        self.assertIn("用户浏览器验收已确认", package)
         for asset in ["index.html", "dashboard.css", "dashboard.js", "login.html"]:
             self.assertTrue((ROOT / "src" / "ai_usage_widget" / "static" / asset).exists())
 
@@ -111,30 +98,6 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("curl -D - -o /dev/null", handoff)
         self.assertIn("未登录 /static/* 预期可以是 401", handoff)
         self.assertIn("带 session cookie 后 /static/dashboard.js 和 /static/dashboard.css 必须是 200", handoff)
-
-    def test_cloudflare_task_package_is_indexed(self) -> None:
-        index = (
-            ROOT
-            / "docs"
-            / "archive"
-            / "task-packages"
-            / "v2"
-            / "INDEX-done.md"
-        ).read_text(encoding="utf-8")
-        package = (
-            ROOT
-            / "docs"
-            / "archive"
-            / "task-packages"
-            / "v2"
-            / "completed"
-            / "TP-V2-083-cloudflare-entrypoint-migration.md"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("TP-V2-083", index)
-        self.assertIn("Cloudflare Entrypoint Migration", package)
-        self.assertIn("aiusage.chunbai.com", package)
-
 
 if __name__ == "__main__":
     unittest.main()

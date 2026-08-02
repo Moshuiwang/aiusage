@@ -288,10 +288,7 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [architecture/database.md](./docs/architecture/database.md)：当前 Cloudflare D1 / 本地 SQLite 边界和表结构索引。
 - [architecture/interfaces.md](./docs/architecture/interfaces.md)：当前 HTTP / summary / mobile 接口索引。
 - [product-brief.md](./docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
-- [task-packages/README.md](./docs/task-packages/README.md)：任务包目录入口。
-- [task-packages/RULES.md](./docs/task-packages/RULES.md)：任务包详细规则、编号、状态、TDD 和 subagent 执行规则。
-- [task-packages/v2/INDEX.md](./docs/task-packages/v2/INDEX.md)：V2 当前任务包索引；`done` 包链接到归档区。
-- [archive/INDEX.md](./docs/archive/INDEX.md)：历史设计稿、已完成任务包和 review 记录索引。
+- [archive/INDEX.md](./docs/archive/INDEX.md)：历史设计稿和 review 记录索引。
 - [operations.md](./docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
 - [schedulers.md](./docs/schedulers.md)：各平台终端定时任务配置文档。
 - [subscription-usage-source.md](./docs/subscription-usage-source.md)：limits/quota 数据源方向。

@@ -11,10 +11,10 @@
 | 当前架构 | `docs/architecture/architecture.md` | 架构边界、依赖方向、模块 owner、禁止事项。 |
 | 当前数据库 | `docs/architecture/database.md` | SQLite 当前表索引；代码为唯一事实源。 |
 | 当前接口 | `docs/architecture/interfaces.md` | HTTP、summary、mobile DTO 当前接口索引。 |
-| 任务与进度 | GitHub [Issues](https://github.com/Moshuiwang/aiusage/issues) + [Project #1](https://github.com/users/Moshuiwang/projects/1) | 唯一状态真值。任务包体系已于 2026-08-01 归档，见 `docs/task-packages/README.md`。 |
+| 任务与进度 | GitHub [Issues](https://github.com/Moshuiwang/aiusage/issues) + [Project #1](https://github.com/users/Moshuiwang/projects/1) | 唯一状态真值。任务包体系已归档并删除，历史在 git。 |
 | 项目命令 | `README.md` | 本地运行、测试、pusher、limits 命令。 |
 
-历史任务包、设计稿和评审记录在 `docs/archive/`，默认不要作为当前事实读取。
+历史设计稿和评审记录在 `docs/archive/`，默认不要作为当前事实读取。
 
 ## 顶层目录
 

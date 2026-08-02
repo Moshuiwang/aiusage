@@ -46,7 +46,7 @@ paths:
 | 设备本机采集与 HTTP 上报 | `pusher.py`、`runners.py`、`mswusage_*.py` | **留 Python**，不冻结 |
 | 采集端 payload 合同 fixture | `pusher.py`（owner 模块产出，**禁止手写**） | **留 Python**。生成 `scripts/gen_collector_payload_fixture.py`，防陈旧守卫 `tests/test_collector_payload_contract.py` |
 | 采集端本地 outbox / 可靠投递 | `collector_store.py` | **已建**（#73）。缓冲不是档案，历史权威永远在 D1。库路径**要求绝对路径**（默认 `~/.ai-usage/collector_outbox.sqlite`）——采集由 LaunchAgent/systemd 拉起时 cwd 是 `/` 或 `$HOME`，相对路径会导致同机开两个库且排空守卫误放行 |
-| 官方额度 provider / runtime / doctor / scheduler / push | `*_limits_provider.py`、`limits_*.py` | **留 Python**，不冻结。但 `limits_runtime.py -> snapshot_builder` 这条依赖边由 #72 剪断，剪断前不得加深 |
+| 官方额度 provider / runtime / doctor / scheduler / push | `*_limits_provider.py`、`limits_*.py` | **留 Python**，不冻结。`limits_runtime.py -> snapshot_builder` 依赖边已由 #72 剪断，不得重建 |
 | 部署单元 / 发布 / 体检 | `deploy_units.py`、`deploy_release.py`、`deploy_doctor.py` | **留 Python**，不冻结 |
 | 本地快照线 `widget_sync.py` / `sync-widget` / `latest.json` | 无 | **判死**，随 #72 处置。不得新增消费者 |
 
@@ -63,13 +63,7 @@ paths:
 
 > `normalize.py` **在 #74 之后会变成零消费者模块**，去留待 PM 定（映射表 PM-4）。
 > 实测：它的消费者只有 `server_services.py`（随 #74 删除）与 `collector.py`
-> （ADR 5.4 判 legacy、随 #74 清理）；**`pusher.py` 不 import 它**。
-> 所以它既不属于「留在 Python 正常开发」，也不是简单的「拆分」——采集端根本不用它。
->
-> 这条的发现过程本身值得记：先查「谁 import 了 `ingest`」发现 `normalize.py → ingest.py`
-> 这条边（#72 治理断言的 glob 只扫 `pusher.py` / `limits_*.py` / `mswusage_*.py` /
-> `deploy_*.py`，扫不到它），据此误判为「混合模块需拆分」；再查「删除之后谁还用它」
-> 才得出零消费者的结论。**只查入边不查出边会得出似是而非的结论。**
+> （ADR 5.4 判 legacy、随 #74 清理）；**`pusher.py` 不 import 它**——采集端根本不用它。
 
 **可以改**：
 
@@ -112,7 +106,6 @@ summary 与 mobile 共享查询参数 `date` / `period(today|week|month|all)` / 
 - 新测试必须可离线 fixture 重放。
 - 重构必须保持现有 API path、HTTP method、status code 和 JSON 合约不变。
 - **不为冻结名单里的模块新增测试**（除非是抓迁移阻断问题的红测）。服务端行为的新测试写在
-  `cloudflare/native-worker/test/`。#74 前需交付「旧测试 → 新归属」映射表，涵盖
-  188 个主体测试（9 文件）+ 61 个旁及测试（9 文件），明细见 ADR 第七节。
+  `cloudflare/native-worker/test/`。「旧测试 → 新归属」映射表已交付（#74 开工门禁产物），明细见 ADR 第七节。
 - 无 lint / formatter 配置。CLI 入口 `ai_usage_widget.cli:main`，日常用 `python3 -m ai_usage_widget.cli`。
 - `collector.py` / SSH 是 legacy，新功能不得依赖。

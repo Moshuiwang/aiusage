@@ -16,14 +16,20 @@ cd "$(dirname "$0")/.." || exit 0
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 CHANGED="$(git status --porcelain 2>/dev/null | sed 's/^...//')"
-[ -z "$CHANGED" ] && exit 0
+
+# 资源盘点（#68 补记二）：git status 干净不等于收口干净。
+# 只查最痛的一种残留——wrangler dev 曾在收口宣布「无残留」后被发现挂了 78 分钟。
+# 模式要能盖住整条进程链：npm exec wrangler dev / sh -c wrangler dev /
+# node .bin/wrangler dev / node wrangler-dist/cli.js dev（最后一层不含字面 "wrangler dev"）。
+# 这里的 pgrep -f 是只读盘点（合法用途）；本脚本自身命令行不含 wrangler，不会自匹配。
+RESIDUE="$(pgrep -f 'wrangler.* dev\b' 2>/dev/null || true)"
 
 NEED_PY=0
 NEED_WORKER=0
 echo "$CHANGED" | grep -qE '(^|")(src/|tests/)' && NEED_PY=1
 echo "$CHANGED" | grep -qE '(^|")cloudflare/'   && NEED_WORKER=1
 
-[ "$NEED_PY" -eq 0 ] && [ "$NEED_WORKER" -eq 0 ] && exit 0
+[ "$NEED_PY" -eq 0 ] && [ "$NEED_WORKER" -eq 0 ] && [ -z "$RESIDUE" ] && exit 0
 
 # 允许显式跳过一次（用于确实无法在本机验证的场景）
 if [ -f .claude/.skip-stop-gate ]; then
@@ -56,6 +62,16 @@ if [ "$NEED_WORKER" -eq 1 ]; then
     echo "    scripts/verify.sh"
     echo "并在收口汇报中给出 Worker 测试结果与证据等级。"
     echo "确实无法在本机验证时，创建 .claude/.skip-stop-gate 并在汇报中写明原因。"
+  } >&2
+  rm -f "$LOG"
+  exit 2
+fi
+
+if [ -n "$RESIDUE" ]; then
+  {
+    echo "【收口被阻止】发现残留的 wrangler dev 进程（PID: $(echo "$RESIDUE" | tr '\n' ' ')）。"
+    echo "按 PID 逐个 kill 并回读确认（父进程链要一起清，fuser -k 只杀监听那一个）。"
+    echo "如果是正在运行的 verify/测试起的，等它结束；确认需要保留时创建 .claude/.skip-stop-gate。"
   } >&2
   rm -f "$LOG"
   exit 2

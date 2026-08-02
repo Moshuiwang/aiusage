@@ -17,6 +17,10 @@ scripts/verify.sh --python-only  # 快速：只跑 Python 约 85s
 单个用例调试可以直接用 `PYTHONPATH=src python3 -m unittest tests.test_x.TestY.test_z`，
 但**收口汇报必须以 `verify.sh` 的结果为准**。
 
+**验证成本要匹配验证目的**（#68：前半程 3 次不必要的全量共浪费约 30 分钟）：
+TDD 红阶段只跑目标测试文件（秒级），绿阶段跑相关模块，**只有收口才跑 `verify.sh`**。
+全量 verify 运行期间**不要并发派 subagent**——CPU 竞争，#68 实测 5 个挂掉里 4 个在此时段。
+
 ## 证据等级（汇报时必须写明当前级别）
 
 | 级 | 含义 | 本机能达到？ |
