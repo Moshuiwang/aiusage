@@ -13,6 +13,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const staticRoot = path.join(repoRoot, "src/ai_usage_widget/static");
+const contractGoldenPath = path.join(repoRoot, "tests/fixtures/contract/api_contract_golden.json");
 const token = "contract-test-token";
 const sessionSecret = "cutover-session-secret";
 const fixedNow = "2026-06-03T12:00:00+08:00";
@@ -145,6 +146,90 @@ describe.sequential("native TS Worker web surface", () => {
       },
     });
     expect(payload.database).toHaveProperty("size_bytes");
+  });
+
+  // Issue #77：`/api/health` 的 `source_status.counts` / `non_ok` 必须数**过期折算后**的
+  // status，与 Python 的 `snapshot_source_health._status_with_staleness()` 同一口径
+  // （阈值 120 分钟，`diff > threshold` 才算 stale，参照时刻取 `AIUSAGE_NOW`）。
+  //
+  // 折算前后必须真的不同，否则这条覆盖等于没加：所以 fixture 里同时放了
+  //   - `boundary-fresh-source`：正好 120 分钟，**不**折算（守住 `>` 不能写成 `>=`）
+  //   - `stale-source`：121 分钟，折算成 stale（行上原始 status 是 ok）
+  // 用原始口径跑这段会得到 `{ok: 3, provider_failed: 1}` 且 non_ok 只有一条。
+  it("counts health source_status with staleness folded in, matching the Python caliber", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await db.batch([
+      db.prepare(`
+        INSERT INTO source_report_states (
+          source_id, collected_at, report_type, command, status, ccusage_version,
+          first_period, last_period, error_type, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("boundary-fresh-source", "2026-06-03T10:00:00+08:00", "daily", "HTTP Ingest", "ok", null, null, null, null, null),
+      db.prepare(`
+        INSERT INTO source_report_states (
+          source_id, collected_at, report_type, command, status, ccusage_version,
+          first_period, last_period, error_type, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("stale-source", "2026-06-03T09:59:00+08:00", "daily", "HTTP Ingest", "ok", null, null, null, null, null),
+    ]);
+
+    const response = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Cookie: await sessionCookieHeader() },
+    });
+    const payload = await response.json<Record<string, any>>();
+
+    expect(payload.source_status.total).toBe(4);
+    expect(payload.source_status.counts).toEqual({ ok: 2, provider_failed: 1, stale: 1 });
+    expect(payload.source_status.non_ok).toEqual([
+      { source_id: "linux-dev-bob", status: "provider_failed" },
+      { source_id: "stale-source", status: "stale" },
+    ]);
+
+    // 同一份响应内两处 status 必须是同一口径：counts 数到的 stale，
+    // 在 versions.needs_attention 里也得是 stale（#63 起该块已走折算）。
+    const attention = new Map(
+      (payload.versions.needs_attention as Array<Record<string, unknown>>).map((row) => [row.source_id, row]),
+    );
+    expect(attention.get("stale-source")?.status).toBe("stale");
+    expect(attention.get("boundary-fresh-source")?.status).toBe("ok");
+  });
+
+  // Issue #77 的跨实现覆盖：直接拿 Python 产出的合同 golden 比。
+  // golden 里 `health-*` 场景现在带一台超过 120 分钟没上报的设备（tests/test_api_contract.py
+  // 的 `_backdate_source_collection`），所以 counts 的键是 ["ok", "stale"]、non_ok 里有
+  // 一条 status = "stale"。Worker 不折算时只会产出 ["ok"] 和空 non_ok，这里必红。
+  it("reproduces the Python contract golden shape for /api/health source_status", async () => {
+    const golden = JSON.parse(await readFile(contractGoldenPath, "utf8")) as Array<Record<string, any>>;
+    const goldenHealth = golden.find((record) => record.name === "health-after-limits");
+    expect(goldenHealth, "golden 里应当有 health-after-limits").toBeTruthy();
+    const expectedShape = goldenHealth!.response.body.shape.fields.source_status;
+    // 绕过路径守卫：golden 一旦退回全新鲜数据，这条覆盖就什么都不守了，必须先炸在这里。
+    expect(expectedShape.fields.counts.keys, "golden 的 health 场景必须含过期设备").toContain("stale");
+
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    // 对齐 Python 合同场景的来源分布：mac-local 新鲜 ok，linux-dev-bob 超阈值。
+    await db.prepare("DELETE FROM source_report_states").run();
+    await db.batch([
+      db.prepare(`
+        INSERT INTO source_report_states (
+          source_id, collected_at, report_type, command, status, ccusage_version,
+          first_period, last_period, error_type, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("mac-local", "2026-06-03T11:55:00+08:00", "daily", "HTTP Ingest", "ok", null, "2026-06-03", "2026-06-03", null, null),
+      db.prepare(`
+        INSERT INTO source_report_states (
+          source_id, collected_at, report_type, command, status, ccusage_version,
+          first_period, last_period, error_type, error_message
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind("linux-dev-bob", "2026-06-03T08:00:00+08:00", "daily", "HTTP Ingest", "ok", null, "2026-06-02", "2026-06-02", null, null),
+    ]);
+
+    const response = await mf.dispatchFetch("http://native.test/api/health", {
+      headers: { Cookie: await sessionCookieHeader() },
+    });
+    const payload = await response.json<Record<string, any>>();
+
+    expect(contractShape(payload.source_status)).toEqual(expectedShape);
   });
 
   it("does not read archived legacy usage tables for the health database-size proxy", async () => {
@@ -422,6 +507,52 @@ async function bundleWorker(): Promise<string> {
     sourcemap: false,
   });
   return readFile(outfile, "utf8");
+}
+
+/**
+ * 复刻 `tests/test_api_contract.py` 的 `_shape()`，用来直接和 Python 产出的
+ * 合同 golden 比对。只覆盖 `/api/health` 的 `source_status` 子树用得到的分支：
+ * 该子树里没有 VOLATILE / `_path` 字段，枚举字段只有 `status`。
+ */
+const contractEnumFields = new Set(["status"]);
+
+function contractShape(value: unknown, fieldName = ""): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    const shapes = value.map((item) => contractShape(item));
+    const seen = new Set<string>();
+    const unique: Record<string, unknown>[] = [];
+    for (const shape of shapes) {
+      const key = canonicalJson(shape);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(shape);
+    }
+    return { type: "array", length: value.length, items: unique };
+  }
+  if (value !== null && typeof value === "object") {
+    const keys = Object.keys(value as Record<string, unknown>).sort();
+    const fields: Record<string, unknown> = {};
+    for (const key of keys) fields[key] = contractShape((value as Record<string, unknown>)[key], key);
+    return { type: "object", keys, fields };
+  }
+  const valueType = value === null
+    ? "null"
+    : typeof value === "boolean"
+      ? "bool"
+      : typeof value === "number"
+        ? (Number.isInteger(value) ? "int" : "float")
+        : "str";
+  return contractEnumFields.has(fieldName) ? { type: valueType, value } : { type: valueType };
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.keys(value as Record<string, unknown>).sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 async function createMiniflare(extraBindings: Record<string, string> = {}): Promise<Miniflare> {

@@ -1,4 +1,5 @@
-import { buildMobile, buildSummary, buildVersionHealthFromSourceRows } from "./read-model";
+import { buildHealthSourceStatus, buildMobile, buildSummary } from "./read-model";
+import { buildVersionHealth } from "./version-contract";
 import { STATIC_ASSETS } from "./static-assets";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
@@ -350,26 +351,24 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
     databaseSizeProxy(env.AIUSAGE_DB),
     buildLimitsHealth(env.AIUSAGE_DB),
   ]);
-  // 已知分叉，不要顺手"统一"：下面的 source_status.counts / non_ok 用行上的**原始**
-  // status，而 Python 侧同名字段用的是**过期折算后**的 status——server_services.py 的
-  // counts 直接数 latest.json 里 source_status[].status，那个 status 在
-  // snapshot_source_health.py 就已经过了 _status_with_staleness()。
-  // 也就是说这里是 Worker 单边偏离参考实现，不是"两边都没定"。
+  // Issue #77：source_status.counts / non_ok 与 versions 数的是**同一份**条目
+  // （`buildHealthSourceStatus`），status 一律带 120 分钟过期折算，参照时刻取
+  // `AIUSAGE_NOW`。跟的是 Python 参考实现的口径：server_services.py 的 counts 直接数
+  // latest.json 里 source_status[].status，而那个 status 在 snapshot_source_health.py
+  // 已经过了 `_status_with_staleness()`。
   //
-  // 本次（Issue #63）新增的 versions.needs_attention[].status 走 buildSourceStatus，
-  // 按 120 分钟做过期折算，跟的是 Python 的口径。结果是同一份响应里同一台设备可能
-  // 在 counts 里算 ok、在 needs_attention 里显示 stale。
-  //
-  // counts 的偏离是 #63 之前就有的既有行为，本轮不改（改它会动到与本 Issue 无关的
-  // 既有契约）。已单独立项跟踪。
+  // 这里曾经数行上的**原始** status（#63 之前的既有行为），结果是同一份响应里同一台
+  // 设备在 counts 里算 ok、在 versions.needs_attention 里显示 stale。#77 已统一，
+  // 不要再退回原始值：折算后的 status 才回答「这台设备现在是否可信」。
+  const healthSourceStatus = buildHealthSourceStatus(sourceRows, env.AIUSAGE_NOW);
   const counts: Record<string, number> = {};
   const nonOk: Record<string, string>[] = [];
-  for (const row of sourceRows) {
-    const status = String(row.status || "unknown");
+  for (const entry of healthSourceStatus) {
+    const status = String(entry.status || "unknown");
     counts[status] = (counts[status] ?? 0) + 1;
     if (status !== "ok") {
       nonOk.push({
-        source_id: String(row.source_id || ""),
+        source_id: String(entry.source_id || ""),
         status,
       });
     }
@@ -395,7 +394,7 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
       non_ok: nonOk,
     },
     // 键位与 src/ai_usage_widget/server_services.py 的 `versions` 一致：source_status 与 limits 之间。
-    versions: buildVersionHealthFromSourceRows(sourceRows, env.AIUSAGE_NOW),
+    versions: buildVersionHealth(healthSourceStatus),
     limits: limitsReport,
   };
 }

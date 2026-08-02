@@ -761,19 +761,20 @@ function sourceVersionView(collectorVersion: unknown): Record<string, unknown> {
 }
 
 /**
- * `/api/health` 的 `versions`。
+ * `/api/health` 的来源条目。
  *
  * 只吃 `source_report_states` + `source_identities` 两张表的行，**不调用 `buildSummary`**：
  * 那会把 usage_daily / usage_hourly_facts / limit_windows / source_accuracy 全拉进一个
  * 健康检查端点，是实打实的 D1 读取量回退。
  *
- * 版本块与来源条目的成形逻辑复用 `buildSourceStatus`，保证 `/api/health` 的 `versions`
- * 与 `/api/summary` 的 `version_health` 是同一份产物，不会分叉。
+ * 条目成形逻辑复用 `buildSourceStatus`，于是 `/api/health` 的 `source_status.counts`、
+ * `versions` 与 `/api/summary` 的 `source_status` 是同一份产物：status 一律带 120 分钟
+ * 过期折算（Python 侧 `snapshot_source_health._status_with_staleness()` 的同一口径）。
  */
-export function buildVersionHealthFromSourceRows(
+export function buildHealthSourceStatus(
   rows: Record<string, string | null>[],
   currentTime?: string | null,
-): Record<string, unknown> {
+): Record<string, unknown>[] {
   const refTime = nowInTimezone("Asia/Shanghai", currentTime);
   const identities: Record<string, SourceIdentity> = {};
   for (const row of rows) {
@@ -784,7 +785,7 @@ export function buildVersionHealthFromSourceRows(
       platform: row.platform,
     };
   }
-  return buildVersionHealth(buildSourceStatus(rows, [], identities, refTime));
+  return buildSourceStatus(rows, [], identities, refTime);
 }
 
 function sourceAccuracySummary(rows: Record<string, unknown>[]): Record<string, unknown> {
