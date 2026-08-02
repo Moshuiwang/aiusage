@@ -158,6 +158,50 @@ class TestVerifyScope(unittest.TestCase):
         self.assertIn("改动面", out, out)
         self.assertIn("src/app.py", out, out)
 
+    def test_worker_source_only_change_skips_python(self) -> None:
+        """只动 TS 源码：Python 测试不读那个目录，可以跳过。"""
+        path = self.repo / "cloudflare" / "native-worker" / "src" / "read-model.ts"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("changed\n", encoding="utf-8")
+        _git(self.repo, "add", "-A")
+        _git(self.repo, "commit", "-qm", "ts only")
+        out = self._explain()
+        self.assertIn("python=skip", out, out)
+        self.assertIn("worker=run", out, out)
+
+    def test_migrations_change_still_runs_python(self) -> None:
+        """改 migrations 必须跑 Python：test_d1_schema_migration 直接读这些 .sql。
+
+        这是「改了 cloudflare/ 就跳 Python」这种过宽判据会漏掉的第一类反例。
+        """
+        path = self.repo / "cloudflare" / "migrations" / "0008_x.sql"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("-- x\n", encoding="utf-8")
+        out = self._explain()
+        self.assertIn("python=run", out, out)
+
+    def test_worker_test_fixture_change_still_runs_python(self) -> None:
+        """改 Worker 侧 test/ 下的 golden 与 fixture 必须跑 Python。
+
+        那些文件由 Python 生成、被 Python 防陈旧守卫逐字段比对
+        （test_value_golden_freshness / test_collector_payload_contract）。
+        """
+        path = self.repo / "cloudflare" / "native-worker" / "test" / "value_golden.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("[]\n", encoding="utf-8")
+        out = self._explain()
+        self.assertIn("python=run", out, out)
+
+    def test_mixed_change_runs_both(self) -> None:
+        """TS 源码 + Python 混合改动：两边都要跑，不许因为「大部分是 TS」就跳。"""
+        ts = self.repo / "cloudflare" / "native-worker" / "src" / "read-model.ts"
+        ts.parent.mkdir(parents=True, exist_ok=True)
+        ts.write_text("changed\n", encoding="utf-8")
+        (self.repo / "src" / "app.py").write_text("changed\n", encoding="utf-8")
+        out = self._explain()
+        self.assertIn("python=run", out, out)
+        self.assertIn("worker=run", out, out)
+
     def test_unknown_base_falls_back_to_full(self) -> None:
         """拿不到 base 时退回全量。判据不可信就不许裁剪。"""
         result = subprocess.run(

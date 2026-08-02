@@ -52,6 +52,7 @@ else
 fi
 
 RUN_WORKER=1
+RUN_PYTHON=1
 if [ "$PYTHON_ONLY" -eq 1 ]; then
   RUN_WORKER=0
   SCOPE_DECISION="指定了 --python-only"
@@ -61,18 +62,37 @@ elif [ -n "$SCOPE_REASON" ]; then
   SCOPE_DECISION="退回全量：$SCOPE_REASON"
 elif [ -z "$CHANGED_FILES" ]; then
   SCOPE_DECISION="退回全量：改动面为空（相对 $VERIFY_BASE 无差异，可能是刚合并或 base 不对）"
-elif printf '%s\n' "$CHANGED_FILES" | grep -qE '^cloudflare/'; then
-  SCOPE_DECISION="改动面涉及 cloudflare/"
 else
-  RUN_WORKER=0
-  SCOPE_DECISION="改动面不涉及 cloudflare/（相对 $VERIFY_BASE）"
+  # Worker 侧：改动面涉及 cloudflare/ 才跑。
+  if printf '%s\n' "$CHANGED_FILES" | grep -qE '^cloudflare/'; then
+    SCOPE_DECISION="改动面涉及 cloudflare/"
+  else
+    RUN_WORKER=0
+    SCOPE_DECISION="改动面不涉及 cloudflare/（相对 $VERIFY_BASE）"
+  fi
+
+  # Python 侧：判据**比「不含 cloudflare/」严格得多**，因为有 9 个 Python 测试文件会读
+  # cloudflare/ 下的内容——migrations/（test_d1_schema_migration）、native-worker/test/ 的
+  # golden 与 fixture（test_value_golden_freshness、test_collector_payload_contract、
+  # test_provider_slots_parity）、aiusage-api-worker.js、worker.ts、README.md、
+  # OPERATIONS_HANDOFF.md（test_cloudflare_deployment 等治理测试）。
+  # 按「改了 cloudflare/ 就跳 Python」做会静默漏跑这些。
+  #
+  # 唯一能证明不影响 Python 的范围是 TS 源码目录：实测 tests/ 与 scripts/ 下无一处读
+  # cloudflare/native-worker/src/。所以只有改动面**全部**落在那里时才跳过 Python。
+  if printf '%s\n' "$CHANGED_FILES" | grep -qvE '^cloudflare/native-worker/src/'; then
+    :  # 有任何一个文件在该范围之外 → 照常跑 Python
+  else
+    RUN_PYTHON=0
+    SCOPE_DECISION="$SCOPE_DECISION；改动面全部在 cloudflare/native-worker/src/（Python 测试不读该目录）"
+  fi
 fi
 
 if [ "$EXPLAIN_ONLY" -eq 1 ]; then
   echo "=== 裁剪判定 ==="
   echo "base          : $VERIFY_BASE"
   echo "判定          : $SCOPE_DECISION"
-  echo "python=run worker=$([ "$RUN_WORKER" -eq 1 ] && echo run || echo skip)"
+  echo "python=$([ "$RUN_PYTHON" -eq 1 ] && echo run || echo skip) worker=$([ "$RUN_WORKER" -eq 1 ] && echo run || echo skip)"
   echo "改动面（$(printf '%s\n' "$CHANGED_FILES" | grep -cv '^$' || echo 0) 个文件）："
   if [ -n "$CHANGED_FILES" ]; then
     printf '%s\n' "$CHANGED_FILES" | sed 's/^/  /'
@@ -87,6 +107,15 @@ PY_RESULT="未运行"
 WORKER_RESULT="未运行"
 WORKER_SKIP_REASON=""
 
+PY_SKIP_REASON=""
+if [ "$RUN_PYTHON" -eq 0 ]; then
+  PY_SKIP_REASON="$SCOPE_DECISION"
+  echo "=== [1/2] Python 测试：跳过 ==="
+  echo "原因：$SCOPE_DECISION"
+  echo "如需强制跑：scripts/verify.sh --full"
+  PY_CODE=0
+  PY_OUT=""
+else
 echo "=== [1/2] Python 测试（stdlib unittest，无第三方依赖） ==="
 PY_OUT="$(PYTHONPATH=src python3 -m unittest discover -s tests 2>&1)"
 PY_CODE=$?
@@ -103,6 +132,7 @@ if [ "$PY_CODE" -eq 0 ]; then
 else
   PY_RESULT="失败"
   FAILED=1
+fi
 fi
 
 echo
@@ -144,7 +174,11 @@ fi
 
 echo
 echo "================= 证据摘要 ================="
-echo "Python 测试   : $PY_RESULT"
+if [ -n "$PY_SKIP_REASON" ]; then
+  echo "Python 测试   : 未运行（$PY_SKIP_REASON）"
+else
+  echo "Python 测试   : $PY_RESULT"
+fi
 if [ -n "$WORKER_SKIP_REASON" ]; then
   echo "Worker 测试   : 未运行（$WORKER_SKIP_REASON）"
 else
