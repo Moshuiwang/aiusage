@@ -45,6 +45,55 @@ public struct MenuTrendBar: Equatable, Sendable, Identifiable {
     public let tooltipTitle: String
     public let valueText: String
     public let ratio: Double
+    public let totalTokens: Int
+    public let segments: [MenuTrendSegment]
+}
+
+public struct MenuTrendSegment: Equatable, Sendable, Identifiable {
+    public var id: String { provider.rawValue }
+
+    public let provider: MenuTrendProvider
+    public let tokens: Int
+    public let fraction: Double
+}
+
+public struct MenuTrendColor: Equatable, Sendable {
+    public let red: Double
+    public let green: Double
+    public let blue: Double
+    public let opacity: Double
+
+    public init(red: Double, green: Double, blue: Double, opacity: Double) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+        self.opacity = opacity
+    }
+}
+
+public enum MenuTrendProvider: String, CaseIterable, Equatable, Sendable {
+    case claude
+    case codex
+    case unknown
+
+    public var displayName: String {
+        switch self {
+        case .claude: return "Claude"
+        case .codex: return "Codex"
+        case .unknown: return "未知"
+        }
+    }
+
+    public var color: MenuTrendColor {
+        switch self {
+        case .claude:
+            return MenuTrendColor(red: 0.855, green: 0.467, blue: 0.337, opacity: 1)
+        case .codex:
+            return MenuTrendColor(red: 0.039, green: 0.518, blue: 1, opacity: 1)
+        case .unknown:
+            return MenuTrendColor(red: 0.5, green: 0.5, blue: 0.52, opacity: 0.55)
+        }
+    }
 }
 
 public struct MenuDisplayRow: Equatable, Sendable, Identifiable {
@@ -185,7 +234,44 @@ public enum MenuBarViewModel {
                 ),
                 tooltipTitle: shortBucket(point.bucket, granularity: trend.granularity),
                 valueText: TokenFormat.compact(point.tokens),
-                ratio: Double(point.tokens) / Double(maxTokens)
+                ratio: Double(point.tokens) / Double(maxTokens),
+                totalTokens: max(point.tokens, 0),
+                segments: trendSegments(point)
+            )
+        }
+    }
+
+    private static func trendSegments(_ point: MobileTrendPoint) -> [MenuTrendSegment] {
+        let total = max(point.tokens, 0)
+        guard total > 0 else { return [] }
+
+        let rawClaude = max(point.claudeTokens, 0)
+        let rawCodex = max(point.codexTokens, 0)
+        let rawKnown = rawClaude + rawCodex
+        let claude: Int
+        let codex: Int
+        if rawKnown <= total {
+            claude = rawClaude
+            codex = rawCodex
+        } else if rawKnown == 0 {
+            claude = 0
+            codex = 0
+        } else {
+            claude = total * rawClaude / rawKnown
+            codex = total - claude
+        }
+        let unknown = total - claude - codex
+
+        return [
+            (MenuTrendProvider.unknown, unknown),
+            (.claude, claude),
+            (.codex, codex),
+        ].compactMap { provider, tokens in
+            guard tokens > 0 else { return nil }
+            return MenuTrendSegment(
+                provider: provider,
+                tokens: tokens,
+                fraction: Double(tokens) / Double(total)
             )
         }
     }
@@ -301,12 +387,16 @@ public enum MenuBarViewModel {
         for slot: MobileProviderSlot,
         now: Date
     ) -> [MobileLimitWindow] {
-        guard slot.quota.status == "available" else { return [] }
+        let isHistorical = slot.quota.status != "available"
 
         let candidates = slot.quota.windows.filter { window in
-            window.isOfficialObserved &&
-                !isLocalEstimate(window.sourceType) &&
-                !isExpired(resetAt: window.resetAt, now: now) &&
+            guard window.isOfficialObserved && !isLocalEstimate(window.sourceType) else {
+                return false
+            }
+            if isHistorical {
+                return true
+            }
+            return !isExpired(resetAt: window.resetAt, now: now) &&
                 !isStale(observedAt: window.observedAt, now: now)
         }
         guard !candidates.isEmpty else { return [] }
@@ -433,11 +523,27 @@ public enum MenuBarViewModel {
                     slot.quota,
                     hasVisibleWindow: outerWindow != nil || weekWindow != nil
                 ),
-                usageText: slot.usage.status == "available"
-                    ? "用量 \(TokenFormat.compact(slot.usage.totalTokens))"
-                    : "用量不可用"
+                usageText: usageText(slot.usage)
             )
         }
+    }
+
+    private static func usageText(_ usage: MobileProviderUsage) -> String {
+        guard usage.status == "available" else {
+            return "用量不可用"
+        }
+        let totalTokens = max(usage.totalTokens, 0)
+        guard totalTokens > 0 else {
+            return "用量 0"
+        }
+        let cacheTokens = min(max(usage.cacheTokens, 0), totalTokens)
+        let cacheRate = Double(cacheTokens) / Double(totalTokens) * 100
+        let cacheText = String(
+            format: "%.1f%%",
+            locale: Locale(identifier: "en_US_POSIX"),
+            cacheRate
+        )
+        return "用量 \(TokenFormat.compact(totalTokens)) · \(cacheText)"
     }
 
     private static func quotaAvailabilityText(
@@ -605,21 +711,17 @@ public enum MenuBarViewModel {
     }
 
     private static func compactDateTime(_ iso: String?, reference: String?, suffix: String) -> String? {
-        guard let iso, iso.count >= 16 else { return nil }
-        let date = String(iso.prefix(10))
-        let timeStart = iso.index(iso.startIndex, offsetBy: 11)
-        let timeEnd = iso.index(iso.startIndex, offsetBy: 16)
-        let time = String(iso[timeStart..<timeEnd])
-        let text: String
-        if let reference, reference.hasPrefix(date) {
-            text = time
-        } else if iso.count >= 10 {
-            let monthStart = iso.index(iso.startIndex, offsetBy: 5)
-            let dayEnd = iso.index(iso.startIndex, offsetBy: 10)
-            text = "\(String(iso[monthStart..<dayEnd])) \(time)"
-        } else {
-            text = time
-        }
+        guard let date = parseDate(iso) else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let isSameDay = reference.flatMap(parseDate).map {
+            calendar.isDate(date, inSameDayAs: $0)
+        } ?? false
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = isSameDay ? "HH:mm" : "MM-dd HH:mm"
+        let text = formatter.string(from: date)
         return "\(text) \(suffix)"
     }
 

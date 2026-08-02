@@ -83,13 +83,13 @@ final class ProviderSlotViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.usageText, "用量 3.1K")
+        XCTAssertEqual(claude.usageText, "用量 3.1K · 9.7%")
         XCTAssertEqual(claude.innerPctText, "78%")
         XCTAssertNotEqual(claude.innerTimeText, "--")
         XCTAssertEqual(claude.availabilityText, "官方额度")
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
-        XCTAssertEqual(codex.usageText, "用量 1.6K")
+        XCTAssertEqual(codex.usageText, "用量 1.6K · 6.2%")
         XCTAssertEqual(codex.outerPctText, "43%")
         XCTAssertNotEqual(codex.outerTimeText, "--")
         XCTAssertNil(state.providerUsageCoverageText)
@@ -104,7 +104,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.usageText, "用量 3.1K")
+        XCTAssertEqual(claude.usageText, "用量 3.1K · 9.7%")
         XCTAssertEqual(claude.outerPctText, "--")
         XCTAssertEqual(claude.innerPctText, "--")
         XCTAssertEqual(claude.outerTimeText, "--")
@@ -227,7 +227,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
         }
     }
 
-    func testDegradedQuotaStatusesNeverExposeStrongConclusion() throws {
+    func testDegradedQuotaStatusesKeepLastSuccessfulWindowsVisible() throws {
         let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
         let sourceWindow = try XCTUnwrap(record.providerSlots.first { $0.provider == "claude" }?.quota.windows.first)
 
@@ -251,9 +251,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             )
             let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
             XCTAssertEqual(ring.outerPctText, "--", "status: \(quotaStatus)")
-            XCTAssertEqual(ring.innerPctText, "--", "status: \(quotaStatus)")
-            XCTAssertEqual(ring.outerTimeText, "--", "status: \(quotaStatus)")
-            XCTAssertEqual(ring.innerTimeText, "--", "status: \(quotaStatus)")
+            XCTAssertEqual(ring.innerPctText, "78%", "status: \(quotaStatus)")
+            XCTAssertNotEqual(ring.innerTimeText, "--", "status: \(quotaStatus)")
         }
     }
 
@@ -294,7 +293,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
         XCTAssertEqual(ring.sourceText, "BIAI · source-b")
     }
 
-    func testEveryOwnerScenarioKeepsFixedSlotsAndFailsClosedForDegradedQuota() throws {
+    func testEveryOwnerScenarioKeepsFixedSlotsAndShowsLastSuccessfulQuota() throws {
         let records = try allGoldenRecords()
         XCTAssertEqual(records.count, 13)
 
@@ -308,7 +307,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
 
             for slot in record.providerSlots {
                 let ring = try XCTUnwrap(state.quotaRings.first { $0.id == slot.provider }, record.name)
-                let hasTrustedOwnerWindow = slot.quota.status == "available" && slot.quota.windows.contains {
+                let hasTrustedOwnerWindow = slot.quota.windows.contains {
                     $0.official && $0.confidence == "observed" && $0.status == "ok"
                 }
                 if !hasTrustedOwnerWindow {

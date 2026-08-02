@@ -192,6 +192,77 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(weekState.trendBars.map(\.label), ["05-28", "", "", "05-31", "", "", "06-03"])
     }
 
+    func testTrendBarsExposeStableProviderColorSemanticsAndConserveTokens() throws {
+        let summary = try loadFixture()
+        let trend = MobileTrend(
+            period: "today",
+            granularity: "hour",
+            startDate: "2026-06-02",
+            endDate: "2026-06-02",
+            points: [
+                MobileTrendPoint(
+                    bucket: "2026-06-02T10:00:00+08:00",
+                    label: "2026-06-02T10:00:00+08:00",
+                    tokens: 600,
+                    inputTokens: 200,
+                    outputTokens: 100,
+                    cacheTokens: 300,
+                    cacheRatio: 50,
+                    claudeTokens: 300,
+                    codexTokens: 200,
+                    unknownTokens: 100
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion,
+                client: summary.client,
+                generatedAt: summary.generatedAt,
+                timezone: summary.timezone,
+                period: summary.period,
+                trend: trend,
+                sources: summary.sources,
+                breakdown: summary.breakdown,
+                limits: summary.limits
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+
+        let bar = try XCTUnwrap(state.trendBars.first)
+        XCTAssertEqual(bar.segments.map(\.provider), [.unknown, .claude, .codex])
+        XCTAssertEqual(bar.segments.map(\.tokens), [100, 300, 200])
+        XCTAssertEqual(bar.segments.reduce(0) { $0 + $1.tokens }, bar.totalTokens)
+        XCTAssertEqual(
+            MenuTrendProvider.claude.color,
+            MenuTrendColor(red: 0.855, green: 0.467, blue: 0.337, opacity: 1)
+        )
+        XCTAssertEqual(
+            MenuTrendProvider.codex.color,
+            MenuTrendColor(red: 0.039, green: 0.518, blue: 1, opacity: 1)
+        )
+        XCTAssertEqual(
+            MenuTrendProvider.unknown.color,
+            MenuTrendColor(red: 0.5, green: 0.5, blue: 0.52, opacity: 0.55)
+        )
+    }
+
+    func testTrendWithoutProviderBreakdownDisplaysAllTokensAsUnknown() throws {
+        let summary = try loadFixture()
+        let state = MenuBarViewModel.build(
+            from: summary,
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+
+        XCTAssertFalse(state.trendBars.isEmpty)
+        for bar in state.trendBars {
+            XCTAssertEqual(bar.segments.map(\.provider), [.unknown])
+            XCTAssertEqual(bar.segments.map(\.tokens), [bar.totalTokens])
+        }
+    }
+
     func testQuotaRingsUseLatestObservedUsagePerProviderWindow() throws {
         let summary = try loadFixture()
         let duplicateLimits = MobileLimits(
@@ -384,14 +455,14 @@ final class MenuBarViewModelTests: XCTestCase {
                     sourceID: "linux-biai-wang", provider: "claude", window: "session",
                     usedPercent: 18, remainingPercent: 82,
                     resetAt: "2026-07-18T18:00:00+08:00", windowDurationMinutes: 300,
-                    observedAt: "2026-07-18T10:20:00+08:00", sourceType: "official_cli",
+                    observedAt: "2026-07-18T02:20:00+00:00", sourceType: "official_cli",
                     confidence: "observed", status: "ok", official: true
                 ),
                 MobileLimitWindow(
                     sourceID: "linux-biai-wang", provider: "claude", window: "week",
                     usedPercent: 37, remainingPercent: 63,
                     resetAt: "2026-07-20T00:00:00+08:00", windowDurationMinutes: 10080,
-                    observedAt: "2026-07-18T10:20:00+08:00", sourceType: "official_cli",
+                    observedAt: "2026-07-18T02:20:00+00:00", sourceType: "official_cli",
                     confidence: "observed", status: "ok", official: true
                 ),
                 MobileLimitWindow(

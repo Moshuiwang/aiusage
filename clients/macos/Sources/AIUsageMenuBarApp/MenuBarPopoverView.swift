@@ -21,6 +21,9 @@ struct MenuBarPopoverView: View {
                 mainContent
             }
         }
+        .frame(width: MenuBarPopoverLayout.width)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(MacOSGlassBackground())
     }
 
     // MARK: – Header
@@ -120,15 +123,13 @@ struct MenuBarPopoverView: View {
                 model.refresh(periodID: newValue)
             }
 
-            ScrollView {
-                VStack(spacing: 10) {
-                    heroCard
-                    if !model.state.quotaRings.isEmpty { quotaSection }
-                    if !model.state.sources.isEmpty { sourcesSection }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+            VStack(spacing: 10) {
+                heroCard
+                if !model.state.quotaRings.isEmpty { quotaSection }
+                if !model.state.sources.isEmpty { sourcesSection }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .onChange(of: model.state.trendBars) { _, _ in
             hoveredBar = nil; hoverLocation = nil
@@ -241,7 +242,23 @@ struct MenuBarPopoverView: View {
     }
 
     private var cardBackground: some ShapeStyle {
-        Color(nsColor: .windowBackgroundColor).opacity(0.82)
+        Color(nsColor: .windowBackgroundColor).opacity(0.56)
+    }
+}
+
+private struct MacOSGlassBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .popover
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = .popover
+        nsView.blendingMode = .behindWindow
+        nsView.state = .active
     }
 }
 
@@ -346,15 +363,14 @@ struct PopoverTrendBars: View {
                     // Bars
                     HStack(alignment: .bottom, spacing: 4) {
                         ForEach(bars) { bar in
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(LinearGradient(
-                                    colors: [Color(red: 0.29, green: 0.62, blue: 1.0),
-                                             Color(red: 0.0, green: 0.48, blue: 1.0)],
-                                    startPoint: .top, endPoint: .bottom
-                                ))
+                            stackedBar(
+                                bar,
+                                height: max(
+                                    4,
+                                    chartHeight * CGFloat(bar.ratio * max(ceilingFraction, 0.05))
+                                )
+                            )
                                 .frame(maxWidth: .infinity)
-                                .frame(height: max(4, chartHeight * CGFloat(bar.ratio * max(ceilingFraction, 0.05))))
-                                .opacity(bar.ratio == 0 ? 0.28 : 0.85)
                                 .help("\(bar.tooltipTitle) · \(bar.valueText)")
                         }
                     }
@@ -397,7 +413,46 @@ struct PopoverTrendBars: View {
                 }
             }
             .frame(height: 12)
+
+            HStack(spacing: 12) {
+                ForEach(MenuTrendProvider.allCases, id: \.rawValue) { provider in
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(providerColor(provider))
+                            .frame(width: 6, height: 6)
+                        Text(provider.displayName)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         }
+    }
+
+    @ViewBuilder
+    private func stackedBar(_ bar: MenuTrendBar, height: CGFloat) -> some View {
+        if bar.totalTokens == 0 || bar.segments.isEmpty {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(providerColor(.unknown))
+                .frame(height: height)
+                .opacity(0.28)
+        } else {
+            VStack(spacing: 0) {
+                ForEach(bar.segments) { segment in
+                    Rectangle()
+                        .fill(providerColor(segment.provider))
+                        .frame(height: height * CGFloat(segment.fraction))
+                }
+            }
+            .frame(height: height, alignment: .bottom)
+            .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+            .opacity(0.9)
+        }
+    }
+
+    private func providerColor(_ provider: MenuTrendProvider) -> Color {
+        let color = provider.color
+        return Color(red: color.red, green: color.green, blue: color.blue, opacity: color.opacity)
     }
 
     private func trendTooltip(_ bar: MenuTrendBar) -> some View {
@@ -455,13 +510,10 @@ struct QuotaRingItem: View {
                         color: Color(red: data.outerRed, green: data.outerGreen, blue: data.outerBlue))
                 ringRow(key: data.innerLabel, pct: data.innerPctText, time: data.innerTimeText,
                         color: Color(red: data.innerRed, green: data.innerGreen, blue: data.innerBlue))
-                Text("\(data.sourceText) · \(data.updatedText)")
+                Text(data.updatedText)
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                Text(data.availabilityText)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(data.availabilityText == "官方额度" ? Color.secondary : Color.orange)
             }
             .padding(.horizontal, 4)
         }
