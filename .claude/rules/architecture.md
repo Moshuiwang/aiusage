@@ -45,7 +45,7 @@ paths:
 | 版本合同：采集端自报 | `version_contract.py`（采集端保留部分） | **留 Python**（`pusher.py`、`config.py` 在用），不冻结 |
 | 设备本机采集与 HTTP 上报 | `pusher.py`、`runners.py`、`mswusage_*.py` | **留 Python**，不冻结 |
 | 采集端 payload 合同 fixture | `pusher.py`（owner 模块产出，**禁止手写**） | **留 Python**。生成 `scripts/gen_collector_payload_fixture.py`，防陈旧守卫 `tests/test_collector_payload_contract.py` |
-| 采集端本地 outbox / 可靠投递 | `collector_store.py` | **待建**（#73）。缓冲不是档案，历史权威永远在 D1 |
+| 采集端本地 outbox / 可靠投递 | `collector_store.py` | **已建**（#73）。缓冲不是档案，历史权威永远在 D1。库路径**要求绝对路径**（默认 `~/.ai-usage/collector_outbox.sqlite`）——采集由 LaunchAgent/systemd 拉起时 cwd 是 `/` 或 `$HOME`，相对路径会导致同机开两个库且排空守卫误放行 |
 | 官方额度 provider / runtime / doctor / scheduler / push | `*_limits_provider.py`、`limits_*.py` | **留 Python**，不冻结。但 `limits_runtime.py -> snapshot_builder` 这条依赖边由 #72 剪断，剪断前不得加深 |
 | 部署单元 / 发布 / 体检 | `deploy_units.py`、`deploy_release.py`、`deploy_doctor.py` | **留 Python**，不冻结 |
 | 本地快照线 `widget_sync.py` / `sync-widget` / `latest.json` | 无 | **判死**，随 #72 处置。不得新增消费者 |
@@ -58,7 +58,18 @@ paths:
 
 **冻结名单**：`server.py`、`server_services.py`、`ingest.py`、`snapshot_builder.py`、
 `snapshot_filters.py`、`snapshot_periods.py`、`snapshot_source_health.py`、`snapshot_trends.py`、
-`mobile_summary.py`、`storage_sqlite.py`、`version_contract.py` 的**服务端判定部分**。
+`mobile_summary.py`、`storage_sqlite.py`、`version_contract.py` 的**服务端判定部分**、
+`normalize.py` 的**服务端归一化部分**。
+
+> `normalize.py` **在 #74 之后会变成零消费者模块**，去留待 PM 定（映射表 PM-4）。
+> 实测：它的消费者只有 `server_services.py`（随 #74 删除）与 `collector.py`
+> （ADR 5.4 判 legacy、随 #74 清理）；**`pusher.py` 不 import 它**。
+> 所以它既不属于「留在 Python 正常开发」，也不是简单的「拆分」——采集端根本不用它。
+>
+> 这条的发现过程本身值得记：先查「谁 import 了 `ingest`」发现 `normalize.py → ingest.py`
+> 这条边（#72 治理断言的 glob 只扫 `pusher.py` / `limits_*.py` / `mswusage_*.py` /
+> `deploy_*.py`，扫不到它），据此误判为「混合模块需拆分」；再查「删除之后谁还用它」
+> 才得出零消费者的结论。**只查入边不查出边会得出似是而非的结论。**
 
 **可以改**：
 
@@ -77,7 +88,7 @@ paths:
 **新字段的唯一去处**：`cloudflare/native-worker/src/*.ts` + `cloudflare/migrations/`。
 
 **不在冻结名单内**（正常开发）：采集端全部模块——`pusher.py`、`runners.py`、`mswusage_*.py`、
-`*_limits_provider.py`、`limits_*.py`、`deploy_*.py`、`config.py`、`cli.py`、`normalize.py`、
+`*_limits_provider.py`、`limits_*.py`、`deploy_*.py`、`config.py`、`cli.py`、
 `models.py`、`timeutil.py` / `timezones.py`、`lock.py`、`backup.py`、`auth.py`、
 `verify_cloud.py`、`version_contract.py` 的采集端自报部分。
 
