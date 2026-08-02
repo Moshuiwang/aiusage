@@ -9,8 +9,62 @@ from ai_usage_widget.storage_sqlite import _ensure_schema
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-MIGRATION_SQL = REPO_ROOT / "cloudflare" / "migrations" / "0001_initial_schema.sql"
-LIMIT_STABLE_KEY_MIGRATION_SQL = REPO_ROOT / "cloudflare" / "migrations" / "0003_limit_window_stable_key.sql"
+MIGRATIONS_DIR = REPO_ROOT / "cloudflare" / "migrations"
+MIGRATION_SQL = MIGRATIONS_DIR / "0001_initial_schema.sql"
+LIMIT_STABLE_KEY_MIGRATION_SQL = MIGRATIONS_DIR / "0003_limit_window_stable_key.sql"
+COLLECTOR_VERSION_MIGRATION_SQL = (
+    MIGRATIONS_DIR / "0007_source_report_states_collector_version.sql"
+)
+
+# The source_report_states layout as it exists on a database already migrated to
+# 0006. Deliberately spelled out instead of replayed from 0001/0004: 0001 was
+# amended to create collector_version for the fresh-install path, so replaying
+# the current chain can never reproduce the deployed pre-0007 table. Production
+# D1 is on this 10-column shape *with rows in it*, and that is the only path
+# where 0007 does real work.
+LEGACY_SOURCE_REPORT_STATES_DDL = """
+CREATE TABLE source_report_states (
+  source_id TEXT PRIMARY KEY,
+  collected_at TEXT NOT NULL,
+  report_type TEXT NOT NULL,
+  command TEXT NOT NULL,
+  status TEXT NOT NULL,
+  ccusage_version TEXT,
+  first_period TEXT,
+  last_period TEXT,
+  error_type TEXT,
+  error_message TEXT
+);
+"""
+
+LEGACY_SOURCE_REPORT_STATES_ROWS = [
+    # Happy path: every optional column populated.
+    (
+        "linux-biai-wang",
+        "2026-07-31T09:00:00+08:00",
+        "daily",
+        "ccusage daily --json",
+        "ok",
+        "15.9.7",
+        "2026-06-01",
+        "2026-07-31",
+        None,
+        None,
+    ),
+    # Failure path: ccusage_version/periods NULL, error columns populated.
+    (
+        "mac-air-wangzhipeng",
+        "2026-07-31T09:05:00+08:00",
+        "limits",
+        "mswusage-codex limits --json",
+        "provider_failed",
+        None,
+        None,
+        None,
+        "timeout",
+        "provider timed out after 30s",
+    ),
+]
 D1_ONLY_TABLE_COLUMNS = {
     "source_report_states": [
         ("source_id", "TEXT", 0, None, 1),
@@ -23,8 +77,19 @@ D1_ONLY_TABLE_COLUMNS = {
         ("last_period", "TEXT", 0, None, 0),
         ("error_type", "TEXT", 0, None, 0),
         ("error_message", "TEXT", 0, None, 0),
+        # Last position is not cosmetic: SQLite `ALTER TABLE ... ADD COLUMN`
+        # can only append, so any other position would make the fresh-install
+        # path (0001 CREATE TABLE) and the incremental path (later migration)
+        # disagree on column order.
+        ("collector_version", "TEXT", 0, None, 0),
     ],
 }
+
+
+def _all_migration_files() -> list[Path]:
+    """Every migration in apply order. Deliberately discovered, not listed:
+    a new migration must be covered by the parity test without editing it."""
+    return sorted(MIGRATIONS_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
 
 
 def _user_tables(conn: sqlite3.Connection) -> list[str]:
@@ -69,6 +134,23 @@ def _created_indexes(conn: sqlite3.Connection, table: str) -> dict[str, tuple]:
     return indexes
 
 
+def _auto_indexes(conn: sqlite3.Connection, table: str) -> dict[str, tuple]:
+    """Indexes SQLite created implicitly (origin 'pk'/'u'), i.e. the ones a table
+    rebuild can silently drop without any CREATE INDEX statement going missing."""
+    indexes = {}
+    for row in conn.execute(f"PRAGMA index_list({table})").fetchall():
+        name = row[1]
+        origin = row[3]
+        if origin == "c":
+            continue
+        columns = tuple(
+            info[2]
+            for info in conn.execute(f"PRAGMA index_info({name})").fetchall()
+        )
+        indexes[name] = (origin, row[2], columns)
+    return indexes
+
+
 class TestD1SchemaMigration(unittest.TestCase):
     def test_initial_d1_migration_matches_sqlite_schema(self) -> None:
         self.assertTrue(MIGRATION_SQL.exists(), f"Missing migration: {MIGRATION_SQL}")
@@ -104,6 +186,161 @@ class TestD1SchemaMigration(unittest.TestCase):
                 self.assertIn(table, actual_tables)
                 self.assertEqual(actual_columns[table], expected_columns)
                 self.assertEqual(actual_indexes[table], {})
+
+    def test_full_migration_chain_matches_fresh_schema_columns(self) -> None:
+        """A brand-new D1 gets 0001 alone in this repo's fresh-install path, while a
+        deployed D1 walks 0001 -> ... -> latest. Both must land on identical column
+        layouts, otherwise an added column silently exists in one shape only."""
+        migrations = _all_migration_files()
+        self.assertEqual(migrations[0], MIGRATION_SQL)
+        self.assertGreater(len(migrations), 1)
+
+        with sqlite3.connect(":memory:") as fresh_conn:
+            fresh_conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
+            fresh_tables = _user_tables(fresh_conn)
+            fresh_columns = {table: _table_columns(fresh_conn, table) for table in fresh_tables}
+
+        with sqlite3.connect(":memory:") as chain_conn:
+            for migration in migrations:
+                chain_conn.executescript(migration.read_text(encoding="utf-8"))
+            chain_tables = _user_tables(chain_conn)
+            chain_columns = {table: _table_columns(chain_conn, table) for table in chain_tables}
+
+        self.assertEqual(chain_tables, fresh_tables)
+        self.assertEqual(chain_columns, fresh_columns)
+        for table, expected_columns in D1_ONLY_TABLE_COLUMNS.items():
+            self.assertEqual(chain_columns[table], expected_columns)
+
+    def _legacy_db_with_rows(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(":memory:")
+        conn.executescript(LEGACY_SOURCE_REPORT_STATES_DDL)
+        conn.executemany(
+            "INSERT INTO source_report_states VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            LEGACY_SOURCE_REPORT_STATES_ROWS,
+        )
+        self.assertEqual(
+            len(_table_columns(conn, "source_report_states")),
+            10,
+            "fixture must start from the deployed pre-0007 layout",
+        )
+        return conn
+
+    def test_collector_version_migration_upgrades_deployed_table_without_data_loss(self) -> None:
+        """The path 0007 actually exists for: a database already on 0006, holding
+        rows, in the 10-column shape. The full-chain test cannot cover this because
+        0001 now creates collector_version itself, so there 0007 is only an
+        equivalent recreate. Here it must really append the column -- and because
+        0007 rebuilds (CREATE v2 / INSERT SELECT / DROP / RENAME) rather than
+        ALTER TABLE ADD COLUMN, every existing row and the PK auto-index are at
+        risk of being silently dropped."""
+        self.assertTrue(
+            COLLECTOR_VERSION_MIGRATION_SQL.exists(),
+            f"Missing migration: {COLLECTOR_VERSION_MIGRATION_SQL}",
+        )
+
+        with self._legacy_db_with_rows() as conn:
+            before_rows = conn.execute(
+                "SELECT * FROM source_report_states ORDER BY source_id"
+            ).fetchall()
+            before_auto_indexes = _auto_indexes(conn, "source_report_states")
+
+            conn.executescript(
+                COLLECTOR_VERSION_MIGRATION_SQL.read_text(encoding="utf-8")
+            )
+
+            after_columns = _table_columns(conn, "source_report_states")
+            after_rows = conn.execute(
+                "SELECT * FROM source_report_states ORDER BY source_id"
+            ).fetchall()
+            after_auto_indexes = _auto_indexes(conn, "source_report_states")
+            leftover_tables = _user_tables(conn)
+
+        # Column appended, and appended LAST -- ADD COLUMN can only append, so any
+        # other position would fork the fresh-install layout from this one.
+        self.assertEqual(len(after_columns), 11)
+        self.assertEqual(after_columns[-1], ("collector_version", "TEXT", 0, None, 0))
+        self.assertEqual(after_columns, D1_ONLY_TABLE_COLUMNS["source_report_states"])
+
+        # Every pre-existing row survives the rebuild, field for field, including
+        # the NULL/non-NULL mix; only the new trailing NULL is added.
+        self.assertEqual(len(after_rows), len(LEGACY_SOURCE_REPORT_STATES_ROWS))
+        self.assertEqual(
+            [row[:10] for row in after_rows],
+            list(before_rows),
+        )
+        self.assertEqual(
+            sorted(row[:10] for row in after_rows),
+            sorted(LEGACY_SOURCE_REPORT_STATES_ROWS),
+        )
+
+        # Existing rows carry no collector_version: 0007's INSERT ... SELECT only
+        # copies the 10 legacy columns, so backfill happens on the next ingest.
+        self.assertEqual([row[10] for row in after_rows], [None, None])
+
+        # The PK auto-index must come back with the rebuilt table.
+        self.assertEqual(after_auto_indexes, before_auto_indexes)
+        self.assertEqual(
+            after_auto_indexes,
+            {"sqlite_autoindex_source_report_states_1": ("pk", 1, ("source_id",))},
+        )
+
+        # The scratch table must not outlive the migration.
+        self.assertEqual(leftover_tables, ["source_report_states"])
+
+    def test_collector_version_migration_rerun_keeps_schema_but_resets_collector_version(self) -> None:
+        """Characterization of re-running 0007 by hand on an already-upgraded
+        database: structurally repeatable, NOT value-preserving.
+
+        The layout stays identical and nothing errors, but the INSERT ... SELECT
+        lists the 10 legacy columns only, so a second run copies those across and
+        leaves collector_version NULL again -- silently discarding every version
+        already recorded. Harmless under `wrangler d1 migrations apply` (an
+        applied migration is never replayed); a data hazard for anyone running
+        the file manually.
+
+        This defect is deliberately accepted rather than fixed. The obvious fix,
+        `INSERT INTO ..._v2 SELECT *, NULL`, aborts a re-run instead of wiping
+        data -- but it breaks the fresh-install path: 0001 already creates the
+        11-column table, so replaying 0001..0007 on a brand new D1 would feed 12
+        values into 11 columns and fail the whole deploy (proven by
+        test_full_migration_chain_matches_fresh_schema_columns going red when
+        that variant was tried). Supporting both real deployment paths requires
+        the explicit column list.
+
+        Locked in so the property cannot change unnoticed. If 0007 is ever made
+        value-preserving, this expectation must be updated deliberately -- and
+        the fresh-install path must be re-verified."""
+        with self._legacy_db_with_rows() as conn:
+            migration_sql = COLLECTOR_VERSION_MIGRATION_SQL.read_text(encoding="utf-8")
+            conn.executescript(migration_sql)
+            conn.execute(
+                "UPDATE source_report_states SET collector_version = ? WHERE source_id = ?",
+                ("2.4.0", "linux-biai-wang"),
+            )
+            first_columns = _table_columns(conn, "source_report_states")
+
+            conn.executescript(migration_sql)
+
+            second_columns = _table_columns(conn, "source_report_states")
+            rows = conn.execute(
+                "SELECT * FROM source_report_states ORDER BY source_id"
+            ).fetchall()
+            auto_indexes = _auto_indexes(conn, "source_report_states")
+            leftover_tables = _user_tables(conn)
+
+        self.assertEqual(second_columns, first_columns)
+        self.assertEqual(second_columns, D1_ONLY_TABLE_COLUMNS["source_report_states"])
+        self.assertEqual(
+            sorted(row[:10] for row in rows),
+            sorted(LEGACY_SOURCE_REPORT_STATES_ROWS),
+        )
+        # The '2.4.0' written above is gone: this is the accepted data hazard.
+        self.assertEqual([row[10] for row in rows], [None, None])
+        self.assertEqual(
+            auto_indexes,
+            {"sqlite_autoindex_source_report_states_1": ("pk", 1, ("source_id",))},
+        )
+        self.assertEqual(leftover_tables, ["source_report_states"])
 
     def test_limit_window_migration_keeps_latest_row_for_stable_key(self) -> None:
         with sqlite3.connect(":memory:") as conn:

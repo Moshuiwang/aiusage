@@ -37,7 +37,14 @@ CREATE TABLE IF NOT EXISTS source_report_states (
   first_period TEXT,
   last_period TEXT,
   error_type TEXT,
-  error_message TEXT
+  error_message TEXT,
+  -- Collector version of the last payload the server successfully accepted for
+  -- this source -- not the version the device is currently running: payloads
+  -- with an incompatible version are rejected before any write.
+  -- Must stay last: 0007 adds this column to already-deployed databases, and
+  -- SQLite can only append columns, so any other position would fork the
+  -- column order between fresh installs and migrated databases.
+  collector_version TEXT
 );
 
 CREATE TABLE IF NOT EXISTS usage_daily (

@@ -630,6 +630,46 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(provenanceRow).toMatchObject({ accuracy_status: "unverified", matching_full_scans: 1 });
   });
 
+  it("refreshes the recorded collector version when a stalled source repeats an unchanged report", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    // 持续失败、没有任何新事实的设备：报告内容一字不变，只有采集端自己升级了。
+    // 这类设备恰恰最需要在汇聚端看到真实版本。
+    const observedAt = "2026-07-18T02:00:00+00:00";
+    const payload = (collectorVersion: string) => ({
+      schema_version: 1,
+      source_id: "linux-stalled",
+      host: "linux-stalled",
+      machine: "linux-stalled",
+      os_user: "tester",
+      platform: "linux",
+      timezone: "Asia/Shanghai",
+      observed_at: observedAt,
+      collection_status: "failed",
+      error_type: "collector_error",
+      error_message: "local usage ledger unavailable",
+      usage_daily: [],
+      usage_hourly_facts: [],
+      collector_release: { collector_version: collectorVersion },
+    });
+
+    expect(await postIngest(payload("0.1.0"))).toBeGreaterThan(0);
+    // 路径证据：完全相同的重放既不改报告状态也不产生新事实行，写入行数必须是 0。
+    // 这一条与采集端版本无关，缺陷修好后依然成立，用来证明下一次上报确实落在
+    // 「报告未变 且 rowsWritten == 0」这条分支上，而不是别的分支。
+    expect(await postIngest(payload("0.1.0"))).toBe(0);
+    expect(await auditRowCount("collection_runs")).toBe(1);
+
+    await postIngest(payload("0.2.0"));
+
+    const latestRun = await db.prepare(
+      "SELECT collector_version FROM collection_runs ORDER BY id DESC LIMIT 1",
+    ).first<{ collector_version: string | null }>();
+    expect(latestRun?.collector_version).toBe("0.2.0");
+    // 版本变化必须被识别成报告状态变化后才写，而不是靠无条件写 collection_runs 补上；
+    // 无条件写会让上面那条重放断言先失败，也会回归 D1 写入量优化。
+    expect(await auditRowCount("collection_runs")).toBe(2);
+  });
+
   async function applyAllPayloads(
     ingestPayloads: Record<string, unknown>[],
     limitsPayloads: Record<string, unknown>[],
