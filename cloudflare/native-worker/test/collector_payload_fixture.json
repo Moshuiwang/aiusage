@@ -1,0 +1,412 @@
+[
+  {
+    "name": "ok-full-collection",
+    "payload": {
+      "ccusage_blocks_report": {
+        "blocks": [
+          {
+            "agent": "claude",
+            "endTime": "2026-06-04T13:00:00+08:00",
+            "id": "fixture-block-1",
+            "isActive": false,
+            "startTime": "2026-06-04T08:00:00+08:00",
+            "totalTokens": 6130
+          }
+        ]
+      },
+      "ccusage_daily_report": {
+        "daily": [
+          {
+            "agent": "claude",
+            "cacheCreationTokens": 90,
+            "cacheReadTokens": 4500,
+            "inputTokens": 1200,
+            "modelBreakdowns": [
+              {
+                "inputTokens": 1200,
+                "modelName": "claude-opus-4",
+                "outputTokens": 340,
+                "totalTokens": 6130
+              }
+            ],
+            "modelsUsed": [
+              "claude-opus-4"
+            ],
+            "outputTokens": 340,
+            "period": "2026-06-04",
+            "totalCost": 0.42,
+            "totalTokens": 6130
+          },
+          {
+            "agent": "codex",
+            "cacheCreationTokens": 0,
+            "cacheReadTokens": 1500,
+            "inputTokens": 800,
+            "modelsUsed": [
+              "gpt-5-codex"
+            ],
+            "outputTokens": 260,
+            "period": "2026-06-04",
+            "totalCost": 0.11,
+            "totalTokens": 2560
+          },
+          {
+            "inputTokens": 40,
+            "outputTokens": 10,
+            "period": "2026-06-05",
+            "totalTokens": 50
+          }
+        ],
+        "totals": {
+          "inputTokens": 2040,
+          "outputTokens": 610,
+          "totalTokens": 8740
+        }
+      },
+      "ccusage_session_report": {
+        "session": [
+          {
+            "agent": "claude",
+            "lastActivity": "2026-06-04",
+            "sessionId": "fixture-session-1",
+            "totalTokens": 6130
+          }
+        ]
+      },
+      "collection_status": "ok",
+      "collection_window": "daily",
+      "collector_release": {
+        "build_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+        "collector_version": "0.3.0",
+        "config_schema_version": 1,
+        "last_upgrade": {
+          "finished_at": "2026-06-05T08:59:00+08:00",
+          "from_version": "0.2.0",
+          "status": "succeeded",
+          "to_version": "0.3.0"
+        },
+        "parser_schema_version": 2,
+        "release_channel": "stable"
+      },
+      "host": "macbook-pro.local",
+      "machine": "macbook-pro",
+      "mswusage_codex_hourly_report": {
+        "collector": {
+          "coverage": {
+            "end": "2026-06-05T00:00:00+08:00",
+            "start": "2026-06-04T00:00:00+08:00"
+          },
+          "lookback_hours": 48,
+          "mode": "incremental"
+        },
+        "daily": [
+          {
+            "agent": "codex",
+            "date": "2026-06-04",
+            "total_tokens": 2500
+          }
+        ],
+        "drift": {
+          "baseline_agent": "codex",
+          "comparison_dates": [
+            "2026-06-04"
+          ],
+          "daily_codex_total_tokens": 2560,
+          "difference_percent": 2.3438,
+          "difference_tokens": 60,
+          "mswusage_codex_total_tokens": 2500,
+          "status": "ok",
+          "threshold_percent": 5.0
+        },
+        "generated_at": "2026-06-05T09:00:00+08:00",
+        "hourly": [
+          {
+            "agent": "codex",
+            "event_count": 1,
+            "hour": "2026-06-03T23:00:00+08:00",
+            "input_tokens": 111,
+            "output_tokens": 11,
+            "session_count": 1,
+            "total_tokens": 122
+          },
+          {
+            "agent": "codex",
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 900,
+            "event_count": 12,
+            "hour": "2026-06-04T09:00:00+08:00",
+            "input_tokens": 600,
+            "output_tokens": 180,
+            "reasoning_output_tokens": 60,
+            "session_count": 2,
+            "total_tokens": 1680
+          },
+          {
+            "agent": "codex",
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 600,
+            "event_count": 5,
+            "hour": "2026-06-04T10:00:00+08:00",
+            "input_tokens": 200,
+            "output_tokens": 80,
+            "reasoning_output_tokens": 20,
+            "session_count": 1,
+            "total_tokens": 880
+          }
+        ],
+        "provenance": "mswusage_codex_token_count",
+        "schema_version": 1,
+        "sessions": [
+          {
+            "session_id": "fixture-codex-session-1",
+            "total_tokens": 2560
+          }
+        ],
+        "source": "mswusage_codex",
+        "timezone": "Asia/Shanghai"
+      },
+      "observed_at": "<masked>",
+      "os_user": "wangzhipeng",
+      "platform": "darwin",
+      "schema_version": 1,
+      "source_id": "fixture-macbook-pro",
+      "timezone": "Asia/Shanghai",
+      "usage_daily": [
+        {
+          "agent": "claude",
+          "cacheCreationTokens": 90,
+          "cacheReadTokens": 4500,
+          "inputTokens": 1200,
+          "modelBreakdowns": [
+            {
+              "inputTokens": 1200,
+              "modelName": "claude-opus-4",
+              "outputTokens": 340,
+              "totalTokens": 6130
+            }
+          ],
+          "modelsUsed": [
+            "claude-opus-4"
+          ],
+          "outputTokens": 340,
+          "period": "2026-06-04",
+          "totalCost": 0.42,
+          "totalTokens": 6130
+        },
+        {
+          "agent": "codex",
+          "cacheCreationTokens": 0,
+          "cacheReadTokens": 1500,
+          "inputTokens": 800,
+          "modelsUsed": [
+            "gpt-5-codex"
+          ],
+          "outputTokens": 260,
+          "period": "2026-06-04",
+          "totalCost": 0.11,
+          "totalTokens": 2560
+        },
+        {
+          "agent": "unknown",
+          "inputTokens": 40,
+          "outputTokens": 10,
+          "period": "2026-06-05",
+          "totalTokens": 50
+        }
+      ],
+      "usage_hourly_facts": [
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:00+08:00",
+            "source": "device_config",
+            "window": "collection_time"
+          },
+          "agent": "codex",
+          "ai_account": {
+            "account_id": "openai:fixture-work",
+            "display_name": "Fixture Codex",
+            "label": "Codex \u5de5\u4f5c\u8d26\u53f7",
+            "provider": "openai",
+            "subscription": "pro"
+          },
+          "attribution_confidence": "account_confirmed",
+          "client": "codex",
+          "event_count": 12,
+          "fact_id": "codex:codex:fixture-macbook-pro:2026-06-04T09:00:00+08:00:2026-06-04T10:00:00+08:00:account_confirmed:openai:openai:fixture-work:mswusage_codex_token_count",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_codex_token_count",
+          "sensitive_payload": false,
+          "session_count": 2,
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 900,
+            "input_tokens": 600,
+            "output_tokens": 180,
+            "reasoning_output_tokens": 60,
+            "total_tokens": 1680
+          },
+          "window_end": "2026-06-04T10:00:00+08:00",
+          "window_start": "2026-06-04T09:00:00+08:00"
+        },
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:00+08:00",
+            "source": "device_config",
+            "window": "collection_time"
+          },
+          "agent": "codex",
+          "ai_account": {
+            "account_id": "openai:fixture-work",
+            "display_name": "Fixture Codex",
+            "label": "Codex \u5de5\u4f5c\u8d26\u53f7",
+            "provider": "openai",
+            "subscription": "pro"
+          },
+          "attribution_confidence": "account_confirmed",
+          "client": "codex",
+          "event_count": 5,
+          "fact_id": "codex:codex:fixture-macbook-pro:2026-06-04T10:00:00+08:00:2026-06-04T11:00:00+08:00:account_confirmed:openai:openai:fixture-work:mswusage_codex_token_count",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_codex_token_count",
+          "sensitive_payload": false,
+          "session_count": 1,
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 600,
+            "input_tokens": 200,
+            "output_tokens": 80,
+            "reasoning_output_tokens": 20,
+            "total_tokens": 880
+          },
+          "window_end": "2026-06-04T11:00:00+08:00",
+          "window_start": "2026-06-04T10:00:00+08:00"
+        },
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:05+08:00",
+            "source": "local_usage_ledger",
+            "window": "collection_time"
+          },
+          "agent": "claude",
+          "ai_account": {
+            "account_id": "unconfirmed_local_source:fixture-macbook-pro:claude",
+            "display_name": null,
+            "label": "\u672c\u673a\u6765\u6e90 / \u672a\u786e\u8ba4\u8d26\u53f7",
+            "provider": "claude",
+            "subscription": null
+          },
+          "attribution_confidence": "unconfirmed_local_source",
+          "client": "claude",
+          "event_count": 20,
+          "fact_id": "claude:claude:fixture-macbook-pro:2026-06-04T09:00:00+08:00:2026-06-04T10:00:00+08:00:unconfirmed_local_source:claude:unconfirmed_local_source:fixture-macbook-pro:claude:mswusage_claude_assistant_usage",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_claude_assistant_usage",
+          "sensitive_payload": false,
+          "session_count": 3,
+          "usage": {
+            "cache_creation_tokens": 90,
+            "cache_read_tokens": 4000,
+            "input_tokens": 1000,
+            "output_tokens": 300,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 5390
+          },
+          "window_end": "2026-06-04T10:00:00+08:00",
+          "window_start": "2026-06-04T09:00:00+08:00"
+        }
+      ],
+      "usage_ledger_runs": [
+        {
+          "agent": "codex",
+          "collector": {
+            "coverage": {
+              "end": "2026-06-05T00:00:00+08:00",
+              "start": "2026-06-04T00:00:00+08:00"
+            },
+            "lookback_hours": 48,
+            "mode": "incremental"
+          },
+          "facts_digest": "54f9b145479f49ca63799f64f57de4b08358c73565d4819e480db2f4176072bc",
+          "provenance": "mswusage_codex_token_count"
+        },
+        {
+          "agent": "claude",
+          "collector": {
+            "coverage": {
+              "end": "2026-06-05T00:00:00+08:00",
+              "start": "2026-06-04T00:00:00+08:00"
+            },
+            "lookback_hours": 48,
+            "mode": "incremental"
+          },
+          "facts_digest": "5d3444e95c979d26868d49f56c9912c64e9aaf617dd963ff0c21b35295af2afc",
+          "provenance": "mswusage_claude_assistant_usage"
+        }
+      ]
+    },
+    "request": {
+      "auth": true,
+      "method": "POST",
+      "path": "/ingest"
+    }
+  },
+  {
+    "name": "error-ccusage-missing-tool",
+    "payload": {
+      "collection_status": "missing_tool",
+      "collection_window": "daily",
+      "collector_release": {
+        "collector_version": "0.3.0",
+        "config_schema_version": 1,
+        "last_upgrade": {
+          "status": "never"
+        },
+        "parser_schema_version": 2,
+        "release_channel": "beta"
+      },
+      "error_message": "[Errno 2] No such file or directory: 'ccusage'",
+      "error_type": "missing_tool",
+      "host": "linux-dev.internal",
+      "machine": "linux-dev",
+      "observed_at": "<masked>",
+      "os_user": "wangzp",
+      "platform": "linux",
+      "schema_version": 1,
+      "source_id": "fixture-linux-dev",
+      "timezone": "Asia/Shanghai",
+      "usage_daily": []
+    },
+    "request": {
+      "auth": true,
+      "method": "POST",
+      "path": "/ingest"
+    }
+  }
+]

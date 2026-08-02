@@ -26,6 +26,12 @@ type IngestFixture = {
   limits_payloads: Record<string, unknown>[];
 };
 
+type CollectorPayloadRecord = {
+  name: string;
+  request: { method: string; path: string; auth: boolean };
+  payload: Record<string, unknown>;
+};
+
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const sourceReportStatesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0004_source_report_states.sql");
@@ -33,8 +39,21 @@ const auditIndexesMigrationPath = path.join(repoRoot, "cloudflare/migrations/000
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const writeModelPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts");
 const fixturePath = path.join(repoRoot, "tests/fixtures/native_worker_ingest_payloads.json");
-const ingestGoldenPath = path.join(repoRoot, "cloudflare/native-worker/test/ingest_value_golden.json");
+// 采集端（Python `DevicePusher`）真实发出的 /ingest payload。由 owner 模块产出，不是手写的。
+// 采集端永远是 Python、服务端是 TS，「采集端 payload ↔ 服务端 ingest」是一条消灭不掉的
+// 跨语言 wire contract，只能靠这份 fixture 在 Worker 侧真实回放来治理。
+const collectorPayloadFixturePath = path.join(repoRoot, "cloudflare/native-worker/test/collector_payload_fixture.json");
+// fixture 为了确定性把顶层 observed_at 抹成 "<masked>"，直接发会因时间格式非法被拒。
+// 只在测试里替换成这个固定的合法时间戳，fixture 文件本身不动。
+const collectorObservedAt = "2026-06-05T09:05:00+08:00";
+const maskedValue = "<masked>";
 const token = "contract-test-token";
+// 采集端当前上报的版本号。真值在 Python 侧的 `src/ai_usage_widget/version_contract.py`
+// 的 `COLLECTOR_VERSION`，由 fixture 固定下来带到 Worker 侧。
+// 常量一升，Python 的防陈旧测试和这里会一起红——正确动作是先重新生成 fixture：
+//     PYTHONPATH=src python3 scripts/gen_collector_payload_fixture.py
+// 再把这里的期望值改成新版本，而不是放宽断言。
+const fixtureCollectorVersion = "0.3.0";
 
 const volatileFields = new Set([
   "accepted_at",
@@ -670,6 +689,262 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(await auditRowCount("collection_runs")).toBe(2);
   });
 
+  it("收下采集端真实发出的完整上报，并把事实、身份与采集端版本都落库", async () => {
+    const record = await collectorPayload("ok-full-collection");
+    const facts = record.payload.usage_hourly_facts as Record<string, unknown>[];
+
+    const { body, rowsWritten } = await postCollectorPayload(record);
+
+    expect(rowsWritten).toBeGreaterThan(0);
+    expect(body).toMatchObject({
+      status: "accepted",
+      source_id: "fixture-macbook-pro",
+      accepted_at: collectorObservedAt,
+      facts_accepted: facts.length,
+    });
+    // collector_release 真的被解析了，而不是被当成未知字段丢掉。
+    expect(body.version).toMatchObject({
+      state: "current",
+      collector_version: fixtureCollectorVersion,
+      release_channel: "stable",
+      parser_schema_version: 2,
+      compatible: true,
+    });
+
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const storedFacts = await db.prepare(`
+      SELECT agent, client, window_start, window_end, timezone, machine_id, os_user,
+             ai_provider, ai_account_id, input_tokens, output_tokens, cache_creation_tokens,
+             cache_read_tokens, reasoning_output_tokens, total_tokens, event_count, session_count,
+             attribution_confidence, provenance
+      FROM usage_hourly_facts WHERE source_id = ? ORDER BY agent, window_start
+    `).bind("fixture-macbook-pro").all<Record<string, unknown>>();
+    expect(storedFacts.results).toEqual([
+      {
+        agent: "claude", client: "claude",
+        window_start: "2026-06-04T09:00:00+08:00", window_end: "2026-06-04T10:00:00+08:00",
+        timezone: "Asia/Shanghai", machine_id: "macbook-pro", os_user: "wangzhipeng",
+        ai_provider: "claude", ai_account_id: "unconfirmed_local_source:fixture-macbook-pro:claude",
+        input_tokens: 1000, output_tokens: 300, cache_creation_tokens: 90, cache_read_tokens: 4000,
+        reasoning_output_tokens: 0, total_tokens: 5390, event_count: 20, session_count: 3,
+        attribution_confidence: "unconfirmed_local_source", provenance: "mswusage_claude_assistant_usage",
+      },
+      {
+        agent: "codex", client: "codex",
+        window_start: "2026-06-04T09:00:00+08:00", window_end: "2026-06-04T10:00:00+08:00",
+        timezone: "Asia/Shanghai", machine_id: "macbook-pro", os_user: "wangzhipeng",
+        ai_provider: "openai", ai_account_id: "openai:fixture-work",
+        input_tokens: 600, output_tokens: 180, cache_creation_tokens: 0, cache_read_tokens: 900,
+        reasoning_output_tokens: 60, total_tokens: 1680, event_count: 12, session_count: 2,
+        attribution_confidence: "account_confirmed", provenance: "mswusage_codex_token_count",
+      },
+      {
+        agent: "codex", client: "codex",
+        window_start: "2026-06-04T10:00:00+08:00", window_end: "2026-06-04T11:00:00+08:00",
+        timezone: "Asia/Shanghai", machine_id: "macbook-pro", os_user: "wangzhipeng",
+        ai_provider: "openai", ai_account_id: "openai:fixture-work",
+        input_tokens: 200, output_tokens: 80, cache_creation_tokens: 0, cache_read_tokens: 600,
+        reasoning_output_tokens: 20, total_tokens: 880, event_count: 5, session_count: 1,
+        attribution_confidence: "account_confirmed", provenance: "mswusage_codex_token_count",
+      },
+    ]);
+
+    // 身份：source_id / machine / os_user 三层都必须落库，否则读模型无法按设备和账户归属。
+    const identity = await db.prepare(`
+      SELECT source_id, host, machine, os_user, platform FROM source_identities WHERE source_id = ?
+    `).bind("fixture-macbook-pro").first();
+    expect(identity).toEqual({
+      source_id: "fixture-macbook-pro", host: "macbook-pro.local", machine: "macbook-pro",
+      os_user: "wangzhipeng", platform: "darwin",
+    });
+    const machine = await db.prepare(`
+      SELECT machine_id, machine_name, host, platform FROM machines WHERE machine_id = ?
+    `).bind("macbook-pro").first();
+    expect(machine).toEqual({
+      machine_id: "macbook-pro", machine_name: "macbook-pro", host: "macbook-pro.local", platform: "darwin",
+    });
+    const osIdentity = await db.prepare(`
+      SELECT display_name FROM os_identities WHERE machine_id = ? AND os_user = ?
+    `).bind("macbook-pro", "wangzhipeng").first<{ display_name: string }>();
+    expect(osIdentity?.display_name).toBe("macbook-pro · wangzhipeng");
+
+    // collector_release.collector_version 必须同时落进审计运行和来源健康读模型。
+    const run = await db.prepare(`
+      SELECT collected_at, timezone, collector_version, status FROM collection_runs ORDER BY id DESC LIMIT 1
+    `).first();
+    expect(run).toEqual({
+      collected_at: collectorObservedAt, timezone: "Asia/Shanghai", collector_version: fixtureCollectorVersion, status: "ok",
+    });
+    const state = await db.prepare(`
+      SELECT collected_at, status, collector_version, first_period, last_period, error_type, error_message
+      FROM source_report_states WHERE source_id = ?
+    `).bind("fixture-macbook-pro").first();
+    expect(state).toEqual({
+      collected_at: collectorObservedAt, status: "ok", collector_version: fixtureCollectorVersion,
+      first_period: "2026-06-04", last_period: "2026-06-04", error_type: null, error_message: null,
+    });
+
+    // usage_ledger_runs 也必须被消费成账本运行，而不是静默丢掉。
+    const accuracy = await db.prepare(`
+      SELECT agent, provenance, mode, coverage_start, coverage_end, facts_digest, accuracy_status
+      FROM source_accuracy WHERE source_id = ? ORDER BY agent
+    `).bind("fixture-macbook-pro").all<Record<string, unknown>>();
+    expect(accuracy.results).toEqual([
+      {
+        agent: "claude", provenance: "mswusage_claude_assistant_usage", mode: "incremental",
+        coverage_start: "2026-06-04T00:00:00+08:00", coverage_end: "2026-06-05T00:00:00+08:00",
+        facts_digest: "5d3444e95c979d26868d49f56c9912c64e9aaf617dd963ff0c21b35295af2afc",
+        accuracy_status: "unverified",
+      },
+      {
+        agent: "codex", provenance: "mswusage_codex_token_count", mode: "incremental",
+        coverage_start: "2026-06-04T00:00:00+08:00", coverage_end: "2026-06-05T00:00:00+08:00",
+        facts_digest: "54f9b145479f49ca63799f64f57de4b08358c73565d4819e480db2f4176072bc",
+        accuracy_status: "unverified",
+      },
+    ]);
+
+    // ccusage_* 报告只是来源材料，不得回流进 legacy 归档表。
+    const counts = await tableCounts();
+    expect(counts.usage_daily).toBe(0);
+    expect(counts.usage_daily_models).toBe(0);
+    expect(counts.usage_hourly).toBe(0);
+    expect(counts.usage_blocks).toBe(0);
+  });
+
+  it("收下采集端上报的采集失败 payload，并把失败原因记进来源健康", async () => {
+    const record = await collectorPayload("error-ccusage-missing-tool");
+    expect(record.payload.usage_daily, "该场景的 usage_daily 必须为空").toEqual([]);
+
+    const { body, rowsWritten } = await postCollectorPayload(record);
+
+    // usage_daily 为空不等于报错：采集失败也必须被服务端收下并记录，否则设备会「静默消失」。
+    expect(rowsWritten).toBeGreaterThan(0);
+    expect(body).toMatchObject({
+      status: "accepted",
+      source_id: "fixture-linux-dev",
+      accepted_at: collectorObservedAt,
+      facts_accepted: 0,
+    });
+    expect(body.version).toMatchObject({ state: "current", collector_version: fixtureCollectorVersion, release_channel: "beta" });
+
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const state = await db.prepare(`
+      SELECT collected_at, status, collector_version, first_period, last_period, error_type, error_message
+      FROM source_report_states WHERE source_id = ?
+    `).bind("fixture-linux-dev").first();
+    expect(state).toEqual({
+      collected_at: collectorObservedAt,
+      status: "missing_tool",
+      collector_version: fixtureCollectorVersion,
+      first_period: null,
+      last_period: null,
+      error_type: "missing_tool",
+      error_message: "[Errno 2] No such file or directory: 'ccusage'",
+    });
+    const report = await db.prepare(`
+      SELECT status, error_type, error_message FROM source_reports WHERE source_id = ?
+    `).bind("fixture-linux-dev").first();
+    expect(report).toEqual({
+      status: "missing_tool",
+      error_type: "missing_tool",
+      error_message: "[Errno 2] No such file or directory: 'ccusage'",
+    });
+
+    const identity = await db.prepare(`
+      SELECT source_id, host, machine, os_user, platform FROM source_identities WHERE source_id = ?
+    `).bind("fixture-linux-dev").first();
+    expect(identity).toEqual({
+      source_id: "fixture-linux-dev", host: "linux-dev.internal", machine: "linux-dev",
+      os_user: "wangzp", platform: "linux",
+    });
+
+    const counts = await tableCounts();
+    expect(counts.usage_hourly_facts).toBe(0);
+    expect(counts.usage_daily).toBe(0);
+    expect(counts.collection_runs).toBe(1);
+  });
+
+  it("采集端发出的每个顶层字段都必须是 Worker 已声明并解析的 ingest 字段", async () => {
+    // 覆盖范围（据实写，别把它读成更大的保证）：
+    //   覆盖：字段压根不在 `type IngestRequest` 里 —— validateIngestPayload 既不报错也不解析，
+    //         采集端发了、服务端 200 收了、字段消失，两端都没有信号。
+    //   **这条断言今天还没抓到过真实 bug**：唯一已知实例是 ccusage_daily_status
+    //         （pusher 会发、Python 服务端校验、Worker 全文零命中，见 #78），但 pusher 只在
+    //         「ccusage 返回非法 JSON 而 ledger 仍可用」时才塞这个字段，本 fixture 的两个场景
+    //         都不触发，所以它现在不在 fixture 里，这条断言也就碰不到它。
+    //         补那个场景会让本用例**立刻变红**——因为 Worker 确实不认识该字段，红得对。
+    //         所以它必须和 #78 的修复（补进 Worker 还是从采集端摘掉）一起做，不能单独加。
+    //   覆盖：声明了却不从 payload 里取（declared 与 parsed 不相等）。
+    //   **不覆盖**：已声明、已解析、但下游零消费。此刻就有三个字段处在这个状态——
+    //         ccusage_session_report / ccusage_blocks_report / codex_hourly_status 在
+    //         write-model.ts 里除类型声明与 return 外没有任何持久化消费方，而这条用例是绿的。
+    //         所以本用例证明的是「Worker 认识这个字段」，不是「这个字段最终被用上了」。
+    //   为什么不补：要覆盖它得做「字段是否被下游消费」的静态检查，而字段可以经由解构、
+    //         别名、整体透传等形式被消费，静态检查会大量误报，很快会被当噪音关掉——
+    //         那就制造了一个新的假门禁。这条缺口应当靠**针对具体字段的落库断言**来补
+    //         （本文件上面那两条真实回放用例就是这么做的），不靠这里的正则。
+    const contract = await ingestRequestFieldContract();
+    expect(contract.declared, "write-model.ts 的 IngestRequest 声明解析失败").toContain("usage_hourly_facts");
+    expect(contract.declared.length, "解析出的已知字段数量异常，正则很可能没匹配到真正的声明").toBeGreaterThan(10);
+    // 声明了却不从 payload 里取同样等于静默丢弃，所以两个集合必须逐字相等。
+    expect([...contract.parsed].sort()).toEqual([...contract.declared].sort());
+
+    const records = await readCollectorPayloads();
+    // fixture 新增场景时必须同时补 Worker 侧回放，不允许只加 fixture 不加覆盖。
+    expect(records.map((item) => item.name).sort()).toEqual([
+      "error-ccusage-missing-tool",
+      "ok-full-collection",
+    ]);
+    for (const record of records) {
+      // fixture 的 request 块由 Python 侧从 pusher 真正发出的那次请求推导（path 取自实际
+      // POST 的 URL，auth 取自实际 headers 有没有 Authorization），不是手写的常量，
+      // 所以这条 toEqual 是在核对采集端的真实上报形态，而不是两处字面量互相比对。
+      expect(record.request, record.name).toEqual({ method: "POST", path: "/ingest", auth: true });
+      const unknownFields = Object.keys(record.payload).filter((key) => !contract.declared.includes(key));
+      expect(
+        unknownFields,
+        `${record.name}: 采集端发出的顶层字段没出现在 Worker 的 IngestRequest 声明里，会被静默丢弃`,
+      ).toEqual([]);
+    }
+  });
+
+  async function collectorPayload(name: string): Promise<CollectorPayloadRecord> {
+    const record = (await readCollectorPayloads()).find((item) => item.name === name);
+    expect(record, `采集端 payload fixture 必须仍然包含场景 ${name}`).toBeDefined();
+    return record as CollectorPayloadRecord;
+  }
+
+  /**
+   * 按 fixture 记录的 `request` 块真实回放一次采集端上报。
+   *
+   * method / path / auth 都**取自 fixture**，而 fixture 那一块是 Python 侧从 pusher 真正
+   * 发出的那次请求推导出来的（`tests/test_collector_payload_contract.py` 的
+   * `_request_descriptor`：path 来自实际 POST 的 URL，auth 来自实际 headers 里有没有
+   * Authorization）。所以这里不是「两处字面量互相比对」：采集端哪天改了上报路径、或不再
+   * 带认证，重新生成 fixture 后这里会真的打到别的 path / 不带 Authorization，
+   * 拿到 404 / 401 而变红。
+   */
+  async function postCollectorPayload(
+    record: CollectorPayloadRecord,
+  ): Promise<{ body: Record<string, unknown>; rowsWritten: number }> {
+    const response = await mf.dispatchFetch(`http://native.test${record.request.path}`, {
+      method: record.request.method,
+      headers: {
+        ...(record.request.auth ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(record.payload),
+    });
+    const text = await response.text();
+    // 采集端真实产出的 payload，生产服务端必须收得下；任何 4xx/5xx 都等于这条 wire contract 破了。
+    expect(response.status, `采集端 payload 未被接受: ${response.status} ${text}`).toBe(200);
+    return {
+      body: JSON.parse(text) as Record<string, unknown>,
+      rowsWritten: Number(response.headers.get("X-AIUsage-Rows-Written") ?? "NaN"),
+    };
+  }
+
   async function applyAllPayloads(
     ingestPayloads: Record<string, unknown>[],
     limitsPayloads: Record<string, unknown>[],
@@ -795,6 +1070,57 @@ describe.sequential("native TS Worker write API parity", () => {
     return Number(row?.count ?? 0);
   }
 });
+
+/**
+ * 读取采集端 payload fixture，并把顶层被掩码的 observed_at 换成固定合法时间戳。
+ * 只改内存里的副本，fixture 文件保持原样。
+ */
+async function readCollectorPayloads(): Promise<CollectorPayloadRecord[]> {
+  const records = JSON.parse(await readFile(collectorPayloadFixturePath, "utf8")) as CollectorPayloadRecord[];
+  expect(records.length, "采集端 payload fixture 不能为空").toBeGreaterThan(0);
+  return records.map((record) => {
+    const payload = { ...record.payload };
+    if (payload.observed_at === maskedValue) payload.observed_at = collectorObservedAt;
+    // fixture 将来多掩码一个字段时，必须在这里显式处理，不能带着 "<masked>" 发给 Worker。
+    expect(
+      maskedFieldPaths(payload),
+      `${record.name}: 出现未处理的掩码字段，测试会把 "<masked>" 原样发给 Worker`,
+    ).toEqual([]);
+    return { ...record, payload };
+  });
+}
+
+function maskedFieldPaths(value: unknown, trail = "$"): string[] {
+  if (value === maskedValue) return [trail];
+  if (Array.isArray(value)) return value.flatMap((item, index) => maskedFieldPaths(item, `${trail}[${index}]`));
+  if (value !== null && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .flatMap(([key, item]) => maskedFieldPaths(item, `${trail}.${key}`));
+  }
+  return [];
+}
+
+/**
+ * 从 write-model.ts 源码里静态取出 Worker 认识的 ingest 顶层字段：
+ * `declared` 是 `type IngestRequest` 的声明，`parsed` 是 `validateIngestPayload` 真正取出的字段。
+ */
+async function ingestRequestFieldContract(): Promise<{ declared: string[]; parsed: string[] }> {
+  const source = await readFile(writeModelPath, "utf8");
+  const declaration = source.match(/type IngestRequest = \{([\s\S]*?)\n\};/);
+  expect(declaration, "write-model.ts 必须仍然声明 type IngestRequest").not.toBeNull();
+  // 先断言锚点存在再 slice：indexOf 找不到会返回 -1，slice(-1) 拿到的是源码最后一个字符，
+  // 后续正则必然失配。那样虽然也会红，但红在莫名其妙的地方，排查要绕一圈。
+  expect(source, "write-model.ts 必须仍然有 function validateIngestPayload").toContain(
+    "function validateIngestPayload",
+  );
+  const validate = source.slice(source.indexOf("function validateIngestPayload"));
+  const returned = validate.match(/\n {2}return \{([\s\S]*?)\n {2}\};/);
+  expect(returned, "validateIngestPayload 必须仍然返回一个 IngestRequest 对象字面量").not.toBeNull();
+  return {
+    declared: Array.from((declaration as RegExpMatchArray)[1].matchAll(/^ {2}(\w+)\??:/gm)).map((match) => match[1]),
+    parsed: Array.from((returned as RegExpMatchArray)[1].matchAll(/^ {4}(\w+):/gm)).map((match) => match[1]),
+  };
+}
 
 async function bundleWorker(): Promise<string> {
   const outdir = path.join(tmpdir(), `aiusage-native-worker-${Date.now()}-${Math.random().toString(16).slice(2)}`);
