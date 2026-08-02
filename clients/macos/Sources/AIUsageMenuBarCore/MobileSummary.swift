@@ -10,6 +10,52 @@ public struct MobileSummary: Codable, Equatable, Sendable {
     public let sources: [MobileSource]
     public let breakdown: MobileBreakdown
     public let limits: MobileLimits
+    public let providerSlots: [MobileProviderSlot]
+    public let providerUsageCoverage: MobileProviderUsageCoverage
+
+    public init(
+        schemaVersion: Int,
+        client: String,
+        generatedAt: String?,
+        timezone: String?,
+        period: MobilePeriod,
+        trend: MobileTrend,
+        sources: [MobileSource],
+        breakdown: MobileBreakdown,
+        limits: MobileLimits,
+        providerSlots: [MobileProviderSlot] = [],
+        providerUsageCoverage: MobileProviderUsageCoverage = .unknown
+    ) {
+        self.schemaVersion = schemaVersion
+        self.client = client
+        self.generatedAt = generatedAt
+        self.timezone = timezone
+        self.period = period
+        self.trend = trend
+        self.sources = sources
+        self.breakdown = breakdown
+        self.limits = limits
+        self.providerSlots = providerSlots
+        self.providerUsageCoverage = providerUsageCoverage
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        client = try container.decode(String.self, forKey: .client)
+        generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+        timezone = try container.decodeIfPresent(String.self, forKey: .timezone)
+        period = try container.decode(MobilePeriod.self, forKey: .period)
+        trend = try container.decode(MobileTrend.self, forKey: .trend)
+        sources = try container.decode([MobileSource].self, forKey: .sources)
+        breakdown = try container.decode(MobileBreakdown.self, forKey: .breakdown)
+        limits = try container.decode(MobileLimits.self, forKey: .limits)
+        providerSlots = try container.decodeIfPresent([MobileProviderSlot].self, forKey: .providerSlots) ?? []
+        providerUsageCoverage = try container.decodeIfPresent(
+            MobileProviderUsageCoverage.self,
+            forKey: .providerUsageCoverage
+        ) ?? .unknown
+    }
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -21,6 +67,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         case sources
         case breakdown
         case limits
+        case providerSlots = "provider_slots"
+        case providerUsageCoverage = "provider_usage_coverage"
     }
 }
 
@@ -59,7 +107,9 @@ public extension MobileSummary {
                 byModel: [],
                 byDate: []
             ),
-            limits: MobileLimits(observedCount: 0, totalCount: 0, windows: [])
+            limits: MobileLimits(observedCount: 0, totalCount: 0, windows: []),
+            providerSlots: [],
+            providerUsageCoverage: .unknown
         )
     }
 }
@@ -229,6 +279,209 @@ public struct MobileLimits: Codable, Equatable, Sendable {
         case totalCount = "total_count"
         case windows
         case providers
+    }
+}
+
+public struct MobileProviderSlot: Codable, Equatable, Sendable, Identifiable {
+    public var id: String { provider }
+
+    public let provider: String
+    public let usage: MobileProviderUsage
+    public let quota: MobileProviderQuota
+
+    public init(provider: String, usage: MobileProviderUsage, quota: MobileProviderQuota) {
+        self.provider = provider
+        self.usage = usage
+        self.quota = quota
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        provider = try container.decode(String.self, forKey: .provider)
+        usage = try container.decodeIfPresent(MobileProviderUsage.self, forKey: .usage) ?? .missing
+        quota = try container.decodeIfPresent(MobileProviderQuota.self, forKey: .quota) ?? .missing()
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case provider
+        case usage
+        case quota
+    }
+}
+
+public struct MobileProviderUsage: Codable, Equatable, Sendable {
+    public let status: String
+    public let totalTokens: Int
+    public let inputTokens: Int
+    public let outputTokens: Int
+    public let cacheTokens: Int
+
+    public static let missing = MobileProviderUsage(
+        status: "missing",
+        totalTokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheTokens: 0
+    )
+
+    public init(
+        status: String,
+        totalTokens: Int,
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheTokens: Int
+    ) {
+        self.status = status
+        self.totalTokens = totalTokens
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheTokens = cacheTokens
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "missing"
+        totalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens) ?? 0
+        inputTokens = try container.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
+        outputTokens = try container.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
+        cacheTokens = try container.decodeIfPresent(Int.self, forKey: .cacheTokens) ?? 0
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case totalTokens = "total_tokens"
+        case inputTokens = "input_tokens"
+        case outputTokens = "output_tokens"
+        case cacheTokens = "cache_tokens"
+    }
+}
+
+public struct MobileProviderQuota: Codable, Equatable, Sendable {
+    public let status: String
+    public let reason: String?
+    public let lastVerifiedAt: String?
+    public let sourceID: String?
+    public let sourceType: String?
+    public let windows: [MobileLimitWindow]
+
+    public init(
+        status: String,
+        reason: String?,
+        lastVerifiedAt: String?,
+        sourceID: String?,
+        sourceType: String?,
+        windows: [MobileLimitWindow]
+    ) {
+        self.status = status
+        self.reason = reason
+        self.lastVerifiedAt = lastVerifiedAt
+        self.sourceID = sourceID
+        self.sourceType = sourceType
+        self.windows = windows
+    }
+
+    public static func missing(reason: String? = "no_data") -> MobileProviderQuota {
+        MobileProviderQuota(
+            status: "missing",
+            reason: reason,
+            lastVerifiedAt: nil,
+            sourceID: nil,
+            sourceType: nil,
+            windows: []
+        )
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "missing"
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        lastVerifiedAt = try container.decodeIfPresent(String.self, forKey: .lastVerifiedAt)
+        sourceID = try container.decodeIfPresent(String.self, forKey: .sourceID)
+        sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
+        windows = try container.decodeIfPresent([MobileLimitWindow].self, forKey: .windows) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case reason
+        case lastVerifiedAt = "last_verified_at"
+        case sourceID = "source_id"
+        case sourceType = "source_type"
+        case windows
+    }
+}
+
+public struct MobileProviderUsageCoverage: Codable, Equatable, Sendable {
+    public let status: String
+    public let totalTokens: Int
+    public let attributedTokens: Int
+    public let otherProviderTokens: Int
+    public let unattributedTokens: Int
+    private let hasCompleteStatistics: Bool
+
+    public static let unknown = MobileProviderUsageCoverage(
+        status: "unknown",
+        totalTokens: 0,
+        attributedTokens: 0,
+        otherProviderTokens: 0,
+        unattributedTokens: 0
+    )
+
+    public var isComplete: Bool {
+        hasCompleteStatistics &&
+            status == "complete" &&
+            attributedTokens == totalTokens &&
+            otherProviderTokens == 0 &&
+            unattributedTokens == 0
+    }
+
+    public init(
+        status: String,
+        totalTokens: Int,
+        attributedTokens: Int,
+        otherProviderTokens: Int,
+        unattributedTokens: Int
+    ) {
+        self.status = status
+        self.totalTokens = totalTokens
+        self.attributedTokens = attributedTokens
+        self.otherProviderTokens = otherProviderTokens
+        self.unattributedTokens = unattributedTokens
+        self.hasCompleteStatistics = true
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unknown"
+        let decodedTotalTokens = try container.decodeIfPresent(Int.self, forKey: .totalTokens)
+        let decodedAttributedTokens = try container.decodeIfPresent(Int.self, forKey: .attributedTokens)
+        let decodedOtherProviderTokens = try container.decodeIfPresent(Int.self, forKey: .otherProviderTokens)
+        let decodedUnattributedTokens = try container.decodeIfPresent(Int.self, forKey: .unattributedTokens)
+        totalTokens = decodedTotalTokens ?? 0
+        attributedTokens = decodedAttributedTokens ?? 0
+        otherProviderTokens = decodedOtherProviderTokens ?? 0
+        unattributedTokens = decodedUnattributedTokens ?? 0
+        hasCompleteStatistics = decodedTotalTokens != nil &&
+            decodedAttributedTokens != nil &&
+            decodedOtherProviderTokens != nil &&
+            decodedUnattributedTokens != nil
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encode(totalTokens, forKey: .totalTokens)
+        try container.encode(attributedTokens, forKey: .attributedTokens)
+        try container.encode(otherProviderTokens, forKey: .otherProviderTokens)
+        try container.encode(unattributedTokens, forKey: .unattributedTokens)
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case totalTokens = "total_tokens"
+        case attributedTokens = "attributed_tokens"
+        case otherProviderTokens = "other_provider_tokens"
+        case unattributedTokens = "unattributed_tokens"
     }
 }
 

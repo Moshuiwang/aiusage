@@ -16,13 +16,17 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.heroTotalText, "5.0K")
         XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · Cache 800")
         XCTAssertEqual(state.healthText, "2/2 正常")
-        XCTAssertEqual(state.primaryLimitText, "Codex session · 40% 已用")
+        XCTAssertEqual(state.primaryLimitText, "暂无可信额度")
         XCTAssertTrue(state.lastUpdatedText.hasSuffix("前"), "Expected relative time, got: \(state.lastUpdatedText)")
         XCTAssertEqual(state.sources.map(\.title), ["wang", "wang"])
         XCTAssertEqual(state.sources.first?.subtitle, "linux-dev · linux · 10:40 更新")
-        XCTAssertEqual(state.limitRows.first?.title, "Codex session")
-        XCTAssertEqual(state.limitRows.first?.subtitle, "40% 已用 · 60% 可用 · observed")
-        XCTAssertEqual(state.limitRows.first?.value, "15:40 重置")
+        XCTAssertTrue(state.limitRows.isEmpty)
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        XCTAssertTrue(state.quotaRings.allSatisfy { ring in
+            ring.outerPctText == "--" && ring.innerPctText == "--" &&
+                ring.outerTimeText == "--" && ring.innerTimeText == "--"
+        })
+        XCTAssertTrue(state.providerUsageCoverageText?.contains("未知") == true)
         XCTAssertEqual(state.breakdownSections.map(\.title), ["机器", "账户", "Agent", "模型", "日期"])
         XCTAssertEqual(state.breakdownSections.first?.rows.map(\.title), ["linux-dev", "macbook-pro"])
         XCTAssertEqual(state.breakdownSections.first?.rows.first?.subtitle, "1 个来源")
@@ -262,7 +266,17 @@ final class MenuBarViewModelTests: XCTestCase {
                 trend: summary.trend,
                 sources: summary.sources,
                 breakdown: summary.breakdown,
-                limits: duplicateLimits
+                limits: summary.limits,
+                providerSlots: [
+                    providerSlot(
+                        provider: "claude",
+                        windows: duplicateLimits.windows.filter { $0.provider == "claude" }
+                    ),
+                    providerSlot(
+                        provider: "codex",
+                        windows: duplicateLimits.windows.filter { $0.provider == "codex" }
+                    ),
+                ]
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-19T09:00:00+00:00")
@@ -339,7 +353,13 @@ final class MenuBarViewModelTests: XCTestCase {
                 trend: summary.trend,
                 sources: summary.sources,
                 breakdown: summary.breakdown,
-                limits: limits
+                limits: summary.limits,
+                providerSlots: [
+                    providerSlot(
+                        provider: "claude",
+                        windows: limits.windows.filter { $0.provider == "claude" }
+                    )
+                ]
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-24T15:31:00+08:00")
@@ -388,7 +408,18 @@ final class MenuBarViewModelTests: XCTestCase {
                 schemaVersion: summary.schemaVersion, client: summary.client,
                 generatedAt: "2026-07-18T10:30:00+08:00", timezone: summary.timezone,
                 period: summary.period, trend: summary.trend, sources: summary.sources,
-                breakdown: summary.breakdown, limits: limits
+                breakdown: summary.breakdown,
+                limits: summary.limits,
+                providerSlots: [
+                    providerSlot(
+                        provider: "claude",
+                        windows: limits.windows.filter { $0.provider == "claude" }
+                    ),
+                    providerSlot(
+                        provider: "codex",
+                        windows: limits.windows.filter { $0.provider == "codex" }
+                    ),
+                ]
             ),
             selectedPeriodID: "today",
             now: try date("2026-07-18T10:30:00+08:00")
@@ -406,29 +437,30 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(codex.outerPctText, "--")
         XCTAssertEqual(codex.sourceText, "Codex 官方")
         XCTAssertEqual(codex.updatedText, "08:00 更新")
-        XCTAssertEqual(codex.availabilityText, "暂不可用")
+        XCTAssertEqual(codex.availabilityText, "额度暂不可用")
     }
 
     func testQuotaRingKeepsStaleProviderSourceAndUpdateWhenValuesAreHidden() throws {
         let summary = try loadFixture()
-        let limits = MobileLimits(
-            observedCount: 0,
-            totalCount: 0,
-            windows: [],
-            providers: [
-                MobileLimitProviderStatus(
-                    provider: "claude", sourceID: "linux-biai-wangzhipeng",
-                    observedAt: "2026-07-18T10:00:00+08:00",
-                    sourceType: "oauth_usage_api", status: "stale"
-                )
-            ]
+        let claudeSlot = MobileProviderSlot(
+            provider: "claude",
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: "missing",
+                reason: "stale",
+                lastVerifiedAt: "2026-07-18T10:00:00+08:00",
+                sourceID: "linux-biai-wangzhipeng",
+                sourceType: "oauth_usage_api",
+                windows: []
+            )
         )
         let state = MenuBarViewModel.build(
             from: MobileSummary(
                 schemaVersion: summary.schemaVersion, client: summary.client,
                 generatedAt: "2026-07-18T12:30:00+08:00", timezone: summary.timezone,
                 period: summary.period, trend: summary.trend, sources: summary.sources,
-                breakdown: summary.breakdown, limits: limits
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [claudeSlot]
             ),
             selectedPeriodID: "today", now: try date("2026-07-18T12:30:00+08:00")
         )
@@ -437,15 +469,22 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(claude.outerPctText, "--")
         XCTAssertEqual(claude.sourceText, "BIAI · wangzhipeng")
         XCTAssertEqual(claude.updatedText, "10:00 更新")
-        XCTAssertEqual(claude.availabilityText, "暂不可用")
+        XCTAssertTrue(claude.availabilityText.contains("额度暂不可用"))
     }
 
     func testQuotaRingNeverCombinesWindowsFromDifferentSources() throws {
         let summary = try loadFixture()
         let commonReset = "2026-07-20T00:00:00+08:00"
-        let limits = MobileLimits(
-            observedCount: 2, totalCount: 2,
-            windows: [
+        let claudeSlot = MobileProviderSlot(
+            provider: "claude",
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: "available",
+                reason: nil,
+                lastVerifiedAt: "2026-07-18T10:20:00+08:00",
+                sourceID: "source-b",
+                sourceType: "oauth_usage_api",
+                windows: [
                 MobileLimitWindow(
                     sourceID: "source-a", provider: "claude", window: "session",
                     usedPercent: 10, remainingPercent: 90, resetAt: commonReset,
@@ -458,20 +497,16 @@ final class MenuBarViewModelTests: XCTestCase {
                     windowDurationMinutes: 10080, observedAt: "2026-07-18T10:20:00+08:00",
                     sourceType: "oauth_usage_api", confidence: "observed", status: "ok", official: true
                 ),
-            ],
-            providers: [
-                MobileLimitProviderStatus(
-                    provider: "claude", sourceID: "source-b", observedAt: "2026-07-18T10:20:00+08:00",
-                    sourceType: "oauth_usage_api", status: "ok"
-                )
-            ]
+                ]
+            )
         )
         let state = MenuBarViewModel.build(
             from: MobileSummary(
                 schemaVersion: summary.schemaVersion, client: summary.client,
                 generatedAt: "2026-07-18T10:30:00+08:00", timezone: summary.timezone,
                 period: summary.period, trend: summary.trend, sources: summary.sources,
-                breakdown: summary.breakdown, limits: limits
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [claudeSlot]
             ),
             selectedPeriodID: "today", now: try date("2026-07-18T10:30:00+08:00")
         )
@@ -516,6 +551,29 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(paths.periodCacheDirectoryURL.lastPathComponent, "summaries")
         XCTAssertEqual(paths.cacheURL(forPeriod: "today").lastPathComponent, "today.json")
         XCTAssertEqual(paths.logURL.lastPathComponent, "menu-bar.log")
+    }
+
+    private func providerSlot(
+        provider: String,
+        windows: [MobileLimitWindow],
+        status: String = "available",
+        reason: String? = nil,
+        sourceID: String? = nil,
+        sourceType: String? = nil,
+        lastVerifiedAt: String? = nil
+    ) -> MobileProviderSlot {
+        MobileProviderSlot(
+            provider: provider,
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: status,
+                reason: reason,
+                lastVerifiedAt: lastVerifiedAt ?? windows.compactMap(\.observedAt).max(),
+                sourceID: sourceID ?? windows.first?.sourceID,
+                sourceType: sourceType ?? windows.first?.sourceType,
+                windows: windows
+            )
+        )
     }
 
     private func loadFixture() throws -> MobileSummary {

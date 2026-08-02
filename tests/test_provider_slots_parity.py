@@ -28,6 +28,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = REPO_ROOT / "cloudflare" / "migrations" / "0001_initial_schema.sql"
 SCENARIO_DIR = REPO_ROOT / "cloudflare" / "native-worker" / "test" / "provider_slots"
 GOLDEN_PATH = REPO_ROOT / "cloudflare" / "native-worker" / "test" / "provider_slots_golden.json"
+MACOS_FIXTURE_PATH = (
+    REPO_ROOT
+    / "clients"
+    / "macos"
+    / "Tests"
+    / "AIUsageMenuBarCoreTests"
+    / "Fixtures"
+    / "provider-slots-owner-fixture.json"
+)
 
 TIMEZONE = "Asia/Shanghai"
 FIXED_NOW = "2026-06-03T12:00:00+08:00"
@@ -146,6 +155,17 @@ class TestProviderSlotsCrossImplementationContract(unittest.TestCase):
                 "13-third-party-provider-without-slot.sql",
             ],
         )
+
+    def test_macos_fixture_is_regenerated_from_every_mobile_owner_record(self) -> None:
+        """Mac fixture must stay byte-for-byte equivalent to every owner mobile read model."""
+        expected = [
+            record for record in _collect_records()
+            if record["name"].endswith(":mobile-summary")
+        ]
+        actual = json.loads(MACOS_FIXTURE_PATH.read_text(encoding="utf-8"))
+
+        self.assertEqual(len(expected), 13)
+        self.assertEqual(actual, expected)
 
     def test_golden_covers_every_quota_missing_reason(self) -> None:
         golden = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))

@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
+from zoneinfo import ZoneInfo
 
 from .limits import LimitContractError, LimitWindow, parse_limit_window
 
@@ -31,12 +32,12 @@ _CLI_WINDOW_PATTERNS = (
 _CLI_NEW_WINDOW_PATTERNS = (
     ("session", 300, re.compile(
         r"Current\s+session:\s*([0-9]+(?:\.[0-9]+)?)%\s+used\s*[·•]\s*resets\s+"
-        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+(?::[0-9]+)?\s*[ap]m)\s*\([^)]+\)",
+        r"([A-Za-z]+\s+[0-9]+(?:,\s+[0-9]{4})?\s*(?:at|,)\s*[0-9]+(?::[0-9]+)?\s*[ap]m)\s*\(([^)]+)\)",
         re.IGNORECASE,
     )),
     ("week", 10080, re.compile(
         r"Current\s+week(?:\s+\([^)]+\))?:\s*([0-9]+(?:\.[0-9]+)?)%\s+used\s*[·•]\s*resets\s+"
-        r"([A-Za-z]+\s+[0-9]+\s+at\s+[0-9]+(?::[0-9]+)?\s*[ap]m)\s*\([^)]+\)",
+        r"([A-Za-z]+\s+[0-9]+(?:,\s+[0-9]{4})?\s*(?:at|,)\s*[0-9]+(?::[0-9]+)?\s*[ap]m)\s*\(([^)]+)\)",
         re.IGNORECASE,
     )),
 )
@@ -148,7 +149,11 @@ def _parse_cli_new_format(text: str, *, observed_at: str) -> List[LimitWindow]:
         if match is None:
             return []
         used_percent = float(match.group(1))
-        reset_at = _parse_human_reset_at(match.group(2), observed_at=observed_at)
+        reset_at = _parse_human_reset_at(
+            match.group(2),
+            observed_at=observed_at,
+            timezone_name=match.group(3),
+        )
         windows.append(
             parse_limit_window(
                 {
@@ -168,15 +173,16 @@ def _parse_cli_new_format(text: str, *, observed_at: str) -> List[LimitWindow]:
     return windows
 
 
-def _parse_human_reset_at(time_text: str, *, observed_at: str) -> str:
-    """Convert 'Jun 19 at 6:09pm' to ISO8601, using observed_at for UTC offset and year context."""
+def _parse_human_reset_at(time_text: str, *, observed_at: str, timezone_name: str | None = None) -> str:
+    """Convert Claude's human reset time to ISO8601 without losing its timezone."""
     try:
         observed = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
     except ValueError as exc:
         raise LimitContractError("claude_cli_schema_invalid", "observed_at must be ISO 8601") from exc
 
     m = re.match(
-        r"([A-Za-z]+)\s+([0-9]+)\s+at\s+([0-9]+)(?::([0-9]+))?\s*(am|pm)",
+        r"([A-Za-z]+)\s+([0-9]+)(?:,\s*([0-9]{4}))?\s*(?:at|,)\s*"
+        r"([0-9]+)(?::([0-9]+))?\s*(am|pm)",
         time_text.strip(),
         re.IGNORECASE,
     )
@@ -187,23 +193,36 @@ def _parse_human_reset_at(time_text: str, *, observed_at: str) -> str:
     if month is None:
         raise LimitContractError("claude_cli_schema_invalid", f"Unknown month: {m.group(1)!r}")
     day = int(m.group(2))
-    hour = int(m.group(3))
-    minute = int(m.group(4) or "0")
-    if m.group(5).lower() == "am":
+    explicit_year = int(m.group(3)) if m.group(3) else None
+    hour = int(m.group(4))
+    minute = int(m.group(5) or "0")
+    if m.group(6).lower() == "am":
         hour = 0 if hour == 12 else hour
     else:
         hour = 12 if hour == 12 else hour + 12
 
-    utc_offset = observed.utcoffset()
-    tz = dt_timezone(utc_offset) if utc_offset is not None else dt_timezone.utc
-    year = observed.year
+    tz = _timezone_from_label(timezone_name, observed)
+    year = explicit_year or observed.year
     try:
         candidate = datetime(year, month, day, hour, minute, 0, tzinfo=tz)
     except ValueError as exc:
         raise LimitContractError("claude_cli_schema_invalid", f"Invalid date: {time_text!r}") from exc
-    if candidate < observed - timedelta(hours=1):
+    if explicit_year is None and candidate < observed - timedelta(hours=1):
         candidate = datetime(year + 1, month, day, hour, minute, 0, tzinfo=tz)
     return candidate.isoformat()
+
+
+def _timezone_from_label(timezone_name: str | None, observed: datetime):
+    label = (timezone_name or "").strip()
+    if label.upper() in {"UTC", "GMT", "Z"}:
+        return dt_timezone.utc
+    if label:
+        try:
+            return ZoneInfo(label)
+        except Exception:
+            pass
+    utc_offset = observed.utcoffset()
+    return dt_timezone(utc_offset) if utc_offset is not None else dt_timezone.utc
 
 
 def _parse_cli_limit_message(text: str, *, observed_at: str) -> List[LimitWindow]:
