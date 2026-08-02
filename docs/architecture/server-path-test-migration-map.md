@@ -16,17 +16,30 @@
 映射表本身可以填满，但下面三件事没解决就动刀，**删除会造成真实的覆盖率下降**，
 而这正是门禁要防的事。
 
-### 阻断 P0：`ccusage_daily_status` 在 Worker 上根本不存在（已立 Issue #78）
+### ~~阻断 P0：`ccusage_daily_status` 在 Worker 上根本不存在~~（#78 已收口，2026-08-02）
 
-采集端 `pusher.py` 会发这个字段（5 处构造），Python 服务端 `ingest.py:134-137` 校验它，
-**Worker 侧全文零命中**——`cloudflare/native-worker/` 里唯一提到它的地方是
-`test/ingest.test.ts:872` 的一段注释，明确写着「Worker 确实不认识该字段」。
+> **本节是历史快照，阻断已解除。** #78 的 PM 决策是**从采集端摘掉该字段，不补进 Worker**：
+> 它在生产（Worker + D1）上从来没被解析过，留着只是让 Python 侧独有一条产不出结论的诊断路径。
+>
+> 收口后的事实：`pusher.py` 不再发（三条产出路径全部清理），`ingest.py` 不再声明也不再校验，
+> `server_services.py` 不再据它回填来源健康。向后兼容由**一对跨实现测试**守住——
+> Python 半边 `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`、
+> Worker 半边 `ingest.test.ts`「老版本采集端仍在发的 ccusage_daily_status 被当未知字段忽略」，
+> 读同一份探针 `cloudflare/native-worker/test/legacy_collector_payload_ccusage_daily_status.json`，
+> 断言同一组可观测结果：不报错、不解析、不落库。
+>
+> **已知代价（PM 已知悉，不新增替代字段）**：ccusage 挂了但账本仍可用时，payload 是
+> `collection_status: "ok"` 且不带 `error_type` / `error_message`，所以「ccusage 在这台设备上
+> 装挂了」不再被上报。该代价由 `test_pusher.py`、合同 fixture 的
+> `partial-ccusage-missing-tool-ledger-ok` 场景和 Worker 侧对应用例三处钉死。
+>
+> 顺带补齐的盲区：合同 fixture 原先只有「全成功」「全失败」两个场景，碰不到这个字段，
+> 所以 `ingest.test.ts` 那条「顶层字段必须被 Worker 声明并解析」的断言对它有盲区。
+> #78 补上了部分失败场景。
 
-受影响的 4 条测试（`test_ingest_contract.py` 3 条 + `test_server_services.py` 1 条）
-是这个行为**今天唯一的守卫**。删掉它们 = 采集失败诊断信息在生产上静默丢弃，且再也没有信号。
-
-→ **#74 不得在 #78 收口前删除这 4 条。** #78 两种收口方式都能解锁：
-Worker 补上该字段（则 4 条迁 W），或从采集端摘掉该字段（则 4 条废弃且理由成立）。
+原始记录（收口前）：采集端 `pusher.py` 会发这个字段（5 处构造），Python 服务端
+`ingest.py:134-137` 校验它，**Worker 侧全文零命中**。受影响的 4 条测试
+（`test_ingest_contract.py` 3 条 + `test_server_services.py` 1 条）曾是这个行为唯一的守卫。
 
 ### 阻断 P1：三份「合同 fixture」的生产者全部是即将被删的 Python 读模型
 
@@ -263,7 +276,7 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 | 行号 | 测试函数 | 守什么 | 归属 | 理由 / 目标 |
 | --- | --- | --- | --- | --- |
 | 57 | `test_ingest_service_preserves_summary_contract` | ingest 服务落库后 summary 合同不变 | **迁 W**（`ingest.test.ts:85` / `:100`） | 已覆盖 |
-| 84 | `test_ingest_with_optional_ccusage_daily_status_keeps_source_health_ok` | 带可选 `ccusage_daily_status` 时来源健康仍为 ok | **待定 / 阻断 P0** | Worker 全文不认识 `ccusage_daily_status`（#78）。#78 收口前不得删 |
+| 84 | `test_ingest_ignores_the_dropped_ccusage_daily_status_field`（#78 前名为 `..._with_optional_..._keeps_source_health_ok`） | 老版本采集端发来该字段时被忽略、不写进来源健康 | **迁 W**（`ingest.test.ts`「老版本采集端仍在发的 ccusage_daily_status 被当未知字段忽略」） | 阻断已解除（#78 摘除该字段）。断言方向已反转：从「错误信息被回填」改成「错误信息为空」 |
 | 144 | `test_ingest_retry_does_not_count_as_a_second_full_scan` | 重试不被当成第二次完整扫描（影响权威删除判定） | **迁 W**（`ingest.test.ts:519`「requires two complete matching scans before verification and authoritative deletion」+ `:652`） | 已覆盖 |
 | 214 | `test_mobile_summary_service_reuses_summary_snapshot` | 移动端服务复用同一份 summary 快照，不重算 | **废弃** | 断言的是 Python 服务层内部的对象复用，不是对外行为。Worker 的 `buildMobile` 结构上就建立在 `buildSummary` 之上（`read-model.ts:419`），两端口径一致性由 `value_golden.json` 的 summary/mobile **成对**记录守护 |
 | 238 | `test_health_service_reads_existing_snapshot_without_rebuilding` | health 读现成快照，不触发重算 | **废弃** | 「读 `latest.json` 而不重建」是 Python 的快照文件模型特有的性能契约。Worker 的 `/api/health` 直接查 D1，没有快照文件；health 的形状与「不读归档表」由 `web_surface.test.ts:111` / `:150` 守 |
@@ -295,9 +308,7 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 | 126 | `test_accepts_usage_ledger_accuracy_evidence` | ledger 准确性证据被接受 | **迁 W**（`ingest.test.ts:519`） | 已覆盖 |
 | 147 | `test_rejects_invalid_mswusage_codex_hourly_report_shape` | 非法 mswusage 形状被拒 | **迁 W** ⚠️（`ingest.test.ts` 🆕） | Worker 有 `WriteValidationError` 路径，但无该形状的拒绝断言 |
 | 156 | `test_accepts_usage_hourly_facts` | `usage_hourly_facts` 被接受并落库 | **迁 W**（`ingest.test.ts:85`） | 已覆盖 |
-| 190 | `test_accepts_optional_ccusage_daily_status` | 可选采集失败诊断字段被接受 | **待定 / 阻断 P0** | Worker 零命中（#78） |
-| 203 | `test_rejects_invalid_ccusage_daily_status_shape` | 该字段非 object 时被拒 | **待定 / 阻断 P0** | 同上 |
-| 212 | `test_rejects_incomplete_ccusage_daily_status` | 该字段缺 `status`/`error_type`/`error_message` 时被拒 | **待定 / 阻断 P0** | 同上 |
+| 190 | `test_ignores_the_dropped_ccusage_daily_status_field`（#78 把原先 3 条合并成这 1 条） | 该字段的四种形态一律既不报错也不解析 | **迁 W**（`ingest.test.ts`「老版本采集端仍在发的 ccusage_daily_status 被当未知字段忽略」） | 阻断已解除（#78 摘除该字段）。原「非 object 被拒」「缺键被拒」两条**故意废弃**：Worker 对未知顶层字段本来就不拒，Python 侧再拒就是两个实现不一致 |
 | 224 | `test_rejects_usage_hourly_facts_missing_required_field` | hourly fact 缺必填字段被拒 | **迁 W** ⚠️（`ingest.test.ts` 🆕） | Worker 实现存在，断言缺失 |
 | 233 | `test_accepts_collector_release_and_flattens_it` | 版本块被接受并扁平化 | **迁 W**（`version-contract.test.ts:82`） | 已覆盖 |
 | 256 | `test_missing_collector_release_degrades_instead_of_failing` | 缺整块只降级不 500 | **迁 W**（`version-contract.test.ts:122`） | 已覆盖 |
@@ -587,7 +598,8 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 行号 | 测试函数 | 守什么 | 归属 | 理由 / 目标 |
 | --- | --- | --- | --- | --- |
 | 155 | `test_initial_d1_migration_matches_sqlite_schema` | D1 首迁与 SQLite schema 逐列一致（镜像守卫） | **废弃 + 迁 W** | 比对对象（`_ensure_schema`）随 `storage_sqlite` 消失，镜像守卫失去意义 → 废弃；但 #74 验收要求 D1 自立的 schema 测试，需**新增**「fresh install schema 列布局快照」用例接替它守的「列不许悄悄漂移」 |
-| 190 | `test_full_migration_chain_matches_fresh_schema_columns` | 全链路迁移与全新安装落到同一列布局 | **留 P** | 不使用 `_ensure_schema`，纯 D1 迁移行为，删除待删模块不打断 |
+| 190 | `test_full_migration_chain_matches_fresh_schema`（#75 前名为 `..._columns`，已扩展到索引维度） | 全链路迁移与全新安装落到同一套表、列与索引 | **留 P** | 不使用 `_ensure_schema`，纯 D1 迁移行为，删除待删模块不打断 |
+| 260 | `test_backfilled_indexes_match_their_owning_migration`（#75 新增） | 回填进 0001 的索引与其 owner 迁移里的定义一致 | **留 P** | 纯 D1 迁移行为。专防「索引名对、表或列错」——`IF NOT EXISTS` 会让迁移链继承 0001 的错误定义，两条路径「一致地错」，上一条守卫看不见 |
 | 228 | `test_collector_version_migration_upgrades_deployed_table_without_data_loss` | 0007 在既有数据上升级不丢数据 | **留 P** | 同上 |
 | 290 | `test_collector_version_migration_rerun_keeps_schema_but_resets_collector_version` | 手工重跑 0007 的特征化（结构可重复、值不保留） | **留 P** | 同上 |
 | 345 | `test_limit_window_migration_keeps_latest_row_for_stable_key` | 额度窗口迁移按稳定 key 保留最新行 | **留 P** | 同上 |
@@ -673,7 +685,7 @@ import 自 `mobile_summary.build_mobile_summary`（第 23 行）与 `version_con
 | 4 | **版本判定细节（枚举拒绝 / 优先级 / 超前 / 回报策略 / 嵌套脱敏 / update_available 不拒收）** | 6 | 实现都在 `version-contract.ts`，用例只覆盖了 unsupported 与四态读取面 | 判定策略被误改不会红 |
 | 5 | **today 趋势的五条派生规则** | 5 | `read-model.ts` 的 `addBlockToHourBuckets`(902) / `dedupeCumulativeBlockRows`(941) / `codexHourlyContext`(1070) / `capTodayHourlyToPeriodTotals`(1014) 全部已实现；Worker 测试目录 **`cap` 零命中**、`drift` 只在写侧命中、正面 block 分摊无用例 | 假尖峰、重复计数、上午用量消失、超额趋势——这几类**用户直接看得见的错**失去守卫 |
 | 6 | **移动端账户/套餐标签的安全处理** | 5 | `mobile-summary.ts:488 safeAccountLabel` / `:500 safePlanLabel` / `:517 titlePlanPart` / `:473 mergeAccountContext` 已实现；`redact` 关键字在 Worker 测试里只命中 `version-contract.test.ts` | **安全相关**：账户标签脱敏、套餐名人性化、多来源合并全部无用例 |
-| 7 | **`ccusage_daily_status` 整个字段（阻断 P0 / #78）** | 4 | Worker 全文零命中，仅 `ingest.test.ts:872` 注释里被承认 | 采集失败诊断在生产上静默丢弃，删除后无任何信号 |
+| 7 | ~~**`ccusage_daily_status` 整个字段（阻断 P0 / #78）**~~ | 0 | **已收口**：字段从采集端摘除，两侧一致忽略，向后兼容由跨实现探针守住 | 缺口关闭。残留的已知代价是「ccusage 挂了但账本可用」时失败原因不再上报，见第 1 节 |
 | 8 | **`verify-cloud` fixture 的 owner 绑定** | 4 | fixture 的 owner 从 Python 读模型换边后，无等价「fixture 由 owner 产出」守卫；`api_contract_golden` 的 Worker 侧生成器同样缺位 | fixture 退回手写状态，违反 AGENTS.md「fixture 必须由 owner 模块产出」 |
 | 9 | **同机多 OS 用户分组** | 4 | `seed.sql` 只有 1 条 `os_identities`，`os_users` 在 `value_golden.json` **零命中** | by-machine 分组这条产品特性在 Worker 侧从未被真正回放 |
 | 10 | **版本状态词表与严重度** | 3 | 常量已存在，无词表级断言 | 词表被误改不会红 |

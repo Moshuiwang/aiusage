@@ -81,7 +81,13 @@ class TestServerServices(unittest.TestCase):
         self.assertEqual(summary_data["summary"]["total_tokens"], 2000)
         self.assertEqual(summary_data["source_status"][0]["status"], "ok")
 
-    def test_ingest_with_optional_ccusage_daily_status_keeps_source_health_ok(self) -> None:
+    def test_ingest_ignores_the_dropped_ccusage_daily_status_field(self) -> None:
+        """#78：老版本采集端仍会发这个字段，收下、不落库、也不据此写来源健康。
+
+        此前 Python 侧会在 ``collection_status == "ok"`` 时把它的 error_message 回填进
+        来源健康——那是**只有 Python 有**的诊断路径，生产用的 Worker 从来产不出这个结论。
+        断言从「错误信息被回填」改成「错误信息为空」，正是这次摘除的可观测结果。
+        """
         payload = dict(self.valid_payload)
         payload["usage_daily"] = []
         payload["ccusage_daily_status"] = {
@@ -137,9 +143,18 @@ class TestServerServices(unittest.TestCase):
                 account_filter=None,
             )
         )
+        # 用量照常落库：忽略诊断字段不等于连数据一起丢。
         self.assertEqual(summary_data["summary"]["total_tokens"], 155)
         self.assertEqual(summary_data["source_status"][0]["status"], "ok")
-        self.assertEqual(summary_data["source_status"][0]["error_message"], "ccusage not found")
+        # 该字段的内容一个字都不许流进来源健康。
+        # 不用 `.get("error_type")` 断言——source_status 条目根本没有这个 key
+        # （见 `snapshot_source_health.py` 的 `_source_status_entry`），那会是一条恒真断言。
+        self.assertIsNone(summary_data["source_status"][0]["error_message"])
+        self.assertNotIn(
+            payload["ccusage_daily_status"]["error_message"],
+            json.dumps(summary_data, ensure_ascii=False),
+            "被摘除字段的内容出现在了 summary 里",
+        )
 
     def test_ingest_retry_does_not_count_as_a_second_full_scan(self) -> None:
         payload = dict(self.valid_payload)

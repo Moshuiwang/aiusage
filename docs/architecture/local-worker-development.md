@@ -114,9 +114,12 @@ Token 是 `wrangler.local.toml` 里的 `AIUSAGE_TOKEN = "contract-test-token"`�
 
 ## migrations 为什么走 `migrations apply` 而不是手工灌 0001
 
-`0001_initial_schema.sql` 是**累计快照**——0002/0003/0004/0006 的成果都已回填进去。
-所以手工只灌 0001 也能跑起来，但拿到的 schema 与生产**不完全一致**：
-0005 的两个审计索引从未回填进 0001（见 #75）。
+`0001_initial_schema.sql` 是**累计快照**——0002/0003/0004/0005/0006 的成果都已回填进去
+（0005 的两个审计索引由 #75 补齐）。所以手工只灌 0001 目前能拿到与迁移链一致的 schema，
+仓库里有守卫测试钉住这一点。
+
+但**这是靠测试维持的不变量，不是机制保证的**：新增迁移时如果忘了回填，0001 会再次落后，
+只不过这次会被 `tests/test_d1_schema_migration.py` 拦下来。
 
 `wrangler d1 migrations apply` 按序重放 0001..000N，与生产 D1 走同一条路径，
 是唯一能保证本地与生产 schema 一致的方式。

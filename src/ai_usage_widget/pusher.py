@@ -251,7 +251,13 @@ class DevicePusher:
 
         ccusage_data: dict[str, Any] = {}
         usage_daily: list[dict[str, Any]] = []
-        ccusage_daily_status = None
+        # ccusage daily 的失败说明。#78 起它**只是本地变量**，不再作为 payload 字段
+        # （`ccusage_daily_status`）上报：生产服务端是 Cloudflare Worker，全文不认识那个
+        # 字段，发过去只会被静默丢弃。它现在唯一的去处是下面的「全失败」判定——
+        # ccusage 和账本同时不可用时，由 `_push_source_status` 走 collection_status /
+        # error_type / error_message 三个两侧都认识的字段如实上报。
+        # 元组形态是刻意的：它没有 dict 的形状，不可能被顺手塞回 payload。
+        ccusage_daily_failure: tuple[str, str, str] | None = None
         ccusage_daily_available = False
 
         # 2. 解析 ccusage 的数据并规范化 (TP-V2-006)
@@ -259,11 +265,11 @@ class DevicePusher:
             try:
                 parsed_ccusage = json.loads(res.stdout) if res.stdout else {}
                 if not isinstance(parsed_ccusage, dict):
-                    ccusage_daily_status = {
-                        "status": "unsupported_shape",
-                        "error_type": "unsupported_shape",
-                        "error_message": "ccusage JSON must be an object",
-                    }
+                    ccusage_daily_failure = (
+                        "unsupported_shape",
+                        "unsupported_shape",
+                        "ccusage JSON must be an object",
+                    )
                 else:
                     ccusage_data = parsed_ccusage
                     ccusage_daily_available = True
@@ -277,17 +283,17 @@ class DevicePusher:
                                 normalized_row["agent"] = "unknown"
                             usage_daily.append(normalized_row)
             except json.JSONDecodeError as exc:
-                ccusage_daily_status = {
-                    "status": "invalid_json",
-                    "error_type": "invalid_json",
-                    "error_message": f"Failed to decode ccusage JSON: {exc}",
-                }
+                ccusage_daily_failure = (
+                    "invalid_json",
+                    "invalid_json",
+                    f"Failed to decode ccusage JSON: {exc}",
+                )
         else:
-            ccusage_daily_status = {
-                "status": res.error_type or "command_failed",
-                "error_type": res.error_type or "command_failed",
-                "error_message": res.error_message or "ccusage command failed",
-            }
+            ccusage_daily_failure = (
+                res.error_type or "command_failed",
+                res.error_type or "command_failed",
+                res.error_message or "ccusage command failed",
+            )
 
         ccusage_session_report = None
         if ccusage_daily_available:
@@ -379,12 +385,18 @@ class DevicePusher:
             mswusage_codex_hourly_report is not None
             or mswusage_claude_report is not None
         )
-        if ccusage_daily_status is not None and not ledger_collection_available:
+        if ccusage_daily_failure is not None and not ledger_collection_available:
+            status, error_type, error_message = ccusage_daily_failure
             return self._push_source_status(
-                status=str(ccusage_daily_status["status"]),
-                error_type=str(ccusage_daily_status["error_type"]),
-                error_message=str(ccusage_daily_status["error_message"]),
+                status=status,
+                error_type=error_type,
+                error_message=error_message,
             )
+        # 注意（#78 的已知代价）：ccusage 挂了但账本仍可用时不走上面这条心跳，
+        # 而下面的 payload 是 `collection_status: "ok"` 且不带 error_type / error_message，
+        # 所以 **ccusage 自身的失败原因不再被上报**。此前由 `ccusage_daily_status` 携带，
+        # 但那个字段在生产（Worker）上零命中，本来就到不了任何人眼前。
+        # 要恢复这类诊断，需要的是一个两侧都实现的字段，不是把旧字段塞回来。
 
         # 3. 组织 Ingest Payload
         # ISO 8601 格式的 observed_at 时间戳
@@ -405,8 +417,6 @@ class DevicePusher:
         }
         if ccusage_daily_available:
             payload["ccusage_daily_report"] = ccusage_data
-        if ccusage_daily_status is not None:
-            payload["ccusage_daily_status"] = ccusage_daily_status
         if ccusage_session_report is not None:
             payload["ccusage_session_report"] = ccusage_session_report
         if ccusage_blocks_report is not None:

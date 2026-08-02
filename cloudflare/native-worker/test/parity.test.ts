@@ -28,6 +28,10 @@ const seedSqlPath = path.join(repoRoot, "cloudflare/native-worker/test/seed.sql"
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const token = "contract-test-token";
 const fixedNow = "2026-06-03T12:00:00+08:00";
+// 与 Python 合同场景 `tests/test_api_contract.py::STALE_COLLECTED_AT` 保持同一个值：
+// 合同 fixture 里必须有一台「超过 120 分钟没上报」的设备，否则过期折算这条口径
+// 在两侧都退化成恒等变换，parity 会一直报绿而实际什么都没守。
+const staleCollectedAt = "2026-06-03T08:00:00+08:00";
 
 const volatileFields = new Set([
   "accepted_at",
@@ -53,6 +57,63 @@ const enumFields = new Set([
   "window",
 ]);
 const floatFields = new Set(["used_percent", "remaining_percent"]);
+
+// #74 P2：`api_contract_golden.json` 是 **shape golden**——非枚举标量只记 type 不记 value，
+// 所以浮点字段（used_percent / remaining_percent）在这份 golden 里只以 {"type":"float"} 出现，
+// 全文没有一处 float 带 value。这里因此不需要（也不该加）浮点容差比较：
+// 数值口径由下一条测试的 value_golden.json 全量深比对守护。
+//
+// 下面这份清单是 web `/api/summary` 7 条记录与 Python golden 之间**仅有的**字段级差异，
+// 根因只有一个 fixture 事实：这份 golden 由 Python server 实录，数据全部经 Python `/ingest`
+// 的 legacy `usage_daily` 路径写入，从不产生 canonical 小时事实与 `ai_accounts` 行；
+// 而 Worker 读模型只读 canonical 事实（见本文件 "does not mix archived ..." 几条）。
+// 于是 golden 在这几棵子树上记录的是空数组，Worker 侧非空——差异全部落在数组 length 上。
+//
+// 必须说清这条清单的**代价**（早先注释写成「字段名、类型、枚举值逐条一致」，那句话不成立）：
+// `walkDiff` 在数组长度不等时 push `|len` 后**直接 return**，不再进入元素比对；
+// 而 golden 这几棵子树是 `{"items": [], "length": 0}`，根本没有元素形状可比。
+// 所以这几棵子树的**元素结构在本条测试里完全没有被比对过**——
+// 例如把 read-model 的 `ai_accounts.label` 改名，本条测试是绿的（已实测）。
+// 覆盖由下一条 `matches Python value golden` 的全量深比对提供：它跑在 canonical seed 上，
+// `ai_accounts` / `account_hourly.by_*` / `confidence_breakdown` / `trend.by_agent` 全部非空，
+// 同一个改名变异在那里会红（也已实测）。这是分工，不是缺口，但不要误以为本条守住了它们。
+//
+// 这不是实现缺陷：同样由 Python 读模型生成、但跑在 canonical seed 上的 value_golden.json，
+// `ai_accounts` 与 `account_hourly.by_*` 同样非空，且 Worker 与它全量深比对通过。
+//
+// 清单是**精确集合**而非模式匹配：多一条、少一条、换个路径、换个差异类型都会红。
+// 等 #74 P1 交出 Worker 侧的 golden 生成器并重新生成 golden，这些差异会消失，
+// 届时本清单会因为「差异不再存在」而变红，正好强制把它删掉。
+const legacyDailyFixtureGaps = [
+  ".response.body.shape.fields.account_hourly.fields.by_agent.items|len",
+  ".response.body.shape.fields.account_hourly.fields.by_agent.length|value",
+  ".response.body.shape.fields.account_hourly.fields.by_ai_account.items|len",
+  ".response.body.shape.fields.account_hourly.fields.by_ai_account.length|value",
+  ".response.body.shape.fields.account_hourly.fields.by_machine.items|len",
+  ".response.body.shape.fields.account_hourly.fields.by_machine.length|value",
+  ".response.body.shape.fields.account_hourly.fields.by_os_user.items|len",
+  ".response.body.shape.fields.account_hourly.fields.by_os_user.length|value",
+  ".response.body.shape.fields.account_hourly.fields.confidence_breakdown.items|len",
+  ".response.body.shape.fields.account_hourly.fields.confidence_breakdown.length|value",
+  ".response.body.shape.fields.ai_accounts.items|len",
+  ".response.body.shape.fields.ai_accounts.length|value",
+];
+// today 期额外多两条：Python 的当日趋势按小时聚合，legacy fixture 没有小时数据，
+// 所以 golden 的 trend.by_agent 是空的；Worker 从 canonical 小时事实聚合出 1 个 agent。
+const todayTrendFixtureGaps = [
+  ...legacyDailyFixtureGaps,
+  ".response.body.shape.fields.trend.fields.by_agent.items|len",
+  ".response.body.shape.fields.trend.fields.by_agent.length|value",
+].sort();
+const knownGoldenGaps = new Map<string, string[]>([
+  ["summary-today-missing-limits", todayTrendFixtureGaps],
+  ["summary-week-missing-limits", legacyDailyFixtureGaps],
+  ["summary-month-missing-limits", legacyDailyFixtureGaps],
+  ["summary-all-missing-limits", legacyDailyFixtureGaps],
+  ["summary-week-machine-filter", legacyDailyFixtureGaps],
+  ["summary-week-account-filter", legacyDailyFixtureGaps],
+  ["summary-week-observed-limits", legacyDailyFixtureGaps],
+]);
 
 describe.sequential("native TS Worker read-only API parity", () => {
   let mf: Miniflare;
@@ -91,15 +152,22 @@ describe.sequential("native TS Worker read-only API parity", () => {
     records.push(await record("summary-week-observed-limits", "/api/summary?date=2026-06-03&period=week", true));
     records.push(await record("mobile-summary-week-observed-limits", "/api/mobile/summary?date=2026-06-03&period=week", true));
 
-    for (const actual of records.slice(0, 2)) {
+    // #74 P2：这里曾经只对前 2 条做全字段 toEqual，其余 14 条只校
+    // status / content_type / body.kind——等于那 14 条的字段级合同无人看守：
+    // 少一个字段、字段类型变了、数组长度变了，测试都不会红。Python 平行实现删除后
+    // 这份 golden 是唯一的合同守卫，所以 16 条一律逐字段比对。
+    expect(records.length, "契约记录条数（新增记录必须同时进入全字段比对）").toBe(16);
+    expect(
+      [...knownGoldenGaps.keys()].filter((name) => !records.some((row) => row.name === name)),
+      "已知缺口清单不得引用不存在的记录",
+    ).toEqual([]);
+    for (const actual of records) {
       const wanted = expected.get(actual.name);
       expect(wanted, `${actual.name} exists in Python golden`).toBeTruthy();
-      expect(actual).toEqual(wanted);
-    }
-    for (const actual of records.slice(2)) {
-      expect(actual.response.status, actual.name).toBe(200);
-      expect(actual.response.content_type, actual.name).toBe("application/json");
-      expect((actual.response.body as Shape).kind, actual.name).toBe("json");
+      expect(
+        structuralDiff(actual, wanted),
+        `${actual.name} 与 Python golden 的字段级差异必须与已知 fixture 缺口完全一致`,
+      ).toEqual(knownGoldenGaps.get(actual.name) ?? []);
     }
   });
 
@@ -673,6 +741,50 @@ describe.sequential("native TS Worker read-only API parity", () => {
   }
 });
 
+// 逐字段结构化比对：返回排序后的差异路径清单（空数组 = 完全一致）。
+// 差异种类刻意分开标注，"字段存在但值是 null / 空对象 / 空数组" 这类绕过路径分别落在
+// |type（null 与 str 的 type 名不同）、|key（keys 不同）、|len（数组长度不同）上，
+// 不会被当成一致。
+function structuralDiff(actual: unknown, expectedValue: unknown): string[] {
+  const diffs: string[] = [];
+  walkDiff(actual, expectedValue, "", diffs);
+  return diffs.sort();
+}
+
+function walkDiff(actual: unknown, expectedValue: unknown, jsonPath: string, diffs: string[]): void {
+  if (valueKind(actual) !== valueKind(expectedValue)) {
+    diffs.push(`${jsonPath}|type`);
+    return;
+  }
+  if (Array.isArray(actual) && Array.isArray(expectedValue)) {
+    if (actual.length !== expectedValue.length) {
+      diffs.push(`${jsonPath}|len`);
+      return;
+    }
+    actual.forEach((item, index) => walkDiff(item, expectedValue[index], `${jsonPath}[${index}]`, diffs));
+    return;
+  }
+  if (actual !== null && typeof actual === "object") {
+    const left = actual as Record<string, unknown>;
+    const right = expectedValue as Record<string, unknown>;
+    for (const key of [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()) {
+      if (!(key in left) || !(key in right)) {
+        diffs.push(`${jsonPath}.${key}|key`);
+        continue;
+      }
+      walkDiff(left[key], right[key], `${jsonPath}.${key}`, diffs);
+    }
+    return;
+  }
+  if (!Object.is(actual, expectedValue)) diffs.push(`${jsonPath}|value`);
+}
+
+function valueKind(value: unknown): string {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  return typeof value;
+}
+
 function bodyFor(records: ContractRecord[], name: string): Shape {
   const record = records.find((item) => item.name === name);
   expect(record, `${name} record exists`).toBeTruthy();
@@ -756,6 +868,13 @@ async function seedUsageFixture(db: D1Database): Promise<void> {
     runId: 2,
     now,
     sourceId: "linux-dev-bob",
+    // Issue #77：Python 合同场景把这台设备的采集时刻回拨到 120 分钟阈值以外
+    // （`tests/test_api_contract.py::_backdate_source_collection`，STALE_COLLECTED_AT）。
+    // 这里必须造出同一个场景，否则 Worker 侧这台来源永远新鲜、status 恒为 ok，
+    // 而 golden 说 stale——「过期折算」这条口径就会在 parity 里静音。
+    // 用固定时刻而不是 `new Date()`：它相对真实当前时间、相对 fixedNow(2026-06-03T12:00)、
+    // 相对 provider-failure 用例的 2026-06-03T10:31 都超过 120 分钟，三种参照下都判 stale。
+    collectedAt: staleCollectedAt,
     host: "linux-dev",
     machine: "linux-dev",
     osUser: "bob",
@@ -789,6 +908,8 @@ async function insertUsagePayload(
   row: {
     runId: number;
     now: string;
+    /** 采集时刻。省略即用 `now`（新鲜来源）；传旧时刻可造出「超过 120 分钟没上报」的来源。 */
+    collectedAt?: string;
     sourceId: string;
     host: string;
     machine: string;
@@ -803,6 +924,11 @@ async function insertUsagePayload(
   },
 ): Promise<void> {
   const totalTokens = row.inputTokens + row.outputTokens + row.cacheTokens;
+  // 只回拨采集时刻这一列（其余 first_seen_at / last_seen_at / 用量行仍用 now），
+  // 与 Python 侧 `_backdate_source_collection` 只改 collection_runs.collected_at 同口径。
+  // 读模型的来源健康取 source_report_states.collected_at（read-model.ts buildSummary），
+  // 所以两张表都要跟着回拨，否则场景造不出来。
+  const collectedAt = row.collectedAt ?? row.now;
   const dailyRaw = {
     agent: row.agent,
     period: row.period,
@@ -832,7 +958,7 @@ async function insertUsagePayload(
 
   await db.batch([
     db.prepare("INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status) VALUES (?, ?, ?, ?, ?)")
-      .bind(row.runId, row.now, "Asia/Shanghai", "0.1.0", "ok"),
+      .bind(row.runId, collectedAt, "Asia/Shanghai", "0.1.0", "ok"),
     db.prepare(`
       INSERT INTO source_reports (
         id, run_id, source_id, report_type, command, status, ccusage_version,
@@ -855,7 +981,7 @@ async function insertUsagePayload(
         error_type = excluded.error_type,
         error_message = excluded.error_message
       WHERE excluded.collected_at >= source_report_states.collected_at
-    `).bind(row.sourceId, row.now, "daily", "HTTP Ingest", "ok", null, row.period, row.period, null, null),
+    `).bind(row.sourceId, collectedAt, "daily", "HTTP Ingest", "ok", null, row.period, row.period, null, null),
     db.prepare(`
       INSERT INTO source_identities (
         source_id, host, machine, os_user, platform, first_seen_at, last_seen_at

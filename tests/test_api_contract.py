@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import os
 import socket
+import sqlite3
 import tempfile
 import threading
 import time
 import unittest
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any, Optional
 
 from ai_usage_widget.server import start_test_server
@@ -40,6 +42,9 @@ ENUM_FIELDS = {
     "success",
     "window",
 }
+# 合同场景里那台「超过 120 分钟没上报」的设备的采集时刻，见 _backdate_source_collection。
+STALE_COLLECTED_AT = "2026-06-03T08:00:00+08:00"
+
 SENSITIVE_SUBSTRINGS = (
     "contract-test-token",
     "/Users/",
@@ -108,6 +113,65 @@ class TestAPIContractGolden(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertNotIn(value, raw)
 
+    def test_health_status_counts_fold_staleness_with_real_numbers(self) -> None:
+        """counts / non_ok 数的是**折算后**的 status，且断言比的是真实数值。
+
+        只断言「两边都有 counts 字段」是穿得过去的：不折算时 counts 是 `{"ok": 2}`，
+        字段照样在。所以这里逐个数值比。
+        """
+        self._request(
+            "POST", "/ingest", data=self._usage_payload_one(),
+            auth=True, auth_token=None, content_type="application/json", follow_redirects=True,
+        )
+        self._request(
+            "POST", "/ingest", data=self._usage_payload_two(),
+            auth=True, auth_token=None, content_type="application/json", follow_redirects=True,
+        )
+        self._backdate_source_collection("linux-dev-bob")
+        # 再上报一次（换一台设备）让服务端重建快照，过期折算才会落进 latest.json。
+        self._request(
+            "POST", "/ingest", data=self._usage_payload_three(),
+            auth=True, auth_token=None, content_type="application/json", follow_redirects=True,
+        )
+
+        _, _, body = self._request(
+            "GET", "/api/health", data=None, auth=True, auth_token=None,
+            content_type="application/json", follow_redirects=True,
+        )
+        health = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(health["source_status"]["total"], 2)
+        self.assertEqual(health["source_status"]["counts"], {"ok": 1, "stale": 1})
+        self.assertEqual(
+            health["source_status"]["non_ok"],
+            [{"source_id": "linux-dev-bob", "status": "stale"}],
+        )
+        # 同一份响应里 versions.needs_attention 的 status 与 counts 必须同口径。
+        attention = {row["source_id"]: row for row in health["versions"]["needs_attention"]}
+        self.assertEqual(attention["linux-dev-bob"]["status"], "stale")
+        self.assertEqual(attention["mac-local"]["status"], "ok")
+
+    def test_contract_golden_health_scenario_still_carries_a_stale_source(self) -> None:
+        """golden 里必须一直有一台过期设备，否则跨实现覆盖会静默失效。
+
+        全新鲜的 fixture 下折算与不折算产出完全相同的 counts，Worker 端拿这份
+        golden 比形状会一直报绿——覆盖还在，守护的东西已经没了。
+        """
+        with open(GOLDEN_PATH, "r", encoding="utf-8") as handle:
+            golden = json.load(handle)
+
+        health_records = [record for record in golden if record["name"].startswith("health-") and record["request"]["auth"]]
+        self.assertTrue(health_records, "golden 里应当有已登录的 /api/health 记录")
+        for record in health_records:
+            with self.subTest(record=record["name"]):
+                source_status = record["response"]["body"]["shape"]["fields"]["source_status"]["fields"]
+                self.assertIn("stale", source_status["counts"]["keys"])
+                non_ok_statuses = [
+                    item["fields"]["status"]["value"]
+                    for item in source_status["non_ok"]["items"]
+                ]
+                self.assertIn("stale", non_ok_statuses)
+
     def _collect_contract_records(self) -> list[dict[str, Any]]:
         records = [
             self._record("root-login-page", "GET", "/", auth=False),
@@ -146,8 +210,17 @@ class TestAPIContractGolden(unittest.TestCase):
             self._record("ingest-success-day1", "POST", "/ingest", data=self._usage_payload_one(), auth=True),
             self._record("ingest-idempotent-duplicate-day1", "POST", "/ingest", data=self._usage_payload_one(), auth=True),
             self._record("ingest-success-day2", "POST", "/ingest", data=self._usage_payload_two(), auth=True),
-            self._record("ingest-success-day3", "POST", "/ingest", data=self._usage_payload_three(), auth=True),
         ]
+
+        # Issue #77：让合同场景里真的有一台**超过 120 分钟没上报**的设备。
+        # 全新鲜的 fixture 里「折算」与「不折算」结果完全一样，跨实现覆盖等于没加。
+        # 把 linux-dev-bob 的采集时刻回拨到阈值以外，再由 day3 的 ingest 重建快照，
+        # 于是 /api/health 的 counts 从 {ok: 2} 变成 {ok: 1, stale: 1}。
+        self._backdate_source_collection("linux-dev-bob")
+
+        records.append(
+            self._record("ingest-success-day3", "POST", "/ingest", data=self._usage_payload_three(), auth=True)
+        )
 
         for period in ("today", "week", "month", "all"):
             records.append(
@@ -219,6 +292,34 @@ class TestAPIContractGolden(unittest.TestCase):
             ]
         )
         return records
+
+    def _backdate_source_collection(self, source_id: str, collected_at: str = STALE_COLLECTED_AT) -> None:
+        """把某个来源最近一次采集运行的时刻往回推，制造一台过期设备。
+
+        只改 `collection_runs.collected_at`——读模型的来源健康正是
+        `source_reports JOIN collection_runs` 取的这一列（snapshot_builder.py）。
+        `/ingest` 里 `collected_at` 写死成 `datetime.now()`，没有注入点，
+        所以过期设备只能靠事后回拨这一列造出来。
+
+        默认值必须相对**本场景用到的两个参照时刻**都超过 120 分钟阈值：
+        `/ingest` 重建快照用真实当前时间，`/ingest-limits` 重建快照用 payload 的
+        `observed_at`（2026-06-03T11:00:00+08:00）。取 08:00 两边都超（后者差 180 分钟）。
+        用「当前时间减 3 小时」会在 limits 那一次变成负数差，反而判成 ok。
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            updated = conn.execute(
+                """
+                UPDATE collection_runs SET collected_at = ?
+                WHERE id IN (SELECT run_id FROM source_reports WHERE source_id = ?)
+                """,
+                (collected_at, source_id),
+            ).rowcount
+        self.assertGreater(updated, 0, f"{source_id} 应当已经有采集运行可以回拨")
+        self.assertLess(
+            datetime.fromisoformat(collected_at),
+            datetime.now(dt_timezone.utc).astimezone() - timedelta(minutes=120),
+            "回拨后的采集时刻必须真的超过 120 分钟阈值",
+        )
 
     def _record(
         self,

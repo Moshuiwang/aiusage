@@ -72,9 +72,10 @@ fi
 
 echo "=== 应用 migrations 到本地 D1 ==="
 # 用 wrangler 原生的 migrations apply，而不是手工 execute 单个 .sql：
-# 它会按序重放 0001..000N，与生产 D1 走的是同一条路径。手工只灌 0001 会得到一个
-# 「看起来能用但和生产不同」的 schema——0001 是累计快照，0002+ 里仍有它没有的东西
-# （例如 0005 的两个审计索引，见 #75）。
+# 它会按序重放 0001..000N，与生产 D1 走的是同一条路径。
+# 手工只灌 0001 依赖「0001 这份累计快照没有落后于迁移链」这个不变量——该不变量目前由
+# tests/test_d1_schema_migration.py 的守卫维持（#75 补回 0005 索引后建立），但它是测试维持的，
+# 不是机制保证的。走 migrations apply 不依赖这个前提。
 if ! wrangler_local d1 migrations apply "$DB_NAME" 2>&1 | tail -20; then
   echo "migrations 应用失败" >&2
   exit 1

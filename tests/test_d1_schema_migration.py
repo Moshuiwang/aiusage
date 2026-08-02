@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -92,6 +93,29 @@ def _all_migration_files() -> list[Path]:
     return sorted(MIGRATIONS_DIR.glob("[0-9][0-9][0-9][0-9]_*.sql"))
 
 
+CREATE_INDEX_RE = re.compile(
+    r"CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)",
+    re.IGNORECASE,
+)
+
+
+def _declared_index_names(migration: Path) -> list[str]:
+    return CREATE_INDEX_RE.findall(migration.read_text(encoding="utf-8"))
+
+
+def _index_definitions(conn: sqlite3.Connection) -> dict[str, tuple]:
+    """Every explicit index in the database, keyed by name, carrying the table it
+    sits on plus its definition. Table is part of the value on purpose: index
+    names are global in SQLite, so an index recreated on the wrong table keeps
+    its name and only the table changes."""
+    definitions = {}
+    for name, table in conn.execute(
+        "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL"
+    ).fetchall():
+        definitions[name] = (table, _created_indexes(conn, table)[name])
+    return definitions
+
+
 def _user_tables(conn: sqlite3.Connection) -> list[str]:
     rows = conn.execute(
         """
@@ -120,17 +144,23 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> list[tuple]:
 
 
 def _created_indexes(conn: sqlite3.Connection, table: str) -> dict[str, tuple]:
+    """Explicit `CREATE INDEX` results for one table, keyed by name and carrying
+    the *definition* (unique flag, partial flag, indexed columns) -- not just the
+    name. A name-only comparison would wave through an index recreated on the
+    wrong columns or without UNIQUE, which is exactly the shape of drift that
+    hurts (same name, different behaviour)."""
     indexes = {}
     for row in conn.execute(f"PRAGMA index_list({table})").fetchall():
         name = row[1]
         origin = row[3]
         if origin != "c":
             continue
+        partial = row[4] if len(row) > 4 else 0
         columns = tuple(
             info[2]
             for info in conn.execute(f"PRAGMA index_info({name})").fetchall()
         )
-        indexes[name] = (row[2], columns)
+        indexes[name] = (row[2], partial, columns)
     return indexes
 
 
@@ -187,10 +217,17 @@ class TestD1SchemaMigration(unittest.TestCase):
                 self.assertEqual(actual_columns[table], expected_columns)
                 self.assertEqual(actual_indexes[table], {})
 
-    def test_full_migration_chain_matches_fresh_schema_columns(self) -> None:
+    def test_full_migration_chain_matches_fresh_schema(self) -> None:
         """A brand-new D1 gets 0001 alone in this repo's fresh-install path, while a
         deployed D1 walks 0001 -> ... -> latest. Both must land on identical column
-        layouts, otherwise an added column silently exists in one shape only."""
+        layouts *and* identical indexes, otherwise an added column or index silently
+        exists in one shape only.
+
+        Indexes are asserted here rather than in a parallel test on purpose: it is
+        one invariant ("both install paths converge on the same schema"), the two
+        databases are already built here, and a second test would have to duplicate
+        the chain replay and the D1-only exclusions -- duplication that drifts the
+        moment someone updates one copy and not the other."""
         migrations = _all_migration_files()
         self.assertEqual(migrations[0], MIGRATION_SQL)
         self.assertGreater(len(migrations), 1)
@@ -199,17 +236,81 @@ class TestD1SchemaMigration(unittest.TestCase):
             fresh_conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
             fresh_tables = _user_tables(fresh_conn)
             fresh_columns = {table: _table_columns(fresh_conn, table) for table in fresh_tables}
+            fresh_indexes = {table: _created_indexes(fresh_conn, table) for table in fresh_tables}
 
         with sqlite3.connect(":memory:") as chain_conn:
             for migration in migrations:
                 chain_conn.executescript(migration.read_text(encoding="utf-8"))
             chain_tables = _user_tables(chain_conn)
             chain_columns = {table: _table_columns(chain_conn, table) for table in chain_tables}
+            chain_indexes = {table: _created_indexes(chain_conn, table) for table in chain_tables}
 
         self.assertEqual(chain_tables, fresh_tables)
         self.assertEqual(chain_columns, fresh_columns)
+        self.assertEqual(
+            chain_indexes,
+            fresh_indexes,
+            "index sets diverge between the fresh-install path (0001 alone) and the "
+            "migration chain; a later migration's CREATE INDEX was never backfilled "
+            "into 0001 (or was backfilled onto different columns)",
+        )
         for table, expected_columns in D1_ONLY_TABLE_COLUMNS.items():
             self.assertEqual(chain_columns[table], expected_columns)
+
+    def test_backfilled_indexes_match_their_owning_migration(self) -> None:
+        """Every index a later migration declares must already exist in a 0001-only
+        database, with the definition that migration itself produces.
+
+        This is deliberately independent of the two-path parity test above, which
+        cannot see this class of bug: later migrations use CREATE INDEX IF NOT
+        EXISTS, and the chain replays 0001 first, so a wrong backfill in 0001 is
+        inherited by the chain and both paths agree on the same wrong index.
+        (Proven by mutation: renaming the indexed column in 0001 leaves the parity
+        test green.) It is also independent of the storage_sqlite.py mirror, which
+        is frozen and slated for deletion, so the invariant must not rest on it.
+
+        Method: build from 0001 alone, drop the indexes the migration owns, replay
+        that migration, and compare -- the owning migration is the source of truth
+        for its own indexes, nothing here is hand-written."""
+        migrations = _all_migration_files()
+        checked = 0
+
+        for migration in migrations[1:]:
+            declared = _declared_index_names(migration)
+            if not declared:
+                continue
+            checked += len(declared)
+            with self.subTest(migration=migration.name):
+                with sqlite3.connect(":memory:") as conn:
+                    conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
+                    fresh = _index_definitions(conn)
+                    missing = [name for name in declared if name not in fresh]
+                    self.assertEqual(
+                        missing,
+                        [],
+                        f"{migration.name} creates these indexes but 0001 does not: "
+                        f"{missing}. A database created by 0001 alone (this repo's "
+                        f"fresh-install path) would never get them.",
+                    )
+
+                    for name in declared:
+                        conn.execute(f"DROP INDEX {name}")
+                    conn.executescript(migration.read_text(encoding="utf-8"))
+                    replayed = _index_definitions(conn)
+
+                for name in declared:
+                    self.assertIn(name, replayed, f"{migration.name} did not recreate {name}")
+                    self.assertEqual(
+                        fresh[name],
+                        replayed[name],
+                        f"0001 backfilled {name} with a different definition than "
+                        f"{migration.name} creates (table/unique/partial/columns)",
+                    )
+
+        # Guards the guard: if the regex ever stops matching, this test would pass
+        # by checking nothing at all. Counts what was declared, not what passed, so
+        # a real backfill failure above shows up as one failure and not two.
+        self.assertGreaterEqual(checked, 5)
 
     def _legacy_db_with_rows(self) -> sqlite3.Connection:
         conn = sqlite3.connect(":memory:")
@@ -303,7 +404,7 @@ class TestD1SchemaMigration(unittest.TestCase):
         data -- but it breaks the fresh-install path: 0001 already creates the
         11-column table, so replaying 0001..0007 on a brand new D1 would feed 12
         values into 11 columns and fail the whole deploy (proven by
-        test_full_migration_chain_matches_fresh_schema_columns going red when
+        test_full_migration_chain_matches_fresh_schema going red when
         that variant was tried). Supporting both real deployment paths requires
         the explicit column list.
 
