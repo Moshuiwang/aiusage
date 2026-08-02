@@ -428,15 +428,30 @@ class CollectorStore:
 
     # --- 读取 ---------------------------------------------------------------
 
-    def pending(self, *, limit: Optional[int] = None, ignore_backoff: bool = False) -> list[OutboxEntry]:
+    def pending(
+        self,
+        *,
+        limit: Optional[int] = None,
+        ignore_backoff: bool = False,
+        kind: Optional[str] = None,
+    ) -> list[OutboxEntry]:
         """当前**可以尝试投递**的条目，最旧优先。
 
         默认排除退避中的条目与已过期的 limit observations。
         `ignore_backoff=True` 用于排空 / 导出 / 巡检这类「我要看全部」的场景。
+
+        `kind` 是**补推方必须传**的：用量事实与额度观测共用同一个库，但走两个不同的
+        ingest 端点。不过滤就会把用量事实 POST 到 `/ingest-limits`（服务端 400 →
+        判成终态 → 进死信表），一条已经安全落盘的历史就此永远不会再补推——
+        方向正好和 outbox 要解决的问题相反。
+        排空 / 导出 / 巡检则**必须不传**：漏看一种 kind 等于放行未交付数据。
         """
         now = float(self.clock())
         sql = "SELECT * FROM outbox WHERE (expires_at IS NULL OR expires_at > ?)"
         params: list[Any] = [now]
+        if kind is not None:
+            sql += " AND kind = ?"
+            params.append(kind)
         if not ignore_backoff:
             sql += " AND next_attempt_at <= ?"
             params.append(now)

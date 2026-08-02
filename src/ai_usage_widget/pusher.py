@@ -667,7 +667,8 @@ class DevicePusher:
         不该把它后面的历史一起堵死。
         """
         outcomes: Dict[int, Dict[str, Any]] = {}
-        for entry in store.pending(limit=limit):
+        # 只取用量事实：额度观测同库不同端点，混着补推会把它打到 /ingest 后进死信。
+        for entry in store.pending(limit=limit, kind=KIND_USAGE):
             try:
                 status_code, resp_data = self._post_with_retries(
                     url=self.config.server_url,
