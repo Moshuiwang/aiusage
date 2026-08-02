@@ -364,7 +364,12 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(http_client.last_json["collection_status"], "ok")
         self.assertEqual(http_client.last_json["usage_daily"], [])
-        self.assertEqual(http_client.last_json["ccusage_daily_status"]["status"], "missing_tool")
+        # #78：ccusage 的失败说明不再作为字段上报（生产用的 Worker 不认识它，只会静默丢弃）。
+        # 代价是这条路径上 ccusage 的失败原因彻底没有承载字段——payload 是 ok 且不带
+        # error_type / error_message，这里一并钉死，免得代价被悄悄忘掉。
+        self.assertNotIn("ccusage_daily_status", http_client.last_json)
+        self.assertNotIn("error_type", http_client.last_json)
+        self.assertNotIn("error_message", http_client.last_json)
         self.assertNotIn("ccusage_daily_report", http_client.last_json)
         self.assertNotIn("ccusage_session_report", http_client.last_json)
         self.assertNotIn("ccusage_blocks_report", http_client.last_json)
