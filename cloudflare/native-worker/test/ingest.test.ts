@@ -43,6 +43,13 @@ const fixturePath = path.join(repoRoot, "tests/fixtures/native_worker_ingest_pay
 // 采集端永远是 Python、服务端是 TS，「采集端 payload ↔ 服务端 ingest」是一条消灭不掉的
 // 跨语言 wire contract，只能靠这份 fixture 在 Worker 侧真实回放来治理。
 const collectorPayloadFixturePath = path.join(repoRoot, "cloudflare/native-worker/test/collector_payload_fixture.json");
+// #78 从采集端摘除的历史字段探针。Python 侧的 `tests/test_collector_payload_contract.py`
+// 读**同一份**文件、断言**同一组可观测结果**（不报错 / 不解析 / 不落库），
+// 两个实现对「老版本采集端还在发的字段」是否一致，就靠这一对用例。
+const legacyDroppedFieldProbePath = path.join(
+  repoRoot,
+  "cloudflare/native-worker/test/legacy_collector_payload_ccusage_daily_status.json",
+);
 // fixture 为了确定性把顶层 observed_at 抹成 "<masked>"，直接发会因时间格式非法被拒。
 // 只在测试里替换成这个固定的合法时间戳，fixture 文件本身不动。
 const collectorObservedAt = "2026-06-05T09:05:00+08:00";
@@ -865,16 +872,108 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(counts.collection_runs).toBe(1);
   });
 
+  it("ccusage 挂了但账本仍可用时，账本用量照常落库；ccusage 的失败原因不再有承载字段", async () => {
+    const record = await collectorPayload("partial-ccusage-missing-tool-ledger-ok");
+    expect(record.payload.usage_daily, "该场景 ccusage 没跑起来，usage_daily 必须为空").toEqual([]);
+    expect(record.payload.ccusage_daily_report, "ccusage 没跑起来就不该有报告").toBeUndefined();
+
+    const { body } = await postCollectorPayload(record);
+    expect(body).toMatchObject({
+      status: "accepted",
+      source_id: "fixture-desktop-partial",
+      accepted_at: collectorObservedAt,
+      facts_accepted: 3,
+    });
+
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    // 关键不变量：ccusage 挂掉不许连带丢掉账本采到的真实用量。
+    const facts = await db.prepare(`
+      SELECT agent, window_start, total_tokens FROM usage_hourly_facts WHERE source_id = ? ORDER BY agent, window_start
+    `).bind("fixture-desktop-partial").all<Record<string, unknown>>();
+    expect(facts.results).toEqual([
+      { agent: "claude", window_start: "2026-06-04T09:00:00+08:00", total_tokens: 5390 },
+      { agent: "codex", window_start: "2026-06-04T09:00:00+08:00", total_tokens: 1680 },
+      { agent: "codex", window_start: "2026-06-04T10:00:00+08:00", total_tokens: 880 },
+    ]);
+
+    // #78 的**已知代价**，在生产实现上钉死：这条路径的来源健康是 ok 且没有任何错误信息，
+    // 所以「ccusage 在这台设备上装挂了」不会被任何人看见。此前由 ccusage_daily_status
+    // 携带，但那个字段在这里从来就没被解析过——摘除只是让代价变得诚实，不是新造出来的。
+    // 哪天补了两侧都实现的替代承载字段，这条会红，届时必须显式复核。
+    const state = await db.prepare(`
+      SELECT status, first_period, last_period, error_type, error_message
+      FROM source_report_states WHERE source_id = ?
+    `).bind("fixture-desktop-partial").first();
+    expect(state).toEqual({
+      status: "ok",
+      // 周期取自账本小时事实（不是 usage_daily）——ccusage 挂了也仍有覆盖周期。
+      first_period: "2026-06-04",
+      last_period: "2026-06-04",
+      error_type: null,
+      error_message: null,
+    });
+  });
+
+  it("老版本采集端仍在发的 ccusage_daily_status 被当未知字段忽略：不报错、不落库", async () => {
+    // 跨实现一致性的 Worker 半边。Python 半边是
+    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`，
+    // 读的是同一份探针文件、断言同一组可观测结果。
+    //
+    // 证明方式不是「返回了 200 就算忽略」——那太弱：字段完全可能被解析后写进某张表。
+    // 这里比对的是**同一份 payload 加不加这个字段，D1 的可观测结果是否逐行相等**。
+    const probe = JSON.parse(await readFile(legacyDroppedFieldProbePath, "utf8")) as {
+      field: string;
+      scenario: string;
+      value: unknown;
+      bypass_values: unknown[];
+    };
+    const clean = await collectorPayload(probe.scenario);
+    expect(clean.payload[probe.field], "基座 payload 不该已经带着这个历史字段").toBeUndefined();
+
+    const { body: cleanBody } = await postCollectorPayload(clean);
+    const cleanState = await readLegacyProbeState();
+
+    // 每一个形状都要过，不只老采集端正常发出的那个：Worker 对未知顶层字段是「无论什么
+    // 形状都忽略」，只覆盖正面形状的话，Python 侧把当年那个必填校验加回来照样绿。
+    const shapes = [probe.value, ...probe.bypass_values];
+    expect(shapes.length, "绕过形状清单不能为空，否则只覆盖了正面路径").toBeGreaterThan(1);
+
+    for (const shape of shapes) {
+      const legacy: CollectorPayloadRecord = {
+        ...clean,
+        payload: { ...clean.payload, [probe.field]: shape },
+      };
+      // 探针不能是空的，否则下面几条比对什么都没验证。
+      expect(Object.keys(legacy.payload)).toContain(probe.field);
+
+      // 1. 不报错：postCollectorPayload 内部已断言 200，非 2xx 会在这里直接失败。
+      const { body: legacyBody } = await postCollectorPayload(legacy);
+
+      // 2. 响应完全一致：字段没有影响任何计数或版本判定。
+      expect(legacyBody, `形状 ${JSON.stringify(shape)} 改变了响应`).toEqual(cleanBody);
+
+      // 3. 不落库：库里的可观测结果逐行相等，字段内容一个字都没进 D1。
+      expect(await readLegacyProbeState(), `形状 ${JSON.stringify(shape)} 改变了落库结果`).toEqual(cleanState);
+    }
+
+    // 4. 字段的内容不许以任何形式出现在来源健康里（上面那条已覆盖，这条写明口径）。
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const state = await db.prepare(`
+      SELECT error_type, error_message FROM source_report_states WHERE source_id = ?
+    `).bind(clean.payload.source_id as string).first();
+    expect(state).toEqual({ error_type: null, error_message: null });
+  });
+
   it("采集端发出的每个顶层字段都必须是 Worker 已声明并解析的 ingest 字段", async () => {
     // 覆盖范围（据实写，别把它读成更大的保证）：
     //   覆盖：字段压根不在 `type IngestRequest` 里 —— validateIngestPayload 既不报错也不解析，
     //         采集端发了、服务端 200 收了、字段消失，两端都没有信号。
-    //   **这条断言今天还没抓到过真实 bug**：唯一已知实例是 ccusage_daily_status
-    //         （pusher 会发、Python 服务端校验、Worker 全文零命中，见 #78），但 pusher 只在
-    //         「ccusage 返回非法 JSON 而 ledger 仍可用」时才塞这个字段，本 fixture 的两个场景
-    //         都不触发，所以它现在不在 fixture 里，这条断言也就碰不到它。
-    //         补那个场景会让本用例**立刻变红**——因为 Worker 确实不认识该字段，红得对。
-    //         所以它必须和 #78 的修复（补进 Worker 还是从采集端摘掉）一起做，不能单独加。
+    //   **这条断言已经抓到过一次真实 bug**：ccusage_daily_status（pusher 会发、Python 服务端
+    //         校验、Worker 全文零命中，见 #78）。它只在「ccusage 挂了而 ledger 仍可用」时出现，
+    //         而 fixture 原先只有成功与全失败两个场景，都不触发，所以这条断言碰不到它。
+    //         #78 补上了 partial-ccusage-missing-tool-ledger-ok 这个场景，本用例当场变红，
+    //         随后 PM 拍板把该字段从采集端摘除（不补进 Worker），现在重新变绿。
+    //         教训：这条断言的覆盖力受限于 fixture 的**场景覆盖**，场景缺一条它就有一个盲区。
     //   覆盖：声明了却不从 payload 里取（declared 与 parsed 不相等）。
     //   **不覆盖**：已声明、已解析、但下游零消费。此刻就有三个字段处在这个状态——
     //         ccusage_session_report / ccusage_blocks_report / codex_hourly_status 在
@@ -895,6 +994,7 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(records.map((item) => item.name).sort()).toEqual([
       "error-ccusage-missing-tool",
       "ok-full-collection",
+      "partial-ccusage-missing-tool-ledger-ok",
     ]);
     for (const record of records) {
       // fixture 的 request 块由 Python 侧从 pusher 真正发出的那次请求推导（path 取自实际
@@ -908,6 +1008,29 @@ describe.sequential("native TS Worker write API parity", () => {
       ).toEqual([]);
     }
   });
+
+  /** 历史字段探针的落库快照：只取「这个字段真要是被解析了就会变」的那些表。 */
+  async function readLegacyProbeState(): Promise<Record<string, unknown[]>> {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const read = async (sql: string): Promise<unknown[]> =>
+      (await db.prepare(sql).all<Record<string, unknown>>()).results;
+    return {
+      facts: await read(`
+        SELECT source_id, agent, window_start, total_tokens, provenance, attribution_confidence
+        FROM usage_hourly_facts ORDER BY source_id, agent, window_start
+      `),
+      reportStates: await read(`
+        SELECT source_id, collected_at, status, collector_version, first_period, last_period, error_type, error_message
+        FROM source_report_states ORDER BY source_id
+      `),
+      // source_reports 是**追加**表：同一份 payload 上报两次会留两行，所以这里取 DISTINCT。
+      // 只要历史字段真被解析进 error_type / error_message，第二次上报就会产生一个**不同**的
+      // 内容行，DISTINCT 收不掉，比对照样红——去重去掉的只是「上报次数」，不是「内容差异」。
+      reports: await read("SELECT DISTINCT source_id, status, error_type, error_message FROM source_reports ORDER BY source_id"),
+      accuracy: await read("SELECT source_id, agent, provenance, facts_digest, accuracy_status FROM source_accuracy ORDER BY source_id, agent"),
+      identities: await read("SELECT source_id, host, machine, os_user, platform FROM source_identities ORDER BY source_id"),
+    };
+  }
 
   async function collectorPayload(name: string): Promise<CollectorPayloadRecord> {
     const record = (await readCollectorPayloads()).find((item) => item.name === name);

@@ -71,12 +71,12 @@ def handle_ingest_payload(
     block_items = normalize_ingest_block_request(req)
 
     collected_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
-    ccusage_daily_status = req.ccusage_daily_status or {}
+    # 失败原因只认 payload 顶层的 error_type / error_message —— 两侧实现都有的字段。
+    # #78 之前这里还会在 collection_status == "ok" 时回退去读 `ccusage_daily_status`，
+    # 那是**只有 Python 侧存在**的诊断路径：同一份 payload 在生产（Worker）上从来不会
+    # 得到这个结论。已随该字段一并摘除，不要重建。
     report_error_type = req.error_type
     report_error_message = req.error_message
-    if req.collection_status == "ok" and isinstance(ccusage_daily_status, dict):
-        report_error_type = report_error_type or ccusage_daily_status.get("error_type")
-        report_error_message = report_error_message or ccusage_daily_status.get("error_message")
 
     report = {
         "source_id": req.source_id,

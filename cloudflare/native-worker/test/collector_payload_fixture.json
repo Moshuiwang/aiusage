@@ -408,5 +408,262 @@
       "method": "POST",
       "path": "/ingest"
     }
+  },
+  {
+    "name": "partial-ccusage-missing-tool-ledger-ok",
+    "payload": {
+      "collection_status": "ok",
+      "collection_window": "daily",
+      "collector_release": {
+        "collector_version": "0.3.0",
+        "config_schema_version": 1,
+        "last_upgrade": {
+          "status": "never"
+        },
+        "parser_schema_version": 2,
+        "release_channel": "stable"
+      },
+      "host": "desktop-partial.internal",
+      "machine": "desktop-partial",
+      "mswusage_codex_hourly_report": {
+        "collector": {
+          "coverage": {
+            "end": "2026-06-05T00:00:00+08:00",
+            "start": "2026-06-04T00:00:00+08:00"
+          },
+          "lookback_hours": 48,
+          "mode": "incremental"
+        },
+        "daily": [
+          {
+            "agent": "codex",
+            "date": "2026-06-04",
+            "total_tokens": 2500
+          }
+        ],
+        "drift": {
+          "baseline_agent": null,
+          "comparison_dates": [],
+          "daily_codex_total_tokens": null,
+          "mswusage_codex_total_tokens": null,
+          "status": "comparison_unavailable",
+          "threshold_percent": 5.0
+        },
+        "generated_at": "2026-06-05T09:00:00+08:00",
+        "hourly": [
+          {
+            "agent": "codex",
+            "event_count": 1,
+            "hour": "2026-06-03T23:00:00+08:00",
+            "input_tokens": 111,
+            "output_tokens": 11,
+            "session_count": 1,
+            "total_tokens": 122
+          },
+          {
+            "agent": "codex",
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 900,
+            "event_count": 12,
+            "hour": "2026-06-04T09:00:00+08:00",
+            "input_tokens": 600,
+            "output_tokens": 180,
+            "reasoning_output_tokens": 60,
+            "session_count": 2,
+            "total_tokens": 1680
+          },
+          {
+            "agent": "codex",
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 600,
+            "event_count": 5,
+            "hour": "2026-06-04T10:00:00+08:00",
+            "input_tokens": 200,
+            "output_tokens": 80,
+            "reasoning_output_tokens": 20,
+            "session_count": 1,
+            "total_tokens": 880
+          }
+        ],
+        "provenance": "mswusage_codex_token_count",
+        "schema_version": 1,
+        "sessions": [
+          {
+            "session_id": "fixture-codex-session-1",
+            "total_tokens": 2560
+          }
+        ],
+        "source": "mswusage_codex",
+        "timezone": "Asia/Shanghai"
+      },
+      "observed_at": "<masked>",
+      "os_user": "wangzp",
+      "platform": "linux",
+      "schema_version": 1,
+      "source_id": "fixture-desktop-partial",
+      "timezone": "Asia/Shanghai",
+      "usage_daily": [],
+      "usage_hourly_facts": [
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:00+08:00",
+            "source": "local_usage_ledger",
+            "window": "collection_time"
+          },
+          "agent": "codex",
+          "ai_account": {
+            "account_id": "unconfirmed_local_source:fixture-desktop-partial:codex",
+            "display_name": null,
+            "label": "\u672c\u673a\u6765\u6e90 / \u672a\u786e\u8ba4\u8d26\u53f7",
+            "provider": "openai",
+            "subscription": null
+          },
+          "attribution_confidence": "unconfirmed_local_source",
+          "client": "codex",
+          "event_count": 12,
+          "fact_id": "codex:codex:fixture-desktop-partial:2026-06-04T09:00:00+08:00:2026-06-04T10:00:00+08:00:unconfirmed_local_source:openai:unconfirmed_local_source:fixture-desktop-partial:codex:mswusage_codex_token_count",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_codex_token_count",
+          "sensitive_payload": false,
+          "session_count": 2,
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 900,
+            "input_tokens": 600,
+            "output_tokens": 180,
+            "reasoning_output_tokens": 60,
+            "total_tokens": 1680
+          },
+          "window_end": "2026-06-04T10:00:00+08:00",
+          "window_start": "2026-06-04T09:00:00+08:00"
+        },
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:00+08:00",
+            "source": "local_usage_ledger",
+            "window": "collection_time"
+          },
+          "agent": "codex",
+          "ai_account": {
+            "account_id": "unconfirmed_local_source:fixture-desktop-partial:codex",
+            "display_name": null,
+            "label": "\u672c\u673a\u6765\u6e90 / \u672a\u786e\u8ba4\u8d26\u53f7",
+            "provider": "openai",
+            "subscription": null
+          },
+          "attribution_confidence": "unconfirmed_local_source",
+          "client": "codex",
+          "event_count": 5,
+          "fact_id": "codex:codex:fixture-desktop-partial:2026-06-04T10:00:00+08:00:2026-06-04T11:00:00+08:00:unconfirmed_local_source:openai:unconfirmed_local_source:fixture-desktop-partial:codex:mswusage_codex_token_count",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_codex_token_count",
+          "sensitive_payload": false,
+          "session_count": 1,
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 600,
+            "input_tokens": 200,
+            "output_tokens": 80,
+            "reasoning_output_tokens": 20,
+            "total_tokens": 880
+          },
+          "window_end": "2026-06-04T11:00:00+08:00",
+          "window_start": "2026-06-04T10:00:00+08:00"
+        },
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:05+08:00",
+            "source": "local_usage_ledger",
+            "window": "collection_time"
+          },
+          "agent": "claude",
+          "ai_account": {
+            "account_id": "unconfirmed_local_source:fixture-desktop-partial:claude",
+            "display_name": null,
+            "label": "\u672c\u673a\u6765\u6e90 / \u672a\u786e\u8ba4\u8d26\u53f7",
+            "provider": "claude",
+            "subscription": null
+          },
+          "attribution_confidence": "unconfirmed_local_source",
+          "client": "claude",
+          "event_count": 20,
+          "fact_id": "claude:claude:fixture-desktop-partial:2026-06-04T09:00:00+08:00:2026-06-04T10:00:00+08:00:unconfirmed_local_source:claude:unconfirmed_local_source:fixture-desktop-partial:claude:mswusage_claude_assistant_usage",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_claude_assistant_usage",
+          "sensitive_payload": false,
+          "session_count": 3,
+          "usage": {
+            "cache_creation_tokens": 90,
+            "cache_read_tokens": 4000,
+            "input_tokens": 1000,
+            "output_tokens": 300,
+            "reasoning_output_tokens": 0,
+            "total_tokens": 5390
+          },
+          "window_end": "2026-06-04T10:00:00+08:00",
+          "window_start": "2026-06-04T09:00:00+08:00"
+        }
+      ],
+      "usage_ledger_runs": [
+        {
+          "agent": "codex",
+          "collector": {
+            "coverage": {
+              "end": "2026-06-05T00:00:00+08:00",
+              "start": "2026-06-04T00:00:00+08:00"
+            },
+            "lookback_hours": 48,
+            "mode": "incremental"
+          },
+          "facts_digest": "fa6a54a3af147ca8016af04571c43f36f5e8f380799056bdc6899272571c8d77",
+          "provenance": "mswusage_codex_token_count"
+        },
+        {
+          "agent": "claude",
+          "collector": {
+            "coverage": {
+              "end": "2026-06-05T00:00:00+08:00",
+              "start": "2026-06-04T00:00:00+08:00"
+            },
+            "lookback_hours": 48,
+            "mode": "incremental"
+          },
+          "facts_digest": "986f13e7d28be4da35eecbb1ae64c14cfe198226383331f32f6177d3920f3003",
+          "provenance": "mswusage_claude_assistant_usage"
+        }
+      ]
+    },
+    "request": {
+      "auth": true,
+      "method": "POST",
+      "path": "/ingest"
+    }
   }
 ]

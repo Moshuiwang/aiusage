@@ -1,0 +1,22 @@
+{
+  "captured_from": "src/ai_usage_widget/pusher.py @ dd1b368 —— #78 摘除前的采集端，场景 partial-ccusage-missing-tool-ledger-ok",
+  "field": "ccusage_daily_status",
+  "not_regenerable": "当前 pusher 已经产不出这个字段（#78 摘除），所以这份取值是冻结的历史产物，不能重新生成。它代表的是仍在运行的老版本采集端：Python 与 Worker 两侧都必须把它当未知字段忽略——不报错、不落库。探针 payload 由测试在运行时拼装：collector_payload_fixture.json 里对应场景的 payload 加上这里的 value，因此除了这个字段本身，探针不会陈旧。",
+  "scenario": "partial-ccusage-missing-tool-ledger-ok",
+  "value": {
+    "error_message": "[Errno 2] No such file or directory: 'ccusage'",
+    "error_type": "missing_tool",
+    "status": "missing_tool"
+  },
+  "bypass_values_note": "绕过路径。`value` 是老采集端**正常**发出的形状，只覆盖正面路径：Python 侧就算把三键必填校验原样加回来，这个形状照样通过，跨实现断言不会红。下面这几个形状是 #78 删掉的那个校验器**当年会拒收的**（非 object、缺键、纯字符串）——它们才是校验被加回来时唯一会露馅的入口。Worker 对未知顶层字段是「无论什么形状都忽略」，所以两侧必须对**每一个**形状都不报错、不落库。",
+  "bypass_values": [
+    [],
+    {
+      "error_type": "missing_tool",
+      "status": "missing_tool"
+    },
+    "missing_tool",
+    null,
+    17
+  ]
+}

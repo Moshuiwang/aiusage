@@ -187,39 +187,34 @@ class TestIngestContract(unittest.TestCase):
         self.assertEqual(len(req.usage_hourly_facts), 1)
         self.assertEqual(req.usage_hourly_facts[0]["ai_account"]["label"], "start@example.com")
 
-    def test_accepts_optional_ccusage_daily_status(self) -> None:
-        data = self.valid_data.copy()
-        data["usage_daily"] = []
-        data["ccusage_daily_status"] = {
-            "status": "missing_tool",
-            "error_type": "missing_tool",
-            "error_message": "ccusage not found",
-        }
+    def test_ignores_the_dropped_ccusage_daily_status_field(self) -> None:
+        """#78：该字段已从两侧摘除，老版本采集端发来时必须当未知字段忽略。
 
-        req = validate_ingest_payload(data)
+        三种形态（合法三键 / 非 object / 缺键）此前分别被接受、被拒、被拒；现在**一律
+        既不报错也不解析**——生产用的 Worker 从来就是这个行为，Python 侧不能更严。
+        跨实现一致性的完整断言在
+        ``tests/test_collector_payload_contract.py`` 与
+        ``cloudflare/native-worker/test/ingest.test.ts``（读同一份历史字段探针）。
+        """
+        legacy_shapes = [
+            {"status": "missing_tool", "error_type": "missing_tool", "error_message": "ccusage not found"},
+            [],
+            {"status": "missing_tool", "error_type": "missing_tool"},
+            "missing_tool",
+        ]
+        for shape in legacy_shapes:
+            with self.subTest(shape=shape):
+                data = self.valid_data.copy()
+                data["usage_daily"] = []
+                data["ccusage_daily_status"] = shape
 
-        self.assertEqual(req.ccusage_daily_status["status"], "missing_tool")
+                req = validate_ingest_payload(data)
 
-    def test_rejects_invalid_ccusage_daily_status_shape(self) -> None:
-        data = self.valid_data.copy()
-        data["ccusage_daily_status"] = []
-
-        with self.assertRaises(IngestValidationError) as context:
-            validate_ingest_payload(data)
-
-        self.assertIn("ccusage_daily_status", str(context.exception))
-
-    def test_rejects_incomplete_ccusage_daily_status(self) -> None:
-        data = self.valid_data.copy()
-        data["ccusage_daily_status"] = {
-            "status": "missing_tool",
-            "error_type": "missing_tool",
-        }
-
-        with self.assertRaises(IngestValidationError) as context:
-            validate_ingest_payload(data)
-
-        self.assertIn("ccusage_daily_status.error_message", str(context.exception))
+                self.assertFalse(
+                    hasattr(req, "ccusage_daily_status"),
+                    "IngestRequest 不该再带这个字段",
+                )
+                self.assertEqual(req.source_id, data["source_id"])
 
     def test_rejects_usage_hourly_facts_missing_required_field(self) -> None:
         data = self.valid_data.copy()
