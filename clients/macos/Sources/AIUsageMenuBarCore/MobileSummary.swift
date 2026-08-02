@@ -168,6 +168,9 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
     public let outputTokens: Int
     public let cacheTokens: Int
     public let cacheRatio: Int
+    public let claudeTokens: Int
+    public let codexTokens: Int
+    public let unknownTokens: Int
 
     enum CodingKeys: String, CodingKey {
         case bucket
@@ -177,6 +180,52 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
         case outputTokens = "output_tokens"
         case cacheTokens = "cache_tokens"
         case cacheRatio = "cache_ratio"
+        case claudeTokens = "claude_tokens"
+        case codexTokens = "codex_tokens"
+        case unknownTokens = "unknown_tokens"
+    }
+
+    public init(
+        bucket: String,
+        label: String,
+        tokens: Int,
+        inputTokens: Int,
+        outputTokens: Int,
+        cacheTokens: Int,
+        cacheRatio: Int,
+        claudeTokens: Int = 0,
+        codexTokens: Int = 0,
+        unknownTokens: Int? = nil
+    ) {
+        self.bucket = bucket
+        self.label = label
+        self.tokens = tokens
+        self.inputTokens = inputTokens
+        self.outputTokens = outputTokens
+        self.cacheTokens = cacheTokens
+        self.cacheRatio = cacheRatio
+        self.claudeTokens = max(claudeTokens, 0)
+        self.codexTokens = max(codexTokens, 0)
+        self.unknownTokens = max(unknownTokens ?? (tokens - claudeTokens - codexTokens), 0)
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let bucket = try values.decode(String.self, forKey: .bucket)
+        let label = try values.decode(String.self, forKey: .label)
+        let tokens = try values.decode(Int.self, forKey: .tokens)
+        self.init(
+            bucket: bucket,
+            label: label,
+            tokens: tokens,
+            inputTokens: try values.decode(Int.self, forKey: .inputTokens),
+            outputTokens: try values.decode(Int.self, forKey: .outputTokens),
+            cacheTokens: try values.decode(Int.self, forKey: .cacheTokens),
+            cacheRatio: try values.decode(Int.self, forKey: .cacheRatio),
+            claudeTokens: try values.decodeIfPresent(Int.self, forKey: .claudeTokens) ?? 0,
+            codexTokens: try values.decodeIfPresent(Int.self, forKey: .codexTokens) ?? 0,
+            unknownTokens: try values.decodeIfPresent(Int.self, forKey: .unknownTokens)
+        )
     }
 }
 
@@ -527,6 +576,34 @@ public struct MobileLimitWindow: Codable, Equatable, Sendable, Identifiable {
 
     public var isOfficialObserved: Bool {
         official && confidence == "observed" && status == "ok"
+    }
+
+    public init(
+        sourceID: String,
+        provider: String,
+        window: String,
+        usedPercent: Double,
+        remainingPercent: Double,
+        resetAt: String?,
+        windowDurationMinutes: Int,
+        observedAt: String?,
+        sourceType: String?,
+        confidence: String,
+        status: String,
+        official: Bool
+    ) {
+        self.sourceID = sourceID
+        self.provider = provider
+        self.window = window
+        self.usedPercent = usedPercent
+        self.remainingPercent = remainingPercent
+        self.resetAt = resetAt
+        self.windowDurationMinutes = windowDurationMinutes
+        self.observedAt = observedAt
+        self.sourceType = sourceType
+        self.confidence = confidence
+        self.status = status
+        self.official = official
     }
 
     enum CodingKeys: String, CodingKey {

@@ -5,6 +5,10 @@ import XCTest
 
 @MainActor
 final class MenuBarAppModelTests: XCTestCase {
+    func testPopoverLayoutUsesMeasuredContentHeight() {
+        XCTAssertEqual(MenuBarPopoverLayout.size(contentHeight: 642).height, 642)
+    }
+
     func testStatusItemPresentationKeepsMenuBarEntryNumeric() throws {
         let state = MenuBarViewModel.build(
             from: try summary(periodID: "today", totalTokens: 366_442_154),
@@ -149,6 +153,88 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(model.summary.period.id, "month")
         XCTAssertEqual(model.summary.period.totalTokens, 1200)
         XCTAssertTrue(model.errorMessage?.hasPrefix("刷新失败，正在显示缓存：") == true)
+    }
+
+    func testSuccessfulQuotaRemainsVisibleWhenFreshSummaryReportsQuotaFailure() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let lastSuccessfulWindow = MobileLimitWindow(
+            sourceID: "claude-main",
+            provider: "claude",
+            window: "session",
+            usedPercent: 4,
+            remainingPercent: 96,
+            resetAt: "2026-06-25T15:00:00+08:00",
+            windowDurationMinutes: 300,
+            observedAt: "2026-06-25T11:00:00+08:00",
+            sourceType: "official_cli",
+            confidence: "observed",
+            status: "ok",
+            official: true
+        )
+        let cached = try summary(
+            periodID: "today",
+            totalTokens: 100,
+            providerSlots: [
+                MobileProviderSlot(
+                    provider: "claude",
+                    usage: MobileProviderUsage(
+                        status: "available", totalTokens: 100, inputTokens: 20,
+                        outputTokens: 10, cacheTokens: 70
+                    ),
+                    quota: MobileProviderQuota(
+                        status: "available", reason: nil,
+                        lastVerifiedAt: lastSuccessfulWindow.observedAt,
+                        sourceID: lastSuccessfulWindow.sourceID,
+                        sourceType: lastSuccessfulWindow.sourceType,
+                        windows: [lastSuccessfulWindow]
+                    )
+                )
+            ]
+        )
+        let refreshed = try summary(
+            periodID: "today",
+            totalTokens: 200,
+            providerSlots: [
+                MobileProviderSlot(
+                    provider: "claude",
+                    usage: MobileProviderUsage(
+                        status: "available", totalTokens: 200, inputTokens: 40,
+                        outputTokens: 20, cacheTokens: 140
+                    ),
+                    quota: MobileProviderQuota(
+                        status: "missing", reason: "unavailable",
+                        lastVerifiedAt: lastSuccessfulWindow.observedAt,
+                        sourceID: lastSuccessfulWindow.sourceID,
+                        sourceType: lastSuccessfulWindow.sourceType,
+                        windows: []
+                    )
+                )
+            ]
+        )
+        let model = MenuBarAppModel(
+            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: cached, fetchedAt: now.addingTimeInterval(-600))
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(force: true)
+        try await loader.waitForRequestCount(1)
+        await loader.complete(period: "today", summary: refreshed)
+        await waitUntil {
+            model.isLoading == false
+        }
+
+        let claude = try XCTUnwrap(model.summary.providerSlots.first { $0.provider == "claude" })
+        XCTAssertEqual(model.summary.period.totalTokens, 200)
+        XCTAssertEqual(claude.usage.totalTokens, 200)
+        XCTAssertEqual(claude.quota.status, "missing")
+        XCTAssertEqual(claude.quota.windows, [lastSuccessfulWindow])
     }
 
     func testPopoverQuitActionTerminatesApplication() throws {
@@ -334,7 +420,11 @@ final class MenuBarAppModelTests: XCTestCase {
         )
     }
 
-    private func summary(periodID: String, totalTokens: Int) throws -> MobileSummary {
+    private func summary(
+        periodID: String,
+        totalTokens: Int,
+        providerSlots: [MobileProviderSlot] = []
+    ) throws -> MobileSummary {
         let json = """
         {
           "schema_version": 1,
@@ -376,7 +466,20 @@ final class MenuBarAppModelTests: XCTestCase {
           }
         }
         """
-        return try JSONDecoder().decode(MobileSummary.self, from: Data(json.utf8))
+        let base = try JSONDecoder().decode(MobileSummary.self, from: Data(json.utf8))
+        return MobileSummary(
+            schemaVersion: base.schemaVersion,
+            client: base.client,
+            generatedAt: base.generatedAt,
+            timezone: base.timezone,
+            period: base.period,
+            trend: base.trend,
+            sources: base.sources,
+            breakdown: base.breakdown,
+            limits: base.limits,
+            providerSlots: providerSlots,
+            providerUsageCoverage: base.providerUsageCoverage
+        )
     }
 
     private func date(_ iso: String) throws -> Date {

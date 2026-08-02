@@ -108,11 +108,15 @@ final class MenuBarAppModel: ObservableObject {
                 guard sequence == self.refreshSequence, selected == self.selectedPeriodID else {
                     return
                 }
-                self.summary = loaded
+                let displayed = Self.summaryKeepingLastSuccessfulQuota(
+                    loaded,
+                    fallback: self.cachedSummaries[loaded.period.id]?.summary
+                )
+                self.summary = displayed
                 self.hasLoadedUsableSummary = true
                 self.errorMessage = nil
-                self.cachedSummaries[loaded.period.id] = CachedMenuSummary(summary: loaded, fetchedAt: self.now())
-                try? SummaryCache.save(loaded, paths: paths)
+                self.cachedSummaries[displayed.period.id] = CachedMenuSummary(summary: displayed, fetchedAt: self.now())
+                try? SummaryCache.save(displayed, paths: paths)
             } catch {
                 guard sequence == self.refreshSequence else {
                     return
@@ -128,6 +132,61 @@ final class MenuBarAppModel: ObservableObject {
 
     private func isFresh(_ cached: CachedMenuSummary) -> Bool {
         now().timeIntervalSince(cached.fetchedAt) < cacheFreshnessInterval
+    }
+
+    private static func summaryKeepingLastSuccessfulQuota(
+        _ loaded: MobileSummary,
+        fallback: MobileSummary?
+    ) -> MobileSummary {
+        guard let fallback else { return loaded }
+
+        let fallbackByProvider = Dictionary(uniqueKeysWithValues: fallback.providerSlots.map { ($0.provider, $0) })
+        var seenProviders = Set<String>()
+        var slots = loaded.providerSlots.map { slot -> MobileProviderSlot in
+            seenProviders.insert(slot.provider)
+            guard slot.quota.windows.isEmpty,
+                  let previous = fallbackByProvider[slot.provider],
+                  !previous.quota.windows.isEmpty
+            else {
+                return slot
+            }
+            return MobileProviderSlot(
+                provider: slot.provider,
+                usage: slot.usage,
+                quota: MobileProviderQuota(
+                    status: slot.quota.status,
+                    reason: slot.quota.reason,
+                    lastVerifiedAt: slot.quota.lastVerifiedAt ?? previous.quota.lastVerifiedAt,
+                    sourceID: slot.quota.sourceID ?? previous.quota.sourceID,
+                    sourceType: slot.quota.sourceType ?? previous.quota.sourceType,
+                    windows: previous.quota.windows
+                )
+            )
+        }
+
+        for previous in fallback.providerSlots where !seenProviders.contains(previous.provider) {
+            slots.append(
+                MobileProviderSlot(
+                    provider: previous.provider,
+                    usage: .missing,
+                    quota: previous.quota
+                )
+            )
+        }
+
+        return MobileSummary(
+            schemaVersion: loaded.schemaVersion,
+            client: loaded.client,
+            generatedAt: loaded.generatedAt,
+            timezone: loaded.timezone,
+            period: loaded.period,
+            trend: loaded.trend,
+            sources: loaded.sources,
+            breakdown: loaded.breakdown,
+            limits: loaded.limits,
+            providerSlots: slots,
+            providerUsageCoverage: loaded.providerUsageCoverage
+        )
     }
 
     private static func shortError(_ error: Error) -> String {
