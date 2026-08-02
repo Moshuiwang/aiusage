@@ -1,4 +1,20 @@
-# AI Usage Ingest Server Operations
+# AI Usage Ingest Server Operations（**冻结中的 Python 实现**）
+
+> ## ⚠️ 本文档描述的不是生产
+>
+> **生产服务端是 Cloudflare Worker + D1**，入口 `https://aiusage.chunbai.com`。
+> 本文档描述的 Python Ingest Server（`cli server`）已按 #67 决策**冻结**，随 #74 删除。
+>
+> **照本文档部署，等于部署一个正在退役的实现。**
+>
+> | 你要做什么 | 去哪 |
+> | --- | --- |
+> | 生产部署 / Secrets / 路由 / 线上 smoke | `.claude/rules/cloudflare.md`（Ops 在 macOS 侧执行） |
+> | 本地起服务端开发调试 | `scripts/dev_worker.sh --seed`，见 `docs/architecture/local-worker-development.md` |
+> | 理解为什么收敛成单实现 | `docs/architecture/server-path-consolidation-decision.md` |
+>
+> 本文档保留的价值：其中的鉴权边界、SQLite 备份策略与 systemd 单元写法，
+> 对理解历史决策与迁移期排查仍有参考意义。**但不要按它新建部署。**
 
 本文档介绍了个人 HTTP 数据汇聚服务端（Ingest Server）的运行、配置、数据备份与安全边界设计。
 
