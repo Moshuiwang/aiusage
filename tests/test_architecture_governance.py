@@ -30,7 +30,13 @@ HTTP_CALL_NAMES = frozenset({"Request", "urlopen", "urlretrieve"})
 
 #: 采集端模块。它们跑在用户的 Mac / Linux 机器上，读本机 ccusage / mswusage 与 OS 上下文——
 #: 这是 Worker 沙箱结构上做不到的事，所以采集端永远是 Python（#67 决策）。
-COLLECTOR_MODULE_GLOBS = ("pusher.py", "limits_*.py", "mswusage_*.py", "deploy_*.py")
+COLLECTOR_MODULE_GLOBS = (
+    "pusher.py",
+    "collector_store.py",
+    "limits_*.py",
+    "mswusage_*.py",
+    "deploy_*.py",
+)
 
 #: 服务端读模型与 HTTP 编排。按 #67 决策服务端权威已转移到 Worker + D1，
 #: 这些 Python 模块已冻结并随 #74 删除。采集端一旦 import 它们，删除就会连带打断采集端——
@@ -266,7 +272,8 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
         """防呆：glob 写错时上面那条会因为「一个文件都没扫到」而永远绿。"""
         names = [p.name for p in _collector_module_paths()]
         self.assertIn("pusher.py", names)
-        self.assertGreaterEqual(len(names), 5, "采集端模块扫描结果异常: " + str(names))
+        self.assertIn("collector_store.py", names)
+        self.assertGreaterEqual(len(names), 6, "采集端模块扫描结果异常: " + str(names))
 
     def test_the_import_check_catches_both_absolute_and_relative_forms(self) -> None:
         """守卫必须挡住**全部四种**导入写法，少认一种就是一条绕过路径。

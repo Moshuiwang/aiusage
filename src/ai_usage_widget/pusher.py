@@ -4,14 +4,26 @@ import json
 import hashlib
 import os
 import shlex
+import sqlite3
 import subprocess
 import sys
 import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 import urllib.request
 import urllib.error
+from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from .collector_store import (
+    DELIVERED,
+    KIND_USAGE,
+    TERMINAL,
+    CollectorStore,
+    OutboxConfig,
+    OutboxFull,
+    OutboxNotDrained,
+    classify_delivery,
+)
 from .config import DeviceConfig
 from .http_identity import PRODUCT_USER_AGENT
 from .models import CommandResult
@@ -213,9 +225,12 @@ class DevicePusher:
         ledger_mode: str = "incremental",
         ledger_lookback_hours: float = 48.0,
         ledger_coverage_start: str | None = None,
+        outbox: CollectorStore | None = None,
     ) -> None:
         self.config = config
         self.executor = executor
+        # 注入的 store 由调用方负责关闭；pusher 自己按配置打开的那个用完即关。
+        self._outbox = outbox
         self.http_client = http_client
         self.retry_attempts = max(1, int(retry_attempts))
         self.retry_sleep = retry_sleep
@@ -435,52 +450,8 @@ class DevicePusher:
             if token:
                 headers["Authorization"] = f"Bearer {token}"
 
-        # 5. 上报 HTTP
-        try:
-            status_code, resp_data = self._post_with_retries(
-                url=self.config.server_url,
-                data=payload,
-                headers=headers,
-                timeout=float(self.config.timeout_seconds),
-            )
-        except Exception as exc:
-            return {
-                "success": False,
-                "error_type": "http_request_failed",
-                "error_message": f"HTTP request failed: {exc}",
-            }
-
-        # 6. 处理响应状态
-        if status_code == 401:
-            return {
-                "success": False,
-                "error_type": "http_auth_failed",
-                "error_message": resp_data.get("message") or "Authentication failed at Ingest Server",
-            }
-        if status_code == 403:
-            return {
-                "success": False,
-                "error_type": "http_access_blocked",
-                "error_message": resp_data.get("message") or "入口防护拦截或访问被拒绝，请检查网络入口策略",
-            }
-        if resp_data.get("error_type") == UNSUPPORTED_ERROR_TYPE:
-            return {
-                "success": False,
-                "error_type": UNSUPPORTED_ERROR_TYPE,
-                "error_message": resp_data.get("message") or "采集端版本不被服务端支持，本次上报未写入",
-            }
-        elif status_code != 200:
-            return {
-                "success": False,
-                "error_type": "http_request_failed",
-                "error_message": f"Server returned error code {status_code}: {resp_data.get('message') or 'Unknown'}",
-            }
-
-        return {
-            "success": True,
-            "status": resp_data.get("status") or "accepted",
-            "source_id": resp_data.get("source_id") or self.config.source_id,
-        }
+        # 5. 投递（直推 或 经本地 outbox 持久缓冲后补推）
+        return self._deliver(payload, headers)
 
     def _push_source_status(self, status: str, error_type: str, error_message: str) -> Dict[str, Any]:
         observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
@@ -505,6 +476,96 @@ class DevicePusher:
             token = os.environ.get(self.config.token_env)
             if token:
                 headers["Authorization"] = f"Bearer {token}"
+        # 状态心跳是「当前状态」，不是不可再生的历史：`usage_daily` 是空的，下一轮采集
+        # 会重新产生同样的结论。「采集坏了 + 网也断了」会同时发生，如果每轮心跳都被
+        # 无限缓冲，磁盘上限会被这些可再生的心跳吃光，之后真正不可再生的用量 payload
+        # 反而被 outbox_full 拒之门外——防丢数的机制亲手造成丢数。所以按 dedupe_key
+        # 只保留最新一条，并给它 TTL。
+        return self._deliver(
+            payload,
+            headers,
+            success_extra={"collection_status": status},
+            dedupe_key="source_status",
+            ttl_seconds=self._status_heartbeat_ttl(),
+        )
+
+    def _status_heartbeat_ttl(self) -> float | None:
+        outbox_config = getattr(self.config, "outbox", None)
+        return outbox_config.limit_ttl_seconds if outbox_config is not None else None
+
+    # --- 投递 ---------------------------------------------------------------
+    #
+    # 采集与投递是两件事：采集只发生在本机、结果是这份 payload；投递可能失败、可能要
+    # 跨天补推。#73 把「投递」从 push() 里单独拆出来，正常路径与失败路径共用同一条，
+    # 免得两处各写一份重试语义再慢慢漂移。
+
+    def _deliver(
+        self,
+        payload: Dict[str, Any],
+        headers: Dict[str, str],
+        *,
+        success_extra: Dict[str, Any] | None = None,
+        dedupe_key: str | None = None,
+        ttl_seconds: float | None = None,
+    ) -> Dict[str, Any]:
+        outbox_config = getattr(self.config, "outbox", None)
+
+        if outbox_config is None and self._outbox is None:
+            # 这台设备从来没启用过 outbox：走原来的直推路径，行为一个字节都不变。
+            return self._deliver_direct(payload, headers, success_extra)
+
+        # outbox 是本次新引入的故障源（库被锁、磁盘只读、文件损坏）。它自己坏掉时
+        # 必须返回结构化失败，而不是把整次采集变成一个栈回溯——`cli.py` 的 except
+        # 子句接不住 `sqlite3.Error`。**也绝不退化成静默直推**：那会让数据看似送出去了，
+        # 磁盘上的积压却再没人管，比直接报错更难发现。
+        try:
+            return self._deliver_with_outbox(
+                payload, headers, outbox_config, success_extra, dedupe_key, ttl_seconds
+            )
+        except sqlite3.Error as exc:
+            return {
+                "success": False,
+                "error_type": "outbox_unavailable",
+                "error_message": f"本地 outbox 不可用，本次上报未送达：{exc}",
+            }
+
+    def _deliver_with_outbox(
+        self,
+        payload: Dict[str, Any],
+        headers: Dict[str, str],
+        outbox_config: OutboxConfig | None,
+        success_extra: Dict[str, Any] | None,
+        dedupe_key: str | None,
+        ttl_seconds: float | None,
+    ) -> Dict[str, Any]:
+        if self._outbox is not None and (outbox_config is None or outbox_config.enabled):
+            return self._deliver_via_outbox(
+                self._outbox, payload, headers, outbox_config, success_extra, dedupe_key, ttl_seconds
+            )
+
+        if outbox_config is not None and not outbox_config.enabled:
+            # 已回退到直推。回退**不允许静默丢弃**：磁盘上还有未交付数据就当场停下，
+            # 而不是绕过它继续直推——那些数据没人会再看一眼。
+            blocked = self._drain_guard(outbox_config)
+            if blocked is not None:
+                return blocked
+            return self._deliver_direct(payload, headers, success_extra)
+
+        assert outbox_config is not None
+        store = CollectorStore.from_config(outbox_config)
+        try:
+            return self._deliver_via_outbox(
+                store, payload, headers, outbox_config, success_extra, dedupe_key, ttl_seconds
+            )
+        finally:
+            store.close()
+
+    def _deliver_direct(
+        self,
+        payload: Dict[str, Any],
+        headers: Dict[str, str],
+        success_extra: Dict[str, Any] | None,
+    ) -> Dict[str, Any]:
         try:
             status_code, resp_data = self._post_with_retries(
                 url=self.config.server_url,
@@ -518,6 +579,138 @@ class DevicePusher:
                 "error_type": "http_request_failed",
                 "error_message": f"HTTP request failed: {exc}",
             }
+        result = self._interpret_response(status_code, resp_data)
+        if result.get("success") and success_extra:
+            result.update(success_extra)
+        return result
+
+    def _deliver_via_outbox(
+        self,
+        store: CollectorStore,
+        payload: Dict[str, Any],
+        headers: Dict[str, str],
+        outbox_config: OutboxConfig | None,
+        success_extra: Dict[str, Any] | None,
+        dedupe_key: str | None = None,
+        ttl_seconds: float | None = None,
+    ) -> Dict[str, Any]:
+        """先落盘，再尽力补推。**先落盘**是这个顺序的全部意义所在。
+
+        payload 一旦进了 outbox，进程被杀、机器断电、网络断三天都不会让它消失；
+        补推失败只是「这次没送到」，不是「这段历史没了」。
+        """
+        store.purge_expired()
+        batch = outbox_config.max_flush_batch if outbox_config is not None else None
+        try:
+            entry_id = store.enqueue(
+                payload, kind=KIND_USAGE, dedupe_key=dedupe_key, ttl_seconds=ttl_seconds
+            )
+        except OutboxFull as exc:
+            # 磁盘上限：拒绝新增而不是丢最旧（理由见 collector_store 模块 docstring）。
+            # 但「满了」不等于「卡死」：先把积压尽力推掉腾出空间，再试一次入队。
+            # 少了这一步，磁盘一旦打满就再也回不来了——网络恢复也没用，
+            # 因为补推根本不会被触发。
+            self._flush_outbox(store, headers, limit=batch)
+            try:
+                entry_id = store.enqueue(
+                    payload, kind=KIND_USAGE, dedupe_key=dedupe_key, ttl_seconds=ttl_seconds
+                )
+            except OutboxFull:
+                # 仍然放不下：**显式失败**，让运维立刻看见，
+                # 而不是悄悄牺牲一段已经缓冲下来的历史。
+                return {
+                    "success": False,
+                    "error_type": "outbox_full",
+                    "error_message": str(exc),
+                    "outbox": store.stats(),
+                }
+
+        outcomes = self._flush_outbox(store, headers, limit=batch)
+
+        result = dict(
+            outcomes.get(entry_id)
+            or {
+                "success": False,
+                "error_type": "outbox_queued",
+                "error_message": (
+                    "本次 payload 已持久化到本地 outbox，等待网络恢复后补推；"
+                    "本次上报未送达服务端"
+                ),
+            }
+        )
+        if result.get("success") and success_extra:
+            result.update(success_extra)
+        result["outbox"] = store.stats()
+        return result
+
+    def _flush_outbox(
+        self,
+        store: CollectorStore,
+        headers: Dict[str, str],
+        *,
+        limit: int | None,
+    ) -> Dict[int, Dict[str, Any]]:
+        """按入队顺序补推，返回每个条目各自的投递结果。
+
+        遇到可重试失败就**停下**：网络不通时继续硬打后面几十条只会拖长采集耗时，
+        而它们下一轮还在。终态失败则跳过该条继续——一条永远收不下的 payload
+        不该把它后面的历史一起堵死。
+        """
+        outcomes: Dict[int, Dict[str, Any]] = {}
+        for entry in store.pending(limit=limit):
+            try:
+                status_code, resp_data = self._post_with_retries(
+                    url=self.config.server_url,
+                    data=entry.payload,
+                    headers=headers,
+                    timeout=float(self.config.timeout_seconds),
+                )
+            except Exception as exc:
+                outcomes[entry.entry_id] = {
+                    "success": False,
+                    "error_type": "http_request_failed",
+                    "error_message": f"HTTP request failed: {exc}",
+                }
+                store.record_failure(entry.entry_id, f"http_request_failed: {exc}")
+                break
+
+            interpreted = self._interpret_response(status_code, resp_data)
+            outcomes[entry.entry_id] = interpreted
+            verdict = classify_delivery(status_code, resp_data)
+            reason = f"{interpreted.get('error_type')}: {interpreted.get('error_message')}"
+            if verdict == DELIVERED:
+                store.ack(entry.entry_id)
+            elif verdict == TERMINAL:
+                store.dead_letter(entry.entry_id, reason=reason)
+            else:
+                store.record_failure(entry.entry_id, reason)
+                break
+        return outcomes
+
+    def _drain_guard(self, outbox_config: OutboxConfig) -> Dict[str, Any] | None:
+        """回退到直推前的排空检查。返回 ``None`` 表示放行。"""
+        store = self._outbox
+        owned = False
+        if store is None:
+            if not Path(outbox_config.path).exists():
+                return None
+            store = CollectorStore.from_config(outbox_config)
+            owned = True
+        try:
+            store.assert_drained()
+        except OutboxNotDrained as exc:
+            return {
+                "success": False,
+                "error_type": "outbox_not_drained",
+                "error_message": str(exc),
+            }
+        finally:
+            if owned:
+                store.close()
+        return None
+
+    def _interpret_response(self, status_code: int, resp_data: dict) -> Dict[str, Any]:
+        """把一次 HTTP 响应翻译成 push 结果。正常路径与失败路径共用同一份判定。"""
         if status_code == 401:
             return {
                 "success": False,
@@ -546,7 +739,6 @@ class DevicePusher:
             "success": True,
             "status": resp_data.get("status") or "accepted",
             "source_id": resp_data.get("source_id") or self.config.source_id,
-            "collection_status": status,
         }
 
     def _post_with_retries(self, url: str, data: dict, headers: dict, timeout: float) -> tuple[int, dict]:
