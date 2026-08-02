@@ -67,8 +67,16 @@ const floatFields = new Set(["used_percent", "remaining_percent"]);
 // 根因只有一个 fixture 事实：这份 golden 由 Python server 实录，数据全部经 Python `/ingest`
 // 的 legacy `usage_daily` 路径写入，从不产生 canonical 小时事实与 `ai_accounts` 行；
 // 而 Worker 读模型只读 canonical 事实（见本文件 "does not mix archived ..." 几条）。
-// 于是 golden 在这几棵子树上记录的是空数组，Worker 侧非空——差异全部落在数组 length 上，
-// 字段名、类型、枚举值、其余全部 length 逐条一致。
+// 于是 golden 在这几棵子树上记录的是空数组，Worker 侧非空——差异全部落在数组 length 上。
+//
+// 必须说清这条清单的**代价**（早先注释写成「字段名、类型、枚举值逐条一致」，那句话不成立）：
+// `walkDiff` 在数组长度不等时 push `|len` 后**直接 return**，不再进入元素比对；
+// 而 golden 这几棵子树是 `{"items": [], "length": 0}`，根本没有元素形状可比。
+// 所以这几棵子树的**元素结构在本条测试里完全没有被比对过**——
+// 例如把 read-model 的 `ai_accounts.label` 改名，本条测试是绿的（已实测）。
+// 覆盖由下一条 `matches Python value golden` 的全量深比对提供：它跑在 canonical seed 上，
+// `ai_accounts` / `account_hourly.by_*` / `confidence_breakdown` / `trend.by_agent` 全部非空，
+// 同一个改名变异在那里会红（也已实测）。这是分工，不是缺口，但不要误以为本条守住了它们。
 //
 // 这不是实现缺陷：同样由 Python 读模型生成、但跑在 canonical seed 上的 value_golden.json，
 // `ai_accounts` 与 `account_hourly.by_*` 同样非空，且 Worker 与它全量深比对通过。

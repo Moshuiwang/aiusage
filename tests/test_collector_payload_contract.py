@@ -872,15 +872,26 @@ class TestDroppedLegacyFieldIsIgnoredByBothImplementations(unittest.TestCase):
         self.assertIn(probe["field"], payload)
         self.assertEqual(payload[probe["field"]], probe["value"])
 
-    def test_probe_base_payload_comes_from_the_owner_module(self) -> None:
-        """基座必须是 pusher 此刻真正会发的 payload，只多出那一个历史字段。
+    def test_probe_is_frozen_to_the_only_scenario_that_ever_sent_the_field(self) -> None:
+        """探针必须钉在 partial 场景上——摘除前只有这一个场景会发那个字段。
 
-        这样探针不会随 pusher 演进而陈旧，也不需要任何手写的 payload 结构。
+        这条曾经写成「基座必须等于 pusher 此刻会发的 payload」，那是**恒真断言**：
+        基座是 ``_legacy_probe_payload()`` 去掉该字段得来的，而后者本身就是
+        ``_fixture_record(scenario)["payload"]`` 加上该字段，两边构造上是同一个对象的拷贝，
+        ``_diff_paths`` 永远为空。基座「来自 owner 模块」由构造保证，不需要也无法用断言证明。
+
+        真正会失效的是**场景选择**：探针若指向 ``OK_SCENARIO`` 或 ``ERROR_SCENARIO``，
+        它就不再重放「老采集端真的会发这个字段」的那条路径，下面两条跨实现断言
+        会退化成「对一个本来就不带该字段的场景验证两侧都忽略它」——依旧全绿，但什么都没验证。
         """
-        payload = _legacy_probe_payload()
-        base = {key: value for key, value in payload.items() if key not in DROPPED_LEGACY_FIELDS}
-        current = _fixture_record(_legacy_probe()["scenario"])["payload"]
-        self.assertEqual(_diff_paths(current, base, "legacy_probe"), [])
+        probe = _legacy_probe()
+        self.assertIn(probe["scenario"], SCENARIOS)
+        self.assertEqual(
+            probe["scenario"],
+            PARTIAL_SCENARIO,
+            "探针必须重放 partial 场景：摘除前 pusher 只在「ccusage 挂了但账本可用」时发该字段，"
+            "换成别的场景这条跨实现覆盖就名存实亡",
+        )
 
     def test_python_ingest_accepts_and_ignores_the_dropped_field(self) -> None:
         """Python 侧：不报错、不解析、不带进 ``IngestRequest``。

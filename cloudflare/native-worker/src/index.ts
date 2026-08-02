@@ -389,7 +389,11 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
       updated_at: latestCollectedAt,
     },
     source_status: {
-      total: sourceRows.length,
+      // total 必须与 counts / non_ok 数同一份条目（Python `server_services.py` 的
+      // `len(source_status)` 就是与 counts 同一个列表）。数 sourceRows 今天恰好等值，
+      // 但只要 buildHealthSourceStatus 将来加任何过滤，total 就会大于 counts 之和——
+      // 那正是 #77 刚消灭的那类「同一个块里两个数字口径不同」。
+      total: healthSourceStatus.length,
       counts,
       non_ok: nonOk,
     },
