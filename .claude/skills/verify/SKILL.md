@@ -5,20 +5,29 @@ description: ai-usage 的验证入口与证据等级判定。在声称任务完�
 
 # 验证与证据
 
-## 唯一验证入口
+## 验证入口与收口口径（2026-08-03 起）
 
 ```bash
-scripts/verify.sh                # 全量：Python 约 85s + Cloudflare Worker 约 180s
+scripts/verify.sh                # 全量：Python 约 85s + Cloudflare Worker 约 6 分钟（本机实测）
 scripts/verify.sh --python-only  # 快速：只跑 Python 约 85s
 ```
 
-不要手写测试命令，不要只跑单个测试文件就宣称通过。脚本会显式打印跳过项和原因。
+**收口口径：本地 targeted 绿 = 等级 3；全量套件交给 PR CI（等级 4）。**
+main 分支保护要求四个 check 全绿才能合并，所以全量不会被绕过——
+它只是从「本机排队 6-8 分钟」挪到了「GitHub 并行 3 分钟」。
+本地全量 `verify.sh` 仍可用，但只是可选复核，**不再是收口必要条件**
+（2026-08-03 实测：一整轮交付里本地全量跑了约 10 次、共约 1 小时，
+targeted 测试没抓到而全量抓到的问题为 0 个）。
 
-单个用例调试可以直接用 `PYTHONPATH=src python3 -m unittest tests.test_x.TestY.test_z`，
-但**收口汇报必须以 `verify.sh` 的结果为准**。
+targeted 的口径：Python 改动跑改动模块的测试文件或 `--python-only`；
+Worker 改动跑改动相关的 test 文件
+（`npx --prefix cloudflare/native-worker vitest run --config cloudflare/native-worker/vitest.config.ts <file>`）。
+收口汇报必须写明跑了哪些 targeted、结果如何、全量由哪个 PR 的 CI 承担。
+
+**两样东西永远在本地做,CI 替代不了**：TDD 的先红后绿；变异证据（破坏→变红→还原）。
 
 **验证成本要匹配验证目的**（#68：前半程 3 次不必要的全量共浪费约 30 分钟）：
-TDD 红阶段只跑目标测试文件（秒级），绿阶段跑相关模块，**只有收口才跑 `verify.sh`**。
+TDD 红阶段只跑目标测试文件（秒级），绿阶段跑相关模块。
 全量 verify 运行期间**不要并发派 subagent**——CPU 竞争，#68 实测 5 个挂掉里 4 个在此时段。
 
 ## 证据等级（汇报时必须写明当前级别）
@@ -27,13 +36,13 @@ TDD 红阶段只跑目标测试文件（秒级），绿阶段跑相关模块，*
 | --- | --- | --- |
 | 1 | 已完成分析 | ✅ |
 | 2 | 已完成本地修改 | ✅ |
-| 3 | 本地测试通过 | ✅ `verify.sh` 退出 0 |
-| 4 | CI 或自动化检查通过 | ⚠️ 需 push 后看 GitHub Actions |
+| 3 | 本地测试通过 | ✅ targeted 测试绿（或 `verify.sh` 退出 0） |
+| 4 | CI 或自动化检查通过 | ⚠️ 需 push 后看 GitHub Actions（PR 全量门禁在这一级） |
 | 5 | 已部署到目标环境 | ❌ 需 Mac 侧 Ops Agent |
 | 6 | 真实用户旅程验证通过 | ❌ 需真机 / 浏览器 |
 | 7 | 已从来源系统回读确认 | ❌ 需生产凭据 |
 
-**`verify.sh` 退出 0 只等于第 3 级。** 禁止用低一级证据宣称高一级完成。
+**targeted 绿或 `verify.sh` 退出 0 都只等于第 3 级。** 禁止用低一级证据宣称高一级完成。
 文档、代码或 CI 证明的是能力存在，不自动证明真实环境已经生效。
 尚未验证的层级必须在汇报里明确列出。
 

@@ -128,12 +128,24 @@ class TestChangeScope(StopGateTestCase):
         self.assertIn("Python 测试未通过", result.stderr)
 
     def test_cloudflare_change_demands_explicit_worker_evidence(self) -> None:
+        """cloudflare/ 有改动仍然阻止收口，但索要的证据是 targeted 测试 + PR CI（2026-08-03 口径）。
+
+        不再索要本地全量 verify.sh：全量套件由 PR CI 承担（main 分支保护要求
+        四个 check 全绿才能合并），本地全量降级为可选复核。
+        """
         path = self.repo / "cloudflare" / "native-worker" / "src" / "index.ts"
         path.parent.mkdir(parents=True)
         path.write_text("export default {};\n", encoding="utf-8")
         result = self._run()
         self.assertEqual(result.returncode, 2, result.stdout)
-        self.assertIn("verify.sh", result.stderr)
+        self.assertIn("targeted", result.stderr)
+        self.assertIn("PR CI", result.stderr)
+        self.assertIn(".skip-stop-gate", result.stderr)
+        self.assertNotIn(
+            "请执行：\n    scripts/verify.sh",
+            result.stderr,
+            "旧口径的「必须本地全量」措辞不应再出现",
+        )
 
     def test_skip_marker_is_one_shot(self) -> None:
         (self.repo / ".claude").mkdir()
