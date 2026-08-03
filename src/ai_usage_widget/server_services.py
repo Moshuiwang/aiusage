@@ -12,7 +12,6 @@ from .ingest import IngestResponse, IngestValidationError, validate_ingest_paylo
 from .limits import LOCAL_ESTIMATE_SOURCE_TYPES, LimitContractError, parse_limit_window
 from .mobile_summary import build_mobile_summary
 from .normalize import (
-    normalize_ingest_block_request,
     normalize_ingest_hourly_facts,
     normalize_ingest_hourly_request,
     normalize_ingest_request,
@@ -68,7 +67,8 @@ def handle_ingest_payload(
     items = normalize_ingest_request(req)
     hourly_items = normalize_ingest_hourly_request(req)
     hourly_facts = normalize_ingest_hourly_facts(req)
-    block_items = normalize_ingest_block_request(req)
+    # `ccusage_blocks_report` 已由 #91 从采集端摘除：老版本采集端仍会发，按未知顶层字段
+    # 忽略，不再归一化、不再写入 usage_blocks（与生产用的 Worker 行为一致）。
 
     collected_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
     # 失败原因只认 payload 顶层的 error_type / error_message —— 两侧实现都有的字段。
@@ -104,7 +104,6 @@ def handle_ingest_payload(
             items=items,
             hourly_items=hourly_items,
             hourly_facts=hourly_facts,
-            block_items=block_items,
             source_identities=[{
                 "source_id": req.source_id,
                 "host": req.host,

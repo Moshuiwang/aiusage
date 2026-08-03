@@ -31,10 +31,10 @@ class IngestRequest:
     collection_window: str
     usage_daily: List[Dict[str, Any]]
     ccusage_daily_report: Optional[Dict[str, Any]] = None
-    # 注意：`ccusage_daily_status` 已由 #78 从两侧摘除（采集端不再发，生产用的 Worker
-    # 从来就不认识它）。老版本采集端仍会发，按未知顶层字段静默忽略，不得重新声明。
+    # 注意：`ccusage_daily_status`（#78）与 `ccusage_blocks_report`（#91）已从两侧摘除
+    # （采集端不再发，生产用的 Worker 不再声明）。老版本采集端仍会发，
+    # 按未知顶层字段静默忽略，不得重新声明。
     ccusage_session_report: Optional[Dict[str, Any]] = None
-    ccusage_blocks_report: Optional[Dict[str, Any]] = None
     mswusage_codex_hourly_report: Optional[Dict[str, Any]] = None
     codex_hourly_status: Optional[Dict[str, Any]] = None
     usage_hourly_facts: Optional[List[Dict[str, Any]]] = None
@@ -138,9 +138,8 @@ def validate_ingest_payload(
     ccusage_session_report = payload.get("ccusage_session_report")
     if ccusage_session_report is not None and not isinstance(ccusage_session_report, dict):
         raise IngestValidationError("ccusage_session_report must be an object", error_type="http_schema_invalid")
-    ccusage_blocks_report = payload.get("ccusage_blocks_report")
-    if ccusage_blocks_report is not None and not isinstance(ccusage_blocks_report, dict):
-        raise IngestValidationError("ccusage_blocks_report must be an object", error_type="http_schema_invalid")
+    # `ccusage_blocks_report` 曾在这里被校验成「必须是 object」。#91 摘除后**不校验、
+    # 不解析**：老版本采集端仍会发它（任何形状），必须当未知顶层字段直接忽略。
     mswusage_codex_hourly_report = payload.get("mswusage_codex_hourly_report")
     if mswusage_codex_hourly_report is not None and not isinstance(mswusage_codex_hourly_report, dict):
         raise IngestValidationError("mswusage_codex_hourly_report must be an object", error_type="http_schema_invalid")
@@ -205,7 +204,6 @@ def validate_ingest_payload(
         usage_daily=list(payload.get("usage_daily", [])),
         ccusage_daily_report=ccusage_daily_report,
         ccusage_session_report=ccusage_session_report,
-        ccusage_blocks_report=ccusage_blocks_report,
         mswusage_codex_hourly_report=mswusage_codex_hourly_report,
         codex_hourly_status=codex_hourly_status,
         usage_hourly_facts=usage_hourly_facts,

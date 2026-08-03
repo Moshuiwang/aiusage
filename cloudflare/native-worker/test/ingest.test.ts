@@ -50,6 +50,11 @@ const legacyDroppedFieldProbePath = path.join(
   repoRoot,
   "cloudflare/native-worker/test/legacy_collector_payload_ccusage_daily_status.json",
 );
+// #91 从采集端摘除的 ccusage_blocks_report 探针，结构与上面同构（Python 半边同样读它）。
+const legacyBlocksProbePath = path.join(
+  repoRoot,
+  "cloudflare/native-worker/test/legacy_collector_payload_ccusage_blocks_report.json",
+);
 // fixture 为了确定性把顶层 observed_at 抹成 "<masked>"，直接发会因时间格式非法被拒。
 // 只在测试里替换成这个固定的合法时间戳，fixture 文件本身不动。
 const collectorObservedAt = "2026-06-05T09:05:00+08:00";
@@ -964,6 +969,69 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(state).toEqual({ error_type: null, error_message: null });
   });
 
+  it("老版本采集端仍在发的 ccusage_blocks_report 被当未知字段忽略：不报错、不解析、不落库", async () => {
+    // #91 停采 blocks 后的跨实现一致性，Worker 半边。Python 半边是
+    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`，
+    // 读的是同一份探针文件、断言同一组可观测结果。结构与上面 #78 那条同构，
+    // 区别只在场景：blocks 子进程只有 ccusage daily 成功后才会跑，所以探针钉在 ok 场景。
+    const probe = JSON.parse(await readFile(legacyBlocksProbePath, "utf8")) as {
+      field: string;
+      scenario: string;
+      value: unknown;
+      bypass_values: unknown[];
+    };
+    expect(probe.field).toBe("ccusage_blocks_report");
+    expect(probe.scenario).toBe("ok-full-collection");
+
+    // 「不解析」的静态半边：字段不得出现在 IngestRequest 的声明里——声明了就等于
+    // validateIngestPayload 会把它取出来，那不是「未知字段忽略」。
+    // 对照组（防恒真）：同一套提取机制必须仍能看到邻位字段 ccusage_session_report，
+    // 证明「看不到 blocks」是因为它真的不在声明里，不是提取正则失灵。
+    const contract = await ingestRequestFieldContract();
+    expect(contract.declared).toContain("ccusage_session_report");
+    expect(
+      contract.declared,
+      "ccusage_blocks_report 重新出现在 Worker 的 IngestRequest 声明里——#91 已把它摘出「已声明解析」清单，它必须走未知字段忽略路径",
+    ).not.toContain(probe.field);
+
+    const clean = await collectorPayload(probe.scenario);
+    expect(clean.payload[probe.field], "基座 payload 不该已经带着这个历史字段").toBeUndefined();
+
+    const { body: cleanBody } = await postCollectorPayload(clean);
+    const cleanState = await readLegacyProbeState();
+    // 结构下限：ok 场景必须真的写入了账本事实，否则「逐行相等」比的是两个空库。
+    expect((cleanState.facts as unknown[]).length).toBeGreaterThan(0);
+
+    // 每一个形状都要过，不只老采集端正常发出的那个。非 object 形状正是 #91 删掉的
+    // isRecord 校验当年会以 400 拒收的——校验被加回来时只有它们会露馅。
+    const shapes = [probe.value, ...probe.bypass_values];
+    expect(shapes.length, "绕过形状清单不能为空，否则只覆盖了正面路径").toBeGreaterThan(1);
+
+    for (const shape of shapes) {
+      const legacy: CollectorPayloadRecord = {
+        ...clean,
+        payload: { ...clean.payload, [probe.field]: shape },
+      };
+      expect(Object.keys(legacy.payload)).toContain(probe.field);
+
+      // 1. 不报错：postCollectorPayload 内部已断言 200，非 2xx 会在这里直接失败。
+      const { body: legacyBody } = await postCollectorPayload(legacy);
+
+      // 2. 响应完全一致：字段没有影响任何计数或版本判定。
+      expect(legacyBody, `形状 ${JSON.stringify(shape)} 改变了响应`).toEqual(cleanBody);
+
+      // 3. 不落库：库里的可观测结果逐行相等。
+      expect(await readLegacyProbeState(), `形状 ${JSON.stringify(shape)} 改变了落库结果`).toEqual(cleanState);
+    }
+
+    // 4. usage_blocks 表为空。据实说明这条的强度：write-model.ts 从来就没有写入
+    //    usage_blocks 的代码路径，所以它对本次摘除是恒真的，单独不构成证据；
+    //    真正会红的守卫是上面的 declared 断言（重新声明即红）与形状回放（恢复
+    //    isRecord 校验即 400 红）。留着它只为把「该表是只读归档」的口径写成可执行的。
+    const counts = await tableCounts();
+    expect(counts.usage_blocks).toBe(0);
+  });
+
   it("采集端发出的每个顶层字段都必须是 Worker 已声明并解析的 ingest 字段", async () => {
     // 覆盖范围（据实写，别把它读成更大的保证）：
     //   覆盖：字段压根不在 `type IngestRequest` 里 —— validateIngestPayload 既不报错也不解析，
@@ -975,9 +1043,10 @@ describe.sequential("native TS Worker write API parity", () => {
     //         随后 PM 拍板把该字段从采集端摘除（不补进 Worker），现在重新变绿。
     //         教训：这条断言的覆盖力受限于 fixture 的**场景覆盖**，场景缺一条它就有一个盲区。
     //   覆盖：声明了却不从 payload 里取（declared 与 parsed 不相等）。
-    //   **不覆盖**：已声明、已解析、但下游零消费。此刻就有三个字段处在这个状态——
-    //         ccusage_session_report / ccusage_blocks_report / codex_hourly_status 在
-    //         write-model.ts 里除类型声明与 return 外没有任何持久化消费方，而这条用例是绿的。
+    //   **不覆盖**：已声明、已解析、但下游零消费。此刻就有两个字段处在这个状态——
+    //         ccusage_session_report / codex_hourly_status 在 write-model.ts 里除类型声明
+    //         与 return 外没有任何持久化消费方，而这条用例是绿的（第三个同状态的
+    //         ccusage_blocks_report 已由 #91 从两侧摘除，走未知字段忽略路径）。
     //         所以本用例证明的是「Worker 认识这个字段」，不是「这个字段最终被用上了」。
     //   为什么不补：要覆盖它得做「字段是否被下游消费」的静态检查，而字段可以经由解构、
     //         别名、整体透传等形式被消费，静态检查会大量误报，很快会被当噪音关掉——
@@ -1029,6 +1098,8 @@ describe.sequential("native TS Worker write API parity", () => {
       reports: await read("SELECT DISTINCT source_id, status, error_type, error_message FROM source_reports ORDER BY source_id"),
       accuracy: await read("SELECT source_id, agent, provenance, facts_digest, accuracy_status FROM source_accuracy ORDER BY source_id, agent"),
       identities: await read("SELECT source_id, host, machine, os_user, platform FROM source_identities ORDER BY source_id"),
+      // #91：blocks 快照的天然落点。字段真被重新解析并持久化，第一个变的就是这张表。
+      usageBlocks: await read("SELECT source_id, start_time, end_time, agent, total_tokens FROM usage_blocks ORDER BY source_id, start_time"),
     };
   }
 
@@ -1479,19 +1550,8 @@ function buildLargeIngestPayloads(): Record<string, unknown>[] {
         lastActivity: `2026-06-${String(21 + Math.floor(index / 24)).padStart(2, "0")}T${String(index % 24).padStart(2, "0")}:17:00+08:00`,
       },
     }));
-    const blocks = Array.from({ length: 36 }, (_, index) => ({
-      agent: "claude",
-      startTime: `2026-06-${String(21 + Math.floor(index / 24)).padStart(2, "0")}T${String(index % 24).padStart(2, "0")}:00:00+08:00`,
-      actualEndTime: `2026-06-${String(21 + Math.floor(index / 24)).padStart(2, "0")}T${String(index % 24).padStart(2, "0")}:59:00+08:00`,
-      tokenCounts: {
-        inputTokens: 200 + index,
-        outputTokens: 80 + index,
-        cacheCreationInputTokens: 6,
-        cacheReadInputTokens: 9,
-      },
-      totalTokens: 295 + index * 2,
-      costUSD: Number((0.35 + index / 300).toFixed(4)),
-    }));
+    // #91：采集端已停采 ccusage blocks，「当前采集端」的模拟 payload 不再携带
+    // ccusage_blocks_report（老采集端仍在发的形态由上面的探针用例专门守）。
     const facts = Array.from({ length: 72 }, (_, index) => {
       const agent = index % 2 === 0 ? "codex" : "claude";
       const day = 20 + Math.floor(index / 24);
@@ -1556,7 +1616,6 @@ function buildLargeIngestPayloads(): Record<string, unknown>[] {
       usage_daily: usageDaily,
       ccusage_daily_report: { daily: usageDaily, totals: { totalTokens: 500000 + sourceIndex } },
       ccusage_session_report: { session: sessions },
-      ccusage_blocks_report: { blocks },
       mswusage_codex_hourly_report: {
         hourly: codexHourly,
         provenance: "mswusage_codex_token_count",

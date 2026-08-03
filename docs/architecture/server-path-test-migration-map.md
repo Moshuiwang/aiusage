@@ -223,20 +223,43 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 > 由 `provider-slots-parity.test.ts` 逐场景消费）。它是 `test_snapshot_builder.py` 后 18 条与
 > `test_mobile_summary.py` 槽位段落的主要接替者，本表把它算作合同 fixture。
 
-### 4.2 分布统计（249 条）
+### 4.2 分布统计
 
-下表由脚本从本文第 5–6 节的逐条表格中直接统计（不是估算），核对方式见第 9 节：
+下表从本文第 5–6 节逐条表格的**归属标记行**直接重算（2026-08-03，随 #91/PR #96 重算；
+统计脚本见本节末尾）。口径说明：标记行共 248 行，与「249 条测试」不是同一口径——
+个别行捆绑多个测试函数。此前的汇总（迁 W 146 / 废弃 5）在 #90、#91 两轮改判归属后
+已两次漂移而未跟着更新，本次改为行数口径并附脚本，之后每次改判归属必须重跑重算：
 
-| 归属 | 条数 | 占比 |
+| 归属 | 标记行数 | 占比 |
 | --- | --- | --- |
-| 迁 W（迁移到 Worker 测试） | 146 | 58.6% |
+| 迁 W（迁移到 Worker 测试） | 144 | 58.1% |
 | 合同（由合同 fixture 接替） | 44 | 17.7% |
-| 留 P（保留在 Python） | 37 | 14.9% |
-| 待定 | 17 | 6.8% |
-| 废弃 | 5 | 2.0% |
-| **合计** | **249** | 100% |
+| 留 P（保留在 Python） | 38 | 15.3% |
+| 待定 | 13 | 5.2% |
+| 废弃 | 9（含 1 行「废弃 + 迁 W」混合，按废弃计） | 3.6% |
+| **合计** | **248** | 100% |
 
-**废弃只有 5 条**，都在第 5.2 / 5.3 / 6.4 / 6.5 节，每条都写了理由。
+重算脚本（在仓库根执行）：
+
+```bash
+python3 - <<'PYEOF'
+import re
+from collections import Counter
+lines = open('docs/architecture/server-path-test-migration-map.md').read().splitlines()
+c = Counter()
+sec5 = next(i for i,l in enumerate(lines) if l.startswith('## 5'))
+sec7 = next(i for i,l in enumerate(lines) if l.startswith('## 7'))
+for l in lines[sec5:sec7]:
+    if not l.startswith('|'): continue
+    for cell in (x.strip() for x in l.strip('|').split('|')):
+        m = re.match(r'^\*\*(迁 W|合同|留 P|待定|废弃)', cell)
+        if m: c[m.group(1)] += 1; break
+print(c, 'total', sum(c.values()))
+PYEOF
+```
+
+**废弃只有 9 行**（在第 5.2 / 5.3 / 5.5 / 6.1 / 6.4 / 6.5 节，每条都写了理由；
+其中 5.5 两行与 6.1 / 6.4 各一行是 #90、#91 交付后由原归属改判的）。
 「废弃」占比这么低是本表的主要结论之一：#74 删掉的 3989 行里，绝大多数行为**不是消失，
 而是换 owner**——所以删除的真正代价不是「少了几个测试」，而是「146 条要在 Worker 侧有等价守卫」。
 
@@ -370,7 +393,7 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 | 880 | `test_source_health_staleness_and_never_seen` | stale / never-seen / 今日零用量但在线 三态区分 | **迁 W**（`web_surface.test.ts:251` / `:263`） | 已覆盖（含 ok / failed / stale） |
 | 956 | `test_build_snapshot_week_period_aggregates_date_range` | week 按真实日期范围聚合并输出趋势序列 | **合同**（`value_golden.json` → `summary-week`） | 已覆盖 |
 | 1071 | `test_today_period_uses_calendar_day_hourly_trend` | today 用所选日 00:00–23:00 小时事实 | **合同**（`value_golden.json` → `summary-today`，`granularity` 14 处） | 已覆盖 |
-| 1141 | `test_today_period_spreads_ccusage_blocks_across_overlapping_hours` | 5 小时 block 分摊到覆盖的小时，上午用量不消失 | **废弃**（#90 判定）| ~~`read-model.ts:902 addBlockToHourBuckets`~~ **已于 #90 删除**：`blockRows` 恒为空数组、`usage_blocks` 表在读模型里从未被查询，该函数不可达。`parity.test.ts` 那条「不混入归档 block 快照」也是**恒真**断言，已一并删除。采集端仍在白采 blocks，见 #91 |
+| 1141 | `test_today_period_spreads_ccusage_blocks_across_overlapping_hours` | 5 小时 block 分摊到覆盖的小时，上午用量不消失 | **废弃**（#90 判定）| ~~`read-model.ts:902 addBlockToHourBuckets`~~ **已于 #90 删除**：`blockRows` 恒为空数组、`usage_blocks` 表在读模型里从未被查询，该函数不可达。`parity.test.ts` 那条「不混入归档 block 快照」也是**恒真**断言，已一并删除。采集端的白采也已由 #91 停止（`pusher.py` 不再跑 `ccusage blocks`） |
 | 1218 | `test_today_period_dedupes_cumulative_ccusage_block_snapshots` | 累计式 block 快照去重 | **废弃**（#90 判定）| ~~`read-model.ts:941 dedupeCumulativeBlockRows`~~ **已于 #90 删除**：同上，不可达 |
 | 1313 | `test_codex_drift_does_not_create_current_hour_residual_spike` | codex 漂移不制造当前小时假尖峰 | **迁 W** ⚠️（`parity.test.ts` 🆕） | `read-model.ts:1070 codexHourlyContext` 已实现；Worker 侧 `drift` 只在 `ingest.test.ts`（写侧）命中，读侧无用例 |
 | 1374 | `test_codex_drift_with_all_daily_baseline_does_not_double_count_trend` | all-daily 基线下漂移不重复计数 | **迁 W** ⚠️（`parity.test.ts` 🆕） | 同上 |
@@ -571,7 +594,7 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 116 | `test_full_ccusage_session_report_skips_codex_hourly_usage` | 不用 `session.lastActivity` 估算 codex 小时（避免假尖峰） | **迁 W**（`ingest.test.ts:431`「leaves archived Codex hourly rows empty」） | 已覆盖 |
 | 182 | `test_mswusage_codex_report_normalizes_hourly_rows_with_provenance` | mswusage codex 小时行带 provenance 归一化 | **迁 W**（`ingest.test.ts:85` / `:692`） | 已覆盖 |
 | 244 | `test_ingest_machine_name_overrides_network_host_for_display` | 展示用 `payload.machine`，网络 host 只作元数据 | **迁 W** ⚠️（`ingest.test.ts` 🆕） | 与 5.7 的 L69 是同一条不变量的写侧，Worker 无用例 |
-| 272 | `test_full_ccusage_blocks_report_normalizes_block_windows` | 从 ccusage blocks 生成带起止的窗口事实 | **迁 W**（`ingest.test.ts` 中 `ccusage_blocks` 命中） | 已覆盖（写侧） |
+| 272 | `test_full_ccusage_blocks_report_normalizes_block_windows` | 从 ccusage blocks 生成带起止的窗口事实 | **废弃**（#91 停采） | 采集端已不发 `ccusage_blocks_report`，两侧当未知字段忽略；该测试与 `normalize_ingest_block_request` 已随 #91 删除，向后兼容由跨实现探针守住（`test_collector_payload_contract.py` + `ingest.test.ts`） |
 | 325 | `test_merge_multiple_requests_idempotency` | 跨请求按稳定 key 幂等 upsert | **迁 W**（`ingest.test.ts:100`） | 已覆盖 |
 
 ### 6.2 `tests/test_provider_slots_parity.py`（9 条）
@@ -615,7 +638,7 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 218 | `test_safe_error_sanitization` | 错误信息脱敏与截断 | **迁 W**（`ingest.test.ts:457`） | `_safe_error` 随模块消失；服务端侧的等价保证是 Worker 的敏感字段拒收与错误体脱敏 |
 | 231 | `test_sqlite_preserves_structured_ccusage_raw_json` | 保留 ccusage 原始结构化 row/model JSON 供后续验算 | **迁 W**（`ingest.test.ts:85` / `:692`） | 已覆盖（对应 D1 的 `usage_daily_models` / raw json 列） |
 | 279 | `test_sqlite_preserves_hourly_usage_and_raw_session_json` | 保留小时 usage facts 与 session 原始行 | **迁 W**（`ingest.test.ts:85` / `:118`） | 已覆盖 |
-| 323 | `test_sqlite_preserves_block_usage_and_raw_block_json` | 保留 ccusage blocks 窗口事实 | **迁 W**（`ingest.test.ts` 中 `ccusage_blocks` 命中） | 已覆盖（写侧） |
+| 323 | `test_sqlite_preserves_block_usage_and_raw_block_json` | 保留 ccusage blocks 窗口事实 | **废弃**（#91 停采） | 原「已覆盖（写侧）」不成立：`write-model.ts` 全文从无写入 `usage_blocks` 的代码，该表在 Worker 侧一直是只读归档。#91 后采集端不再发 `ccusage_blocks_report`，两侧当未知字段忽略；Python `storage_sqlite` 的该测试仍在（冻结模块，D1 镜像基准，归 #74） |
 | 369 | `test_mswusage_codex_replaces_old_session_derived_codex_hourly_rows` | mswusage 覆盖旧的 session 推导 codex 小时行 | **迁 W**（`ingest.test.ts:431`） | 已覆盖 |
 | 433 | `test_sqlite_preserves_account_hourly_fact_dimensions` | 账户小时事实的维度完整保留 | **迁 W**（`ingest.test.ts:85`） | 已覆盖 |
 | 499 | `test_account_hourly_fact_upsert_uses_logical_hour_key` | 账户小时事实按逻辑小时 key upsert | **迁 W**（`ingest.test.ts:100`） | 已覆盖 |

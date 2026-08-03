@@ -29,7 +29,8 @@ type IngestRequest = {
   usage_daily: AnyRecord[];
   ccusage_daily_report?: AnyRecord;
   ccusage_session_report?: AnyRecord;
-  ccusage_blocks_report?: AnyRecord;
+  // `ccusage_blocks_report` 已由 #91 从采集端摘除（#78 摘的是 `ccusage_daily_status`）。
+  // 老版本采集端仍会发这两个字段，一律当未知顶层字段忽略：不声明、不校验、不解析、不落库。
   mswusage_codex_hourly_report?: AnyRecord;
   codex_hourly_status?: AnyRecord;
   usage_hourly_facts?: AnyRecord[];
@@ -651,7 +652,7 @@ function validateIngestPayload(payload: unknown): IngestRequest {
       }
     });
   }
-  for (const key of ["ccusage_daily_report", "ccusage_session_report", "ccusage_blocks_report", "mswusage_codex_hourly_report", "codex_hourly_status"]) {
+  for (const key of ["ccusage_daily_report", "ccusage_session_report", "mswusage_codex_hourly_report", "codex_hourly_status"]) {
     if (payload[key] !== undefined && !isRecord(payload[key])) {
       throw new WriteValidationError(400, "http_schema_invalid", `${key} must be an object`);
     }
@@ -680,7 +681,6 @@ function validateIngestPayload(payload: unknown): IngestRequest {
     usage_daily: Array.isArray(payload.usage_daily) ? payload.usage_daily.filter(isRecord) : [],
     ccusage_daily_report: isRecord(payload.ccusage_daily_report) ? payload.ccusage_daily_report : undefined,
     ccusage_session_report: isRecord(payload.ccusage_session_report) ? payload.ccusage_session_report : undefined,
-    ccusage_blocks_report: isRecord(payload.ccusage_blocks_report) ? payload.ccusage_blocks_report : undefined,
     mswusage_codex_hourly_report: isRecord(payload.mswusage_codex_hourly_report) ? payload.mswusage_codex_hourly_report : undefined,
     codex_hourly_status: isRecord(payload.codex_hourly_status) ? payload.codex_hourly_status : undefined,
     usage_hourly_facts: Array.isArray(usageHourlyFacts) ? usageHourlyFacts.filter(isRecord) : undefined,

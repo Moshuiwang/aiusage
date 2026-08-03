@@ -307,17 +307,9 @@ class DevicePusher:
                 except json.JSONDecodeError:
                     ccusage_session_report = None
 
-        ccusage_blocks_report = None
-        if ccusage_daily_available:
-            blocks_argv = ["ccusage", "blocks", "--json", "--timezone", self.config.timezone]
-            blocks_res = self.executor(blocks_argv, float(self.config.timeout_seconds))
-            if blocks_res.ok and blocks_res.stdout:
-                try:
-                    blocks_data = json.loads(blocks_res.stdout)
-                    if isinstance(blocks_data, dict) and isinstance(blocks_data.get("blocks"), list):
-                        ccusage_blocks_report = blocks_data
-                except json.JSONDecodeError:
-                    ccusage_blocks_report = None
+        # `ccusage blocks` 已由 #91 停采：block 快照在服务端零消费者（读侧死代码已在
+        # #90/PR #92 删除），继续采只是白跑子进程、白占上报带宽。老版本采集端仍会发的
+        # `ccusage_blocks_report` 由两侧当未知顶层字段忽略，不得重新采集或声明。
 
         mswusage_codex_hourly_report = None
         codex_hourly_status = None
@@ -419,8 +411,6 @@ class DevicePusher:
             payload["ccusage_daily_report"] = ccusage_data
         if ccusage_session_report is not None:
             payload["ccusage_session_report"] = ccusage_session_report
-        if ccusage_blocks_report is not None:
-            payload["ccusage_blocks_report"] = ccusage_blocks_report
         if mswusage_codex_hourly_report is not None:
             payload["mswusage_codex_hourly_report"] = mswusage_codex_hourly_report
             hourly_facts = _usage_hourly_facts_from_mswusage(

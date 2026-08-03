@@ -2,18 +2,6 @@
   {
     "name": "ok-full-collection",
     "payload": {
-      "ccusage_blocks_report": {
-        "blocks": [
-          {
-            "agent": "claude",
-            "endTime": "2026-06-04T13:00:00+08:00",
-            "id": "fixture-block-1",
-            "isActive": false,
-            "startTime": "2026-06-04T08:00:00+08:00",
-            "totalTokens": 6130
-          }
-        ]
-      },
       "ccusage_daily_report": {
         "daily": [
           {
