@@ -11,9 +11,14 @@
 //     而 DTO owner 已随 #67 迁到 `cloudflare/native-worker/src/mobile-summary.ts`。
 //   - 全文链接与凭据扫描 → 留 Python（全文级卫生，与服务端判定无关，不重复实现）。
 //
-// 并存期的已知重叠：Python 侧 `test_doc_points_at_code_as_the_source_of_truth_for_thresholds`
-// 是本文件「阈值常量」那条的**更松版本**（全文 contains，删掉服务端表那一处照样绿）。
-// 本轮不动 Python 侧（#90 明确不执行 #74 的任何删除），它随 #74 的服务端半边一起摘除。
+// 并存期的已知重叠（给 #74 执行者）：Python 侧 `tests/test_version_contract_doc.py` 现在仍在
+// 对着**Python 常量**守整个服务端半边，共 8 条 —— `test_server_field_inventory_*`、
+// `test_presentation_field_inventory_*`、`test_state_reason_map_*`、`test_doc_documents_every_state_*`、
+// `test_each_documented_state_lists_the_reasons_*`、`test_doc_records_the_deterministic_severity_order`、
+// `test_min_supported_version_section_*`、`test_doc_points_at_code_as_the_source_of_truth_for_thresholds`；
+// 另有 `test_every_version_field_points_at_an_owner_path_*` 横跨三张表（采集端半边要留）。
+// 其中最后一条是本文件「阈值常量」那条的**更松版本**（全文 contains，删掉服务端表那一处照样绿）。
+// 本轮一条都不动（#90 明确不执行 #74 的任何删除），它们随 #74 的服务端半边一起摘除。
 //
 // 这类测试的典型失效模式非常具体：**从文档解析出集合、再和代码常量比对时，
 // 如果解析失败返回空集，「空集 == 空集」会照样通过。** 所以每条解析结果都配
@@ -84,18 +89,29 @@ const AUTHORITY_ENTRIES = [
     mustReference: ["evaluateCollectorRelease", "UNSUPPORTED_ERROR_TYPE"],
   },
   {
+    // `buildVersionHealth` 一个符号不够：它在 `index.ts` 里也有（`/api/health` 那条）。
+    // `version_health` 只在 `read-model.ts` 里出现，它才是把这条职责钉死的那个符号。
     duty: "来源健康读模型",
     owner: "cloudflare/native-worker/src/read-model.ts",
+    mustReference: ["buildVersionHealth", "version_health"],
+  },
+  {
+    duty: "`/api/health` 的 `versions` 块",
+    owner: "cloudflare/native-worker/src/index.ts",
     mustReference: ["buildVersionHealth"],
   },
 ];
-const EXPECTED_AUTHORITY_SYMBOL_CHECKS = 7;
 /**
- * 「权威入口」共 8 条：上面 5 条代码 owner + 3 条文档索引
- * （模块 owner 总表 / 接口索引 / 表结构索引，它们的可达性由 Python 侧的相对链接测试守）。
- * 写死条数是为了让「悄悄少一条」也红。
+ * 符号检查次数 = 2+1+1+2+2+1。它守的是「`AUTHORITY_ENTRIES` 被悄悄删条目」，
+ * **不是**「文档解析塌空」——循环源是本文件的字面量，这一点与下面那个真下限不同级。
  */
-const EXPECTED_AUTHORITY_BULLET_COUNT = 8;
+const EXPECTED_AUTHORITY_SYMBOL_CHECKS = 9;
+/**
+ * 「权威入口」共 9 条：上面 6 条代码 owner + 3 条文档索引
+ * （模块 owner 总表 / 接口索引 / 表结构索引，它们的可达性由 Python 侧的相对链接测试守）。
+ * 这是对着**文档解析结果**的真下限：写死条数让「悄悄少一条」也红。
+ */
+const EXPECTED_AUTHORITY_BULLET_COUNT = 9;
 
 /** 判定探针用的策略。不用默认策略，默认策略下 min == 0.1.0 构造不出 below_minimum。 */
 const PROBE_POLICY: VersionPolicy = {
@@ -158,6 +174,27 @@ function section(text: string, heading: string): string {
 /** 不抛错的章节存在性探测。`section()` 缺章节时会抛，用它做断言拿不到清晰的失败原因。 */
 function sectionExists(text: string, heading: string): boolean {
   return text.split("\n").some((line) => line.trim().toLowerCase() === heading.toLowerCase());
+}
+
+/**
+ * 剥掉注释再判断符号是否出现。
+ *
+ * 不剥的话 `source.includes(symbol)` 会被注释里的一句提及糊弄过去——独立审查实测：
+ * 把 `read-model.ts` 里 `buildVersionHealth` 的真实调用全删、只在注释里留一句
+ * 「这里以前调用 buildVersionHealth」，用例照样绿。那样用例名说的「它真的承担被指派的职责」
+ * 就高于实际强度。剥注释可能因为字符串里的 `//` `#` 产生误剥，但那只会让断言更严（变红），
+ * 不会让它更松。
+ */
+function stripComments(source: string, ext: string): string {
+  const lineMarker = ext === ".py" ? "#" : "//";
+  const withoutBlocks = ext === ".py" ? source : source.replace(/\/\*[\s\S]*?\*\//g, "");
+  return withoutBlocks
+    .split("\n")
+    .map((line) => {
+      const index = line.indexOf(lineMarker);
+      return index >= 0 ? line.slice(0, index) : line;
+    })
+    .join("\n");
 }
 
 /** 把无序列表拆成条目，续行并回它所属的那一条。 */
@@ -238,11 +275,11 @@ describe("版本合同文档 · 服务端半边（#90 块 2）", () => {
       const ownerPath = path.join(repoRoot, entry.owner);
       expect(existsSync(ownerPath), `${entry.owner} 在仓库里不存在`).toBe(true);
 
-      const source = readFileSync(ownerPath, "utf8");
+      const source = stripComments(readFileSync(ownerPath, "utf8"), path.extname(entry.owner));
       for (const symbol of entry.mustReference) {
         expect(
           source.includes(symbol),
-          `${entry.owner} 里没有 ${symbol}，它承担不了「${entry.duty}」`,
+          `${entry.owner} 的**代码**里没有 ${symbol}（注释不算），它承担不了「${entry.duty}」`,
         ).toBe(true);
         checked += 1;
       }
