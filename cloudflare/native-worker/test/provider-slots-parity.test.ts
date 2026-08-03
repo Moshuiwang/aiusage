@@ -48,6 +48,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       "11-aggregate-agent-with-canonical-provider",
       "12-naive-limit-timestamps",
       "13-third-party-provider-without-slot",
+      "14-usage-without-canonical-provider",
     ]);
     expect(golden.length, "每个场景两个端点").toBe(goldenScenarios.length * providerSlotsEndpoints.length);
     for (const record of golden) {
@@ -79,6 +80,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     const derived = macosOwnerFixtureFrom(golden);
 
     expect(derived.length, "mobile 半边必须与场景数一致").toBe(goldenScenarios.length);
+    expect(derived.length, "场景数变化必须显式改这里").toBe(14);
     expect(derived.length, "派生结果不能为空").toBeGreaterThan(0);
     expect(committed.map((record) => record.name), "fixture 覆盖的场景必须与 golden 一致")
       .toEqual(derived.map((record) => record.name));
@@ -168,6 +170,28 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       const estimateOnly = claudeQuota(byName.get(`09-local-estimate-only:${endpoint}`)!);
       expect(estimateOnly.reason).toBe("unverified");
       expect(estimateOnly.last_verified_at).toBeNull();
+    }
+  });
+
+  it("完全无法归属的用量被点名进 unattributed，而不是静默消失", () => {
+    // #90 块 11。前 13 个场景里 `unattributed_tokens` 恒为 0——守恒等式的最后一项
+    // 从未被激活，「归属不出 provider 的用量」这半边等于没有断言。而它正是最难发现的
+    // 一类错：token 既进不了槽位、也没被点名，用户看到的是「槽位加起来对不上标题总量」。
+    const byName = new Map(golden.map((record) => [record.name, record]));
+    for (const [endpoint] of providerSlotsEndpoints) {
+      const record = byName.get(`14-usage-without-canonical-provider:${endpoint}`);
+      expect(record, `14 号场景的 ${endpoint} 记录必须存在`).toBeTruthy();
+      const coverage = record!.provider_usage_coverage as Record<string, number | string>;
+      const slotTokens = (record!.provider_slots as Array<{ usage: { total_tokens: number } }>)
+        .reduce((sum, row) => sum + row.usage.total_tokens, 0);
+
+      expect(slotTokens, "claude 的用量照常进槽位").toBe(3100);
+      // 关键一条：那 800 token 必须被单独点名。断成 0 就是静默消失。
+      expect(coverage.unattributed_tokens, "无法归属的用量必须被点名").toBe(800);
+      expect(coverage.other_provider_tokens, "这批不是第三方 provider，而是完全无归属").toBe(0);
+      expect(coverage.total_tokens, "总量必须含那 800").toBe(3900);
+      expect(coverage.status, "有没被展示的量就是 partial").toBe("partial");
+      expect(coverage.attributed_tokens, "已归属量只算进了槽位的那部分").toBe(3100);
     }
   });
 

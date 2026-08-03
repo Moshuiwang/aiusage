@@ -44,6 +44,10 @@ export const valueRequests: Array<[name: string, path: string]> = [
   // 记录的是「额度已入库」这条路径下 summary / mobile 的完整取值。
   ["summary-week-observed-limits", "/api/summary?date=2026-06-03&period=week"],
   ["mobile-summary-week-observed-limits", "/api/mobile/summary?date=2026-06-03&period=week"],
+  // #90 块 9：carol 与 alice **在同一台 macbook-pro 上**。按 OS 用户过滤时，
+  // 同机另一个用户的用量绝不能被算进来——机器相同、用户不同是最容易串的一种。
+  ["summary-week-same-machine-other-user", "/api/summary?date=2026-06-03&period=week&account=carol"],
+  ["mobile-summary-week-same-machine-other-user", "/api/mobile/summary?date=2026-06-03&period=week&account=carol"],
 ];
 
 export async function collectValueGoldenRecords(): Promise<ValueRecord[]> {

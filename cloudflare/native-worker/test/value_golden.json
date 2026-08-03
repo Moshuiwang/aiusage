@@ -155,7 +155,8 @@
               "display_name": "macbook-pro",
               "name": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
               "total_tokens": 3100,
               "users": [
@@ -167,6 +168,15 @@
                     "mac-local"
                   ],
                   "total_tokens": 3100
+                },
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 0
                 }
               ]
             },
@@ -1123,12 +1133,17 @@
                 {
                   "source_id": "mac-local",
                   "tokens": 3100
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 0
                 }
               ],
               "id": "macbook-pro",
               "label": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
               "tokens": 3100
             },
@@ -1786,7 +1801,7 @@
             },
             {
               "name": "codex",
-              "total_tokens": 1600
+              "total_tokens": 2100
             },
             {
               "name": "antigravity",
@@ -1819,24 +1834,25 @@
             {
               "account_id": "codex-main",
               "attribution_confidence": "observed",
-              "cache_tokens": 100,
+              "cache_tokens": 150,
               "confidence_breakdown": [
                 {
                   "confidence": "observed",
-                  "total_tokens": 1600
+                  "total_tokens": 2100
                 }
               ],
               "display_name": "Codex Team",
-              "input_tokens": 1000,
+              "input_tokens": 1300,
               "label": "Codex Team",
-              "output_tokens": 500,
+              "output_tokens": 650,
               "provider": "codex",
               "reasoning_output_tokens": 25,
               "source_ids": [
-                "linux-dev-bob"
+                "linux-dev-bob",
+                "mac-local-carol"
               ],
               "subscription": "pro",
-              "total_tokens": 1600
+              "total_tokens": 2100
             },
             {
               "account_id": "ag-main",
@@ -1865,7 +1881,7 @@
             {
               "machine_id": "macbook-pro",
               "machine_name": "macbook-pro",
-              "total_tokens": 5100
+              "total_tokens": 5600
             },
             {
               "machine_id": "linux-dev",
@@ -1899,20 +1915,27 @@
               "machine_name": "workstation-9",
               "os_user": "cara",
               "total_tokens": 1100
+            },
+            {
+              "display_name": "macbook-pro \u00b7 carol",
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "os_user": "carol",
+              "total_tokens": 500
             }
           ],
           "confidence_breakdown": [
             {
               "confidence": "observed",
-              "total_tokens": 6700
+              "total_tokens": 7200
             },
             {
               "confidence": "inferred",
               "total_tokens": 1100
             }
           ],
-          "facts": 4,
-          "total_tokens": 7800
+          "facts": 5,
+          "total_tokens": 8300
         },
         "ai_accounts": [
           {
@@ -1954,6 +1977,10 @@
             {
               "name": "cara",
               "total_tokens": 1100
+            },
+            {
+              "name": "carol",
+              "total_tokens": 500
             }
           ],
           "by_agent": [
@@ -1963,7 +1990,7 @@
             },
             {
               "name": "codex",
-              "total_tokens": 1600
+              "total_tokens": 2100
             },
             {
               "name": "antigravity",
@@ -1975,9 +2002,10 @@
               "display_name": "macbook-pro",
               "name": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "total_tokens": 5100,
+              "total_tokens": 5600,
               "users": [
                 {
                   "account": "alice",
@@ -1987,6 +2015,15 @@
                     "mac-local"
                   ],
                   "total_tokens": 5100
+                },
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 500
                 }
               ]
             },
@@ -2097,6 +2134,20 @@
             "source_id": "workstation-cara",
             "total_cost": 0.44,
             "total_tokens": 1100
+          },
+          {
+            "account": "carol",
+            "agent": "codex",
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 0,
+            "date": "2026-06-02",
+            "input_tokens": 300,
+            "machine": "macbook-pro",
+            "model_breakdowns": [],
+            "output_tokens": 150,
+            "source_id": "mac-local-carol",
+            "total_cost": 0.21,
+            "total_tokens": 500
           },
           {
             "account": "bob",
@@ -2316,19 +2367,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 100,
-              "input_tokens": 1000,
-              "output_tokens": 500,
+              "cache_tokens": 150,
+              "input_tokens": 1300,
+              "output_tokens": 650,
               "status": "available",
-              "total_tokens": 1600
+              "total_tokens": 2100
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 6700,
+          "attributed_tokens": 7200,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 7800,
+          "total_tokens": 8300,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -2467,15 +2518,15 @@
           }
         ],
         "summary": {
-          "cache_creation_tokens": 650,
+          "cache_creation_tokens": 700,
           "cache_read_tokens": 150,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
-          "input_tokens": 5100,
-          "output_tokens": 1900,
+          "input_tokens": 5400,
+          "output_tokens": 2050,
           "period": "week",
           "start_date": "2026-05-28",
-          "total_tokens": 7800
+          "total_tokens": 8300
         },
         "timezone": "Asia/Shanghai",
         "trend": {
@@ -2504,14 +2555,14 @@
             },
             {
               "agent": "codex",
-              "total_tokens": 1600,
+              "total_tokens": 2100,
               "values": [
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
+                500,
                 1600
               ]
             },
@@ -2539,7 +2590,7 @@
                 0,
                 0,
                 700,
-                0,
+                300,
                 3200
               ]
             },
@@ -2552,7 +2603,7 @@
                 0,
                 0,
                 300,
-                0,
+                150,
                 1100
               ]
             },
@@ -2565,7 +2616,7 @@
                 0,
                 0,
                 100,
-                0,
+                50,
                 400
               ]
             }
@@ -2610,11 +2661,11 @@
               "total_tokens": 1100
             },
             {
-              "cache_tokens": 0,
+              "cache_tokens": 50,
               "date": "2026-06-02",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "total_tokens": 0
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "total_tokens": 500
             },
             {
               "cache_tokens": 400,
@@ -2722,14 +2773,19 @@
                 {
                   "source_id": "linux-dev-bob",
                   "tokens": 1600
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "codex",
               "label": "codex",
               "source_ids": [
-                "linux-dev-bob"
+                "linux-dev-bob",
+                "mac-local-carol"
               ],
-              "tokens": 1600
+              "tokens": 2100
             },
             {
               "contributions": [
@@ -2778,6 +2834,20 @@
             {
               "contributions": [
                 {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "2026-06-02",
+              "label": "2026-06-02",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            },
+            {
+              "contributions": [
+                {
                   "source_id": "linux-dev-bob",
                   "tokens": 1600
                 },
@@ -2801,14 +2871,19 @@
                 {
                   "source_id": "mac-local",
                   "tokens": 5100
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "macbook-pro",
               "label": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "tokens": 5100
+              "tokens": 5600
             },
             {
               "contributions": [
@@ -2939,6 +3014,20 @@
                 "workstation-cara"
               ],
               "tokens": 1100
+            },
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "carol",
+              "label": "carol",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
             }
           ]
         },
@@ -3024,15 +3113,15 @@
         "period": {
           "account": null,
           "cache_ratio": 10,
-          "cache_tokens": 800,
+          "cache_tokens": 850,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
           "id": "week",
-          "input_tokens": 5100,
+          "input_tokens": 5400,
           "machine": null,
-          "output_tokens": 1900,
+          "output_tokens": 2050,
           "start_date": "2026-05-28",
-          "total_tokens": 7800
+          "total_tokens": 8300
         },
         "provider_slots": [
           {
@@ -3108,19 +3197,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 100,
-              "input_tokens": 1000,
-              "output_tokens": 500,
+              "cache_tokens": 150,
+              "input_tokens": 1300,
+              "output_tokens": 650,
               "status": "available",
-              "total_tokens": 1600
+              "total_tokens": 2100
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 6700,
+          "attributed_tokens": 7200,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 7800,
+          "total_tokens": 8300,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -3254,14 +3343,14 @@
             },
             {
               "bucket": "2026-06-02",
-              "cache_ratio": 0,
-              "cache_tokens": 0,
+              "cache_ratio": 10,
+              "cache_tokens": 50,
               "claude_tokens": 0,
-              "codex_tokens": 0,
-              "input_tokens": 0,
+              "codex_tokens": 500,
+              "input_tokens": 300,
               "label": "2026-06-02",
-              "output_tokens": 0,
-              "tokens": 0,
+              "output_tokens": 150,
+              "tokens": 500,
               "unknown_tokens": 0
             },
             {
@@ -3297,12 +3386,12 @@
         "account_hourly": {
           "by_agent": [
             {
-              "name": "claude",
+              "name": "codex",
               "total_tokens": 5100
             },
             {
-              "name": "codex",
-              "total_tokens": 4600
+              "name": "claude",
+              "total_tokens": 5100
             },
             {
               "name": "antigravity",
@@ -3310,6 +3399,29 @@
             }
           ],
           "by_ai_account": [
+            {
+              "account_id": "codex-main",
+              "attribution_confidence": "observed",
+              "cache_tokens": 650,
+              "confidence_breakdown": [
+                {
+                  "confidence": "observed",
+                  "total_tokens": 5100
+                }
+              ],
+              "display_name": "Codex Team",
+              "input_tokens": 2900,
+              "label": "Codex Team",
+              "output_tokens": 1550,
+              "provider": "codex",
+              "reasoning_output_tokens": 65,
+              "source_ids": [
+                "linux-dev-bob",
+                "mac-local-carol"
+              ],
+              "subscription": "pro",
+              "total_tokens": 5100
+            },
             {
               "account_id": "claude-main",
               "attribution_confidence": "observed",
@@ -3331,28 +3443,6 @@
               ],
               "subscription": "pro",
               "total_tokens": 5100
-            },
-            {
-              "account_id": "codex-main",
-              "attribution_confidence": "observed",
-              "cache_tokens": 600,
-              "confidence_breakdown": [
-                {
-                  "confidence": "observed",
-                  "total_tokens": 4600
-                }
-              ],
-              "display_name": "Codex Team",
-              "input_tokens": 2600,
-              "label": "Codex Team",
-              "output_tokens": 1400,
-              "provider": "codex",
-              "reasoning_output_tokens": 65,
-              "source_ids": [
-                "linux-dev-bob"
-              ],
-              "subscription": "pro",
-              "total_tokens": 4600
             },
             {
               "account_id": "ag-main",
@@ -3381,7 +3471,7 @@
             {
               "machine_id": "macbook-pro",
               "machine_name": "macbook-pro",
-              "total_tokens": 5100
+              "total_tokens": 5600
             },
             {
               "machine_id": "linux-dev",
@@ -3415,20 +3505,27 @@
               "machine_name": "workstation-9",
               "os_user": "cara",
               "total_tokens": 1100
+            },
+            {
+              "display_name": "macbook-pro \u00b7 carol",
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "os_user": "carol",
+              "total_tokens": 500
             }
           ],
           "confidence_breakdown": [
             {
               "confidence": "observed",
-              "total_tokens": 9700
+              "total_tokens": 10200
             },
             {
               "confidence": "inferred",
               "total_tokens": 1100
             }
           ],
-          "facts": 5,
-          "total_tokens": 10800
+          "facts": 6,
+          "total_tokens": 11300
         },
         "ai_accounts": [
           {
@@ -3470,16 +3567,20 @@
             {
               "name": "cara",
               "total_tokens": 1100
+            },
+            {
+              "name": "carol",
+              "total_tokens": 500
             }
           ],
           "by_agent": [
             {
-              "name": "claude",
+              "name": "codex",
               "total_tokens": 5100
             },
             {
-              "name": "codex",
-              "total_tokens": 4600
+              "name": "claude",
+              "total_tokens": 5100
             },
             {
               "name": "antigravity",
@@ -3491,9 +3592,10 @@
               "display_name": "macbook-pro",
               "name": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "total_tokens": 5100,
+              "total_tokens": 5600,
               "users": [
                 {
                   "account": "alice",
@@ -3503,6 +3605,15 @@
                     "mac-local"
                   ],
                   "total_tokens": 5100
+                },
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 500
                 }
               ]
             },
@@ -3639,6 +3750,20 @@
             "total_tokens": 1100
           },
           {
+            "account": "carol",
+            "agent": "codex",
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 0,
+            "date": "2026-06-02",
+            "input_tokens": 300,
+            "machine": "macbook-pro",
+            "model_breakdowns": [],
+            "output_tokens": 150,
+            "source_id": "mac-local-carol",
+            "total_cost": 0.21,
+            "total_tokens": 500
+          },
+          {
             "account": "bob",
             "agent": "codex",
             "cache_creation_tokens": 100,
@@ -3856,19 +3981,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 600,
-              "input_tokens": 2600,
-              "output_tokens": 1400,
+              "cache_tokens": 650,
+              "input_tokens": 2900,
+              "output_tokens": 1550,
               "status": "available",
-              "total_tokens": 4600
+              "total_tokens": 5100
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 9700,
+          "attributed_tokens": 10200,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 10800,
+          "total_tokens": 11300,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -4007,15 +4132,15 @@
           }
         ],
         "summary": {
-          "cache_creation_tokens": 1150,
+          "cache_creation_tokens": 1200,
           "cache_read_tokens": 150,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
-          "input_tokens": 6700,
-          "output_tokens": 2800,
+          "input_tokens": 7000,
+          "output_tokens": 2950,
           "period": "month",
           "start_date": "2026-05-05",
-          "total_tokens": 10800
+          "total_tokens": 11300
         },
         "timezone": "Asia/Shanghai",
         "trend": {
@@ -4053,6 +4178,42 @@
           ],
           "by_agent": [
             {
+              "agent": "codex",
+              "total_tokens": 5100,
+              "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                3000,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                500,
+                1600
+              ]
+            },
+            {
               "agent": "claude",
               "total_tokens": 5100,
               "values": [
@@ -4086,42 +4247,6 @@
                 0,
                 0,
                 3100
-              ]
-            },
-            {
-              "agent": "codex",
-              "total_tokens": 4600,
-              "values": [
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                3000,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1600
               ]
             },
             {
@@ -4194,7 +4319,7 @@
                 0,
                 0,
                 700,
-                0,
+                300,
                 3200
               ]
             },
@@ -4230,7 +4355,7 @@
                 0,
                 0,
                 300,
-                0,
+                150,
                 1100
               ]
             },
@@ -4266,7 +4391,7 @@
                 0,
                 0,
                 100,
-                0,
+                50,
                 400
               ]
             }
@@ -4472,11 +4597,11 @@
               "total_tokens": 1100
             },
             {
-              "cache_tokens": 0,
+              "cache_tokens": 50,
               "date": "2026-06-02",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "total_tokens": 0
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "total_tokens": 500
             },
             {
               "cache_tokens": 400,
@@ -4584,14 +4709,19 @@
                 {
                   "source_id": "linux-dev-bob",
                   "tokens": 4600
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "codex",
               "label": "codex",
               "source_ids": [
-                "linux-dev-bob"
+                "linux-dev-bob",
+                "mac-local-carol"
               ],
-              "tokens": 4600
+              "tokens": 5100
             },
             {
               "contributions": [
@@ -4654,6 +4784,20 @@
             {
               "contributions": [
                 {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "2026-06-02",
+              "label": "2026-06-02",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            },
+            {
+              "contributions": [
+                {
                   "source_id": "linux-dev-bob",
                   "tokens": 1600
                 },
@@ -4677,14 +4821,19 @@
                 {
                   "source_id": "mac-local",
                   "tokens": 5100
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "macbook-pro",
               "label": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "tokens": 5100
+              "tokens": 5600
             },
             {
               "contributions": [
@@ -4815,6 +4964,20 @@
                 "workstation-cara"
               ],
               "tokens": 1100
+            },
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "carol",
+              "label": "carol",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
             }
           ]
         },
@@ -4900,15 +5063,15 @@
         "period": {
           "account": null,
           "cache_ratio": 12,
-          "cache_tokens": 1300,
+          "cache_tokens": 1350,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
           "id": "month",
-          "input_tokens": 6700,
+          "input_tokens": 7000,
           "machine": null,
-          "output_tokens": 2800,
+          "output_tokens": 2950,
           "start_date": "2026-05-05",
-          "total_tokens": 10800
+          "total_tokens": 11300
         },
         "provider_slots": [
           {
@@ -4984,19 +5147,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 600,
-              "input_tokens": 2600,
-              "output_tokens": 1400,
+              "cache_tokens": 650,
+              "input_tokens": 2900,
+              "output_tokens": 1550,
               "status": "available",
-              "total_tokens": 4600
+              "total_tokens": 5100
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 9700,
+          "attributed_tokens": 10200,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 10800,
+          "total_tokens": 11300,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -5406,14 +5569,14 @@
             },
             {
               "bucket": "2026-06-02",
-              "cache_ratio": 0,
-              "cache_tokens": 0,
+              "cache_ratio": 10,
+              "cache_tokens": 50,
               "claude_tokens": 0,
-              "codex_tokens": 0,
-              "input_tokens": 0,
+              "codex_tokens": 500,
+              "input_tokens": 300,
               "label": "2026-06-02",
-              "output_tokens": 0,
-              "tokens": 0,
+              "output_tokens": 150,
+              "tokens": 500,
               "unknown_tokens": 0
             },
             {
@@ -5450,7 +5613,7 @@
           "by_agent": [
             {
               "name": "codex",
-              "total_tokens": 5900
+              "total_tokens": 6400
             },
             {
               "name": "claude",
@@ -5465,25 +5628,26 @@
             {
               "account_id": "codex-main",
               "attribution_confidence": "observed",
-              "cache_tokens": 700,
+              "cache_tokens": 750,
               "confidence_breakdown": [
                 {
                   "confidence": "observed",
-                  "total_tokens": 5900
+                  "total_tokens": 6400
                 }
               ],
               "display_name": "Codex Team",
-              "input_tokens": 3400,
+              "input_tokens": 3700,
               "label": "Codex Team",
-              "output_tokens": 1800,
+              "output_tokens": 1950,
               "provider": "codex",
               "reasoning_output_tokens": 80,
               "source_ids": [
                 "linux-dev-bob",
+                "mac-local-carol",
                 "mac-mini-dan"
               ],
               "subscription": "pro",
-              "total_tokens": 5900
+              "total_tokens": 6400
             },
             {
               "account_id": "claude-main",
@@ -5534,7 +5698,7 @@
             {
               "machine_id": "macbook-pro",
               "machine_name": "macbook-pro",
-              "total_tokens": 5100
+              "total_tokens": 5600
             },
             {
               "machine_id": "linux-dev",
@@ -5580,20 +5744,27 @@
               "machine_name": "workstation-9",
               "os_user": "cara",
               "total_tokens": 1100
+            },
+            {
+              "display_name": "macbook-pro \u00b7 carol",
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "os_user": "carol",
+              "total_tokens": 500
             }
           ],
           "confidence_breakdown": [
             {
               "confidence": "observed",
-              "total_tokens": 11000
+              "total_tokens": 11500
             },
             {
               "confidence": "inferred",
               "total_tokens": 1100
             }
           ],
-          "facts": 6,
-          "total_tokens": 12100
+          "facts": 7,
+          "total_tokens": 12600
         },
         "ai_accounts": [
           {
@@ -5639,12 +5810,16 @@
             {
               "name": "cara",
               "total_tokens": 1100
+            },
+            {
+              "name": "carol",
+              "total_tokens": 500
             }
           ],
           "by_agent": [
             {
               "name": "codex",
-              "total_tokens": 5900
+              "total_tokens": 6400
             },
             {
               "name": "claude",
@@ -5660,9 +5835,10 @@
               "display_name": "macbook-pro",
               "name": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "total_tokens": 5100,
+              "total_tokens": 5600,
               "users": [
                 {
                   "account": "alice",
@@ -5672,6 +5848,15 @@
                     "mac-local"
                   ],
                   "total_tokens": 5100
+                },
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 500
                 }
               ]
             },
@@ -5830,6 +6015,20 @@
             "source_id": "workstation-cara",
             "total_cost": 0.44,
             "total_tokens": 1100
+          },
+          {
+            "account": "carol",
+            "agent": "codex",
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 0,
+            "date": "2026-06-02",
+            "input_tokens": 300,
+            "machine": "macbook-pro",
+            "model_breakdowns": [],
+            "output_tokens": 150,
+            "source_id": "mac-local-carol",
+            "total_cost": 0.21,
+            "total_tokens": 500
           },
           {
             "account": "bob",
@@ -6049,19 +6248,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 700,
-              "input_tokens": 3400,
-              "output_tokens": 1800,
+              "cache_tokens": 750,
+              "input_tokens": 3700,
+              "output_tokens": 1950,
               "status": "available",
-              "total_tokens": 5900
+              "total_tokens": 6400
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 11000,
+          "attributed_tokens": 11500,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 12100,
+          "total_tokens": 12600,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -6200,15 +6399,15 @@
           }
         ],
         "summary": {
-          "cache_creation_tokens": 1250,
+          "cache_creation_tokens": 1300,
           "cache_read_tokens": 150,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
-          "input_tokens": 7500,
-          "output_tokens": 3200,
+          "input_tokens": 7800,
+          "output_tokens": 3350,
           "period": "all",
           "start_date": null,
-          "total_tokens": 12100
+          "total_tokens": 12600
         },
         "timezone": "Asia/Shanghai",
         "trend": {
@@ -6217,17 +6416,19 @@
             "2026-05-15",
             "2026-05-29",
             "2026-06-01",
+            "2026-06-02",
             "2026-06-03"
           ],
           "by_agent": [
             {
               "agent": "codex",
-              "total_tokens": 5900,
+              "total_tokens": 6400,
               "values": [
                 1300,
                 3000,
                 0,
                 0,
+                500,
                 1600
               ]
             },
@@ -6238,6 +6439,7 @@
                 0,
                 0,
                 2000,
+                0,
                 0,
                 3100
               ]
@@ -6250,6 +6452,7 @@
                 0,
                 0,
                 1100,
+                0,
                 0
               ]
             }
@@ -6263,6 +6466,7 @@
                 1600,
                 1200,
                 700,
+                300,
                 3200
               ]
             },
@@ -6274,6 +6478,7 @@
                 900,
                 500,
                 300,
+                150,
                 1100
               ]
             },
@@ -6285,6 +6490,7 @@
                 500,
                 300,
                 100,
+                50,
                 400
               ]
             }
@@ -6320,6 +6526,13 @@
               "input_tokens": 700,
               "output_tokens": 300,
               "total_tokens": 1100
+            },
+            {
+              "cache_tokens": 50,
+              "date": "2026-06-02",
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "total_tokens": 500
             },
             {
               "cache_tokens": 400,
@@ -6415,6 +6628,10 @@
                   "tokens": 4600
                 },
                 {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                },
+                {
                   "source_id": "mac-mini-dan",
                   "tokens": 1300
                 }
@@ -6423,9 +6640,10 @@
               "label": "codex",
               "source_ids": [
                 "linux-dev-bob",
+                "mac-local-carol",
                 "mac-mini-dan"
               ],
-              "tokens": 5900
+              "tokens": 6400
             },
             {
               "contributions": [
@@ -6516,6 +6734,20 @@
             {
               "contributions": [
                 {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "2026-06-02",
+              "label": "2026-06-02",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            },
+            {
+              "contributions": [
+                {
                   "source_id": "linux-dev-bob",
                   "tokens": 1600
                 },
@@ -6539,14 +6771,19 @@
                 {
                   "source_id": "mac-local",
                   "tokens": 5100
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "macbook-pro",
               "label": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "tokens": 5100
+              "tokens": 5600
             },
             {
               "contributions": [
@@ -6719,6 +6956,20 @@
                 "workstation-cara"
               ],
               "tokens": 1100
+            },
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "carol",
+              "label": "carol",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
             }
           ]
         },
@@ -6804,15 +7055,15 @@
         "period": {
           "account": null,
           "cache_ratio": 12,
-          "cache_tokens": 1400,
+          "cache_tokens": 1450,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
           "id": "all",
-          "input_tokens": 7500,
+          "input_tokens": 7800,
           "machine": null,
-          "output_tokens": 3200,
+          "output_tokens": 3350,
           "start_date": null,
-          "total_tokens": 12100
+          "total_tokens": 12600
         },
         "provider_slots": [
           {
@@ -6888,19 +7139,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 700,
-              "input_tokens": 3400,
-              "output_tokens": 1800,
+              "cache_tokens": 750,
+              "input_tokens": 3700,
+              "output_tokens": 1950,
               "status": "available",
-              "total_tokens": 5900
+              "total_tokens": 6400
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 11000,
+          "attributed_tokens": 11500,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 12100,
+          "total_tokens": 12600,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -7021,6 +7272,18 @@
               "unknown_tokens": 1100
             },
             {
+              "bucket": "2026-06-02",
+              "cache_ratio": 10,
+              "cache_tokens": 50,
+              "claude_tokens": 0,
+              "codex_tokens": 500,
+              "input_tokens": 300,
+              "label": "2026-06-02",
+              "output_tokens": 150,
+              "tokens": 500,
+              "unknown_tokens": 0
+            },
+            {
               "bucket": "2026-06-03",
               "cache_ratio": 9,
               "cache_tokens": 400,
@@ -7055,6 +7318,10 @@
             {
               "name": "claude",
               "total_tokens": 5100
+            },
+            {
+              "name": "codex",
+              "total_tokens": 500
             }
           ],
           "by_ai_account": [
@@ -7079,13 +7346,35 @@
               ],
               "subscription": "pro",
               "total_tokens": 5100
+            },
+            {
+              "account_id": "codex-main",
+              "attribution_confidence": "observed",
+              "cache_tokens": 50,
+              "confidence_breakdown": [
+                {
+                  "confidence": "observed",
+                  "total_tokens": 500
+                }
+              ],
+              "display_name": "Codex Team",
+              "input_tokens": 300,
+              "label": "Codex Team",
+              "output_tokens": 150,
+              "provider": "codex",
+              "reasoning_output_tokens": 0,
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "subscription": "pro",
+              "total_tokens": 500
             }
           ],
           "by_machine": [
             {
               "machine_id": "macbook-pro",
               "machine_name": "macbook-pro",
-              "total_tokens": 5100
+              "total_tokens": 5600
             }
           ],
           "by_os_user": [
@@ -7095,16 +7384,23 @@
               "machine_name": "macbook-pro",
               "os_user": "alice",
               "total_tokens": 5100
+            },
+            {
+              "display_name": "macbook-pro \u00b7 carol",
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "os_user": "carol",
+              "total_tokens": 500
             }
           ],
           "confidence_breakdown": [
             {
               "confidence": "observed",
-              "total_tokens": 5100
+              "total_tokens": 5600
             }
           ],
-          "facts": 2,
-          "total_tokens": 5100
+          "facts": 3,
+          "total_tokens": 5600
         },
         "ai_accounts": [
           {
@@ -7138,12 +7434,20 @@
             {
               "name": "alice",
               "total_tokens": 5100
+            },
+            {
+              "name": "carol",
+              "total_tokens": 500
             }
           ],
           "by_agent": [
             {
               "name": "claude",
               "total_tokens": 5100
+            },
+            {
+              "name": "codex",
+              "total_tokens": 500
             }
           ],
           "by_machine": [
@@ -7151,9 +7455,10 @@
               "display_name": "macbook-pro",
               "name": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "total_tokens": 5100,
+              "total_tokens": 5600,
               "users": [
                 {
                   "account": "alice",
@@ -7163,6 +7468,15 @@
                     "mac-local"
                   ],
                   "total_tokens": 5100
+                },
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 500
                 }
               ]
             }
@@ -7192,6 +7506,20 @@
             "source_id": "mac-local",
             "total_cost": 0.84,
             "total_tokens": 2000
+          },
+          {
+            "account": "carol",
+            "agent": "codex",
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 0,
+            "date": "2026-06-02",
+            "input_tokens": 300,
+            "machine": "macbook-pro",
+            "model_breakdowns": [],
+            "output_tokens": 150,
+            "source_id": "mac-local-carol",
+            "total_cost": 0.21,
+            "total_tokens": 500
           },
           {
             "account": "alice",
@@ -7387,19 +7715,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 0,
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "status": "missing",
-              "total_tokens": 0
+              "cache_tokens": 50,
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "status": "available",
+              "total_tokens": 500
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 5100,
+          "attributed_tokens": 5600,
           "other_provider_tokens": 0,
           "status": "complete",
-          "total_tokens": 5100,
+          "total_tokens": 5600,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -7439,16 +7767,16 @@
           }
         ],
         "summary": {
-          "cache_creation_tokens": 500,
+          "cache_creation_tokens": 550,
           "cache_read_tokens": 100,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
-          "input_tokens": 3400,
+          "input_tokens": 3700,
           "machine": "macbook-pro",
-          "output_tokens": 1100,
+          "output_tokens": 1250,
           "period": "week",
           "start_date": "2026-05-28",
-          "total_tokens": 5100
+          "total_tokens": 5600
         },
         "timezone": "Asia/Shanghai",
         "trend": {
@@ -7474,6 +7802,19 @@
                 0,
                 3100
               ]
+            },
+            {
+              "agent": "codex",
+              "total_tokens": 500,
+              "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                500,
+                0
+              ]
             }
           ],
           "by_token_type": [
@@ -7486,7 +7827,7 @@
                 0,
                 0,
                 0,
-                0,
+                300,
                 2200
               ]
             },
@@ -7499,7 +7840,7 @@
                 0,
                 0,
                 0,
-                0,
+                150,
                 600
               ]
             },
@@ -7512,7 +7853,7 @@
                 0,
                 0,
                 0,
-                0,
+                50,
                 300
               ]
             }
@@ -7557,11 +7898,11 @@
               "total_tokens": 0
             },
             {
-              "cache_tokens": 0,
+              "cache_tokens": 50,
               "date": "2026-06-02",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "total_tokens": 0
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "total_tokens": 500
             },
             {
               "cache_tokens": 300,
@@ -8946,7 +9287,7 @@
             },
             {
               "name": "codex",
-              "total_tokens": 1600
+              "total_tokens": 2100
             },
             {
               "name": "antigravity",
@@ -8979,24 +9320,25 @@
             {
               "account_id": "codex-main",
               "attribution_confidence": "observed",
-              "cache_tokens": 100,
+              "cache_tokens": 150,
               "confidence_breakdown": [
                 {
                   "confidence": "observed",
-                  "total_tokens": 1600
+                  "total_tokens": 2100
                 }
               ],
               "display_name": "Codex Team",
-              "input_tokens": 1000,
+              "input_tokens": 1300,
               "label": "Codex Team",
-              "output_tokens": 500,
+              "output_tokens": 650,
               "provider": "codex",
               "reasoning_output_tokens": 25,
               "source_ids": [
-                "linux-dev-bob"
+                "linux-dev-bob",
+                "mac-local-carol"
               ],
               "subscription": "pro",
-              "total_tokens": 1600
+              "total_tokens": 2100
             },
             {
               "account_id": "ag-main",
@@ -9025,7 +9367,7 @@
             {
               "machine_id": "macbook-pro",
               "machine_name": "macbook-pro",
-              "total_tokens": 5100
+              "total_tokens": 5600
             },
             {
               "machine_id": "linux-dev",
@@ -9059,20 +9401,27 @@
               "machine_name": "workstation-9",
               "os_user": "cara",
               "total_tokens": 1100
+            },
+            {
+              "display_name": "macbook-pro \u00b7 carol",
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "os_user": "carol",
+              "total_tokens": 500
             }
           ],
           "confidence_breakdown": [
             {
               "confidence": "observed",
-              "total_tokens": 6700
+              "total_tokens": 7200
             },
             {
               "confidence": "inferred",
               "total_tokens": 1100
             }
           ],
-          "facts": 4,
-          "total_tokens": 7800
+          "facts": 5,
+          "total_tokens": 8300
         },
         "ai_accounts": [
           {
@@ -9114,6 +9463,10 @@
             {
               "name": "cara",
               "total_tokens": 1100
+            },
+            {
+              "name": "carol",
+              "total_tokens": 500
             }
           ],
           "by_agent": [
@@ -9123,7 +9476,7 @@
             },
             {
               "name": "codex",
-              "total_tokens": 1600
+              "total_tokens": 2100
             },
             {
               "name": "antigravity",
@@ -9135,9 +9488,10 @@
               "display_name": "macbook-pro",
               "name": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "total_tokens": 5100,
+              "total_tokens": 5600,
               "users": [
                 {
                   "account": "alice",
@@ -9147,6 +9501,15 @@
                     "mac-local"
                   ],
                   "total_tokens": 5100
+                },
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 500
                 }
               ]
             },
@@ -9257,6 +9620,20 @@
             "source_id": "workstation-cara",
             "total_cost": 0.44,
             "total_tokens": 1100
+          },
+          {
+            "account": "carol",
+            "agent": "codex",
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 0,
+            "date": "2026-06-02",
+            "input_tokens": 300,
+            "machine": "macbook-pro",
+            "model_breakdowns": [],
+            "output_tokens": 150,
+            "source_id": "mac-local-carol",
+            "total_cost": 0.21,
+            "total_tokens": 500
           },
           {
             "account": "bob",
@@ -9476,19 +9853,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 100,
-              "input_tokens": 1000,
-              "output_tokens": 500,
+              "cache_tokens": 150,
+              "input_tokens": 1300,
+              "output_tokens": 650,
               "status": "available",
-              "total_tokens": 1600
+              "total_tokens": 2100
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 6700,
+          "attributed_tokens": 7200,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 7800,
+          "total_tokens": 8300,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -9627,15 +10004,15 @@
           }
         ],
         "summary": {
-          "cache_creation_tokens": 650,
+          "cache_creation_tokens": 700,
           "cache_read_tokens": 150,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
-          "input_tokens": 5100,
-          "output_tokens": 1900,
+          "input_tokens": 5400,
+          "output_tokens": 2050,
           "period": "week",
           "start_date": "2026-05-28",
-          "total_tokens": 7800
+          "total_tokens": 8300
         },
         "timezone": "Asia/Shanghai",
         "trend": {
@@ -9664,14 +10041,14 @@
             },
             {
               "agent": "codex",
-              "total_tokens": 1600,
+              "total_tokens": 2100,
               "values": [
                 0,
                 0,
                 0,
                 0,
                 0,
-                0,
+                500,
                 1600
               ]
             },
@@ -9699,7 +10076,7 @@
                 0,
                 0,
                 700,
-                0,
+                300,
                 3200
               ]
             },
@@ -9712,7 +10089,7 @@
                 0,
                 0,
                 300,
-                0,
+                150,
                 1100
               ]
             },
@@ -9725,7 +10102,7 @@
                 0,
                 0,
                 100,
-                0,
+                50,
                 400
               ]
             }
@@ -9770,11 +10147,11 @@
               "total_tokens": 1100
             },
             {
-              "cache_tokens": 0,
+              "cache_tokens": 50,
               "date": "2026-06-02",
-              "input_tokens": 0,
-              "output_tokens": 0,
-              "total_tokens": 0
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "total_tokens": 500
             },
             {
               "cache_tokens": 400,
@@ -9882,14 +10259,19 @@
                 {
                   "source_id": "linux-dev-bob",
                   "tokens": 1600
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "codex",
               "label": "codex",
               "source_ids": [
-                "linux-dev-bob"
+                "linux-dev-bob",
+                "mac-local-carol"
               ],
-              "tokens": 1600
+              "tokens": 2100
             },
             {
               "contributions": [
@@ -9938,6 +10320,20 @@
             {
               "contributions": [
                 {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "2026-06-02",
+              "label": "2026-06-02",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            },
+            {
+              "contributions": [
+                {
                   "source_id": "linux-dev-bob",
                   "tokens": 1600
                 },
@@ -9961,14 +10357,19 @@
                 {
                   "source_id": "mac-local",
                   "tokens": 5100
+                },
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
                 }
               ],
               "id": "macbook-pro",
               "label": "macbook-pro",
               "source_ids": [
-                "mac-local"
+                "mac-local",
+                "mac-local-carol"
               ],
-              "tokens": 5100
+              "tokens": 5600
             },
             {
               "contributions": [
@@ -10099,6 +10500,20 @@
                 "workstation-cara"
               ],
               "tokens": 1100
+            },
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "carol",
+              "label": "carol",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
             }
           ]
         },
@@ -10184,15 +10599,15 @@
         "period": {
           "account": null,
           "cache_ratio": 10,
-          "cache_tokens": 800,
+          "cache_tokens": 850,
           "date": "2026-06-03",
           "end_date": "2026-06-03",
           "id": "week",
-          "input_tokens": 5100,
+          "input_tokens": 5400,
           "machine": null,
-          "output_tokens": 1900,
+          "output_tokens": 2050,
           "start_date": "2026-05-28",
-          "total_tokens": 7800
+          "total_tokens": 8300
         },
         "provider_slots": [
           {
@@ -10268,19 +10683,19 @@
               ]
             },
             "usage": {
-              "cache_tokens": 100,
-              "input_tokens": 1000,
-              "output_tokens": 500,
+              "cache_tokens": 150,
+              "input_tokens": 1300,
+              "output_tokens": 650,
               "status": "available",
-              "total_tokens": 1600
+              "total_tokens": 2100
             }
           }
         ],
         "provider_usage_coverage": {
-          "attributed_tokens": 6700,
+          "attributed_tokens": 7200,
           "other_provider_tokens": 1100,
           "status": "partial",
-          "total_tokens": 7800,
+          "total_tokens": 8300,
           "unattributed_tokens": 0
         },
         "schema_version": 1,
@@ -10414,14 +10829,14 @@
             },
             {
               "bucket": "2026-06-02",
-              "cache_ratio": 0,
-              "cache_tokens": 0,
+              "cache_ratio": 10,
+              "cache_tokens": 50,
               "claude_tokens": 0,
-              "codex_tokens": 0,
-              "input_tokens": 0,
+              "codex_tokens": 500,
+              "input_tokens": 300,
               "label": "2026-06-02",
-              "output_tokens": 0,
-              "tokens": 0,
+              "output_tokens": 150,
+              "tokens": 500,
               "unknown_tokens": 0
             },
             {
@@ -10434,6 +10849,842 @@
               "label": "2026-06-03",
               "output_tokens": 1100,
               "tokens": 4700,
+              "unknown_tokens": 0
+            }
+          ],
+          "start_date": "2026-05-28"
+        }
+      },
+      "content_type": "application/json",
+      "location": null,
+      "status": 200
+    }
+  },
+  {
+    "name": "summary-week-same-machine-other-user",
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/summary?date=2026-06-03&period=week&account=carol"
+    },
+    "response": {
+      "body": {
+        "account_hourly": {
+          "by_agent": [
+            {
+              "name": "codex",
+              "total_tokens": 500
+            }
+          ],
+          "by_ai_account": [
+            {
+              "account_id": "codex-main",
+              "attribution_confidence": "observed",
+              "cache_tokens": 50,
+              "confidence_breakdown": [
+                {
+                  "confidence": "observed",
+                  "total_tokens": 500
+                }
+              ],
+              "display_name": "Codex Team",
+              "input_tokens": 300,
+              "label": "Codex Team",
+              "output_tokens": 150,
+              "provider": "codex",
+              "reasoning_output_tokens": 0,
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "subscription": "pro",
+              "total_tokens": 500
+            }
+          ],
+          "by_machine": [
+            {
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "total_tokens": 500
+            }
+          ],
+          "by_os_user": [
+            {
+              "display_name": "macbook-pro \u00b7 carol",
+              "machine_id": "macbook-pro",
+              "machine_name": "macbook-pro",
+              "os_user": "carol",
+              "total_tokens": 500
+            }
+          ],
+          "confidence_breakdown": [
+            {
+              "confidence": "observed",
+              "total_tokens": 500
+            }
+          ],
+          "facts": 1,
+          "total_tokens": 500
+        },
+        "ai_accounts": [
+          {
+            "account_id": "ag-main",
+            "display_name": "Antigravity Lab",
+            "label": "Antigravity Lab",
+            "last_seen_at": "2026-06-03T10:00:00+08:00",
+            "provider": "antigravity",
+            "subscription": "team"
+          },
+          {
+            "account_id": "claude-main",
+            "display_name": "Claude Team",
+            "label": "Claude Team",
+            "last_seen_at": "2026-06-03T11:30:00+08:00",
+            "provider": "claude",
+            "subscription": "pro"
+          },
+          {
+            "account_id": "codex-main",
+            "display_name": "Codex Team",
+            "label": "Codex Team",
+            "last_seen_at": "2026-06-03T11:31:00+08:00",
+            "provider": "codex",
+            "subscription": "pro"
+          }
+        ],
+        "generated_at": "<masked>",
+        "groups": {
+          "by_account": [
+            {
+              "name": "carol",
+              "total_tokens": 500
+            }
+          ],
+          "by_agent": [
+            {
+              "name": "codex",
+              "total_tokens": 500
+            }
+          ],
+          "by_machine": [
+            {
+              "display_name": "macbook-pro",
+              "name": "macbook-pro",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "total_tokens": 500,
+              "users": [
+                {
+                  "account": "carol",
+                  "display_name": "macbook-pro \u00b7 carol",
+                  "machine": "macbook-pro",
+                  "source_ids": [
+                    "mac-local-carol"
+                  ],
+                  "total_tokens": 500
+                }
+              ]
+            }
+          ]
+        },
+        "items": [
+          {
+            "account": "carol",
+            "agent": "codex",
+            "cache_creation_tokens": 50,
+            "cache_read_tokens": 0,
+            "date": "2026-06-02",
+            "input_tokens": 300,
+            "machine": "macbook-pro",
+            "model_breakdowns": [],
+            "output_tokens": 150,
+            "source_id": "mac-local-carol",
+            "total_cost": 0.21,
+            "total_tokens": 500
+          }
+        ],
+        "limit_status": [
+          {
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "provider": "claude",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok"
+          },
+          {
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "provider": "codex",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok"
+          }
+        ],
+        "limits": [
+          {
+            "confidence": "missing",
+            "observed_at": "2026-06-03T11:02:00+08:00",
+            "official": false,
+            "provider": "claude",
+            "remaining_percent": 0,
+            "reset_at": "2026-06-03T15:00:00+08:00",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "provider_failed",
+            "used_percent": 0,
+            "window": "5h",
+            "window_duration_minutes": 300
+          },
+          {
+            "confidence": "observed",
+            "observed_at": "2026-06-03T11:03:00+08:00",
+            "official": true,
+            "provider": "claude",
+            "remaining_percent": 21.75,
+            "reset_at": "2026-06-10T00:00:00+08:00",
+            "source_id": "claude-main",
+            "source_type": "oauth_usage_api",
+            "status": "ok",
+            "used_percent": 78.25,
+            "window": "week",
+            "window_duration_minutes": 10080
+          },
+          {
+            "confidence": "observed",
+            "observed_at": "2026-06-03T11:00:00+08:00",
+            "official": true,
+            "provider": "codex",
+            "remaining_percent": 57.5,
+            "reset_at": "2026-06-03T16:00:00+08:00",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok",
+            "used_percent": 42.5,
+            "window": "5h",
+            "window_duration_minutes": 300
+          },
+          {
+            "confidence": "observed",
+            "observed_at": "2026-06-03T11:01:00+08:00",
+            "official": true,
+            "provider": "codex",
+            "remaining_percent": 35.75,
+            "reset_at": "2026-06-10T00:00:00+08:00",
+            "source_id": "codex-main",
+            "source_type": "runtime_api",
+            "status": "ok",
+            "used_percent": 64.25,
+            "window": "week",
+            "window_duration_minutes": 10080
+          }
+        ],
+        "metadata": {
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
+          "codex_hourly": {
+            "drift": {
+              "status": "comparison_unavailable"
+            }
+          },
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
+        },
+        "provider_slots": [
+          {
+            "provider": "claude",
+            "quota": {
+              "last_verified_at": "2026-06-03T11:03:00+08:00",
+              "reason": null,
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "available",
+              "windows": [
+                {
+                  "confidence": "observed",
+                  "observed_at": "2026-06-03T11:03:00+08:00",
+                  "official": true,
+                  "provider": "claude",
+                  "remaining_percent": 21.75,
+                  "reset_at": "2026-06-10T00:00:00+08:00",
+                  "source_id": "claude-main",
+                  "source_type": "oauth_usage_api",
+                  "status": "ok",
+                  "used_percent": 78.25,
+                  "window": "week",
+                  "window_duration_minutes": 10080
+                }
+              ]
+            },
+            "usage": {
+              "cache_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "status": "missing",
+              "total_tokens": 0
+            }
+          },
+          {
+            "provider": "codex",
+            "quota": {
+              "last_verified_at": "2026-06-03T11:01:00+08:00",
+              "reason": null,
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "available",
+              "windows": [
+                {
+                  "confidence": "observed",
+                  "observed_at": "2026-06-03T11:00:00+08:00",
+                  "official": true,
+                  "provider": "codex",
+                  "remaining_percent": 57.5,
+                  "reset_at": "2026-06-03T16:00:00+08:00",
+                  "source_id": "codex-main",
+                  "source_type": "runtime_api",
+                  "status": "ok",
+                  "used_percent": 42.5,
+                  "window": "5h",
+                  "window_duration_minutes": 300
+                },
+                {
+                  "confidence": "observed",
+                  "observed_at": "2026-06-03T11:01:00+08:00",
+                  "official": true,
+                  "provider": "codex",
+                  "remaining_percent": 35.75,
+                  "reset_at": "2026-06-10T00:00:00+08:00",
+                  "source_id": "codex-main",
+                  "source_type": "runtime_api",
+                  "status": "ok",
+                  "used_percent": 64.25,
+                  "window": "week",
+                  "window_duration_minutes": 10080
+                }
+              ]
+            },
+            "usage": {
+              "cache_tokens": 50,
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "status": "available",
+              "total_tokens": 500
+            }
+          }
+        ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 500,
+          "other_provider_tokens": 0,
+          "status": "complete",
+          "total_tokens": 500,
+          "unattributed_tokens": 0
+        },
+        "schema_version": 1,
+        "source_status": [],
+        "summary": {
+          "account": "carol",
+          "cache_creation_tokens": 50,
+          "cache_read_tokens": 0,
+          "date": "2026-06-03",
+          "end_date": "2026-06-03",
+          "input_tokens": 300,
+          "output_tokens": 150,
+          "period": "week",
+          "start_date": "2026-05-28",
+          "total_tokens": 500
+        },
+        "timezone": "Asia/Shanghai",
+        "trend": {
+          "axis": [
+            "2026-05-28",
+            "2026-05-29",
+            "2026-05-30",
+            "2026-05-31",
+            "2026-06-01",
+            "2026-06-02",
+            "2026-06-03"
+          ],
+          "by_agent": [
+            {
+              "agent": "codex",
+              "total_tokens": 500,
+              "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                500,
+                0
+              ]
+            }
+          ],
+          "by_token_type": [
+            {
+              "label": "Input",
+              "type": "input",
+              "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                300,
+                0
+              ]
+            },
+            {
+              "label": "Output",
+              "type": "output",
+              "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                150,
+                0
+              ]
+            },
+            {
+              "label": "Cache",
+              "type": "cache",
+              "values": [
+                0,
+                0,
+                0,
+                0,
+                0,
+                50,
+                0
+              ]
+            }
+          ],
+          "end_date": "2026-06-03",
+          "granularity": "day",
+          "period": "week",
+          "points": [
+            {
+              "cache_tokens": 0,
+              "date": "2026-05-28",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            },
+            {
+              "cache_tokens": 0,
+              "date": "2026-05-29",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            },
+            {
+              "cache_tokens": 0,
+              "date": "2026-05-30",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            },
+            {
+              "cache_tokens": 0,
+              "date": "2026-05-31",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            },
+            {
+              "cache_tokens": 0,
+              "date": "2026-06-01",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            },
+            {
+              "cache_tokens": 50,
+              "date": "2026-06-02",
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "total_tokens": 500
+            },
+            {
+              "cache_tokens": 0,
+              "date": "2026-06-03",
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "total_tokens": 0
+            }
+          ],
+          "start_date": "2026-05-28"
+        },
+        "version_health": {
+          "counts": {
+            "current": 0,
+            "rollback_available": 0,
+            "unknown": 0,
+            "unsupported": 0,
+            "update_available": 0
+          },
+          "needs_attention": [],
+          "server": {
+            "api_version": "1.0.0",
+            "ingest_schema_version": 1,
+            "min_supported_collector_version": "0.1.0",
+            "read_model_version": "1.0.0",
+            "target_collector_version": "0.3.0"
+          }
+        }
+      },
+      "content_type": "application/json",
+      "location": null,
+      "status": 200
+    }
+  },
+  {
+    "name": "mobile-summary-week-same-machine-other-user",
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=week&account=carol"
+    },
+    "response": {
+      "body": {
+        "breakdown": {
+          "by_agent": [
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "codex",
+              "label": "codex",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            }
+          ],
+          "by_date": [
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "2026-06-02",
+              "label": "2026-06-02",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            }
+          ],
+          "by_machine": [
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "macbook-pro",
+              "label": "macbook-pro",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            }
+          ],
+          "by_model": [],
+          "by_os_user": [
+            {
+              "contributions": [
+                {
+                  "source_id": "mac-local-carol",
+                  "tokens": 500
+                }
+              ],
+              "id": "carol",
+              "label": "carol",
+              "source_ids": [
+                "mac-local-carol"
+              ],
+              "tokens": 500
+            }
+          ]
+        },
+        "client": "ios",
+        "generated_at": "<masked>",
+        "limits": {
+          "observed_count": 3,
+          "providers": [
+            {
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "provider": "claude",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok"
+            },
+            {
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "provider": "codex",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok"
+            }
+          ],
+          "total_count": 3,
+          "windows": [
+            {
+              "account_label": "Claude Team",
+              "account_plan_label": "Pro",
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            },
+            {
+              "account_label": "Codex Team",
+              "account_plan_label": "Pro 20x",
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            },
+            {
+              "account_label": "Codex Team",
+              "account_plan_label": "Pro 20x",
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:01:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 35.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 64.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "metadata": {
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
+          "freshness_status": "ok",
+          "limits_observed_at": "2026-06-03T11:03:00+08:00",
+          "read_model_generated_at": "2026-06-03T12:00:00+08:00"
+        },
+        "period": {
+          "account": "carol",
+          "cache_ratio": 10,
+          "cache_tokens": 50,
+          "date": "2026-06-03",
+          "end_date": "2026-06-03",
+          "id": "week",
+          "input_tokens": 300,
+          "machine": null,
+          "output_tokens": 150,
+          "start_date": "2026-05-28",
+          "total_tokens": 500
+        },
+        "provider_slots": [
+          {
+            "provider": "claude",
+            "quota": {
+              "last_verified_at": "2026-06-03T11:03:00+08:00",
+              "reason": null,
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "available",
+              "windows": [
+                {
+                  "confidence": "observed",
+                  "observed_at": "2026-06-03T11:03:00+08:00",
+                  "official": true,
+                  "provider": "claude",
+                  "remaining_percent": 21.75,
+                  "reset_at": "2026-06-10T00:00:00+08:00",
+                  "source_id": "claude-main",
+                  "source_type": "oauth_usage_api",
+                  "status": "ok",
+                  "used_percent": 78.25,
+                  "window": "week",
+                  "window_duration_minutes": 10080
+                }
+              ]
+            },
+            "usage": {
+              "cache_tokens": 0,
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "status": "missing",
+              "total_tokens": 0
+            }
+          },
+          {
+            "provider": "codex",
+            "quota": {
+              "last_verified_at": "2026-06-03T11:01:00+08:00",
+              "reason": null,
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "available",
+              "windows": [
+                {
+                  "confidence": "observed",
+                  "observed_at": "2026-06-03T11:00:00+08:00",
+                  "official": true,
+                  "provider": "codex",
+                  "remaining_percent": 57.5,
+                  "reset_at": "2026-06-03T16:00:00+08:00",
+                  "source_id": "codex-main",
+                  "source_type": "runtime_api",
+                  "status": "ok",
+                  "used_percent": 42.5,
+                  "window": "5h",
+                  "window_duration_minutes": 300
+                },
+                {
+                  "confidence": "observed",
+                  "observed_at": "2026-06-03T11:01:00+08:00",
+                  "official": true,
+                  "provider": "codex",
+                  "remaining_percent": 35.75,
+                  "reset_at": "2026-06-10T00:00:00+08:00",
+                  "source_id": "codex-main",
+                  "source_type": "runtime_api",
+                  "status": "ok",
+                  "used_percent": 64.25,
+                  "window": "week",
+                  "window_duration_minutes": 10080
+                }
+              ]
+            },
+            "usage": {
+              "cache_tokens": 50,
+              "input_tokens": 300,
+              "output_tokens": 150,
+              "status": "available",
+              "total_tokens": 500
+            }
+          }
+        ],
+        "provider_usage_coverage": {
+          "attributed_tokens": 500,
+          "other_provider_tokens": 0,
+          "status": "complete",
+          "total_tokens": 500,
+          "unattributed_tokens": 0
+        },
+        "schema_version": 1,
+        "sources": [],
+        "timezone": "Asia/Shanghai",
+        "trend": {
+          "end_date": "2026-06-03",
+          "granularity": "day",
+          "period": "week",
+          "points": [
+            {
+              "bucket": "2026-05-28",
+              "cache_ratio": 0,
+              "cache_tokens": 0,
+              "claude_tokens": 0,
+              "codex_tokens": 0,
+              "input_tokens": 0,
+              "label": "2026-05-28",
+              "output_tokens": 0,
+              "tokens": 0,
+              "unknown_tokens": 0
+            },
+            {
+              "bucket": "2026-05-29",
+              "cache_ratio": 0,
+              "cache_tokens": 0,
+              "claude_tokens": 0,
+              "codex_tokens": 0,
+              "input_tokens": 0,
+              "label": "2026-05-29",
+              "output_tokens": 0,
+              "tokens": 0,
+              "unknown_tokens": 0
+            },
+            {
+              "bucket": "2026-05-30",
+              "cache_ratio": 0,
+              "cache_tokens": 0,
+              "claude_tokens": 0,
+              "codex_tokens": 0,
+              "input_tokens": 0,
+              "label": "2026-05-30",
+              "output_tokens": 0,
+              "tokens": 0,
+              "unknown_tokens": 0
+            },
+            {
+              "bucket": "2026-05-31",
+              "cache_ratio": 0,
+              "cache_tokens": 0,
+              "claude_tokens": 0,
+              "codex_tokens": 0,
+              "input_tokens": 0,
+              "label": "2026-05-31",
+              "output_tokens": 0,
+              "tokens": 0,
+              "unknown_tokens": 0
+            },
+            {
+              "bucket": "2026-06-01",
+              "cache_ratio": 0,
+              "cache_tokens": 0,
+              "claude_tokens": 0,
+              "codex_tokens": 0,
+              "input_tokens": 0,
+              "label": "2026-06-01",
+              "output_tokens": 0,
+              "tokens": 0,
+              "unknown_tokens": 0
+            },
+            {
+              "bucket": "2026-06-02",
+              "cache_ratio": 10,
+              "cache_tokens": 50,
+              "claude_tokens": 0,
+              "codex_tokens": 500,
+              "input_tokens": 300,
+              "label": "2026-06-02",
+              "output_tokens": 150,
+              "tokens": 500,
+              "unknown_tokens": 0
+            },
+            {
+              "bucket": "2026-06-03",
+              "cache_ratio": 0,
+              "cache_tokens": 0,
+              "claude_tokens": 0,
+              "codex_tokens": 0,
+              "input_tokens": 0,
+              "label": "2026-06-03",
+              "output_tokens": 0,
+              "tokens": 0,
               "unknown_tokens": 0
             }
           ],

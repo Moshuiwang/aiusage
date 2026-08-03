@@ -58,7 +58,11 @@ INSERT INTO source_identities (source_id, host, machine, os_user, platform, firs
   ('mac-local', 'macbook-pro', 'macbook-pro', 'alice', 'darwin', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
   ('linux-dev-bob', 'linux-dev', 'linux-dev', 'bob', 'linux', '2026-05-15T09:00:00+08:00', '2026-06-03T11:31:00+08:00'),
   ('workstation-cara', 'workstation-9', 'workstation-9', 'cara', 'windows', '2026-06-01T09:00:00+08:00', '2026-06-03T10:00:00+08:00'),
-  ('mac-mini-dan', 'mac-mini', 'mac-mini', 'dan', 'darwin', '2026-04-10T09:00:00+08:00', '2026-06-03T11:32:00+08:00');
+  ('mac-mini-dan', 'mac-mini', 'mac-mini', 'dan', 'darwin', '2026-04-10T09:00:00+08:00', '2026-06-03T11:32:00+08:00'),
+  -- #90 块 9：同一台 macbook-pro 上的第二个 OS 用户。
+  -- 只有一个用户时，「machine 总量 == 各 user 之和」「users 数组」「per-user source_ids」
+  -- 这几条断言全部退化成恒等，by-machine 分组这条产品特性从未被真正回放过。
+  ('mac-local-carol', 'macbook-pro', 'macbook-pro', 'carol', 'darwin', '2026-05-30T09:00:00+08:00', '2026-06-03T11:33:00+08:00');
 
 INSERT INTO machines (machine_id, machine_name, host, platform, first_seen_at, last_seen_at) VALUES
   ('macbook-pro', 'macbook-pro', 'macbook-pro', 'darwin', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
@@ -70,7 +74,8 @@ INSERT INTO os_identities (machine_id, os_user, display_name, first_seen_at, las
   ('macbook-pro', 'alice', 'macbook-pro · alice', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
   ('linux-dev', 'bob', 'linux-dev · bob', '2026-05-15T09:00:00+08:00', '2026-06-03T11:31:00+08:00'),
   ('workstation-9', 'cara', 'workstation-9 · cara', '2026-06-01T09:00:00+08:00', '2026-06-03T10:00:00+08:00'),
-  ('mac-mini', 'dan', 'mac-mini · dan', '2026-04-10T09:00:00+08:00', '2026-06-03T11:32:00+08:00');
+  ('mac-mini', 'dan', 'mac-mini · dan', '2026-04-10T09:00:00+08:00', '2026-06-03T11:32:00+08:00'),
+  ('macbook-pro', 'carol', 'macbook-pro · carol', '2026-05-30T09:00:00+08:00', '2026-06-03T11:33:00+08:00');
 
 INSERT INTO ai_accounts (provider, account_id, account_label, display_name, subscription, first_seen_at, last_seen_at) VALUES
   ('claude', 'claude-main', 'Claude Team', 'Claude Team', 'pro', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
@@ -119,7 +124,9 @@ INSERT INTO usage_hourly_facts (
   ('fact-workstation-20260601-10', 'workstation-cara', 'workstation-9', 'cara', 'antigravity', 'ag-main', 'antigravity', 'desktop', '2026-06-01T10:00:00+08:00', '2026-06-01T11:00:00+08:00', 'Asia/Shanghai', 700, 300, 50, 50, 0, 1100, 0.44, 2, 1, 'inferred', 'seed', '{"source":"seed"}', '{"seed":"fact-workstation-week"}', '2026-06-01T10:00:00+08:00', '2026-06-03T10:00:00+08:00'),
   ('fact-mac-20260529-09', 'mac-local', 'macbook-pro', 'alice', 'claude', 'claude-main', 'claude', 'cli', '2026-05-29T09:00:00+08:00', '2026-05-29T10:00:00+08:00', 'Asia/Shanghai', 1200, 500, 300, 0, 0, 2000, 0.84, 3, 1, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-mac-week"}', '2026-05-29T09:00:00+08:00', '2026-06-03T11:30:00+08:00'),
   ('fact-linux-20260515-12', 'linux-dev-bob', 'linux-dev', 'bob', 'codex', 'codex-main', 'codex', 'cli', '2026-05-15T12:00:00+08:00', '2026-05-15T13:00:00+08:00', 'Asia/Shanghai', 1600, 900, 500, 0, 40, 3000, 1.50, 5, 2, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-linux-month"}', '2026-05-15T12:00:00+08:00', '2026-06-03T11:31:00+08:00'),
-  ('fact-mini-20260410-12', 'mac-mini-dan', 'mac-mini', 'dan', 'codex', 'codex-main', 'codex', 'cli', '2026-04-10T12:00:00+08:00', '2026-04-10T13:00:00+08:00', 'Asia/Shanghai', 800, 400, 100, 0, 15, 1300, 0.61, 2, 1, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-mini-all"}', '2026-04-10T12:00:00+08:00', '2026-06-03T11:32:00+08:00');
+  ('fact-mini-20260410-12', 'mac-mini-dan', 'mac-mini', 'dan', 'codex', 'codex-main', 'codex', 'cli', '2026-04-10T12:00:00+08:00', '2026-04-10T13:00:00+08:00', 'Asia/Shanghai', 800, 400, 100, 0, 15, 1300, 0.61, 2, 1, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-mini-all"}', '2026-04-10T12:00:00+08:00', '2026-06-03T11:32:00+08:00'),
+  -- #90 块 9：与 alice 同机、不同 OS 用户、不同 agent 的事实。
+  ('fact-mac-carol-20260602-15', 'mac-local-carol', 'macbook-pro', 'carol', 'codex', 'codex-main', 'codex', 'cli', '2026-06-02T15:00:00+08:00', '2026-06-02T16:00:00+08:00', 'Asia/Shanghai', 300, 150, 50, 0, 0, 500, 0.21, 1, 1, 'observed', 'seed', '{"source":"seed"}', '{"seed":"fact-mac-carol-week"}', '2026-06-02T15:00:00+08:00', '2026-06-03T11:33:00+08:00');
 
 INSERT INTO usage_hourly_models (
   fact_id, model, input_tokens, output_tokens, cache_creation_tokens,
