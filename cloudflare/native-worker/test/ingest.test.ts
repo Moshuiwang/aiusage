@@ -1082,16 +1082,20 @@ describe.sequential("native TS Worker write API parity", () => {
     // tests/fixtures/native_worker_ingest_payloads.json 是 Worker 侧的手写场景 fixture（#97）。
     // 它不能由 owner 生成：其中的错误形态（error_type / collection_status 组合）正是
     // pusher 永远不会产出的状态。手写 fixture 的失效方向是与现实脱节，所以这里把它的
-    // 每个顶层字段钉进「Worker 已声明的 ingest 合同 ∪ 刻意冻结的 legacy 探针字段」：
-    // 字段改名、摘除、新增时本用例立刻红，fixture 不再能静默漂移。
+    // 每个顶层字段钉进「Worker 已声明的 ingest 合同 ∪ 刻意冻结的 legacy 探针字段」。
+    // 覆盖：fixture 侧改名 / 摘除 / 新增未知字段（三个方向各有变异证据）。
+    // 不覆盖：Worker 合同侧新增字段而 fixture 不动——守卫按构造是单向的
+    // （fixture 字段 ⊆ 合同），此刻 `collector_release` / `usage_ledger_runs` 就处在
+    // 这个状态：已声明已解析、真实采集端每场景都发，但本 fixture 一个 payload 都没带。
+    // 手写场景 fixture 不承诺覆盖全部可选字段，反向断言会变成需要长期维护的噪音。
     const contract = await ingestRequestFieldContract();
-    // legacy 集合从探针文件动态取，单一事实源：探针退役或新增，这里自动跟着变。
+    // legacy 字段名从探针文件动态取，单一事实源：字段改名自动跟随；
+    // 探针**数量**变化（退役或新增）需同步这里的路径清单。
     const legacyFields = await Promise.all(
       [legacyDroppedFieldProbePath, legacyBlocksProbePath].map(async (probePath) =>
         (JSON.parse(await readFile(probePath, "utf8")) as { field: string }).field,
       ),
     );
-    expect(legacyFields.length).toBe(2);
     // 结构下限：场景数与字段检查量钉死，防止 fixture 被清空后本用例照绿。
     expect(fixture.ingest_payloads.length).toBe(4);
     let checkedFields = 0;
