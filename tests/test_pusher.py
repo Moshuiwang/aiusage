@@ -132,7 +132,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout=ccusage_stdout, exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout='{"schema_version": 1, "source": "mswusage_codex", "timezone": "Asia/Shanghai", "generated_at": "2026-06-05T09:00:00+08:00", "provenance": "mswusage_codex_token_count", "daily": [], "hourly": [], "sessions": []}', exit_code=0),
         ])
         http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted", "source_id": "mac-local"})
@@ -149,15 +148,14 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertIn("ccusage", executor.calls[0][0])
         self.assertIn("daily", executor.calls[0])
         self.assertIn("session", executor.calls[1])
-        self.assertIn("blocks", executor.calls[2])
-        self.assertIn("mswusage-codex", executor.calls[3])
+        # #91：`ccusage blocks` 已停采，session 之后直接进账本采集。
+        self.assertIn("mswusage-codex", executor.calls[2])
         self.assertEqual(http_client.last_json["ccusage_daily_report"]["totals"]["totalTokens"], 100)
         self.assertEqual(http_client.last_json["host"], "macbook-pro.local")
         self.assertEqual(http_client.last_json["machine"], "macbook-pro")
         self.assertEqual(http_client.last_json["ccusage_daily_report"]["extra"], {"kept": True})
         self.assertEqual(http_client.last_json["usage_daily"][0]["modelsUsed"], ["opus"])
         self.assertEqual(http_client.last_json["ccusage_session_report"]["session"], [])
-        self.assertEqual(http_client.last_json["ccusage_blocks_report"]["blocks"], [])
         self.assertEqual(http_client.last_json["mswusage_codex_hourly_report"]["source"], "mswusage_codex")
 
     def test_pusher_adds_mswusage_codex_report_and_drift_status(self) -> None:
@@ -178,7 +176,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout=daily_stdout, exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout=mswusage_stdout, exit_code=0),
         ])
         http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
@@ -228,7 +225,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout=daily_stdout, exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout=mswusage_stdout, exit_code=0),
         ])
         http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
@@ -291,7 +287,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout=daily_stdout, exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout=codex_stdout, exit_code=0),
             CommandResult(stdout=claude_stdout, exit_code=0),
         ])
@@ -305,7 +300,7 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual([fact["usage"]["total_tokens"] for fact in facts], [155, 77])
         self.assertEqual({fact["attribution_confidence"] for fact in facts}, {"unconfirmed_local_source"})
         self.assertEqual({fact["ai_account"]["label"] for fact in facts}, {"本机来源 / 未确认账号"})
-        self.assertIn("mswusage-claude", executor.calls[4])
+        self.assertIn("mswusage-claude", executor.calls[3])
 
     def test_pusher_keeps_usage_ledger_push_when_ccusage_is_missing(self) -> None:
         codex_stdout = json.dumps({
@@ -372,7 +367,9 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertNotIn("error_message", http_client.last_json)
         self.assertNotIn("ccusage_daily_report", http_client.last_json)
         self.assertNotIn("ccusage_session_report", http_client.last_json)
-        self.assertNotIn("ccusage_blocks_report", http_client.last_json)
+        # ccusage_blocks_report 不在这里断言：#91 后任何场景都不发它，在这条失败路径上
+        # 断言它不存在是恒真的；全场景守卫在 test_collector_payload_contract 的
+        # DROPPED_LEGACY_FIELDS（那边配了真实 payload 基座与变异证据）。
         self.assertIn("mswusage-codex", executor.calls[1])
         self.assertIn("mswusage-claude", executor.calls[2])
         self.assertEqual([fact["agent"] for fact in http_client.last_json["usage_hourly_facts"]], ["codex", "claude"])
@@ -415,7 +412,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout=daily_stdout, exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout=empty_codex_report, exit_code=0),
             CommandResult(stdout=empty_claude_report, exit_code=0),
         ])
@@ -430,14 +426,14 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         ).push()
 
         self.assertTrue(result["success"])
-        self.assertIn("mswusage-codex", executor.calls[3])
-        self.assertIn("mswusage-claude", executor.calls[4])
+        self.assertIn("mswusage-codex", executor.calls[2])
+        self.assertIn("mswusage-claude", executor.calls[3])
+        self.assertEqual(executor.calls[2][executor.calls[2].index("--mode") + 1], "full-rescan")
         self.assertEqual(executor.calls[3][executor.calls[3].index("--mode") + 1], "full-rescan")
-        self.assertEqual(executor.calls[4][executor.calls[4].index("--mode") + 1], "full-rescan")
+        self.assertNotIn("--lookback-hours", executor.calls[2])
         self.assertNotIn("--lookback-hours", executor.calls[3])
-        self.assertNotIn("--lookback-hours", executor.calls[4])
+        self.assertEqual(executor.calls[2][executor.calls[2].index("--coverage-start") + 1], "2026-07-12T00:00:00+08:00")
         self.assertEqual(executor.calls[3][executor.calls[3].index("--coverage-start") + 1], "2026-07-12T00:00:00+08:00")
-        self.assertEqual(executor.calls[4][executor.calls[4].index("--coverage-start") + 1], "2026-07-12T00:00:00+08:00")
         self.assertEqual(http_client.last_json["usage_ledger_runs"][0]["agent"], "codex")
         self.assertEqual(http_client.last_json["usage_ledger_runs"][0]["collector"]["report_digest"], "safe-digest-a")
         self.assertRegex(http_client.last_json["usage_ledger_runs"][0]["facts_digest"], r"^[0-9a-f]{64}$")
@@ -446,7 +442,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout='{"daily": [{"period": "2026-06-05", "agent": "claude", "totalTokens": 150}]}', exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout=json.dumps({
                 "schema_version": 1,
                 "source": "mswusage_codex",
@@ -472,7 +467,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout='{"daily": [{"period": "2026-06-05", "agent": "all", "totalTokens": 150}]}', exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(stdout=json.dumps({
                 "schema_version": 1,
                 "source": "mswusage_codex",
@@ -499,7 +493,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout='{"daily": [{"period": "2026-06-05", "agent": "codex", "totalTokens": 150}]}', exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(exit_code=1, error_type="command_failed", error_message="parser failed at /Users/wang/.codex/raw.jsonl"),
         ])
         http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
@@ -525,7 +518,6 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout=daily_stdout, exit_code=0),
             CommandResult(stdout=session_stdout, exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
         ])
         http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
 
@@ -535,34 +527,18 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(executor.calls[0], ["ccusage", "daily", "--json", "--timezone", "Asia/Shanghai"])
         self.assertEqual(executor.calls[1], ["ccusage", "session", "--json", "--timezone", "Asia/Shanghai"])
-        self.assertEqual(executor.calls[2], ["ccusage", "blocks", "--json", "--timezone", "Asia/Shanghai"])
+        # #91：session 之后不再有 `ccusage blocks` 子进程（停采）。
+        self.assertTrue(all("blocks" not in call for call in executor.calls))
         self.assertEqual(http_client.last_json["ccusage_session_report"]["totals"], {"totalTokens": 10})
         self.assertEqual(
             http_client.last_json["ccusage_session_report"]["session"][0]["metadata"]["lastActivity"],
             "2026-06-01T09:00:00+08:00",
         )
 
-    def test_pusher_sends_full_ccusage_blocks_report_when_available(self) -> None:
-        """测试客户端把 ccusage blocks 原始结构一起交给后端"""
-        daily_stdout = '{"daily": []}'
-        session_stdout = '{"session": []}'
-        blocks_stdout = '{"blocks": [{"startTime": "2026-05-31T21:00:00.000Z", "endTime": "2026-06-01T02:00:00.000Z", "totalTokens": 1000}]}'
-        executor = FakeExecutor([
-            CommandResult(stdout=daily_stdout, exit_code=0),
-            CommandResult(stdout=session_stdout, exit_code=0),
-            CommandResult(stdout=blocks_stdout, exit_code=0),
-        ])
-        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
-
-        pusher = DevicePusher(self.config, executor=executor, http_client=http_client)
-        result = pusher.push()
-
-        self.assertTrue(result["success"])
-        self.assertEqual(executor.calls[2], ["ccusage", "blocks", "--json", "--timezone", "Asia/Shanghai"])
-        self.assertEqual(
-            http_client.last_json["ccusage_blocks_report"]["blocks"][0]["startTime"],
-            "2026-05-31T21:00:00.000Z",
-        )
+    # `test_pusher_sends_full_ccusage_blocks_report_when_available` 已随 #91 删除：
+    # 采集端不再跑 `ccusage blocks`，也不再上报 `ccusage_blocks_report`。
+    # 停采守卫在 tests/test_collector_payload_contract.py（DROPPED_LEGACY_FIELDS +
+    # OK 场景命令序列），向后兼容探针见同文件 TestDroppedLegacyFieldIsIgnoredByBothImplementations。
 
     def test_pusher_ccusage_failure(self) -> None:
         """测试 ccusage 命令执行失败时仍会上报 source 失败状态"""
@@ -717,7 +693,6 @@ class TestDevicePusherCollectorRelease(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout='{"daily": []}', exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(error_type="command_failed", error_message="mswusage codex failed"),
             CommandResult(error_type="command_failed", error_message="mswusage claude failed"),
         ])
@@ -793,7 +768,6 @@ class TestDevicePusherCollectorRelease(unittest.TestCase):
         executor = FakeExecutor([
             CommandResult(stdout='{"daily": []}', exit_code=0),
             CommandResult(stdout='{"session": []}', exit_code=0),
-            CommandResult(stdout='{"blocks": []}', exit_code=0),
             CommandResult(error_type="command_failed", error_message="mswusage codex failed"),
             CommandResult(error_type="command_failed", error_message="mswusage claude failed"),
         ])

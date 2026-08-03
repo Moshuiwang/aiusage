@@ -1,0 +1,28 @@
+{
+  "captured_from": "src/ai_usage_widget/pusher.py @ 1274f6e —— #91 摘除前的采集端，场景 ok-full-collection",
+  "field": "ccusage_blocks_report",
+  "not_regenerable": "当前 pusher 已经产不出这个字段（#91 摘除：不再跑 `ccusage blocks` 子进程），所以这份取值是冻结的历史产物，不能重新生成。它代表的是仍在运行的老版本采集端：Python 与 Worker 两侧都必须把它当未知字段忽略——不报错、不解析、不落库。探针 payload 由测试在运行时拼装：collector_payload_fixture.json 里对应场景的 payload 加上这里的 value，因此除了这个字段本身，探针不会陈旧。",
+  "scenario": "ok-full-collection",
+  "value": {
+    "blocks": [
+      {
+        "agent": "claude",
+        "endTime": "2026-06-04T13:00:00+08:00",
+        "id": "fixture-block-1",
+        "isActive": false,
+        "startTime": "2026-06-04T08:00:00+08:00",
+        "totalTokens": 6130
+      }
+    ]
+  },
+  "bypass_values_note": "绕过路径。`value` 是老采集端**正常**发出的形状，只覆盖正面路径：两侧就算把「必须是 object」的校验原样加回来，这个形状照样通过，跨实现断言不会红。下面的非 object 形状是 #91 删掉的那两个校验器（Python `must be an object` / Worker isRecord 循环）**当年会拒收的**——它们才是校验被加回来时唯一会露馅的入口；`{\"blocks\": \"not-a-list\"}` 则守「重新按 blocks 键解析」这条路。两侧必须对**每一个**形状都不报错、不落库。",
+  "bypass_values": [
+    [],
+    {
+      "blocks": "not-a-list"
+    },
+    "blocks",
+    null,
+    17
+  ]
+}

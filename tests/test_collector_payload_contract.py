@@ -64,10 +64,14 @@ FIXTURE_PATH = REPO_ROOT / "cloudflare" / "native-worker" / "test" / "collector_
 
 GENERATOR_HINT = "PYTHONPATH=src python3 scripts/gen_collector_payload_fixture.py"
 
-#: #78 摘除的历史字段探针。两侧（本模块 + Worker 侧 ingest.test.ts）读同一份，
+#: 摘除的历史字段探针。两侧（本模块 + Worker 侧 ingest.test.ts）读同一份，
 #: 断言同一组可观测结果：都不报错、都不解析、都不落库。
 LEGACY_PROBE_PATH = (
     REPO_ROOT / "cloudflare" / "native-worker" / "test" / "legacy_collector_payload_ccusage_daily_status.json"
+)
+#: #91 摘除的 ``ccusage_blocks_report`` 探针，结构与上面同构。
+BLOCKS_PROBE_PATH = (
+    REPO_ROOT / "cloudflare" / "native-worker" / "test" / "legacy_collector_payload_ccusage_blocks_report.json"
 )
 #: fixture 里 observed_at 被抹成 "<masked>"，回放前换成一个固定的合法时间戳。
 LEGACY_PROBE_OBSERVED_AT = "2026-06-05T09:05:00+08:00"
@@ -98,7 +102,6 @@ REQUIRED_TOP_LEVEL_FIELDS = (
 REQUIRED_OK_FIELDS = (
     "ccusage_daily_report",
     "ccusage_session_report",
-    "ccusage_blocks_report",
     "mswusage_codex_hourly_report",
     "usage_hourly_facts",
     "usage_ledger_runs",
@@ -187,22 +190,8 @@ CCUSAGE_SESSION_STDOUT = json.dumps(
     sort_keys=True,
 )
 
-CCUSAGE_BLOCKS_STDOUT = json.dumps(
-    {
-        "blocks": [
-            {
-                "id": "fixture-block-1",
-                "startTime": "2026-06-04T08:00:00+08:00",
-                "endTime": "2026-06-04T13:00:00+08:00",
-                "agent": "claude",
-                "isActive": False,
-                "totalTokens": 6130,
-            }
-        ]
-    },
-    ensure_ascii=False,
-    sort_keys=True,
-)
+# `ccusage blocks` 已由 #91 停采：采集端不再跑该子进程，历史取值冻结在
+# ``BLOCKS_PROBE_PATH`` 里（摘除前从真实 pusher 捕获），只服务于向后兼容探针。
 
 # codex 报告里首条 hourly 早于 coverage.start，必须被 pusher 按覆盖窗剔除。
 MSWUSAGE_CODEX_STDOUT = json.dumps(
@@ -319,9 +308,19 @@ ERROR_SCENARIO = "error-ccusage-missing-tool"
 PARTIAL_SCENARIO = "partial-ccusage-missing-tool-ledger-ok"
 SCENARIOS = (OK_SCENARIO, ERROR_SCENARIO, PARTIAL_SCENARIO)
 
-#: #78 已从采集端摘除的顶层字段。老版本采集端仍会发，服务端两侧都必须当未知字段忽略；
-#: 当前 pusher 则一个场景都不许再发。
-DROPPED_LEGACY_FIELDS = ("ccusage_daily_status",)
+#: 已从采集端摘除的顶层字段（#78 ``ccusage_daily_status``、#91 ``ccusage_blocks_report``）。
+#: 老版本采集端仍会发，服务端两侧都必须当未知字段忽略；当前 pusher 则一个场景都不许再发。
+DROPPED_LEGACY_FIELDS = ("ccusage_daily_status", "ccusage_blocks_report")
+
+#: 探针文件 → 该字段摘除前**唯一**会发它的场景。场景钉错了，跨实现断言就名存实亡
+#: （详见 ``test_probe_is_frozen_to_the_only_scenario_that_ever_sent_the_field``）。
+#: - ``ccusage_daily_status``：只在 partial 场景（ccusage 挂了但账本可用）出现过；
+#: - ``ccusage_blocks_report``：只在 ok 场景出现过——blocks 子进程只有 ccusage daily
+#:   成功后才会跑，partial / error 场景根本采不到它。
+LEGACY_PROBES = (
+    (LEGACY_PROBE_PATH, PARTIAL_SCENARIO),
+    (BLOCKS_PROBE_PATH, OK_SCENARIO),
+)
 
 #: 自升级 agent 会写入的环境变量。显式接管，避免本机 shell 里恰好有值时 fixture 漂移。
 COLLECTOR_RELEASE_ENV_KEYS = (
@@ -414,15 +413,16 @@ ERROR_CONFIG = DeviceConfig(
 )
 
 # 命令返回值按 pusher 的调用次序排列（FakeExecutor 按次序取）。
+# #91 之后不再包含 `ccusage blocks`：pusher 多跑那条子进程时 _ScriptedExecutor 会直接
+# raise（第 5 条命令越界），这正是「停采」的守卫之一。
 OK_COMMAND_RESULTS = (
     CommandResult(stdout=CCUSAGE_DAILY_STDOUT, exit_code=0),
     CommandResult(stdout=CCUSAGE_SESSION_STDOUT, exit_code=0),
-    CommandResult(stdout=CCUSAGE_BLOCKS_STDOUT, exit_code=0),
     CommandResult(stdout=MSWUSAGE_CODEX_STDOUT, exit_code=0),
     CommandResult(stdout=MSWUSAGE_CLAUDE_STDOUT, exit_code=0),
 )
 
-# ccusage 缺失 -> 不采 session/blocks；两个 ledger 也失败 -> 走 _push_source_status。
+# ccusage 缺失 -> 不采 session；两个 ledger 也失败 -> 走 _push_source_status。
 ERROR_COMMAND_RESULTS = (
     CommandResult(
         exit_code=None,
@@ -589,14 +589,23 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
                 self.assertIn("daily", executor.calls[0])
 
     def test_ok_scenario_executes_the_declared_collection_commands_in_order(self) -> None:
-        """采集命令次序是 fixture 的前提，次序错了 fixture 的含义就变了。"""
+        """采集命令次序是 fixture 的前提，次序错了 fixture 的含义就变了。
+
+        #91 起 `ccusage blocks` 不许再出现在任何一次采集里：blocks 快照零消费者
+        （读侧死代码已在 #90/PR #92 删除），继续采只是在浪费设备上的子进程与上报带宽。
+        """
         _, executor, _, _ = _push_once(OK_SCENARIO)
         self.assertEqual(len(executor.calls), len(OK_COMMAND_RESULTS))
         self.assertEqual(executor.calls[0][:2], ["ccusage", "daily"])
         self.assertEqual(executor.calls[1][:2], ["ccusage", "session"])
-        self.assertEqual(executor.calls[2][:2], ["ccusage", "blocks"])
-        self.assertIn("mswusage-codex", executor.calls[3])
-        self.assertIn("mswusage-claude", executor.calls[4])
+        self.assertIn("mswusage-codex", executor.calls[2])
+        self.assertIn("mswusage-claude", executor.calls[3])
+        for call in executor.calls:
+            self.assertNotIn(
+                "blocks",
+                call,
+                "#91 已停采 ccusage blocks：pusher 不许再跑这条子进程",
+            )
 
     def test_error_scenario_executes_exactly_the_declared_failure_path_commands(self) -> None:
         """失败路径的命令次数同样是 fixture 的前提，不能只守成功路径。
@@ -715,7 +724,10 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
                 self.assertIn("release_channel", release)
 
     def test_ok_payload_carries_the_full_collection_evidence(self) -> None:
-        """成功采集的 payload 必须带上三份 ccusage 报告、小时事实和账本运行记录。"""
+        """成功采集的 payload 必须带上两份 ccusage 报告、小时事实和账本运行记录。
+
+        #91 之前这里是三份——``ccusage_blocks_report`` 已停采，见 ``DROPPED_LEGACY_FIELDS``。
+        """
         payload = self.by_name[OK_SCENARIO]["payload"]
         missing = [field for field in REQUIRED_OK_FIELDS if field not in payload]
         self.assertEqual(missing, [], "成功场景 payload 缺少采集证据字段")
@@ -791,8 +803,9 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
 
         self.assertEqual(payload["collection_status"], "ok")
         self.assertEqual(payload["usage_daily"], [])
-        # ccusage 三份报告一份都没有——它压根没跑起来。
-        for field in ("ccusage_daily_report", "ccusage_session_report", "ccusage_blocks_report"):
+        # ccusage 两份报告一份都没有——它压根没跑起来（blocks 已由 #91 整体停采，
+        # 由 test_pusher_no_longer_sends_the_dropped_legacy_fields 全场景守着）。
+        for field in ("ccusage_daily_report", "ccusage_session_report"):
             self.assertNotIn(field, payload)
         # 但账本用量必须照常上报，否则「ccusage 装挂了」会连带丢掉真实用量。
         self.assertTrue(payload["usage_hourly_facts"])
@@ -811,9 +824,12 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         self.assertNotIn("error_message", payload)
 
     def test_pusher_no_longer_sends_the_dropped_legacy_fields(self) -> None:
-        """#78：采集端不许再发 ``ccusage_daily_status``（任何场景、任何失败形态）。
+        """采集端不许再发已摘除的字段（任何场景、任何失败形态）。
 
+        #78 摘 ``ccusage_daily_status``，#91 摘 ``ccusage_blocks_report``。
         守卫覆盖**全部三条产出路径**，不只正面路径：成功、全失败心跳、部分失败。
+        「断言字段不在 payload 里」不是恒真：payload 来自真实 ``DevicePusher.push()``，
+        把 pusher 的采集段加回去这里就红（#91 交付时已实测过一次变异证据）。
         """
         for scenario in SCENARIOS:
             with self.subTest(scenario=scenario):
@@ -822,8 +838,8 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
                     self.assertNotIn(
                         field,
                         payload,
-                        f"{scenario}: {field} 已由 #78 从采集端摘除，"
-                        "生产用的 Worker 全文不认识它，发出去只会被静默丢弃",
+                        f"{scenario}: {field} 已从采集端摘除（#78 / #91），"
+                        "服务端两侧都只会把它当未知字段静默忽略，发出去没有任何意义",
                     )
 
     def test_payload_never_carries_raw_log_directory_paths(self) -> None:
@@ -846,20 +862,21 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
 
 
 class TestDroppedLegacyFieldIsIgnoredByBothImplementations(unittest.TestCase):
-    """#78 向后兼容：老版本采集端仍会发 ``ccusage_daily_status``，两侧都必须忽略它。
+    """向后兼容：老版本采集端仍会发已摘除的字段，两侧都必须忽略它。
 
-    这是一条**跨实现**测试的 Python 半边。Worker 半边在
-    ``cloudflare/native-worker/test/ingest.test.ts``（「老版本采集端仍在发的
-    ccusage_daily_status」那条用例），读的是**同一份**探针定义
-    （``LEGACY_PROBE_PATH``）并断言**同一组可观测结果**：
+    覆盖两个历史字段：#78 的 ``ccusage_daily_status`` 与 #91 的 ``ccusage_blocks_report``，
+    探针清单见 ``LEGACY_PROBES``。这是**跨实现**测试的 Python 半边。Worker 半边在
+    ``cloudflare/native-worker/test/ingest.test.ts``（「老版本采集端仍在发的 …」两条用例），
+    读的是**同一批**探针定义并断言**同一组可观测结果**：
 
     1. 请求被接受，不报错（Python 不抛 ``IngestValidationError``，Worker 返回 200）；
-    2. 字段不被解析（Python 的 ``IngestRequest`` 上没有这个属性）、不落库
-       （Worker 侧断言来源健康的 error_type / error_message 仍为 null）。
+    2. 字段不被解析（Python 的 ``IngestRequest`` 上没有这个属性；Worker 的
+       ``IngestRequest`` 声明里没有这个字段）、不落库（Worker 侧断言 D1 可观测结果
+       与不带该字段时逐行相等）。
 
     探针 payload 不是手写的：基座取自 owner 模块 ``pusher.py`` 产出的 fixture
-    （``PARTIAL_SCENARIO`` 那条记录），再叠加冻结在 ``LEGACY_PROBE_PATH`` 里的字段取值。
-    那份取值本身是 #78 摘除前从真实 pusher 捕获的，当前 pusher 已经产不出它，
+    （探针各自钉死的场景那条记录），再叠加冻结在探针文件里的字段取值。
+    那份取值本身是摘除前从真实 pusher 捕获的，当前 pusher 已经产不出它，
     所以它只能冻结、不能重新生成——这一点在探针文件里写明了。
     """
 
@@ -867,63 +884,75 @@ class TestDroppedLegacyFieldIsIgnoredByBothImplementations(unittest.TestCase):
 
     def test_probe_is_not_vacuous(self) -> None:
         """探针必须真的带着那个字段，否则下面两条断言什么都没验证。"""
-        probe = _legacy_probe()
-        self.assertEqual(probe["field"], DROPPED_LEGACY_FIELDS[0])
-        payload = _legacy_probe_payload()
-        self.assertIn(probe["field"], payload)
-        self.assertEqual(payload[probe["field"]], probe["value"])
+        probed_fields = []
+        for path, _expected_scenario in LEGACY_PROBES:
+            probe = _legacy_probe(path)
+            with self.subTest(field=probe["field"]):
+                self.assertIn(probe["field"], DROPPED_LEGACY_FIELDS)
+                payload = _legacy_probe_payload(probe)
+                self.assertIn(probe["field"], payload)
+                self.assertEqual(payload[probe["field"]], probe["value"])
+            probed_fields.append(probe["field"])
+        # 结构下限：每个已摘除字段都必须有自己的探针，缺一个就有一个字段没人守。
+        self.assertEqual(sorted(probed_fields), sorted(DROPPED_LEGACY_FIELDS))
 
     def test_probe_is_frozen_to_the_only_scenario_that_ever_sent_the_field(self) -> None:
-        """探针必须钉在 partial 场景上——摘除前只有这一个场景会发那个字段。
+        """探针必须钉在摘除前唯一会发该字段的场景上。
 
         这条曾经写成「基座必须等于 pusher 此刻会发的 payload」，那是**恒真断言**：
         基座是 ``_legacy_probe_payload()`` 去掉该字段得来的，而后者本身就是
         ``_fixture_record(scenario)["payload"]`` 加上该字段，两边构造上是同一个对象的拷贝，
         ``_diff_paths`` 永远为空。基座「来自 owner 模块」由构造保证，不需要也无法用断言证明。
 
-        真正会失效的是**场景选择**：探针若指向 ``OK_SCENARIO`` 或 ``ERROR_SCENARIO``，
-        它就不再重放「老采集端真的会发这个字段」的那条路径，下面两条跨实现断言
-        会退化成「对一个本来就不带该字段的场景验证两侧都忽略它」——依旧全绿，但什么都没验证。
+        真正会失效的是**场景选择**：探针若指向别的场景，它就不再重放「老采集端真的会发
+        这个字段」的那条路径，下面的跨实现断言会退化成「对一个本来就不带该字段的场景
+        验证两侧都忽略它」——依旧全绿，但什么都没验证。
+        ``ccusage_daily_status`` 只在 partial 场景（ccusage 挂了但账本可用）出现过；
+        ``ccusage_blocks_report`` 只在 ok 场景出现过（blocks 子进程只有 ccusage daily
+        成功后才会跑）。
         """
-        probe = _legacy_probe()
-        self.assertIn(probe["scenario"], SCENARIOS)
-        self.assertEqual(
-            probe["scenario"],
-            PARTIAL_SCENARIO,
-            "探针必须重放 partial 场景：摘除前 pusher 只在「ccusage 挂了但账本可用」时发该字段，"
-            "换成别的场景这条跨实现覆盖就名存实亡",
-        )
+        for path, expected_scenario in LEGACY_PROBES:
+            probe = _legacy_probe(path)
+            with self.subTest(field=probe["field"]):
+                self.assertIn(probe["scenario"], SCENARIOS)
+                self.assertEqual(
+                    probe["scenario"],
+                    expected_scenario,
+                    f"{probe['field']} 的探针必须重放 {expected_scenario} 场景：摘除前 pusher "
+                    "只在那个场景发该字段，换成别的场景这条跨实现覆盖就名存实亡",
+                )
 
     def test_python_ingest_accepts_and_ignores_the_dropped_field(self) -> None:
         """Python 侧：不报错、不解析、不带进 ``IngestRequest``。
 
         **每一个形状都要过**，不只老采集端正常发出的那个：Worker 对未知顶层字段是
         「无论什么形状都忽略」，Python 侧只要对某个形状还会拒收，两个实现就不一致。
-        `bypass_values` 里的形状正是 #78 删掉的那个校验器当年会拒收的那些——
-        只断言正面形状的话，把校验原样加回来这条断言照样绿（真踩过：变异 2a 一开始
-        没能让这里变红）。
+        `bypass_values` 里的形状正是被删掉的那些校验器当年会拒收的——
+        只断言正面形状的话，把校验原样加回来这条断言照样绿（真踩过：#78 变异 2a
+        一开始没能让这里变红）。
         """
         from ai_usage_widget.ingest import validate_ingest_payload
 
-        probe = _legacy_probe()
-        shapes = [probe["value"], *probe["bypass_values"]]
-        self.assertGreater(len(shapes), 1, "绕过形状清单不能为空，否则只覆盖了正面路径")
+        for path, _expected_scenario in LEGACY_PROBES:
+            probe = _legacy_probe(path)
+            shapes = [probe["value"], *probe["bypass_values"]]
+            self.assertGreater(len(shapes), 1, "绕过形状清单不能为空，否则只覆盖了正面路径")
 
-        for shape in shapes:
-            with self.subTest(shape=shape):
-                payload = _legacy_probe_payload(shape)
-                payload["observed_at"] = LEGACY_PROBE_OBSERVED_AT
+            for shape in shapes:
+                with self.subTest(field=probe["field"], shape=shape):
+                    payload = _legacy_probe_payload(probe, shape)
+                    payload["observed_at"] = LEGACY_PROBE_OBSERVED_AT
 
-                req = validate_ingest_payload(payload)
+                    req = validate_ingest_payload(payload)
 
-                self.assertEqual(req.source_id, payload["source_id"])
-                self.assertFalse(
-                    hasattr(req, DROPPED_LEGACY_FIELDS[0]),
-                    f"IngestRequest 仍然带着 {DROPPED_LEGACY_FIELDS[0]}——Python 侧还在解析这个字段，"
-                    "与生产用的 Worker（全文不认识它）行为不一致",
-                )
-                # 账本用量必须照常被解析：忽略诊断字段不等于连用量一起丢掉。
-                self.assertEqual(len(req.usage_hourly_facts), len(payload["usage_hourly_facts"]))
+                    self.assertEqual(req.source_id, payload["source_id"])
+                    self.assertFalse(
+                        hasattr(req, probe["field"]),
+                        f"IngestRequest 仍然带着 {probe['field']}——Python 侧还在解析这个字段，"
+                        "与生产用的 Worker（把它当未知字段忽略）行为不一致",
+                    )
+                    # 账本用量必须照常被解析：忽略历史字段不等于连用量一起丢掉。
+                    self.assertEqual(len(req.usage_hourly_facts), len(payload["usage_hourly_facts"]))
 
 
 def _fixture_record(name: str) -> dict[str, Any]:
@@ -934,16 +963,15 @@ def _fixture_record(name: str) -> dict[str, Any]:
     raise AssertionError(f"fixture 里没有场景 {name}，需要重新生成：{GENERATOR_HINT}")
 
 
-def _legacy_probe() -> dict[str, Any]:
-    return json.loads(LEGACY_PROBE_PATH.read_text(encoding="utf-8"))
+def _legacy_probe(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _legacy_probe_payload(shape: Any = _UNSET) -> dict[str, Any]:
+def _legacy_probe_payload(probe: dict[str, Any], shape: Any = _UNSET) -> dict[str, Any]:
     """拼出「老版本采集端会发出的 payload」：当前基座 + 冻结的历史字段。
 
     ``shape`` 用于换上 ``bypass_values`` 里的绕过形状；不传就是老采集端正常发出的那个。
     """
-    probe = _legacy_probe()
     payload = dict(_fixture_record(probe["scenario"])["payload"])
     payload[probe["field"]] = probe["value"] if shape is _UNSET else shape
     return payload

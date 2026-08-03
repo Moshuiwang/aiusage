@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
-from .models import NormalizeResult, UsageBlockItem, UsageHourlyFact, UsageHourlyItem, UsageItem
+from .models import NormalizeResult, UsageHourlyFact, UsageHourlyItem, UsageItem
 from .ingest import IngestRequest
 
 try:
@@ -256,28 +256,9 @@ def _is_codex_agent(agent: Any) -> bool:
     return "codex" in raw or "gpt" in raw or "openai" in raw
 
 
-def normalize_ingest_block_request(req: IngestRequest) -> List[UsageBlockItem]:
-    items = []
-    if not isinstance(req.ccusage_blocks_report, dict):
-        return []
-    blocks = req.ccusage_blocks_report.get("blocks")
-    if not isinstance(blocks, list):
-        return []
-
-    source_config = {
-        "source_id": req.source_id,
-        "host_label": req.machine or req.host,
-        "host": req.host,
-        "os_user": req.os_user,
-        "platform": req.platform,
-    }
-    for row in blocks:
-        if not isinstance(row, dict) or row.get("isGap"):
-            continue
-        item = _block_row_to_item(source_config, row, req.timezone)
-        if item is not None:
-            items.append(item)
-    return items
+# `normalize_ingest_block_request` 已随 #91 删除：`ccusage_blocks_report` 从采集端摘除，
+# 老版本采集端仍在发的该字段按未知顶层字段忽略（不校验、不解析、不落库），
+# 与生产用的 Worker（write-model.ts 已不再声明它）行为一致。
 
 
 def normalize_ingest_hourly_facts(req: IngestRequest) -> List[UsageHourlyFact]:
@@ -338,47 +319,6 @@ def normalize_ingest_hourly_facts(req: IngestRequest) -> List[UsageHourlyFact]:
     return facts
 
 
-def _block_row_to_item(source: Dict[str, Any], row: Dict[str, Any], timezone_str: str) -> Optional[UsageBlockItem]:
-    start_time = _block_time(row.get("startTime"), timezone_str)
-    end_time = _block_time(row.get("actualEndTime") or row.get("endTime"), timezone_str)
-    if not start_time or not end_time:
-        return None
-
-    token_counts = row.get("tokenCounts") if isinstance(row.get("tokenCounts"), dict) else {}
-    input_tokens = int(token_counts.get("inputTokens") or row.get("inputTokens") or 0)
-    output_tokens = int(token_counts.get("outputTokens") or row.get("outputTokens") or 0)
-    cache_creation_tokens = int(token_counts.get("cacheCreationInputTokens") or row.get("cacheCreationTokens") or 0)
-    cache_read_tokens = int(token_counts.get("cacheReadInputTokens") or row.get("cacheReadTokens") or 0)
-    total_tokens = _optional_int_field(row, "totalTokens")
-    if total_tokens is None:
-        total_tokens = input_tokens + output_tokens + cache_creation_tokens + cache_read_tokens
-    if total_tokens <= 0:
-        return None
-
-    metadata = {
-        "machine": source.get("host_label") or source.get("machine") or source["source_id"],
-        "host": source.get("host"),
-        "account": source.get("os_user") or source.get("account") or "unknown",
-        "platform": source.get("platform") or "unknown",
-        "ccusage_block_row": dict(row),
-    }
-    return UsageBlockItem(
-        source_id=source["source_id"],
-        machine=metadata["machine"],
-        account=metadata["account"],
-        agent=row.get("agent") or "claude",
-        start_time=start_time,
-        end_time=end_time,
-        input_tokens=input_tokens,
-        output_tokens=output_tokens,
-        cache_creation_tokens=cache_creation_tokens,
-        cache_read_tokens=cache_read_tokens,
-        total_tokens=total_tokens,
-        total_cost=_optional_float_field(row, "costUSD"),
-        metadata=metadata,
-    )
-
-
 def _session_row_to_hourly_item(source: Dict[str, Any], row: Dict[str, Any], hour: str) -> UsageHourlyItem:
     input_tokens = _int_field(row, "inputTokens")
     output_tokens = _int_field(row, "outputTokens")
@@ -423,21 +363,6 @@ def _session_hour(row: Dict[str, Any], timezone_str: str) -> Optional[str]:
         tz = _zoneinfo(timezone_str)
         local = parsed.astimezone(tz) if tz else parsed.astimezone()
     return local.replace(minute=0, second=0, microsecond=0).isoformat(timespec="seconds")
-
-
-def _block_time(value: Any, timezone_str: str) -> Optional[str]:
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        local = parsed
-    else:
-        tz = _zoneinfo(timezone_str)
-        local = parsed.astimezone(tz) if tz else parsed.astimezone()
-    return local.replace(microsecond=0).isoformat(timespec="seconds")
 
 
 def _zoneinfo(timezone_str: str):

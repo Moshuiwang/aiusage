@@ -55,7 +55,6 @@
 - `usage_daily`
 - `ccusage_daily_report`
 - `ccusage_session_report`
-- `ccusage_blocks_report`
 - `mswusage_codex_hourly_report`
 - `codex_hourly_status`
 - `usage_hourly_facts`

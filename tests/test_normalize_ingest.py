@@ -4,7 +4,7 @@ import unittest
 
 from ai_usage_widget.ingest import IngestRequest
 from ai_usage_widget.models import UsageItem
-from ai_usage_widget.normalize import normalize_ingest_block_request, normalize_ingest_hourly_request, normalize_ingest_request, merge_usage_items
+from ai_usage_widget.normalize import normalize_ingest_hourly_request, normalize_ingest_request, merge_usage_items
 
 
 class TestNormalizeIngestIdempotency(unittest.TestCase):
@@ -269,58 +269,10 @@ class TestNormalizeIngestIdempotency(unittest.TestCase):
         self.assertEqual(items[0].metadata["machine"], "VM-0-3-ubuntu")
         self.assertEqual(items[0].metadata["host"], "ai.chunbai.com")
 
-    def test_full_ccusage_blocks_report_normalizes_block_windows(self) -> None:
-        """测试后端从 ccusage blocks 生成带起止时间的窗口事实"""
-        request = IngestRequest(
-            schema_version=1,
-            source_id="mac-local",
-            host="macbook-pro",
-            os_user="wangzhipeng",
-            platform="darwin",
-            timezone="Asia/Shanghai",
-            observed_at="2026-06-01T10:40:00+08:00",
-            collection_window="daily",
-            usage_daily=[],
-            ccusage_blocks_report={
-                "blocks": [
-                    {
-                        "startTime": "2026-05-31T21:00:00.000Z",
-                        "endTime": "2026-06-01T02:00:00.000Z",
-                        "actualEndTime": "2026-06-01T01:50:00.000Z",
-                        "isGap": False,
-                        "models": ["claude-opus-4-8"],
-                        "tokenCounts": {
-                            "inputTokens": 100,
-                            "outputTokens": 20,
-                            "cacheCreationInputTokens": 30,
-                            "cacheReadInputTokens": 850,
-                        },
-                        "totalTokens": 1000,
-                        "costUSD": 0.1,
-                    },
-                    {
-                        "startTime": "2026-06-01T02:00:00.000Z",
-                        "endTime": "2026-06-01T07:00:00.000Z",
-                        "isGap": True,
-                        "totalTokens": 999,
-                    },
-                ],
-            },
-        )
-
-        blocks = normalize_ingest_block_request(request)
-
-        self.assertEqual(len(blocks), 1)
-        block = blocks[0]
-        self.assertEqual(block.source_id, "mac-local")
-        self.assertEqual(block.machine, "macbook-pro")
-        self.assertEqual(block.account, "wangzhipeng")
-        self.assertEqual(block.agent, "claude")
-        self.assertEqual(block.start_time, "2026-06-01T05:00:00+08:00")
-        self.assertEqual(block.end_time, "2026-06-01T09:50:00+08:00")
-        self.assertEqual(block.cache_read_tokens, 850)
-        self.assertEqual(block.total_tokens, 1000)
-        self.assertEqual(block.metadata["ccusage_block_row"]["models"], ["claude-opus-4-8"])
+    # `test_full_ccusage_blocks_report_normalizes_block_windows` 已随 #91 删除：
+    # `ccusage_blocks_report` 从采集端摘除，`normalize_ingest_block_request` 一并删除，
+    # 老版本采集端仍在发的该字段按未知顶层字段忽略
+    # （守卫见 tests/test_collector_payload_contract.py 的跨实现探针）。
 
     def test_merge_multiple_requests_idempotency(self) -> None:
         """测试跨请求多次 Push 时，通过 merge_usage_items 实现基于稳定 Key 的幂等 Upsert"""

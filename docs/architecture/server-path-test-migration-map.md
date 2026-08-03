@@ -370,7 +370,7 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 | 880 | `test_source_health_staleness_and_never_seen` | stale / never-seen / 今日零用量但在线 三态区分 | **迁 W**（`web_surface.test.ts:251` / `:263`） | 已覆盖（含 ok / failed / stale） |
 | 956 | `test_build_snapshot_week_period_aggregates_date_range` | week 按真实日期范围聚合并输出趋势序列 | **合同**（`value_golden.json` → `summary-week`） | 已覆盖 |
 | 1071 | `test_today_period_uses_calendar_day_hourly_trend` | today 用所选日 00:00–23:00 小时事实 | **合同**（`value_golden.json` → `summary-today`，`granularity` 14 处） | 已覆盖 |
-| 1141 | `test_today_period_spreads_ccusage_blocks_across_overlapping_hours` | 5 小时 block 分摊到覆盖的小时，上午用量不消失 | **废弃**（#90 判定）| ~~`read-model.ts:902 addBlockToHourBuckets`~~ **已于 #90 删除**：`blockRows` 恒为空数组、`usage_blocks` 表在读模型里从未被查询，该函数不可达。`parity.test.ts` 那条「不混入归档 block 快照」也是**恒真**断言，已一并删除。采集端仍在白采 blocks，见 #91 |
+| 1141 | `test_today_period_spreads_ccusage_blocks_across_overlapping_hours` | 5 小时 block 分摊到覆盖的小时，上午用量不消失 | **废弃**（#90 判定）| ~~`read-model.ts:902 addBlockToHourBuckets`~~ **已于 #90 删除**：`blockRows` 恒为空数组、`usage_blocks` 表在读模型里从未被查询，该函数不可达。`parity.test.ts` 那条「不混入归档 block 快照」也是**恒真**断言，已一并删除。采集端的白采也已由 #91 停止（`pusher.py` 不再跑 `ccusage blocks`） |
 | 1218 | `test_today_period_dedupes_cumulative_ccusage_block_snapshots` | 累计式 block 快照去重 | **废弃**（#90 判定）| ~~`read-model.ts:941 dedupeCumulativeBlockRows`~~ **已于 #90 删除**：同上，不可达 |
 | 1313 | `test_codex_drift_does_not_create_current_hour_residual_spike` | codex 漂移不制造当前小时假尖峰 | **迁 W** ⚠️（`parity.test.ts` 🆕） | `read-model.ts:1070 codexHourlyContext` 已实现；Worker 侧 `drift` 只在 `ingest.test.ts`（写侧）命中，读侧无用例 |
 | 1374 | `test_codex_drift_with_all_daily_baseline_does_not_double_count_trend` | all-daily 基线下漂移不重复计数 | **迁 W** ⚠️（`parity.test.ts` 🆕） | 同上 |
@@ -571,7 +571,7 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 116 | `test_full_ccusage_session_report_skips_codex_hourly_usage` | 不用 `session.lastActivity` 估算 codex 小时（避免假尖峰） | **迁 W**（`ingest.test.ts:431`「leaves archived Codex hourly rows empty」） | 已覆盖 |
 | 182 | `test_mswusage_codex_report_normalizes_hourly_rows_with_provenance` | mswusage codex 小时行带 provenance 归一化 | **迁 W**（`ingest.test.ts:85` / `:692`） | 已覆盖 |
 | 244 | `test_ingest_machine_name_overrides_network_host_for_display` | 展示用 `payload.machine`，网络 host 只作元数据 | **迁 W** ⚠️（`ingest.test.ts` 🆕） | 与 5.7 的 L69 是同一条不变量的写侧，Worker 无用例 |
-| 272 | `test_full_ccusage_blocks_report_normalizes_block_windows` | 从 ccusage blocks 生成带起止的窗口事实 | **迁 W**（`ingest.test.ts` 中 `ccusage_blocks` 命中） | 已覆盖（写侧） |
+| 272 | `test_full_ccusage_blocks_report_normalizes_block_windows` | 从 ccusage blocks 生成带起止的窗口事实 | **废弃**（#91 停采） | 采集端已不发 `ccusage_blocks_report`，两侧当未知字段忽略；该测试与 `normalize_ingest_block_request` 已随 #91 删除，向后兼容由跨实现探针守住（`test_collector_payload_contract.py` + `ingest.test.ts`） |
 | 325 | `test_merge_multiple_requests_idempotency` | 跨请求按稳定 key 幂等 upsert | **迁 W**（`ingest.test.ts:100`） | 已覆盖 |
 
 ### 6.2 `tests/test_provider_slots_parity.py`（9 条）
@@ -615,7 +615,7 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 218 | `test_safe_error_sanitization` | 错误信息脱敏与截断 | **迁 W**（`ingest.test.ts:457`） | `_safe_error` 随模块消失；服务端侧的等价保证是 Worker 的敏感字段拒收与错误体脱敏 |
 | 231 | `test_sqlite_preserves_structured_ccusage_raw_json` | 保留 ccusage 原始结构化 row/model JSON 供后续验算 | **迁 W**（`ingest.test.ts:85` / `:692`） | 已覆盖（对应 D1 的 `usage_daily_models` / raw json 列） |
 | 279 | `test_sqlite_preserves_hourly_usage_and_raw_session_json` | 保留小时 usage facts 与 session 原始行 | **迁 W**（`ingest.test.ts:85` / `:118`） | 已覆盖 |
-| 323 | `test_sqlite_preserves_block_usage_and_raw_block_json` | 保留 ccusage blocks 窗口事实 | **迁 W**（`ingest.test.ts` 中 `ccusage_blocks` 命中） | 已覆盖（写侧） |
+| 323 | `test_sqlite_preserves_block_usage_and_raw_block_json` | 保留 ccusage blocks 窗口事实 | **废弃**（#91 停采） | 原「已覆盖（写侧）」不成立：`write-model.ts` 全文从无写入 `usage_blocks` 的代码，该表在 Worker 侧一直是只读归档。#91 后采集端不再发 `ccusage_blocks_report`，两侧当未知字段忽略；Python `storage_sqlite` 的该测试仍在（冻结模块，D1 镜像基准，归 #74） |
 | 369 | `test_mswusage_codex_replaces_old_session_derived_codex_hourly_rows` | mswusage 覆盖旧的 session 推导 codex 小时行 | **迁 W**（`ingest.test.ts:431`） | 已覆盖 |
 | 433 | `test_sqlite_preserves_account_hourly_fact_dimensions` | 账户小时事实的维度完整保留 | **迁 W**（`ingest.test.ts:85`） | 已覆盖 |
 | 499 | `test_account_hourly_fact_upsert_uses_logical_hour_key` | 账户小时事实按逻辑小时 key upsert | **迁 W**（`ingest.test.ts:100`） | 已覆盖 |
