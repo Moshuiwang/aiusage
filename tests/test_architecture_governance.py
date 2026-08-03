@@ -313,14 +313,17 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
 
 class TestArchitectureGovernance(unittest.TestCase):
     def test_architecture_doc_records_current_owners_and_legacy_boundary(self) -> None:
+        # #74 之后架构总文档必须记录 Worker 侧的当前 owner 与「Python 服务端已删除」
+        # 这一事实本身——地图指向已删代码比没有地图更糟。
         text = (ROOT / "docs" / "architecture" / "architecture.md").read_text(encoding="utf-8")
         normalized = text.casefold()
 
         for required in [
             "DevicePusher",
-            "server_services.py",
-            "snapshot_builder.py",
-            "mobile_summary.py",
+            "write-model.ts",
+            "read-model.ts",
+            "mobile-summary.ts",
+            "已随 #74 删除",
         ]:
             with self.subTest(required=required):
                 self.assertIn(required, text)

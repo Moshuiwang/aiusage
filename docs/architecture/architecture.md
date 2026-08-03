@@ -6,7 +6,7 @@
 
 - 当前真实架构：本文。
 - SQLite 表结构索引：[`database.md`](database.md)；字段以 `storage_sqlite.py` 和 `models.py` 为准。
-- 服务接口索引：[`interfaces.md`](interfaces.md)；接口以 `server.py`、`server_services.py`、`ingest.py`、`mobile_summary.py` 为准。
+- 服务接口索引：[`interfaces.md`](interfaces.md)；接口以 `cloudflare/native-worker/src/index.ts`、`write-model.ts`、`read-model.ts`、`mobile-summary.ts` 为准。
 - 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
 - Cloudflare/D1 当前生产事实：[`cloudflare-migration-remaining-work.md`](cloudflare-migration-remaining-work.md)。
@@ -62,29 +62,28 @@ CLI / HTTP handler / clients
 
 ## 模块 Owner
 
-> **#67 决策后的读法**：下表描述的是 Python 侧各模块**当前**的职责边界，仍然是读代码时的地图。
-> 但 `server.py`、`server_services.py`、`ingest.py`、`storage_sqlite.py`、`snapshot_builder.py`
-> 及其 `snapshot_*` helper、`mobile_summary.py`、`version_contract.py` 的服务端判定部分
-> **已冻结**：只修迁移阻断问题，不承接新产品字段。服务端的新字段一律加在
+> **#74 之后的读法**（2026-08-03）：Python 服务端路径（`server.py`、`server_services.py`、
+> `ingest.py`、`storage_sqlite.py`、`snapshot_builder.py` 及其 `snapshot_*` helper、
+> `mobile_summary.py`、legacy 的 `collector.py`、`version_contract.py` 的服务端判定部分）
+> **已随 #74 删除**，服务端唯一实现是 Cloudflare Worker + D1。服务端的新字段一律加在
 > `cloudflare/native-worker/src/*.ts` + `cloudflare/migrations/`。
-> 冻结名单与「什么能改、什么不能改」的完整口径见
-> [`server-path-consolidation-decision.md`](server-path-consolidation-decision.md)
+> 决策与执行记录见
+> [`server-path-consolidation-decision.md`](server-path-consolidation-decision.md)、
+> [`server-path-test-migration-map.md`](server-path-test-migration-map.md)
 > 与 `.claude/rules/architecture.md`。
 
 | 模块 | Owner 职责 | 禁止承载 |
 | --- | --- | --- |
-| `cli.py` | 命令解析和调用编排。 | 不直接写展示口径。 |
-| `server.py` | HTTP 路由、认证入口、request/response 适配、登录/cookie、静态文件。 | 不承载 ingest 写库、summary 构建、health 聚合等业务编排。 |
-| `server_services.py` | HTTP 入口背后的业务编排：ingest、limits ingest、summary/mobile summary、health。 | 不依赖 `BaseHTTPRequestHandler` 或 Web request 对象。 |
-| `ingest.py` | Ingest contract、payload 校验、敏感字段边界。 | 不写 SQLite，不构建展示快照。 |
+| `cloudflare/native-worker/src/index.ts` | HTTP 路由、认证入口、request/response 适配、登录/cookie、静态文件（`cloudflare/native-worker/static/`）。 | 不承载业务口径计算。 |
+| `cloudflare/native-worker/src/write-model.ts` | Ingest contract、payload 校验、敏感字段边界、D1 upsert。 | 不构建展示快照。 |
+| `cloudflare/native-worker/src/read-model.ts` | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。 | 不把口径分散到 Web、Mobile 或 route。 |
+| `cloudflare/native-worker/src/mobile-summary.ts` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
+| `cloudflare/native-worker/src/version-contract.ts` | 服务端版本判定：四态、最低支持版本策略、wire 校验与脱敏。 | —— |
+| `cloudflare/migrations/` | D1 schema 与迁移；守卫是 `tests/test_d1_schema_migration.py` 的显式列布局快照。 | —— |
+| `cli.py` | 命令解析和调用编排（采集端）。 | 不直接写展示口径。 |
 | `pusher.py` | 设备本机采集和 HTTP 上报。 | 不读取其他 OS 用户 home，不做 server-side 聚合。 |
-| `storage_sqlite.py` | 本地 SQLite adapter、schema、写入、upsert、WAL/busy timeout、错误脱敏；D1 schema 以此兼容迁移。 | 不定义 Web/Mobile 展示文案。 |
-| `snapshot_builder.py` | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。 | 不把口径分散到 Web、Mobile 或 server route。 |
-| `snapshot_periods.py` / `snapshot_filters.py` / `snapshot_trends.py` / `snapshot_source_health.py` | `snapshot_builder.py` 的内部 helper：period/date axis、machine/account filter、trend/hourly residual、source health。 | 不成为新的 API owner，不直接被 Web/Mobile 调用。 |
-| `mobile_summary.py` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
-| `version_contract.py` | 采集端/服务端版本字段口径、四态判定、最低支持版本策略、版本字段安全白名单。 | 不做 HTTP、不写 SQLite、不依赖包内其它模块。 |
-| `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
-| `collector.py` / SSH source | Legacy compatibility only。 | V2 新功能不得依赖这条路径。 |
+| `version_contract.py`（采集端半边） | 本机上报版本块的构造与出站自检、发布通道枚举。 | 不做 HTTP、不依赖包内其它模块；服务端判定权威在 `version-contract.ts`。 |
+| `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。#74/PM-2 起不落本地库。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
 
 ## Source / Trust Boundary
 
@@ -112,7 +111,7 @@ CLI / HTTP handler / clients
 - `mobile summary`：由 `/api/summary` 的 snapshot 派生，只做 DTO 转换和字段裁剪，不重新计算 canonical usage；`limits.observed_count` 只统计 official observed quota。
 - `Usage Ledger hourly fact`：本机按最近窗口扫描并按记录时间切成小时桶；服务端按来源、agent、client、时间窗口、账号、归因状态和 provenance upsert，同一小时重复上报只更新最新值，不累加。
 - `实时上报`：macOS 本机当前通过 LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒运行 Python pusher。默认增量 lookback 为 48 小时，用于覆盖日志延迟和近期归档，不代表上传 48 小时内每个 session 明细。
-- `Cloudflare D1`：当前生产 canonical store。D1 是 Cloudflare 托管的 SQLite-compatible serverless SQL 数据库，不是 PostgreSQL。本地 SQLite 仅作为 legacy/local adapter 和测试/迁移参考。
+- `Cloudflare D1`：当前生产 canonical store。D1 是 Cloudflare 托管的 SQLite-compatible serverless SQL 数据库，不是 PostgreSQL。#74 起服务端不再有本地 SQLite adapter；采集端唯一的本地库是 `collector_store.py` 的 outbox（缓冲，不是档案）。
 
 详细 SQLite 表和当前 snapshot 顶层字段见 [`database.md`](database.md) 与
 [`interfaces.md`](interfaces.md)。旧 `docs/architecture.md` 中的 `snapshot_builds`
@@ -120,11 +119,9 @@ CLI / HTTP handler / clients
 
 ## Legacy SSH 策略
 
-- V2 主线只支持 push ingest：`DevicePusher -> /ingest -> SQLite -> summary API`。
-- `collector.py` / `ssh` source 是 legacy compatibility。
-- 新功能不得依赖 SSH pull。
+- 主线只有 push ingest：`DevicePusher -> /ingest -> D1 -> summary API`。
+- legacy 的 `collector.py` / `ssh` source **已随 #74 删除**；汇聚端不通过 SSH pull 拉取。
 - 新文档、新 onboarding、新 mobile flow 不得引导用户使用 SSH pull。
-- 如果未来删除 legacy，需要单独任务包、迁移说明和回归测试。
 
 ## 新功能放置规则
 

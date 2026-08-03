@@ -1,11 +1,12 @@
-# AI Usage Ingest Server Operations（**冻结中的 Python 实现**）
+# AI Usage Ingest Server Operations（**已删除的 Python 实现，历史归档**）
 
-> ## ⚠️ 本文档描述的不是生产
+> ## ⚠️ 本文档描述的实现已不存在
 >
 > **生产服务端是 Cloudflare Worker + D1**，入口 `https://aiusage.chunbai.com`。
-> 本文档描述的 Python Ingest Server（`cli server`）已按 #67 决策**冻结**，随 #74 删除。
+> 本文档描述的 Python Ingest Server（`cli server`）已按 #67 决策于 **#74 删除**
+> （2026-08-03，历史代码见 tag `pre-server-deletion-eee4f35`）。
 >
-> **照本文档部署，等于部署一个正在退役的实现。**
+> **本文档只作历史归档，其中的命令已全部失效。**
 >
 > | 你要做什么 | 去哪 |
 > | --- | --- |

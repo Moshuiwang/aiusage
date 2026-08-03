@@ -46,7 +46,7 @@ Round 8 不做客户端物理搬迁，只给 AI 明确当前真实代码和目�
 
 | 平台 | 用户体验 | 当前真实代码 | 目标目录 | 本轮动作 |
 | --- | --- | --- | --- | --- |
-| Web | 完整 dashboard：机器、OS 用户、agent、趋势、source health、可信 limits。 | `src/ai_usage_widget/static` | `clients/web` | 只记录映射，不搬迁。 |
+| Web | 完整 dashboard：机器、OS 用户、agent、趋势、source health、可信 limits。 | `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管） | `clients/web` | 只记录映射。 |
 | iPhone / iOS Widget | App 是移动主体验；Widget 是轻量摘要。 | `mobile/ios`、`mobile/ios-xcode` | `clients/ios` | 只记录映射，不搬迁。 |
 | Android / Android Widget | 复用移动端主体验和 mobile summary。 | 暂无真实实现 | `clients/android` | 后续独立任务包。 |
 | macOS | 菜单栏或轻量桌面入口；打开 dashboard 看完整信息。 | `clients/macos` 有新菜单栏方向；`widget/macos*` 为 legacy。 | `clients/macos` | 不复用 legacy Widget 主线。 |
@@ -65,13 +65,15 @@ Round 8 不做客户端物理搬迁，只给 AI 明确当前真实代码和目�
 
 | 模块 | Owner |
 | --- | --- |
-| `server.py` | HTTP route、认证入口、request/response 适配。 |
-| `server_services.py` | HTTP 背后的业务编排。 |
-| `ingest.py` | Usage ingest payload 校验和敏感字段边界。 |
-| `storage_sqlite.py` | SQLite schema、upsert、WAL/busy timeout。 |
-| `snapshot_builder.py` | `/api/summary` read model。 |
-| `mobile_summary.py` | `/api/mobile/summary` DTO。 |
+| `cloudflare/native-worker/src/index.ts` | HTTP route、认证入口、request/response 适配。 |
+| `cloudflare/native-worker/src/write-model.ts` | Usage ingest payload 校验和敏感字段边界。 |
+| `cloudflare/migrations/` | D1 schema、upsert 口径与迁移。 |
+| `cloudflare/native-worker/src/read-model.ts` | `/api/summary` read model。 |
+| `cloudflare/native-worker/src/mobile-summary.ts` | `/api/mobile/summary` DTO。 |
 | `limits_*` / provider modules | 官方额度 provider、runtime、doctor、scheduler、push。 |
 | `pusher.py` | 设备本机采集和 HTTP push。 |
+
+> Python 服务端一列（`server.py` 到 `mobile_summary.py` + `storage_sqlite.py`）已于 #74 删除，
+> 服务端唯一实现是 Cloudflare Worker + D1（#67 决策）。
 
 新增字段或接口时，先找 owner，不要在客户端、route handler 或历史文档里重新定义一套口径。

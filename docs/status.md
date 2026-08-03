@@ -15,17 +15,20 @@
   prompt、response、tool output 或原始日志路径。
 - 去重口径：服务端对同一来源、agent、账号归因、小时窗口和 provenance upsert；
   重复上报更新同一小时桶，不累加成重复用量。
-- **服务端只有一份权威实现**：Cloudflare Worker + D1。Python 服务端（`server.py` 那条链）
-  已冻结，只修迁移阻断问题，不承接新产品字段，随 #74 删除。本地开发跑 `scripts/dev_worker.sh`
-  （wrangler dev + 本地 D1，与生产同款实现），不再用 `cli server`。
+- **服务端只有一份权威实现**：Cloudflare Worker + D1。Python 服务端路径（`server.py` 到
+  `mobile_summary.py` 整条链 + 本地 canonical store）**已于 #74 删除**（2026-08-03，删除前
+  tag `pre-server-deletion-eee4f35`）。本地开发跑 `scripts/dev_worker.sh`（wrangler dev +
+  本地 D1，与生产同款实现）。随 #74 落地的还有：静态资源搬到
+  `cloudflare/native-worker/static/`（PM-1）、`collect-limits` 停止写本地 SQLite（PM-2，
+  云端 D1 是唯一正本）、`supabase-sync.ts` 按 PM 意向保留（PM-5，代码内无已知消费者）。
 - **版本可见性已上线**：`/api/summary` 的 `source_status[].version` 与顶层 `version_health`、
   `/api/health` 的 `versions` 返回各设备版本状态。语义是「**最后一次被服务端成功接收的版本**」，
   不是「设备当前运行的版本」——不兼容 payload 在写库之前就被拒绝。
-- **D1 迁移已到 `0007`**。`0001_initial_schema.sql` 是**累计快照**：0002/0003/0004/0006 的成果，
-  以及 0005 的两个审计索引（#75 已回填）都在里面，「只跑 0001 的新建库」与迁移链现在收敛到同一套
-  表、列与索引，由 `tests/test_d1_schema_migration.py` 的两条守卫钉住（一条比对两条建库路径的
-  schema，一条从 owner 迁移重放比对索引定义——后者专防「索引名对、表或列错」这种 `IF NOT EXISTS`
-  会让两条路径「一致地错」的绕过路径）。
+- **D1 迁移已到 `0008`**。`0001_initial_schema.sql` 是**累计快照**：0002/0003/0004/0006 的成果、
+  0005 的两个审计索引（#75 已回填）、以及 0008 的 `usage_blocks` 删表（#74，0001 已同步不再建表）
+  都收敛在里面，「只跑 0001 的新建库」与迁移链落到同一套表、列与索引。守卫在
+  `tests/test_d1_schema_migration.py`：显式列布局快照（#74 起不再镜像 Python 存储层）、
+  两条建库路径 schema 比对、owner 迁移索引重放。**生产 D1 的 0008 尚未执行，归 Ops（Mac 侧）**。
 
 > D1 体量等会随时间变化的数字不在此维护，需要时直接查。
 

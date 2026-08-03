@@ -849,3 +849,59 @@ grep -ril "<关键词>" cloudflare/native-worker/test/*.ts
 - 没有核实 `provider_slots` 13 个场景 SQL 与 Python 测试的逐条语义对应，只核实了
   agent / provider 取值的存在性（这正是发现 5.5 中三条缺口的方式）。
 - 生产环境未回源核实（证据等级未达 5）。
+
+---
+
+## 10. #74 执行记录（2026-08-03，逐块勾销）
+
+> 本节由 #74 实施代理写入。删除前 tag：`pre-server-deletion-eee4f35`；
+> 执行分支 `feat/issue-74-delete-python-server-path`。逐行归属以第 5–6 节为准，
+> 本节按文件汇总勾销结果；与第 5–6 节标注不一致处均已在执行时实测复核。
+
+### 10.1 主体 9 文件
+
+| 文件 | 处置 |
+| --- | --- |
+| `test_api_contract.py` | ✅ 已随 #89（P1 golden 迁移）删除，owner 是 `golden-freshness.test.ts` |
+| `test_web_server.py` | ✅ 删除。迁 W/合同行均有 Worker 侧接替（#90 台账）；唯一「废弃」行（L600 `latest.json` 副作用）随架构消失 |
+| `test_server_services.py` | ✅ 删除。13 迁 W 已覆盖 + 2 废弃（Python 内部对象复用/快照文件模型，Worker 无该结构） |
+| `test_ingest_contract.py` | ✅ 删除。写路径认证与校验缺口已由 #90 块 1（`ingest-validation.test.ts` 等）补齐；`test_payload_too_large` 对应 PM-3 撤销（两侧同为 50MB，`write-model.ts:620`） |
+| `test_snapshot_builder.py` | ✅ 删除。42 条逐行按第 5.5 节归属：合同（四份 golden）+ 迁 W（#90 块 5/9/11/12/15）+ 4 条废弃（block 死代码，#90/#91 判定） |
+| `test_mobile_summary.py` | ✅ 删除。25 条按第 5.6 节：合同 + 迁 W（#90 块 6 脱敏、块 15） |
+| `test_snapshot_source_health.py` | ✅ 删除。7 条全部迁 W 已覆盖（含 #90 块 13） |
+| `test_version_contract.py` | ✅ 收缩 40→4：`TestLocalCollectorRelease` 留 Python；36 条服务端半边由 `version-contract*.test.ts` / `version_read_surface.test.ts` 接替（#90 块 3/4/10） |
+| `test_version_contract_doc.py` | ✅ 收缩 15→7：8 条并存重叠按 `version-contract-doc.test.ts` 文件头清单摘除；owner 路径测试收窄到采集端表 |
+
+### 10.2 旁及 9 文件
+
+| 文件 | 处置 |
+| --- | --- |
+| `test_normalize_ingest.py` | ✅ 删除（PM-4：`normalize.py` 一并删）；7 条中 6 迁 W 已覆盖、1 条 #91 已废弃 |
+| `test_provider_slots_parity.py` | ✅ 已随 #89 删除；守恒断言迁至 `provider-slots-parity.test.ts:98`（块 14） |
+| `test_value_golden_freshness.py` | ✅ 已随 #89 删除，防陈旧守卫在 `golden-freshness.test.ts` |
+| `test_storage_sqlite.py` | ✅ 删除。迁 W 行均有覆盖；2 条废弃（WAL pragma / blocks 写入，#91 停采） |
+| `test_d1_schema_migration.py` | ✅ L155 镜像用例废弃，由**显式列布局快照**用例接替（不再 import `storage_sqlite`）；其余 4 条留 P 原样 |
+| `test_limit_windows_store.py` | ✅ 删除（PM-2：停止写本地库，9 条守护对象消失）。L279 安全断言的服务端等价是 `ingest.test.ts:457` 敏感字段拒收 |
+| `test_dashboard_static.py` | ✅ 8 条零删除，仅 `STATIC` 常量改指 `cloudflare/native-worker/static`（PM-1 走法 B） |
+| `test_limits_runtime.py` | ✅ 7 条重写为 PM-2 语义（不落库），新增三层「never touches sqlite」守卫（构造/源码/行为面，带变异证据） |
+| `test_cli_verify_cloud.py` | ✅ 3 条 owner 绑定耦合用例删除，由 `verify-cloud-fixtures.test.ts` 接替（块 8——**实测发现 #90 台账未覆盖此块，本次先补 Worker 守卫再删**，4 组变异证据）；第 4 条纯结构断言留 Python |
+
+### 10.3 待定项的最终裁决
+
+| 待定 | 裁决 |
+| --- | --- |
+| PM-1 静态资源 | 搬 `cloudflare/native-worker/static/`，三处引用同步（`web_surface.test.ts` / `static-assets.ts` / `package.json`） |
+| PM-2 collect-limits 本地落库 | 停止写入；`storage_sqlite.py` 归零消费者后整体删除 |
+| PM-3 payload 大小上限 | 已于 1.5 节撤销（两侧均有 50MB 检查） |
+| PM-4 `normalize.py` | 随 #74 删除（零消费者） |
+| PM-5 `supabase-sync.ts` | **保留**（PM 显式指示，推翻裁决清单默认值；代码内无已知消费者，后续处置需再次请示） |
+| PM-6 文档合同 | TS 侧已建（#93），Python 侧本次摘除并存重叠 |
+| `usage_blocks` D1 表（#91 并入） | 0001 移除建表 + 0008 `DROP TABLE IF EXISTS`；golden 重生成零 diff 实证零读取。**生产 D1 迁移归 Ops（Mac 侧），未执行** |
+
+### 10.4 代码删除面（实际）
+
+`server.py`、`server_services.py`、`ingest.py`、`snapshot_builder.py`、`snapshot_filters.py`、
+`snapshot_periods.py`、`snapshot_source_health.py`、`snapshot_trends.py`、`mobile_summary.py`、
+`normalize.py`、`collector.py`、`storage_json.py`、`storage_sqlite.py`、`timeutil.py`（14 个模块），
+`version_contract.py` 拆分只留采集端半边；`cli.py` 删 `server` / `collect` 命令。
+Python 测试 803 → 597。孤儿 fixture 两份（`ccusage_daily_sample.json`、`ingest_payload_valid.json`）一并删除。
