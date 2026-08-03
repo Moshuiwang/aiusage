@@ -512,9 +512,10 @@ async function bundleWorker(): Promise<string> {
 }
 
 /**
- * 复刻 `tests/test_api_contract.py` 的 `_shape()`，用来直接和 Python 产出的
- * 合同 golden 比对。只覆盖 `/api/health` 的 `source_status` 子树用得到的分支：
- * 该子树里没有 VOLATILE / `_path` 字段，枚举字段只有 `status`。
+ * 合同 golden 的 shape 投影，用来直接和已提交的 `api_contract_golden.json` 比对。
+ * 完整实现在 `test/golden/shape.ts`（golden 生成端的 owner）；这里是**刻意收窄的一份**，
+ * 只覆盖 `/api/health` 的 `source_status` 子树用得到的分支：该子树里没有 VOLATILE /
+ * `_path` 字段，枚举字段只有 `status`。改口径时两边都要看一眼。
  */
 const contractEnumFields = new Set(["status"]);
 

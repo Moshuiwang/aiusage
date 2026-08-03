@@ -134,6 +134,13 @@ async function record(ctx: WorkerContext, name: string, request: RawRequest): Pr
 /**
  * 灌入两台设备的 canonical 用量事实与来源健康状态。
  *
+ * **这段 SQL 是手写的，它的形状真值在 `write-model.ts` 的 canonical INSERT。**
+ * 旧 Python 合同场景的读端点记录是 `/ingest` 真写进去再读出来的，写读两端连在同一份
+ * golden 里；这里断了（原因见上面第二段注释）。代价是：写模型的 canonical 行口径漂移
+ * （新增列、`ai_account_id` 派生规则变化、`attribution_confidence` 取值变化）时，
+ * 这份 seed 会继续记录旧形状而不红。兜底在 `ingest.test.ts`——那里有真实的
+ * `/ingest` → `/api/summary` 往返覆盖。改 `write-model.ts` 的写入形状时两边都要看。
+ *
  * `linux-dev-bob` 的采集时刻刻意落在 120 分钟阈值以外：全新鲜的 fixture 下
  * 「折算」与「不折算」产出完全一样的 `source_status.counts`，`/api/health` 那条口径
  * 会在这份 golden 里静音。防陈旧守卫里有一条断言专门盯住这个场景不许消失。

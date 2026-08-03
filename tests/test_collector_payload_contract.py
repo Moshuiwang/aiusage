@@ -14,7 +14,8 @@ Python**（要读本机 ccusage / mswusage 与 OS 上下文），服务端是 Ty
   且脱节方向正好是「实现者以为的样子」）。
 - 生成逻辑的 owner 是**本测试模块**（``FIXTURE_PATH`` + ``_collect_payloads()``），
   ``scripts/gen_collector_payload_fixture.py`` 反过来从这里 import，只负责写文件；
-  和 ``tests/test_value_golden_freshness.py`` / ``scripts/gen_value_golden.py`` 同构。
+  和 Worker 侧服务端合同 golden 的做法同构（``cloudflare/native-worker/test/golden/``
+  的收集器即 owner，``npm run cf:golden:gen`` 反过来调它们）。
 - 消费方是 Worker 侧的 ``cloudflare/native-worker/test/ingest.test.ts``：
   它拿同一份 fixture 断言服务端能收下采集端真实发出的 payload。
 

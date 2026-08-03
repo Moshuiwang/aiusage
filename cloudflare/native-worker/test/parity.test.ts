@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { fixedNow, staleCollectedAt, token } from "./golden/paths";
 
 type ContractRecord = {
   name: string;
@@ -24,12 +25,10 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const seedSqlPath = path.join(repoRoot, "cloudflare/native-worker/test/seed.sql");
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
-const token = "contract-test-token";
-const fixedNow = "2026-06-03T12:00:00+08:00";
-// 与 Python 合同场景 `tests/test_api_contract.py::STALE_COLLECTED_AT` 保持同一个值：
-// 合同 fixture 里必须有一台「超过 120 分钟没上报」的设备，否则过期折算这条口径
-// 在两侧都退化成恒等变换，parity 会一直报绿而实际什么都没守。
-const staleCollectedAt = "2026-06-03T08:00:00+08:00";
+// token / fixedNow / staleCollectedAt 从 golden 收集器那边 import，不在这里再抄一份：
+// `staleCollectedAt` 是本文件的 seed 与合同 golden 的场景之间的**语义绑定**——
+// 合同场景里必须有一台「超过 120 分钟没上报」的设备，否则过期折算这条口径
+// 会退化成恒等变换，两边都报绿而实际什么都没守。各存一份就会悄悄漂开。
 
 // 值 golden 的易变字段：与运行时刻绑定，重放必然不同，比对前统一抹掉。
 // 口径与 `test/golden/shape.ts` 同源，那边是 golden 生成端的 owner。
@@ -622,10 +621,10 @@ async function seedUsageFixture(db: D1Database): Promise<void> {
     runId: 2,
     now,
     sourceId: "linux-dev-bob",
-    // Issue #77：Python 合同场景把这台设备的采集时刻回拨到 120 分钟阈值以外
-    // （`tests/test_api_contract.py::_backdate_source_collection`，STALE_COLLECTED_AT）。
-    // 这里必须造出同一个场景，否则 Worker 侧这台来源永远新鲜、status 恒为 ok，
-    // 而 golden 说 stale——「过期折算」这条口径就会在 parity 里静音。
+    // Issue #77：合同场景里这台设备的采集时刻落在 120 分钟阈值以外
+    // （与 `test/golden/paths.ts` 的 `staleCollectedAt` 同一个值）。
+    // 这里必须造出同一个场景，否则本文件的来源永远新鲜、status 恒为 ok，
+    // 而合同 golden 说 stale——「过期折算」这条口径就会在这里静音。
     // 用固定时刻而不是 `new Date()`：它相对真实当前时间、相对 fixedNow(2026-06-03T12:00)、
     // 相对 provider-failure 用例的 2026-06-03T10:31 都超过 120 分钟，三种参照下都判 stale。
     collectedAt: staleCollectedAt,

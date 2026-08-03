@@ -104,6 +104,162 @@ describe.sequential("golden 防陈旧守卫", () => {
     }
   });
 
+  it("value_golden 的周期语义从请求参数独立复算，不看读模型怎么算的", async () => {
+    // 这是补 `npm run cf:golden:gen` 这条逃生口的第一道。防陈旧比对的生成端与校验端
+    // 是同一份实现，所以「改读模型 + 顺手重新生成」必然全绿——实测过两个产品可见的
+    // 口径事故都能这样零信号穿过去：week 窗口从 7 天缩成 6 天、mobile 缓存占比算少。
+    //
+    // 这里的判据完全来自**请求参数**（date + period），与读模型的实现无关：
+    // 周期边界是产品定义，不是实现细节。read-model 把 -6 改成 -5，这条立刻红。
+    const committed = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ValueRecord[];
+    const day = (base: string, delta: number) => {
+      const stamp = new Date(`${base}T00:00:00Z`);
+      stamp.setUTCDate(stamp.getUTCDate() + delta);
+      return stamp.toISOString().slice(0, 10);
+    };
+    // period → [start_date 相对请求日期的偏移（null = 不设下界）, trend 点数]
+    const periodRules: Record<string, { startOffset: number; trendPoints: number }> = {
+      today: { startOffset: 0, trendPoints: 24 },   // 当日按小时
+      week: { startOffset: -6, trendPoints: 7 },    // 含今天在内的 7 天
+      month: { startOffset: -29, trendPoints: 30 }, // 含今天在内的 30 天
+    };
+
+    let checked = 0;
+    for (const record of committed) {
+      const url = new URL(`http://native.test${record.request.path}`);
+      const date = url.searchParams.get("date")!;
+      const period = url.searchParams.get("period")!;
+      const body = record.response.body as AnyRecord;
+      // web 的边界在 summary 里，mobile 的在 period 里——两个端点都要核。
+      const window = (body.summary ?? body.period) as AnyRecord;
+      const rule = periodRules[period];
+
+      if (rule) {
+        expect(window.start_date, `${record.name} 的 start_date 必须等于 ${period} 的产品定义边界`)
+          .toBe(day(date, rule.startOffset));
+        const points = ((body.trend as AnyRecord)?.points as unknown[]) ?? [];
+        expect(points.length, `${record.name} 的 trend 点数必须是 ${period} 的定义长度`)
+          .toBe(rule.trendPoints);
+      } else {
+        expect(period, "只认识 today/week/month/all 四个周期").toBe("all");
+        expect(window.start_date, `${record.name}：all 不设下界`).toBeNull();
+      }
+      expect(window.end_date, `${record.name} 的 end_date 必须是请求日期`).toBe(date);
+      checked += 1;
+    }
+    // 只留确切条数这一条：`checked === committed.length` 在循环里恒成立，断言它等于没断言。
+    expect(checked, "必须逐条核到全部 14 条记录").toBe(14);
+  });
+
+  it("value_golden 里 web 与 mobile 对同一组请求必须给出同一份口径", async () => {
+    // 两个端点的数值由两份实现算出（read-model.ts 与 mobile-summary.ts），
+    // 而它们都在这份 golden 里。让它们互相核对，就得到一条**不依赖 golden 与读模型
+    // 一致**的独立恒等式：只改其中一侧（实测过 mobile 的 cacheTokens 丢掉
+    // cache_read），regenerate 之后两侧对不上，这里就红。
+    const committed = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ValueRecord[];
+    const byName = new Map(committed.map((record) => [record.name, record]));
+    // 只配对**请求参数完全相同**的：machine/account 过滤那两组两侧刻意用了不同的值。
+    const pairs = [
+      ["summary-today", "mobile-summary-today"],
+      ["summary-week", "mobile-summary-week"],
+      ["summary-month", "mobile-summary-month"],
+      ["summary-all", "mobile-summary-all"],
+      ["summary-week-observed-limits", "mobile-summary-week-observed-limits"],
+    ];
+
+    let checked = 0;
+    for (const [webName, mobileName] of pairs) {
+      const web = (byName.get(webName)!.response.body as AnyRecord).summary as AnyRecord;
+      const mobile = (byName.get(mobileName)!.response.body as AnyRecord).period as AnyRecord;
+      expect(new URL(`http://x${byName.get(webName)!.request.path}`).search,
+        `${webName} 与 ${mobileName} 必须是同一组请求参数`)
+        .toBe(new URL(`http://x${byName.get(mobileName)!.request.path}`).search);
+
+      for (const key of ["total_tokens", "input_tokens", "output_tokens"]) {
+        expect(Number(mobile[key]), `${mobileName}.${key} 必须与 ${webName} 一致`).toBe(Number(web[key]));
+      }
+      // mobile 把两类缓存合成一个 cache_tokens；少合一类就是这里对不上。
+      expect(Number(mobile.cache_tokens), `${mobileName}.cache_tokens 必须等于 web 两类缓存之和`)
+        .toBe(Number(web.cache_creation_tokens) + Number(web.cache_read_tokens));
+      checked += 1;
+    }
+    expect(checked, "五对都必须核到").toBe(pairs.length);
+  });
+
+  it("value_golden 的聚合恒等式从产物独立算一遍", async () => {
+    // 逐条明细之和必须等于总量。周期截断把整行删掉时，那一行的分量与 total 一起消失，
+    // 上面那条「行内四分量分解」照样成立——所以还需要这条跨行的。
+    const committed = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ValueRecord[];
+    let webChecked = 0;
+    let mobileChecked = 0;
+    for (const record of committed) {
+      const body = record.response.body as AnyRecord;
+      const items = body.items as AnyRecord[] | undefined;
+      if (items) {
+        const total = items.reduce((sum, row) => sum + Number(row.total_tokens ?? 0), 0);
+        expect(total, `${record.name}：items 之和必须等于 summary.total_tokens`)
+          .toBe(Number((body.summary as AnyRecord).total_tokens));
+        webChecked += 1;
+      }
+      const byAgent = ((body.breakdown as AnyRecord)?.by_agent as AnyRecord[]) ?? null;
+      if (byAgent) {
+        const total = byAgent.reduce((sum, row) => sum + Number(row.tokens ?? 0), 0);
+        expect(total, `${record.name}：by_agent 之和必须等于 period.total_tokens`)
+          .toBe(Number((body.period as AnyRecord).total_tokens));
+        mobileChecked += 1;
+      }
+    }
+    // 结构下限用**确切条数**：`> 0` 会被 web 那 7 条满足，mobile 半边整体漏掉也不会红。
+    expect(webChecked, "web 半边 7 条都要核到").toBe(7);
+    expect(mobileChecked, "mobile 半边 7 条都要核到").toBe(7);
+  });
+
+  it("value_golden 不含任何运行时敏感数据", async () => {
+    // value golden 记录的是全量响应（含 sources[].error_message），泄漏面比 shape golden 大。
+    const raw = await readFile(valueGoldenPath, "utf8");
+    expect(raw.length, "golden 不能是空文件").toBeGreaterThan(1000);
+    for (const value of sensitiveSubstrings) {
+      expect(raw.includes(value), `golden 不得包含 ${value}`).toBe(false);
+    }
+  });
+
+  it("value_golden 的 token 守恒等式从产物独立算一遍", async () => {
+    // 这条断言存在的理由，是 golden 变成 self-referential 之后留下的那个洞：
+    // 「改读模型 + 顺手 npm run cf:golden:gen」会让上面那条防陈旧比对必然变绿
+    // （生成端与校验端是同一份实现），于是一个纯数值口径回归可以零信号地穿过去。
+    // 实测过：把 read-model 的 `cacheReadTokens += cacheRead` 改成 `+= 0`，
+    // 重新生成 golden 之后 109 条测试全绿。
+    //
+    // 所以这里**不重放读模型**，只从已提交的产物里独立复算一个恒等式：
+    // 四个分量之和必须等于 total。分量少算而 total 另有来路时，两边会立刻对不上。
+    const committed = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ValueRecord[];
+    const parts = ["input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens"];
+    const sumParts = (row: AnyRecord) => parts.reduce((sum, key) => sum + Number(row[key] ?? 0), 0);
+
+    let checkedSummaries = 0;
+    let checkedItems = 0;
+    for (const record of committed) {
+      const body = record.response.body as AnyRecord;
+      const summary = body.summary as AnyRecord | undefined;
+      if (summary && summary.total_tokens !== undefined) {
+        expect(sumParts(summary), `${record.name} 的 summary 分量之和必须等于 total_tokens`)
+          .toBe(Number(summary.total_tokens));
+        checkedSummaries += 1;
+      }
+      for (const item of (body.items as AnyRecord[]) ?? []) {
+        if (item.total_tokens === undefined) continue;
+        expect(sumParts(item), `${record.name} 的 items 分量之和必须等于 total_tokens`)
+          .toBe(Number(item.total_tokens));
+        checkedItems += 1;
+      }
+    }
+
+    // 结构下限：golden 一旦退化成空壳，上面两个循环一次都不跑，「守恒成立」与
+    // 「什么都没核」会产生同一个绿。
+    expect(checkedSummaries, "必须真的核到 summary").toBeGreaterThan(0);
+    expect(checkedItems, "必须真的核到逐条 items").toBeGreaterThan(0);
+  });
+
   it("api_contract_golden.json 等于此刻 Worker 实录出来的结果", async () => {
     const committed = JSON.parse(await readFile(apiContractGoldenPath, "utf8")) as ContractRecord[];
     const regenerated = await collectApiContractRecords();
