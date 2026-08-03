@@ -16,7 +16,8 @@
   `cloudflare/native-worker/src/version-contract.ts`（唯一 owner）。
 - 采集端自报版本字段：`src/ai_usage_widget/version_contract.py`（`pusher.py` / `config.py` 在用）。
 - 上报 payload 校验与敏感字段边界：`cloudflare/native-worker/src/write-model.ts`。
-- 兼容判定与拒绝动作：`cloudflare/native-worker/src/index.ts`。
+- 兼容判定与拒绝动作：`cloudflare/native-worker/src/write-model.ts`（判定在写库之前完成；
+  `index.ts` 只负责把 `WriteValidationError` 序列化成 400 响应，不含任何版本语义）。
 - 来源健康读模型：`cloudflare/native-worker/src/read-model.ts`。
 - 模块 owner 总表与依赖方向：[`architecture.md`](architecture.md)。
 - 接口索引：[`interfaces.md`](interfaces.md)。
@@ -77,7 +78,7 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 判定优先级：`unsupported` > `rollback_available` > `update_available` > `current`。
 `unknown` 不属于 Issue 要求的四态，是「采集端没报版本」的降级态：**不拒绝，也不当成合规**。
 
-判定条件列写的是 `version_contract.evaluate_collector_release()` 实际返回的 `reason`。
+判定条件列写的是 `version-contract.ts` 的 `evaluateCollectorRelease()` 实际返回的 `reason`。
 排序权重决定来源健康列表的确定性排序，数字越小越需要人工处理。
 
 | 状态 | 排序权重 | 判定条件 | 服务端动作 | 用户看到什么 |

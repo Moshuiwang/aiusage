@@ -253,8 +253,9 @@ describe("版本状态词表与严重度（#90 块 10）", () => {
       "rollback_available",
       "unknown",
     ]);
-    expect(VERSION_STATES).not.toContain(VERSION_STATE_UNKNOWN);
-    expect(new Set(ALL_VERSION_STATES).size).toBe(ALL_VERSION_STATES.length);
+    // 这里原本还有 `VERSION_STATES 不含 unknown` 与 `ALL_VERSION_STATES 无重复` 两条。
+    // 它们是恒真的：上面两条 toEqual 一旦通过，两个数组就已经是那几个互不相同的字面量，
+    // 后面两条不可能为假。独立审查抓到，删掉，覆盖力零损失。
   });
 
   it("严重度覆盖全部状态、互不相同，且顺序是「越需要人工处理越小」", () => {
