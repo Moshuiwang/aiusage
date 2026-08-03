@@ -1078,6 +1078,43 @@ describe.sequential("native TS Worker write API parity", () => {
     }
   });
 
+  it("ties the hand-authored worker fixture to the ingest contract so drift becomes visible", async () => {
+    // tests/fixtures/native_worker_ingest_payloads.json 是 Worker 侧的手写场景 fixture（#97）。
+    // 它不能由 owner 生成：其中的错误形态（error_type / collection_status 组合）正是
+    // pusher 永远不会产出的状态。手写 fixture 的失效方向是与现实脱节，所以这里把它的
+    // 每个顶层字段钉进「Worker 已声明的 ingest 合同 ∪ 刻意冻结的 legacy 探针字段」：
+    // 字段改名、摘除、新增时本用例立刻红，fixture 不再能静默漂移。
+    const contract = await ingestRequestFieldContract();
+    // legacy 集合从探针文件动态取，单一事实源：探针退役或新增，这里自动跟着变。
+    const legacyFields = await Promise.all(
+      [legacyDroppedFieldProbePath, legacyBlocksProbePath].map(async (probePath) =>
+        (JSON.parse(await readFile(probePath, "utf8")) as { field: string }).field,
+      ),
+    );
+    expect(legacyFields.length).toBe(2);
+    // 结构下限：场景数与字段检查量钉死，防止 fixture 被清空后本用例照绿。
+    expect(fixture.ingest_payloads.length).toBe(4);
+    let checkedFields = 0;
+    let legacyOccurrences = 0;
+    for (const payload of fixture.ingest_payloads) {
+      for (const key of Object.keys(payload as Record<string, unknown>)) {
+        checkedFields += 1;
+        if (legacyFields.includes(key)) {
+          legacyOccurrences += 1;
+          continue;
+        }
+        expect(
+          contract.declared,
+          `手写 fixture 的顶层字段 ${key} 既不在 Worker 声明合同里、也不是冻结的 legacy 探针字段——fixture 已与现实脱节`,
+        ).toContain(key);
+      }
+    }
+    expect(checkedFields).toBe(58);
+    // ccusage_blocks_report 在 fixture 里是刻意保留的未知字段忽略路径覆盖（#91/#97），
+    // 不是待同步的现状快照；谁把它「顺手清理」掉，这里会红，逼着先来读这段注释。
+    expect(legacyOccurrences).toBe(1);
+  });
+
   /** 历史字段探针的落库快照：只取「这个字段真要是被解析了就会变」的那些表。 */
   async function readLegacyProbeState(): Promise<Record<string, unknown[]>> {
     const db = await mf.getD1Database("AIUSAGE_DB");
