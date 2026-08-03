@@ -49,6 +49,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       "12-naive-limit-timestamps",
       "13-third-party-provider-without-slot",
       "14-usage-without-canonical-provider",
+      "15-two-accounts-one-provider",
     ]);
     expect(golden.length, "每个场景两个端点").toBe(goldenScenarios.length * providerSlotsEndpoints.length);
     for (const record of golden) {
@@ -80,7 +81,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     const derived = macosOwnerFixtureFrom(golden);
 
     expect(derived.length, "mobile 半边必须与场景数一致").toBe(goldenScenarios.length);
-    expect(derived.length, "场景数变化必须显式改这里").toBe(14);
+    expect(derived.length, "场景数变化必须显式改这里").toBe(15);
     expect(derived.length, "派生结果不能为空").toBeGreaterThan(0);
     expect(committed.map((record) => record.name), "fixture 覆盖的场景必须与 golden 一致")
       .toEqual(derived.map((record) => record.name));
@@ -170,6 +171,30 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       const estimateOnly = claudeQuota(byName.get(`09-local-estimate-only:${endpoint}`)!);
       expect(estimateOnly.reason).toBe("unverified");
       expect(estimateOnly.last_verified_at).toBeNull();
+    }
+  });
+
+  it("同一 provider 下两个账号时只展示最新观测的那个，不许把两份百分比混在一起", () => {
+    // #90 块 12。`selectedLimitSources`（mobile 侧择优）与 `bestLimitWindows`（读侧去重）
+    // 在测试里原本零命中——同 provider 多 source_id 只在 08 号出现过一次，
+    // 而那是「官方 vs 本地估算」，不是两个真实账号。
+    // 不择优的后果是两个账号的百分比混在一起：用户看到的数字既不是 A 的也不是 B 的。
+    const byName = new Map(golden.map((record) => [record.name, record]));
+    for (const [endpoint] of providerSlotsEndpoints) {
+      const record = byName.get(`15-two-accounts-one-provider:${endpoint}`);
+      expect(record, `15 号场景的 ${endpoint} 记录必须存在`).toBeTruthy();
+      const claude = (record!.provider_slots as Array<{ provider: string; quota: Record<string, any> }>)
+        .find((row) => row.provider === "claude")!;
+
+      expect(claude.quota.status, "择优之后额度是可用的").toBe("available");
+      // 结构下限：必须**恰好一条**。两条就是混在一起，零条就是这条路径根本没跑到。
+      expect(claude.quota.windows, "同 provider 只能展示一个账号的窗口").toHaveLength(1);
+      const shown = claude.quota.windows[0];
+      expect(shown.source_id, "展示的必须是观测时刻更新的那个账号").toBe("claude-second");
+      expect(shown.used_percent, "展示的百分比来自 claude-second").toBe(40);
+      // 另一个账号的数字绝不能出现在任何地方——混进去比不显示更糟。
+      expect(JSON.stringify(claude.quota).includes("78.25"), "claude-main 的百分比不许泄漏").toBe(false);
+      expect(JSON.stringify(claude.quota).includes("claude-main"), "claude-main 不许出现").toBe(false);
     }
   });
 
