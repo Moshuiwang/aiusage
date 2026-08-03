@@ -11,8 +11,9 @@
 - `/verify`：验证入口与证据等级判定。**声称任何任务完成前调用它。**
 - `/tdd-task`：开发任务的执行规则（原子性、先红后绿、收口交付要求）。
 - `reviewer` subagent：实现完成后收口前，用它在干净上下文审一遍 diff。
-- Stop hook：改动 `src/` 或 `tests/` 却没跑绿测试时会阻止收口；发现残留 `wrangler dev`
-  进程也会阻止（`git status` 干净不等于收口干净）。这是硬门禁不是建议。
+- Stop hook：改动 `src/` 或 `tests/` 却没跑绿测试时会阻止收口；改动 `cloudflare/`
+  要求显式交代 targeted Worker 测试结果（全量由 PR CI 承担，见 `/verify` 的收口口径）；
+  发现残留 `wrangler dev` 进程也会阻止（`git status` 干净不等于收口干净）。这是硬门禁不是建议。
 - Bash hook（`scripts/bash_guard.sh`）：`pkill -f` 与 `until/while + pgrep` 等待循环会被
   直接拦下并给出替代手法——这两个坑在 #68 里各踩过 3 次以上。
 - 后台纪律：拿到 subagent 报告后立刻停掉它（TaskStop），「拿到结果」≠「它停了」；

@@ -50,3 +50,6 @@ docs/usage-fact-check-board.md
 
 # wrangler dev --local 的本地状态（含本地 D1 的 SQLite 文件）
 .wrangler/
+
+# Claude Code subagent worktree（完整仓库副本,git add -A 会整个提进去）
+.claude/worktrees/
