@@ -67,13 +67,15 @@ elif [ -z "$CHANGED_FILES" ]; then
 else
   # Worker 侧：改动面涉及 cloudflare/ 才跑。
   #
-  # 例外必须显式列出：#74 P1 之后有两份产物的 owner 是 Worker 侧的测试，
+  # 例外必须显式列出：#74 之后有三批产物的 owner（或 owner 绑定守卫）是 Worker 侧的测试，
   # 但它们的路径都不在 cloudflare/ 下——
   #   - `tests/fixtures/contract/api_contract_golden.json` → `golden-freshness.test.ts`
   #   - macOS owner fixture → `provider-slots-parity.test.ts`（由 golden 的 mobile 半边派生）
-  # 漏了它们，单独手改那两份文件时 Worker 测试会被静默跳过，
+  #   - `tests/fixtures/verify_cloud/` → `verify-cloud-fixtures.test.ts`（mobile DTO 与版本块
+  #     由 Worker owner 现算比对，#74 块 8 的接替守卫）
+  # 漏了它们，单独手改那些文件时 Worker 测试会被静默跳过，
   # 而那正是唯一会为「被人手改过 / 已经陈旧」变红的地方。
-  if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(cloudflare/|tests/fixtures/contract/|clients/macos/Tests/AIUsageMenuBarCoreTests/Fixtures/)'; then
+  if printf '%s\n' "$CHANGED_FILES" | grep -qE '^(cloudflare/|tests/fixtures/contract/|tests/fixtures/verify_cloud/|clients/macos/Tests/AIUsageMenuBarCoreTests/Fixtures/)'; then
     SCOPE_DECISION="改动面涉及 cloudflare/ 或 Worker 拥有的合同 fixture"
   else
     RUN_WORKER=0
