@@ -11,7 +11,21 @@
 
 - Issues：`gh issue list` / <https://github.com/Moshuiwang/aiusage/issues>
 - Project #1 `AI Usage Delivery`：`gh project item-list 1 --owner Moshuiwang`
-  字段 `Status` / `Work type` / `证据等级`(0-7) / `执行环境`(Linux 可做 / 必须 Mac / 必须 Ops / 需真机)
+  代理需要维护的看板字段只有两个（2026-08-03 实测，`gh project field-list 1 --owner Moshuiwang`
+  为准；其余都是 GitHub 内置字段，不用管）：
+  - `Status`：`Backlog` / `Ready` / `In progress` / `Review` / `Waiting external` / `Done`
+  - `证据等级`：`0 未开始` … `7 回源确认`，与下面「验证与证据」的等级同一套口径。
+    读它时注意 `gh project item-list --format json` 会把**中文字段名的首字符编码搞坏**，
+    按原名取永远是 `None`，要用后缀匹配（`endswith('据等级')`）
+
+  **执行环境和工作类型不在看板上，改由 Issue 标签表达**（`gh label list` 为准）：
+
+  - 执行环境：`env:linux` 本机可完成 / `env:mac` 必须 MacBook / `env:ops` 必须 Ops Agent /
+    `env:device` 需真机。**领 Issue 前先看这个标签，不是你这台机器的直接别领。**
+  - 工作类型：`bug` / `enhancement` / `refactor` / `guardrail` / `documentation` /
+    `epic` / `plan`；`blocked` 表示开工条件未满足，`needs-decision` 表示等 PM 拍板。
+  - 领域：`area:collector` / `area:worker` / `area:client-mac` / `area:client-ios` /
+    `area:tooling` / `area:docs`。
 
 开工先领取对应 Issue 并把 Status 设为 `In progress`；同一变更只能有一个主实施代理。
 新工作直接开 Issue，用产品语言描述用户结果。**V1/V2 任务包体系已于 2026-08-01 整体归档，
