@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     backup_parser.add_argument("--keep", type=int, default=14, help="Number of backups to keep")
     backup_parser.add_argument("--max-total-mb", type=int, default=512, help="Maximum backup directory size")
 
-    limits_parser = subparsers.add_parser("collect-limits", help="Collect official limits facts into SQLite")
+    limits_parser = subparsers.add_parser("collect-limits", help="Collect official limits facts and print them (no local persistence; push-limits uploads to D1)")
     limits_parser.add_argument("--provider", action="append", dest="providers", help="Provider to collect, repeatable")
     limits_parser.add_argument("--limits-config", default=None, help="Local limits provider config JSON")
     limits_parser.add_argument("--provider-fixture", default=None, help="Offline fixture with provider windows")
@@ -151,10 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     limits_parser.add_argument("--claude-auth-file", default=None, help="Explicit Claude auth JSON path for OAuth usage")
     limits_parser.add_argument("--claude-usage-url", default=None, help="Explicit Claude OAuth usage URL")
     limits_parser.add_argument("--claude-cli", action="store_true", help="Use explicit Claude CLI /usage fallback")
-    limits_parser.add_argument("--sqlite", default=None)
     limits_parser.add_argument("--timezone", default=None)
-    limits_parser.add_argument("--date", default=None, help="Snapshot date in YYYY-MM-DD")
-    limits_parser.add_argument("--dry-run", action="store_true", help="Collect and validate without writing SQLite or latest snapshot")
     limits_parser.add_argument("--check-config", action="store_true", help="Validate limits config and print a redacted provider plan")
     limits_parser.add_argument("--doctor", action="store_true", help="Run redacted readiness checks before real provider smoke")
 
@@ -414,26 +411,21 @@ def main(argv: list[str] | None = None) -> int:
                 [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
             )
             runtime = LimitsRuntime(
-                db_path=args.sqlite or (limits_config.sqlite_path if limits_config else "data/usage.sqlite"),
                 timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
                 providers=providers,
             )
-            result = runtime.collect(
-                provider_names=provider_names,
-                dry_run=args.dry_run,
-            )
+            result = runtime.collect(provider_names=provider_names)
         except (OSError, ValueError, LimitsConfigError, json.JSONDecodeError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(json.dumps({
             "success": result.success,
-            "dry_run": args.dry_run,
-            "windows_written": result.windows_written,
+            "windows_collected": len(result.windows),
             "providers": [
                 {
                     "provider": item.provider,
                     "status": item.status,
-                    "windows_written": item.windows_written,
+                    "windows_collected": item.windows_collected,
                     "error_type": item.error_type,
                 }
                 for item in result.provider_results
@@ -677,14 +669,10 @@ def _run_push_limits(args):
         [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
     )
     runtime = LimitsRuntime(
-        db_path=limits_config.sqlite_path if limits_config else "data/usage.sqlite",
         timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
         providers=providers,
     )
-    result = runtime.collect(
-        provider_names=provider_names,
-        dry_run=True,
-    )
+    result = runtime.collect(provider_names=provider_names)
     payload = {
         "schema_version": 1,
         "observed_at": _limits_payload_observed_at(result.windows),

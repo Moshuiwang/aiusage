@@ -28,47 +28,50 @@ class TestCliLimits(unittest.TestCase):
     def tearDown(self) -> None:
         self.default_now.stop()
 
-    def test_collect_limits_fixture_writes_sqlite(self) -> None:
-        db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
-        os.close(db_fd)
-        try:
-            code = cli.main([
+    def test_collect_limits_fixture_collects_without_local_persistence(self) -> None:
+        """PM-2（#74）：collect-limits 只采集并打印，不再写本地 SQLite。
+
+        原先这里断言 limit_windows 表落库两行；落库已停止（#72 后零读取方，
+        云端 D1 是唯一正本），等价强度改为钉死 JSON 输出的采集结果，
+        并断言默认库路径不再被创建。
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = os.getcwd()
+            os.chdir(tmpdir)
+            stdout = io.StringIO()
+            try:
+                with redirect_stdout(stdout):
+                    code = cli.main([
+                        "collect-limits",
+                        "--provider-fixture",
+                        str(FIXTURES / "limits_runtime_fixture.json"),
+                    ])
+            finally:
+                os.chdir(cwd)
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["success"])
+            self.assertEqual(payload["windows_collected"], 2)
+            self.assertEqual(
+                [(item["provider"], item["status"], item["windows_collected"]) for item in payload["providers"]],
+                [("claude", "ok", 1), ("codex", "ok", 1)],
+            )
+            self.assertNotIn("windows_written", stdout.getvalue())
+            # 旧默认路径 data/usage.sqlite 不再被创建；整个工作目录零文件副作用。
+            self.assertEqual(os.listdir(tmpdir), [])
+
+    def test_collect_limits_rejects_removed_sqlite_flag(self) -> None:
+        """`--sqlite` 已随 PM-2 摘除；还在用旧旗标的调用要显式失败，不许静默忽略。"""
+        with self.assertRaises(SystemExit) as ctx:
+            cli.main([
                 "collect-limits",
                 "--provider-fixture",
                 str(FIXTURES / "limits_runtime_fixture.json"),
                 "--sqlite",
-                db_path,
-                "--date",
-                "2026-06-03",
+                "ignored.sqlite",
             ])
-
-            self.assertEqual(code, 0)
-            with sqlite3.connect(db_path) as conn:
-                rows = conn.execute("SELECT provider, window FROM limit_windows ORDER BY provider").fetchall()
-            self.assertEqual(rows, [("claude", "week"), ("codex", "session")])
-            # 原先还断言「latest.json 快照里有 2 条 limits」。collect-limits 已不再重建快照
-            # （依赖 snapshot_builder 的那条边由 #72 剪断），断言的对象不存在了。
-            # limit_windows 写入是这条命令真正的职责，上面已断言。
-        finally:
-            if os.path.exists(db_path):
-                os.remove(db_path)
-
-    def test_collect_limits_dry_run_fixture_does_not_write_sqlite(self) -> None:
-        db_path = tempfile.mktemp(suffix=".sqlite")
-
-        code = cli.main([
-            "collect-limits",
-            "--provider-fixture",
-            str(FIXTURES / "limits_runtime_fixture.json"),
-            "--sqlite",
-            db_path,
-            "--dry-run",
-        ])
-
-        self.assertEqual(code, 0)
-        self.assertFalse(os.path.exists(db_path))
-        # 原先还断言「dry-run 不写 latest.json 快照」。collect-limits 已不再重建快照
-        # （依赖 snapshot_builder 的那条边由 #72 剪断），断言的对象不存在了。
+        self.assertEqual(ctx.exception.code, 2)
 
     def test_collect_limits_reports_runtime_error(self) -> None:
         class BrokenRuntime:
@@ -116,21 +119,13 @@ class TestCliLimits(unittest.TestCase):
                     )
                 ]
 
-        db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
-        os.close(db_fd)
-        try:
-            with patch.object(cli, "CodexAppServerRPCProvider", FakeCodexRPCProvider):
-                code = cli.main([
-                    "collect-limits",
-                    "--provider",
-                    "codex",
-                    "--codex-rpc",
-                    "--sqlite",
-                    db_path,
-                ])
-        finally:
-            if os.path.exists(db_path):
-                os.remove(db_path)
+        with patch.object(cli, "CodexAppServerRPCProvider", FakeCodexRPCProvider):
+            code = cli.main([
+                "collect-limits",
+                "--provider",
+                "codex",
+                "--codex-rpc",
+            ])
 
         self.assertEqual(code, 0)
 
@@ -162,21 +157,13 @@ class TestCliLimits(unittest.TestCase):
                     )
                 ]
 
-        db_fd, db_path = tempfile.mkstemp(suffix=".sqlite")
-        os.close(db_fd)
-        try:
-            with patch.object(cli, "ClaudeCliUsageProvider", FakeClaudeCliProvider):
-                code = cli.main([
-                    "collect-limits",
-                    "--provider",
-                    "claude",
-                    "--claude-cli",
-                    "--sqlite",
-                    db_path,
-                ])
-        finally:
-            if os.path.exists(db_path):
-                os.remove(db_path)
+        with patch.object(cli, "ClaudeCliUsageProvider", FakeClaudeCliProvider):
+            code = cli.main([
+                "collect-limits",
+                "--provider",
+                "claude",
+                "--claude-cli",
+            ])
 
         self.assertEqual(code, 0)
 
