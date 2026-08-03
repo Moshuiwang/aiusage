@@ -156,7 +156,6 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     "machines",
     "limit_windows",
     "source_identities",
-    "usage_blocks",
     "usage_hourly",
     "usage_daily_models",
     "usage_daily",

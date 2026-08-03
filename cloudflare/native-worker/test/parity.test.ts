@@ -93,7 +93,6 @@ describe.sequential("native TS Worker read-only API parity", () => {
       db.prepare("DELETE FROM usage_daily_models"),
       db.prepare("DELETE FROM usage_daily"),
       db.prepare("DELETE FROM usage_hourly"),
-      db.prepare("DELETE FROM usage_blocks"),
     ]);
 
     const after = [];
@@ -292,7 +291,6 @@ describe.sequential("native TS Worker read-only API parity", () => {
     for (const table of [
       "usage_hourly_models",
       "usage_hourly_facts",
-      "usage_blocks",
       "usage_hourly",
       "usage_daily_models",
       "usage_daily",
@@ -376,7 +374,6 @@ describe.sequential("native TS Worker read-only API parity", () => {
     for (const table of [
       "usage_hourly_models",
       "usage_hourly_facts",
-      "usage_blocks",
       "usage_hourly",
       "usage_daily_models",
       "usage_daily",
@@ -980,7 +977,6 @@ async function resetDatabase(db: D1Database): Promise<void> {
     "machines",
     "limit_windows",
     "source_identities",
-    "usage_blocks",
     "usage_hourly",
     "usage_daily_models",
     "usage_daily",

@@ -260,12 +260,6 @@ describe.sequential("native TS Worker web surface", () => {
           cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
         ) VALUES ('archive-health', '2026-01-01T00:00:00+08:00', 'codex', 1, 0, 0, 0, 1, 0, '2026-01-01', '2026-01-01')
       `),
-      db.prepare(`
-        INSERT INTO usage_blocks (
-          source_id, start_time, end_time, agent, input_tokens, output_tokens,
-          cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
-        ) VALUES ('archive-health', '2026-01-01T00:00:00+08:00', '2026-01-01T01:00:00+08:00', 'codex', 1, 0, 0, 0, 1, 0, '2026-01-01', '2026-01-01')
-      `),
     ]);
 
     const afterResponse = await mf.dispatchFetch("http://native.test/api/health", {
@@ -677,7 +671,6 @@ async function resetDatabase(db: D1Database): Promise<void> {
     "machines",
     "limit_windows",
     "source_identities",
-    "usage_blocks",
     "usage_hourly",
     "usage_daily_models",
     "usage_daily",
