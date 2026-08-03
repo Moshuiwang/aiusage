@@ -98,6 +98,96 @@ describe("mobile official limits freshness", () => {
       limits_observed_at: "2026-07-18T10:00:00+08:00",
     });
   });
+
+  // #90 块 15：每个周期都保留新鲜短窗。
+  // 现有 stale / expired 用例全部只跑单一周期；「短窗只在 today 展示」这类周期相关的
+  // 误过滤（Python 侧历史上真出过）在 Worker 侧此前没有任何断言拦得住。
+  it("四个周期都保留新鲜的短额度窗口，不许按周期丢短窗", () => {
+    const periods = ["today", "week", "month", "all"];
+    let checked = 0;
+    for (const period of periods) {
+      const mobile = buildMobileSummary({
+        generated_at: "2026-06-02T10:45:00+08:00",
+        timezone: "Asia/Shanghai",
+        summary: { period, total_tokens: 1200 },
+        trend: { points: [] },
+        source_status: [],
+        groups: {},
+        items: [],
+        limit_status: [],
+        limits: [{
+          source_id: "claude-main",
+          provider: "claude",
+          window: "session",
+          used_percent: 0,
+          remaining_percent: 100,
+          reset_at: "2026-06-02T15:45:00+08:00",
+          window_duration_minutes: 300,
+          observed_at: "2026-06-02T10:45:00+08:00",
+          source_type: "oauth_usage_api",
+          confidence: "observed",
+          status: "ok",
+          official: true,
+        }],
+      }) as Record<string, any>;
+      expect(
+        mobile.limits.windows.map((row: any) => [row.provider, row.window]),
+        `period=${period} 必须保留新鲜的 session 短窗`,
+      ).toEqual([["claude", "session"]]);
+      checked += 1;
+    }
+    // 结构下限：四个周期都真的被检查过，少一个就是盲区。
+    expect(checked).toBe(4);
+  });
+});
+
+// #90 块 15：全零来源不进移动端列表。
+// Python 侧 test_sources_empty_when_every_contributor_is_zero 的 Worker 半边此前无对应用例。
+describe("mobile zero-usage source visibility", () => {
+  const snapshotWith = (machineTokens: number, sourceStatus: string) => ({
+    generated_at: "2026-06-02T10:45:00+08:00",
+    timezone: "Asia/Shanghai",
+    summary: { period: "month", total_tokens: machineTokens },
+    trend: { points: [] },
+    source_status: [{
+      source_id: "old",
+      machine: "old-host",
+      os_user: "LIUDS",
+      status: sourceStatus,
+      observed_at: "2026-06-02T10:40:00+08:00",
+    }],
+    groups: {
+      by_machine: [{
+        name: "old-host",
+        display_name: "old-host",
+        total_tokens: machineTokens,
+        source_ids: ["old"],
+      }],
+    },
+    items: [],
+    limits: [],
+    limit_status: [],
+  });
+
+  it("全零时 by_machine 与 sources 为空；健康异常的来源即使全零也必须保留", () => {
+    const zero = buildMobileSummary(snapshotWith(0, "ok")) as Record<string, any>;
+    expect(zero.breakdown.by_machine).toEqual([]);
+    expect(zero.sources).toEqual([]);
+
+    // 对照组：同一形状、非零用量时两者都出现——否则上面两条「为空」在
+    // 「过滤器把一切都吞掉」的坏实现下同样是绿的，什么都没守。
+    const nonZero = buildMobileSummary(snapshotWith(500, "ok")) as Record<string, any>;
+    expect(nonZero.breakdown.by_machine).toHaveLength(1);
+    expect(nonZero.breakdown.by_machine[0]).toMatchObject({ id: "old-host", tokens: 500, source_ids: ["old"] });
+    expect(nonZero.sources).toHaveLength(1);
+    expect(nonZero.sources[0]).toMatchObject({ source_id: "old", status: "ok" });
+
+    // 健康对照：用量全零但采集失败的来源，健康信息不许跟着用量一起消失。
+    const failedZero = buildMobileSummary(snapshotWith(0, "provider_failed")) as Record<string, any>;
+    expect(failedZero.breakdown.by_machine).toEqual([]);
+    expect(failedZero.sources).toHaveLength(1);
+    expect(failedZero.sources[0]).toMatchObject({ source_id: "old", status: "provider_failed" });
+  });
 });
 
 // #90 缺口块 6：移动端账户 / 套餐标签的安全处理。
