@@ -445,97 +445,10 @@ describe.sequential("native TS Worker read-only API parity", () => {
     ]);
   });
 
-  it("does not mix archived ccusage block snapshots into today's hourly trend", async () => {
-    const db = await mf.getD1Database("AIUSAGE_DB");
-    for (const table of [
-      "usage_hourly_models",
-      "usage_hourly_facts",
-      "usage_blocks",
-      "usage_hourly",
-      "usage_daily_models",
-      "usage_daily",
-      "ai_accounts",
-      "os_identities",
-      "machines",
-      "source_identities",
-    ]) {
-      await db.prepare(`DELETE FROM ${table}`).run();
-    }
-    await db.prepare(`
-      INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      "mac-local", "macbook-pro.local", "MacBook Pro", "wangzhipeng", "darwin",
-      "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
-    ).run();
-    await db.prepare(`
-      INSERT INTO usage_daily (
-        source_id, date, agent, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      "mac-local", "2026-06-28", "all", 1000, 500, 0, 20000, 21500, null,
-      JSON.stringify({ machine: "MacBook Pro", account: "wangzhipeng" }),
-      "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
-    ).run();
-    await db.prepare(`
-      INSERT INTO usage_hourly (
-        source_id, hour, agent, input_tokens, output_tokens, cache_creation_tokens,
-        cache_read_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      "mac-local", "2026-06-28T08:00:00+08:00", "codex", 100, 50, 0, 3350, 3500, null,
-      JSON.stringify({ machine: "MacBook Pro", account: "wangzhipeng" }),
-      "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
-    ).run();
-    for (const block of [
-      {
-        end: "2026-06-28T08:12:00+08:00",
-        total: 5000,
-        input: 200,
-        output: 100,
-        cache: 4700,
-        actualEndTime: "2026-06-28T00:12:00.000Z",
-      },
-      {
-        end: "2026-06-28T08:48:00+08:00",
-        total: 10000,
-        input: 300,
-        output: 200,
-        cache: 9500,
-        actualEndTime: "2026-06-28T00:48:00.000Z",
-      },
-    ]) {
-      await db.prepare(`
-        INSERT INTO usage_blocks (
-          source_id, start_time, end_time, agent, input_tokens, output_tokens,
-          cache_creation_tokens, cache_read_tokens, total_tokens, total_cost,
-          metadata_json, raw_json, first_seen_at, last_seen_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        "mac-local", "2026-06-28T08:00:00+08:00", block.end, "claude",
-        block.input, block.output, 0, block.cache, block.total, null,
-        JSON.stringify({
-          machine: "MacBook Pro",
-          account: "wangzhipeng",
-          ccusage_block_row: {
-            id: "2026-06-28T00:00:00.000Z",
-            actualEndTime: block.actualEndTime,
-          },
-        }),
-        null, "2026-06-28T09:45:00+08:00", "2026-06-28T09:45:00+08:00",
-      ).run();
-    }
-
-    const mobile = bodyFor(
-      [await recordValue("mobile-summary-deduped-block-trend", "/api/mobile/summary?date=2026-06-28&period=today")],
-      "mobile-summary-deduped-block-trend",
-    );
-
-    const points = ((mobile.trend as Shape).points as Shape[]) ?? [];
-    const eight = points.find((point) => point.label === "08:00");
-    expect(eight).toEqual(expect.objectContaining({ tokens: 0 }));
-  });
+  // 这里曾经有一条 "does not mix archived ccusage block snapshots into today's hourly trend"，
+  // 已随 ccusage block 读路径一起删除：它插入 usage_blocks 行、再断言某个小时点是 0，
+  // 而 `blockRows` 从来就是空数组、`usage_blocks` 表从来没被读模型查询过——
+  // 这条断言**由构造恒成立**，什么都没守。判定见 #90。
 
   async function recordValue(name: string, requestPath: string): Promise<ContractRecord> {
     const response = await mf.dispatchFetch(`http://native.test${requestPath}`, {
