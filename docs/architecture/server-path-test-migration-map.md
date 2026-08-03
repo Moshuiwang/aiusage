@@ -232,11 +232,11 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 
 | 归属 | 标记行数 | 占比 |
 | --- | --- | --- |
-| 迁 W（迁移到 Worker 测试） | 144 | 58.1% |
-| 合同（由合同 fixture 接替） | 44 | 17.7% |
+| 迁 W（迁移到 Worker 测试） | 145 | 58.5% |
+| 合同（由合同 fixture 接替） | 42 | 16.9% |
 | 留 P（保留在 Python） | 38 | 15.3% |
 | 待定 | 13 | 5.2% |
-| 废弃 | 9（含 1 行「废弃 + 迁 W」混合，按废弃计） | 3.6% |
+| 废弃 | 10（含 1 行「废弃 + 迁 W」混合，按废弃计） | 4.0% |
 | **合计** | **248** | 100% |
 
 重算脚本（在仓库根执行）：
@@ -258,8 +258,8 @@ print(c, 'total', sum(c.values()))
 PYEOF
 ```
 
-**废弃只有 9 行**（在第 5.2 / 5.3 / 5.5 / 6.1 / 6.4 / 6.5 节，每条都写了理由；
-其中 5.5 两行与 6.1 / 6.4 各一行是 #90、#91 交付后由原归属改判的）。
+**废弃只有 10 行**（在第 5.2 / 5.3 / 5.5 / 6.1 / 6.4 / 6.5 节，每条都写了理由；
+其中 5.5 三行与 6.1 / 6.4 各一行是 #90、#91 交付后由原归属改判的）。
 「废弃」占比这么低是本表的主要结论之一：#74 删掉的 3989 行里，绝大多数行为**不是消失，
 而是换 owner**——所以删除的真正代价不是「少了几个测试」，而是「146 条要在 Worker 侧有等价守卫」。
 
@@ -379,13 +379,13 @@ PYEOF
 | --- | --- | --- | --- | --- |
 | 85 | `test_build_snapshot_success` | 从库生成快照的基础结构 | **合同**（`value_golden.json` → 全部 `summary-*`） | 结构与值逐字段比对 |
 | 146 | `test_build_snapshot_uses_account_hourly_ledger_for_user_visible_total` | 用户可见总量以账户小时台账为准 | **迁 W**（`parity.test.ts:382`「uses usage_hourly_facts as the mobile summary period total when stale daily rows disagree」） | 已覆盖 |
-| 231 | `test_ledger_partial_agent_keeps_all_daily_residual` | 台账只覆盖部分 agent 时保留 all-daily 残差 | **不迁**（#90 块 15 实测：行为已被架构取代，不是测试缺口） | Worker 读模型**不读 `usage_daily`**（全文零查询），canonical 是 facts/rollups；「保留残差」在 Worker 没有对应实现，架构选择的是反方向——「不混残差」（parity「does not mix archived all-agent daily residuals」）与「历史回退整日择一」（`preferHistoricalDailyFallbackRows`，parity historical fallback 用例）都已有守卫。给不存在的行为写守卫 = 假象 |
+| 231 | `test_ledger_partial_agent_keeps_all_daily_residual` | 台账只覆盖部分 agent 时保留 all-daily 残差 | **废弃**（#90 块 15 实测：行为已被架构取代，不是测试缺口） | Worker 读模型**不读 `usage_daily`**（全文零查询），canonical 是 facts/rollups；「保留残差」在 Worker 没有对应实现，架构选择的是反方向——「不混残差」（parity「does not mix archived all-agent daily residuals」）与「历史回退整日择一」（`preferHistoricalDailyFallbackRows`，parity historical fallback 用例）都已有守卫。给不存在的行为写守卫 = 假象 |
 | 302 | `test_build_snapshot_includes_known_ai_accounts_without_hourly_facts` | 已知 AI 账户即使没有小时事实也要出现 | **迁 W** ✅（#90 块 15：`parity.test.ts` ai_accounts 回落用例） | ~~「`ai_accounts` 表里有行、事实表为空」这条具体路径未单独回放~~ 实测属实，已补：清空事实四表后断言 `ai_accounts` 精确 3 条 + `by_ai_account` 为空 |
 | 355 | `test_account_hourly_mixed_confidence_is_visible_per_account` | 同账户混合 confidence 逐账户可见 | **迁 W** ✅（#90 块 15：`parity.test.ts` 混合 confidence 用例） | ~~Worker 侧无对应用例~~ 实测属实（`confidence_breakdown` 与 `"mixed"` 全仓测试零命中），已补：逐账户 breakdown 精确值 + `mixed` 判定 + 单一 confidence 邻居不被污染 + 顶层汇总独立对账 |
 | 422 | `test_account_hourly_period_filter_uses_configured_timezone` | 周期过滤用配置时区而非 UTC | **迁 W**（`parity.test.ts:319`「bounds the hourly-fact query to the requested display period」） | 已覆盖 |
 | 483 | `test_build_snapshot_includes_observed_limits` | observed 额度进入快照 | **合同**（`value_golden.json` → `summary-week-observed-limits`） | 已覆盖 |
 | 545 | `test_build_snapshot_keeps_multi_account_limits` | 同 provider 多账户额度都保留 | **迁 W** ⚠️（`ingest.test.ts` / `parity.test.ts` 🆕） | `seed.sql` 的 `limit_windows` 每个 provider 只有 1 个 `source_id`（共 4 条），value golden 无法回放同 provider 多账户；Worker 测试 `multi_account` 零命中 |
-| 606 | `test_build_snapshot_keeps_best_limit_window_per_source_provider_and_window` | 每 source×provider×window 只留最优窗口（读侧择优） | **前提失效 + 换对象补**（#90 块 15：`parity.test.ts` 第二来源用例） | 实测：`bestLimitWindows` 的 per-key 择优在 Worker **不可达**——0003 迁移后 `(source_id, provider, window)` 是主键，同键第二行进不了库，择优已由写侧 upsert 守住（`ingest.test.ts:206/228/258`）。活着的读侧择优是「同 provider 多来源」链路（`buildLimitStatus` 选源 → `selectedLimitSources` → DTO 过滤），已补 D1 级端到端：第二来源较旧时不混入、变最新时整体切换 |
+| 606 | `test_build_snapshot_keeps_best_limit_window_per_source_provider_and_window` | 每 source×provider×window 只留最优窗口（读侧择优） | **迁 W**（前提失效换对象补；#90 块 15：`parity.test.ts` 第二来源用例） | 实测：`bestLimitWindows` 的 per-key 择优在 Worker **不可达**——0003 迁移后 `(source_id, provider, window)` 是主键，同键第二行进不了库，择优已由写侧 upsert 守住（`ingest.test.ts:206/228/258`）。活着的读侧择优是「同 provider 多来源」链路（`buildLimitStatus` 选源 → `selectedLimitSources` → DTO 过滤），已补 D1 级端到端：第二来源较旧时不混入、变最新时整体切换 |
 | 680 | `test_build_snapshot_filters_old_active_limits_cache_from_effective_windows` | 陈旧 active 缓存不得进入有效窗口 | **迁 W**（`ingest.test.ts:487`「rejects cached or expired limits pretending to be current」） | 已覆盖 |
 | 738 | `test_build_snapshot_excludes_expired_limit_windows` | 过期窗口被排除 | **合同**（`provider_slots_golden.json` → `06-expired-official-quota`） | 已覆盖 |
 | 803 | `test_failed_limits_do_not_break_usage_summary` | 额度失败不影响用量摘要 | **合同**（`provider_slots_golden.json` → `07-provider-failed-after-success`） | 已覆盖 |
@@ -463,7 +463,7 @@ PYEOF
 | --- | --- | --- | --- | --- |
 | 11 | `test_build_source_status_keeps_stale_ok_and_never_seen_contract` | stale / ok / never-seen 三态合同 | **迁 W**（`web_surface.test.ts:251` / `:263`） | 已覆盖 |
 | 48 | `test_build_source_status_respects_machine_and_account_filters` | 机器/账户过滤生效 | **合同**（`value_golden.json` → `summary-week-machine-filter` / `summary-week-account-filter`） | 已覆盖 |
-| 69 | `test_build_source_status_keeps_machine_separate_from_network_host` | 展示机器名与网络 host 分离 | **已覆盖**（#90 块 15 实测：假阴性，不补） | `web_surface.test.ts`「keeps dashboard and mobile source health …」已断言 `stale-source` 的 `machine: "actual-machine"`、`host: "wrong-network-host"`、`display_name: "actual-machine · carol"`——machine≠host 且展示名用 machine，正是本条不变量 |
+| 69 | `test_build_source_status_keeps_machine_separate_from_network_host` | 展示机器名与网络 host 分离 | **迁 W**（已覆盖；#90 块 15 实测：假阴性，不补） | `web_surface.test.ts`「keeps dashboard and mobile source health …」已断言 `stale-source` 的 `machine: "actual-machine"`、`host: "wrong-network-host"`、`display_name: "actual-machine · carol"`——machine≠host 且展示名用 machine，正是本条不变量 |
 | 118 | `test_version_state_is_derived_for_every_source_with_a_reported_version` | 每个报了版本的来源都推出状态 | **迁 W**（`version_read_surface.test.ts:274` / `:292`） | 已覆盖 |
 | 128 | `test_source_that_never_reported_a_version_is_unknown_not_assumed_compliant` | 没报版本 = unknown，不假定合规 | **迁 W**（`version_read_surface.test.ts:308`） | 已覆盖 |
 | 135 | `test_version_block_keeps_a_stable_key_set_for_downstream_consumers` | 版本块 key 集合稳定 | **迁 W**（`version_read_surface.test.ts:274`「exposes the full Python-equivalent version block on every /api/summary source_status entry」） | 已覆盖 |
@@ -593,7 +593,7 @@ Worker 侧**没有任何文档合同测试**。见 **PM-6**。
 | 71 | `test_full_ccusage_report_is_used_and_preserved` | 从完整 ccusage report 归一化并保留结构化明细 | **迁 W**（`ingest.test.ts:85` / `:692`） | 已覆盖 |
 | 116 | `test_full_ccusage_session_report_skips_codex_hourly_usage` | 不用 `session.lastActivity` 估算 codex 小时（避免假尖峰） | **迁 W**（`ingest.test.ts:431`「leaves archived Codex hourly rows empty」） | 已覆盖 |
 | 182 | `test_mswusage_codex_report_normalizes_hourly_rows_with_provenance` | mswusage codex 小时行带 provenance 归一化 | **迁 W**（`ingest.test.ts:85` / `:692`） | 已覆盖 |
-| 244 | `test_ingest_machine_name_overrides_network_host_for_display` | 展示用 `payload.machine`，网络 host 只作元数据 | **已覆盖**（#90 块 15 实测：假阴性，不补） | owner 产出的 `collector_payload_fixture.json` 里 machine（`macbook-pro`）≠ host（`macbook-pro.local`），`ingest.test.ts` 身份断言把两列分别钉死且 `machines.machine_id` 取 machine——`machine ?? host` 优先级翻转会直接变红 |
+| 244 | `test_ingest_machine_name_overrides_network_host_for_display` | 展示用 `payload.machine`，网络 host 只作元数据 | **迁 W**（已覆盖；#90 块 15 实测：假阴性，不补） | owner 产出的 `collector_payload_fixture.json` 里 machine（`macbook-pro`）≠ host（`macbook-pro.local`），`ingest.test.ts` 身份断言把两列分别钉死且 `machines.machine_id` 取 machine——`machine ?? host` 优先级翻转会直接变红 |
 | 272 | `test_full_ccusage_blocks_report_normalizes_block_windows` | 从 ccusage blocks 生成带起止的窗口事实 | **废弃**（#91 停采） | 采集端已不发 `ccusage_blocks_report`，两侧当未知字段忽略；该测试与 `normalize_ingest_block_request` 已随 #91 删除，向后兼容由跨实现探针守住（`test_collector_payload_contract.py` + `ingest.test.ts`） |
 | 325 | `test_merge_multiple_requests_idempotency` | 跨请求按稳定 key 幂等 upsert | **迁 W**（`ingest.test.ts:100`） | 已覆盖 |
 
