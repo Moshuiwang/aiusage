@@ -223,20 +223,43 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 > 由 `provider-slots-parity.test.ts` 逐场景消费）。它是 `test_snapshot_builder.py` 后 18 条与
 > `test_mobile_summary.py` 槽位段落的主要接替者，本表把它算作合同 fixture。
 
-### 4.2 分布统计（249 条）
+### 4.2 分布统计
 
-下表由脚本从本文第 5–6 节的逐条表格中直接统计（不是估算），核对方式见第 9 节：
+下表从本文第 5–6 节逐条表格的**归属标记行**直接重算（2026-08-03，随 #91/PR #96 重算；
+统计脚本见本节末尾）。口径说明：标记行共 248 行，与「249 条测试」不是同一口径——
+个别行捆绑多个测试函数。此前的汇总（迁 W 146 / 废弃 5）在 #90、#91 两轮改判归属后
+已两次漂移而未跟着更新，本次改为行数口径并附脚本，之后每次改判归属必须重跑重算：
 
-| 归属 | 条数 | 占比 |
+| 归属 | 标记行数 | 占比 |
 | --- | --- | --- |
-| 迁 W（迁移到 Worker 测试） | 146 | 58.6% |
+| 迁 W（迁移到 Worker 测试） | 144 | 58.1% |
 | 合同（由合同 fixture 接替） | 44 | 17.7% |
-| 留 P（保留在 Python） | 37 | 14.9% |
-| 待定 | 17 | 6.8% |
-| 废弃 | 5 | 2.0% |
-| **合计** | **249** | 100% |
+| 留 P（保留在 Python） | 38 | 15.3% |
+| 待定 | 13 | 5.2% |
+| 废弃 | 9（含 1 行「废弃 + 迁 W」混合，按废弃计） | 3.6% |
+| **合计** | **248** | 100% |
 
-**废弃只有 5 条**，都在第 5.2 / 5.3 / 6.4 / 6.5 节，每条都写了理由。
+重算脚本（在仓库根执行）：
+
+```bash
+python3 - <<'PYEOF'
+import re
+from collections import Counter
+lines = open('docs/architecture/server-path-test-migration-map.md').read().splitlines()
+c = Counter()
+sec5 = next(i for i,l in enumerate(lines) if l.startswith('## 5'))
+sec7 = next(i for i,l in enumerate(lines) if l.startswith('## 7'))
+for l in lines[sec5:sec7]:
+    if not l.startswith('|'): continue
+    for cell in (x.strip() for x in l.strip('|').split('|')):
+        m = re.match(r'^\*\*(迁 W|合同|留 P|待定|废弃)', cell)
+        if m: c[m.group(1)] += 1; break
+print(c, 'total', sum(c.values()))
+PYEOF
+```
+
+**废弃只有 9 行**（在第 5.2 / 5.3 / 5.5 / 6.1 / 6.4 / 6.5 节，每条都写了理由；
+其中 5.5 两行与 6.1 / 6.4 各一行是 #90、#91 交付后由原归属改判的）。
 「废弃」占比这么低是本表的主要结论之一：#74 删掉的 3989 行里，绝大多数行为**不是消失，
 而是换 owner**——所以删除的真正代价不是「少了几个测试」，而是「146 条要在 Worker 侧有等价守卫」。
 

@@ -883,15 +883,19 @@ class TestDroppedLegacyFieldIsIgnoredByBothImplementations(unittest.TestCase):
     maxDiff = None
 
     def test_probe_is_not_vacuous(self) -> None:
-        """探针必须真的带着那个字段，否则下面两条断言什么都没验证。"""
+        """探针的基座里不许已经带着那个字段，否则探针没有在验证「额外的 legacy 字段」。
+
+        注意不要断言「拼好的 payload 里有该字段」——``_legacy_probe_payload`` 就是
+        ``payload[field] = value``，那样的断言由构造恒成立，什么都没守（#96 审查抓到）。
+        真正非恒真的对象是**基座**：当前 pusher 产出的 fixture 场景必须已经不发该字段，
+        探针叠加上去才构成「老采集端多发一个字段」的形态。
+        """
         probed_fields = []
         for path, _expected_scenario in LEGACY_PROBES:
             probe = _legacy_probe(path)
             with self.subTest(field=probe["field"]):
                 self.assertIn(probe["field"], DROPPED_LEGACY_FIELDS)
-                payload = _legacy_probe_payload(probe)
-                self.assertIn(probe["field"], payload)
-                self.assertEqual(payload[probe["field"]], probe["value"])
+                self.assertNotIn(probe["field"], _fixture_record(probe["scenario"])["payload"])
             probed_fields.append(probe["field"])
         # 结构下限：每个已摘除字段都必须有自己的探针，缺一个就有一个字段没人守。
         self.assertEqual(sorted(probed_fields), sorted(DROPPED_LEGACY_FIELDS))
