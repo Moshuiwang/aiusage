@@ -48,6 +48,8 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       "11-aggregate-agent-with-canonical-provider",
       "12-naive-limit-timestamps",
       "13-third-party-provider-without-slot",
+      "14-usage-without-canonical-provider",
+      "15-two-accounts-one-provider",
     ]);
     expect(golden.length, "每个场景两个端点").toBe(goldenScenarios.length * providerSlotsEndpoints.length);
     for (const record of golden) {
@@ -79,6 +81,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     const derived = macosOwnerFixtureFrom(golden);
 
     expect(derived.length, "mobile 半边必须与场景数一致").toBe(goldenScenarios.length);
+    expect(derived.length, "场景数变化必须显式改这里").toBe(15);
     expect(derived.length, "派生结果不能为空").toBeGreaterThan(0);
     expect(committed.map((record) => record.name), "fixture 覆盖的场景必须与 golden 一致")
       .toEqual(derived.map((record) => record.name));
@@ -168,6 +171,61 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       const estimateOnly = claudeQuota(byName.get(`09-local-estimate-only:${endpoint}`)!);
       expect(estimateOnly.reason).toBe("unverified");
       expect(estimateOnly.last_verified_at).toBeNull();
+    }
+  });
+
+  it("同一 provider 下两个账号时只展示最新观测的那个，不许把两份百分比混在一起", () => {
+    // #90 块 12。同 provider 多 source_id 此前只在 08 号出现过一次，而那是
+    // 「官方 vs 本地估算」，不是两个真实账号。不择优的后果是两个账号的百分比混在一起：
+    // 用户看到的数字既不是 A 的也不是 B 的。
+    //
+    // **这条守的到底是谁**（审查纠正过一次，别再指错）：是 `read-model.ts` 的
+    // `buildLimitStatus`（每 provider 选最新观测来源）+ `providerQuotaSlot`（按选定来源
+    // 过滤窗口）。**不是** `selectedLimitSources`——那个只影响 mobile 的 `limits.windows`，
+    // 而本 golden 只记 `provider_slots` 与 `provider_usage_coverage`；且它的择新分支在
+    // `limit_status` 已给出 provider 时被 continue 跳过，本场景恰好给出了。
+    // 也**不是** `bestLimitWindows`——它的 key 含 source_id，同 provider 两个账号
+    // 根本不会被它去重。这两个函数目前仍然零守卫。
+    const byName = new Map(golden.map((record) => [record.name, record]));
+    // 两个端点的 provider_slots 逐字节相同，这个循环不产生额外覆盖；
+    // 保留只是为了「两个端点都必须有这条记录」这一层。
+    for (const [endpoint] of providerSlotsEndpoints) {
+      const record = byName.get(`15-two-accounts-one-provider:${endpoint}`);
+      expect(record, `15 号场景的 ${endpoint} 记录必须存在`).toBeTruthy();
+      const claude = (record!.provider_slots as Array<{ provider: string; quota: Record<string, any> }>)
+        .find((row) => row.provider === "claude")!;
+
+      expect(claude.quota.status, "择优之后额度是可用的").toBe("available");
+      // 结构下限：必须**恰好一条**。两条就是混在一起，零条就是这条路径根本没跑到。
+      expect(claude.quota.windows, "同 provider 只能展示一个账号的窗口").toHaveLength(1);
+      const shown = claude.quota.windows[0];
+      expect(shown.source_id, "展示的必须是观测时刻更新的那个账号").toBe("claude-second");
+      expect(shown.used_percent, "展示的百分比来自 claude-second").toBe(40);
+      // 另一个账号的数字绝不能出现在任何地方——混进去比不显示更糟。
+      expect(JSON.stringify(claude.quota).includes("78.25"), "claude-main 的百分比不许泄漏").toBe(false);
+      expect(JSON.stringify(claude.quota).includes("claude-main"), "claude-main 不许出现").toBe(false);
+    }
+  });
+
+  it("完全无法归属的用量被点名进 unattributed，而不是静默消失", () => {
+    // #90 块 11。前 13 个场景里 `unattributed_tokens` 恒为 0——守恒等式的最后一项
+    // 从未被激活，「归属不出 provider 的用量」这半边等于没有断言。而它正是最难发现的
+    // 一类错：token 既进不了槽位、也没被点名，用户看到的是「槽位加起来对不上标题总量」。
+    const byName = new Map(golden.map((record) => [record.name, record]));
+    for (const [endpoint] of providerSlotsEndpoints) {
+      const record = byName.get(`14-usage-without-canonical-provider:${endpoint}`);
+      expect(record, `14 号场景的 ${endpoint} 记录必须存在`).toBeTruthy();
+      const coverage = record!.provider_usage_coverage as Record<string, number | string>;
+      const slotTokens = (record!.provider_slots as Array<{ usage: { total_tokens: number } }>)
+        .reduce((sum, row) => sum + row.usage.total_tokens, 0);
+
+      expect(slotTokens, "claude 的用量照常进槽位").toBe(3100);
+      // 关键一条：那 800 token 必须被单独点名。断成 0 就是静默消失。
+      expect(coverage.unattributed_tokens, "无法归属的用量必须被点名").toBe(800);
+      expect(coverage.other_provider_tokens, "这批不是第三方 provider，而是完全无归属").toBe(0);
+      expect(coverage.total_tokens, "总量必须含那 800").toBe(3900);
+      expect(coverage.status, "有没被展示的量就是 partial").toBe("partial");
+      expect(coverage.attributed_tokens, "已归属量只算进了槽位的那部分").toBe(3100);
     }
   });
 

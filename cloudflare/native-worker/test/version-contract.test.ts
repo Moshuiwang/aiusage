@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { evaluateCollectorRelease } from "../src/version-contract";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
@@ -409,3 +410,40 @@ async function applySchema(db: D1Database): Promise<void> {
     if (trimmed) await db.prepare(trimmed).run();
   }
 }
+
+// #90 缺口块 13：两种「没有版本」必须判成**不同的 reason**。
+//
+// `read-model.ts:753-758` 的注释写明了这个区分：没有版本时传 `null`（整块省略）
+// 而不是 `{collector_version: null}`，因为前者判成 `collector_release_missing`、
+// 后者判成 `collector_version_missing`。0007 迁移后存量行的该列全是 NULL，
+// 整块省略是**常态路径**。
+//
+// 实测：`collector_release_missing` 有三处覆盖，而 `collector_version_missing`
+// **全仓零命中**——两条分支合并成一条不会有任何测试变红，而合并之后运维就分不清
+// 「这台设备根本没上报版本块」和「上报了版本块但版本字段是空的」——
+// 前者是老采集端，后者是采集端出了 bug，处置动作完全不同。
+describe("两种「没有版本」不能混为一谈（#90 块 13）", () => {
+  it("整块省略判 collector_release_missing，版本字段为空判 collector_version_missing", () => {
+    const omitted = evaluateCollectorRelease(null);
+    const emptyVersion = evaluateCollectorRelease({ collector_version: null });
+
+    // 两条都必须落在 unknown 态——它们的区别在 reason，不在 state。
+    expect(omitted.state, "整块省略是 unknown 态").toBe("unknown");
+    expect(emptyVersion.state, "版本字段为空也是 unknown 态").toBe("unknown");
+
+    expect(omitted.reason, "整块省略").toBe("collector_release_missing");
+    expect(emptyVersion.reason, "上报了版本块但版本字段为空").toBe("collector_version_missing");
+    // 结构下限：两个 reason 必须真的不同。合并成一条时上面两条会一起变红，
+    // 但这一条把「必须可区分」这个意图直接写死。
+    expect(omitted.reason, "两种缺失必须可区分").not.toBe(emptyVersion.reason);
+
+    // 两条都不算已核验：把「没上报」读成「核验过且没问题」是最糟的一种。
+    expect(omitted.verified, "整块省略不算已核验").toBe(false);
+    expect(emptyVersion.verified, "版本字段为空不算已核验").toBe(false);
+  });
+
+  it("undefined 与 null 一样按整块省略处理", () => {
+    // 采集端漏传与显式传 null 在 JSON 上是同一件事，判定不能不同。
+    expect(evaluateCollectorRelease(undefined).reason).toBe("collector_release_missing");
+  });
+});

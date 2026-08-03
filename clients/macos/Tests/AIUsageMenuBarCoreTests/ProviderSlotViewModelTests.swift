@@ -298,7 +298,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
 
     func testEveryOwnerScenarioKeepsFixedSlotsAndShowsLastSuccessfulQuota() throws {
         let records = try allGoldenRecords()
-        XCTAssertEqual(records.count, 13)
+        // 场景数变化必须显式改这里。Worker 侧 provider-slots-parity.test.ts 有对称的 toBe(15)。
+        XCTAssertEqual(records.count, 15)
 
         for record in records {
             let state = MenuBarViewModel.build(

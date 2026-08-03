@@ -42,7 +42,7 @@ describe.sequential("golden 防陈旧守卫", () => {
 
     // 结构下限：先证明「确实比了东西」，再证明「比下来一致」。
     expect(regenerated.length, "重放条数").toBe(valueRequests.length);
-    expect(regenerated.length, "value golden 至少要覆盖 14 条请求").toBeGreaterThanOrEqual(14);
+    expect(regenerated.length, "value golden 至少要覆盖 16 条请求").toBeGreaterThanOrEqual(16);
     expect(committed.map((record) => record.name), "golden 覆盖的请求集合必须与 valueRequests 一致")
       .toEqual(valueRequests.map(([name]) => name));
 
@@ -148,7 +148,7 @@ describe.sequential("golden 防陈旧守卫", () => {
       checked += 1;
     }
     // 只留确切条数这一条：`checked === committed.length` 在循环里恒成立，断言它等于没断言。
-    expect(checked, "必须逐条核到全部 14 条记录").toBe(14);
+    expect(checked, "必须逐条核到全部 16 条记录").toBe(16);
   });
 
   it("value_golden 里 web 与 mobile 对同一组请求必须给出同一份口径", async () => {
@@ -210,8 +210,8 @@ describe.sequential("golden 防陈旧守卫", () => {
       }
     }
     // 结构下限用**确切条数**：`> 0` 会被 web 那 7 条满足，mobile 半边整体漏掉也不会红。
-    expect(webChecked, "web 半边 7 条都要核到").toBe(7);
-    expect(mobileChecked, "mobile 半边 7 条都要核到").toBe(7);
+    expect(webChecked, "web 半边 8 条都要核到").toBe(8);
+    expect(mobileChecked, "mobile 半边 8 条都要核到").toBe(8);
   });
 
   it("value_golden 不含任何运行时敏感数据", async () => {
@@ -258,6 +258,67 @@ describe.sequential("golden 防陈旧守卫", () => {
     // 「什么都没核」会产生同一个绿。
     expect(checkedSummaries, "必须真的核到 summary").toBeGreaterThan(0);
     expect(checkedItems, "必须真的核到逐条 items").toBeGreaterThan(0);
+  });
+
+  it("同一台机器上的多个 OS 用户各自成组，机器总量等于各用户之和", async () => {
+    // #90 块 9。seed.sql 原本 4 台机器各 1 个用户，`users[]` 永远只有一个元素——
+    // 「机器总量 == 各用户之和」「per-user source_ids」这些断言全部退化成恒等，
+    // by-machine 分组这条产品特性从未被真正回放过。现在 macbook-pro 上有 alice 与 carol。
+    const committed = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ValueRecord[];
+    const week = bodyOf(committed, "summary-week");
+    const machines = (week.groups as AnyRecord).by_machine as AnyRecord[];
+    const macbook = machines.find((row) => row.name === "macbook-pro");
+
+    expect(macbook, "macbook-pro 必须在分组里").toBeTruthy();
+    const users = (macbook!.users as AnyRecord[]) ?? [];
+    // 结构下限：必须真的是**两个**用户。退回一个用户时下面全部退化成恒等。
+    expect(users.map((row) => String(row.account)).sort(), "同机两个 OS 用户都要成组")
+      .toEqual(["alice", "carol"]);
+    // 两人用量刻意不同：相等的话「总量 == 之和」在只取其一的实现下也会成立。
+    const totals = new Map(users.map((row) => [String(row.account), Number(row.total_tokens)]));
+    expect(totals.get("alice"), "alice 的用量").toBe(5100);
+    expect(totals.get("carol"), "carol 的用量").toBe(500);
+    expect(Number(macbook!.total_tokens), "机器总量必须等于各用户之和")
+      .toBe(totals.get("alice")! + totals.get("carol")!);
+
+    // 机器的 source_ids 必须**恰好**是各用户 source_ids 的并集：多一个是串源，少一个是漏源。
+    const fromUsers = users.flatMap((row) => (row.source_ids as string[]) ?? []).sort();
+    expect((macbook!.source_ids as string[]).slice().sort(), "机器 source_ids 必须恰好是各用户之并")
+      .toEqual(fromUsers);
+    expect(fromUsers, "两个用户必须来自两个不同的 source").toEqual(["mac-local", "mac-local-carol"]);
+  });
+
+  it("按 OS 用户过滤时，同机另一个用户的用量不许被算进来", async () => {
+    // 机器相同、用户不同是最容易串的一种：按 machine 聚合的实现会把两人一起算进去。
+    const committed = JSON.parse(await readFile(valueGoldenPath, "utf8")) as ValueRecord[];
+    const filtered = bodyOf(committed, "summary-week-same-machine-other-user");
+    const unfiltered = bodyOf(committed, "summary-week");
+
+    const carolOnly = Number((filtered.summary as AnyRecord).total_tokens);
+    expect(carolOnly, "只应看到 carol 自己的用量").toBe(500);
+    // 结构下限：未过滤时同机是 5600，两个数必须不同，否则「过滤生效」无从谈起。
+    const machineTotal = ((unfiltered.groups as AnyRecord).by_machine as AnyRecord[])
+      .find((row) => row.name === "macbook-pro")!.total_tokens;
+    expect(Number(machineTotal), "未过滤时同机总量").toBe(5600);
+    expect(carolOnly, "过滤后必须比整机少——相等就说明过滤根本没生效")
+      .toBeLessThan(Number(machineTotal));
+
+    const machines = (filtered.groups as AnyRecord).by_machine as AnyRecord[];
+    expect(machines.flatMap((row) => ((row.users as AnyRecord[]) ?? []).map((user) => String(user.account))),
+      "过滤后不许出现别的 OS 用户").toEqual(["carol"]);
+
+    // 设备健康这一面同样要按 OS 用户过滤，而且**不能整块空掉**。
+    // carol 原本没有采集报告行，golden 曾把「按 carol 过滤 → 一台设备都看不到」
+    // 记录成正确输出——那样将来「过滤后健康列表被清空」的回归会被照单接受。
+    const filteredSources = (filtered.source_status as AnyRecord[]) ?? [];
+    expect(filteredSources.map((row) => String(row.source_id)), "过滤后必须只剩 carol 那台，且不能为空")
+      .toEqual(["mac-local-carol"]);
+    // 结构下限：未过滤时同机两个来源都在——两个集合必须不同，否则「过滤生效」无从谈起。
+    const allSources = ((unfiltered.source_status as AnyRecord[]) ?? []).map((row) => String(row.source_id));
+    expect(allSources, "未过滤时 alice 与 carol 两台都要在").toEqual(
+      expect.arrayContaining(["mac-local", "mac-local-carol"]),
+    );
+    expect(allSources.length, "未过滤的来源数必须多于过滤后").toBeGreaterThan(filteredSources.length);
   });
 
   it("api_contract_golden.json 等于此刻 Worker 实录出来的结果", async () => {

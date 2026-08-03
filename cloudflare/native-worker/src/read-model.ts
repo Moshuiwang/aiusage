@@ -161,7 +161,6 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const hourlyRows = periodId === "today"
     ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows)
     : [];
-  const blockRows: TimedRow[] = [];
   const accountHourly = accountHourlySummary(filteredAccountHourlyRows);
 
   const modelsByItem = new Map<string, Record<string, unknown>[]>();
@@ -329,7 +328,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const codexContext = codexHourlyContext(rows, hourlyRows);
   let trend: Record<string, unknown>;
   if (periodId === "today") {
-    trend = hourlyTrend(hourAxisValues, hourlyRows, blockRows);
+    trend = hourlyTrend(hourAxisValues, hourlyRows);
     fillTodayHourlyResidual(trend, refTime, {
       total_tokens: totalTokens,
       input_tokens: inputTokens,
@@ -824,7 +823,7 @@ function statusWithStaleness(status: string, collectedAt: string, refTime: Date,
   return diffMinutes > staleMinutes ? "stale" : status;
 }
 
-function hourlyTrend(axis: string[], rows: TimedRow[], blockRows: TimedRow[]): Record<string, unknown> {
+function hourlyTrend(axis: string[], rows: TimedRow[]): Record<string, unknown> {
   const byTokenType = {
     input: new Map(axis.map((hour) => [hour, 0])),
     output: new Map(axis.map((hour) => [hour, 0])),
@@ -840,17 +839,10 @@ function hourlyTrend(axis: string[], rows: TimedRow[], blockRows: TimedRow[]): R
   }]));
   const agentTotals = new Map<string, number>();
   const byAgent = new Map<string, Map<string, number>>();
-  blockRows = dedupeCumulativeBlockRows(blockRows);
-  const blockSources = new Set(blockRows.map((row) => row.source_id));
-
   for (const row of rows) {
     const hour = str(row.hour);
     if (!points.has(hour)) continue;
-    if (blockSources.has(row.source_id) && !isCodexAgent(row.agent)) continue;
     addTimedPoint(axis, hour, row, byTokenType, points, agentTotals, byAgent);
-  }
-  for (const row of blockRows) {
-    addBlockToHourBuckets(axis, row, byTokenType, points, agentTotals, byAgent);
   }
 
   return {
@@ -898,82 +890,6 @@ function addTimedPoint(
   agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + int(row.total_tokens));
   if (!byAgent.has(row.agent)) byAgent.set(row.agent, new Map(axis.map((item) => [item, 0])));
   byAgent.get(row.agent)?.set(hour, (byAgent.get(row.agent)?.get(hour) ?? 0) + int(row.total_tokens));
-}
-
-function addBlockToHourBuckets(
-  axis: string[],
-  row: TimedRow,
-  byTokenType: Record<"input" | "output" | "cache", Map<string, number>>,
-  points: Map<string, Record<string, number | string>>,
-  agentTotals: Map<string, number>,
-  byAgent: Map<string, Map<string, number>>,
-): void {
-  const start = parseDate(str(row.start_time));
-  const end = parseDate(str(row.end_time));
-  if (!start || !end || end <= start) return;
-  const duration = end.getTime() - start.getTime();
-  if (!byAgent.has(row.agent)) byAgent.set(row.agent, new Map(axis.map((hour) => [hour, 0])));
-  for (const hour of axis) {
-    const hourStart = parseDate(hour);
-    if (!hourStart) continue;
-    const hourEnd = new Date(hourStart.getTime() + 3600000);
-    const overlap = Math.max(0, Math.min(end.getTime(), hourEnd.getTime()) - Math.max(start.getTime(), hourStart.getTime()));
-    if (overlap <= 0) continue;
-    const ratio = overlap / duration;
-    const input = int(row.input_tokens) * ratio;
-    const output = int(row.output_tokens) * ratio;
-    const cache = (int(row.cache_creation_tokens) + int(row.cache_read_tokens)) * ratio;
-    const total = int(row.total_tokens) * ratio;
-    byTokenType.input.set(hour, (byTokenType.input.get(hour) ?? 0) + input);
-    byTokenType.output.set(hour, (byTokenType.output.get(hour) ?? 0) + output);
-    byTokenType.cache.set(hour, (byTokenType.cache.get(hour) ?? 0) + cache);
-    const point = points.get(hour);
-    if (point) {
-      point.input_tokens = Math.round(int(point.input_tokens) + input);
-      point.output_tokens = Math.round(int(point.output_tokens) + output);
-      point.cache_tokens = Math.round(int(point.cache_tokens) + cache);
-      point.total_tokens = Math.round(int(point.total_tokens) + total);
-    }
-    agentTotals.set(row.agent, (agentTotals.get(row.agent) ?? 0) + total);
-    byAgent.get(row.agent)?.set(hour, (byAgent.get(row.agent)?.get(hour) ?? 0) + total);
-  }
-}
-
-function dedupeCumulativeBlockRows(rows: TimedRow[]): TimedRow[] {
-  const latestByKey = new Map<string, TimedRow>();
-  for (const row of rows) {
-    const key = blockDedupeKey(row);
-    const current = latestByKey.get(key);
-    if (!current || blockRowSortKey(row).localeCompare(blockRowSortKey(current)) >= 0) {
-      latestByKey.set(key, row);
-    }
-  }
-  return Array.from(latestByKey.values())
-    .sort((lhs, rhs) =>
-      `${lhs.start_time || ""}:${lhs.source_id}:${lhs.agent}:${lhs.end_time || ""}`
-        .localeCompare(`${rhs.start_time || ""}:${rhs.source_id}:${rhs.agent}:${rhs.end_time || ""}`),
-    );
-}
-
-function blockDedupeKey(row: TimedRow): string {
-  const rawBlock = metadataObject(row.metadata_json).ccusage_block_row;
-  const blockId = isRecord(rawBlock) ? str(rawBlock.id) : "";
-  if (blockId) return `${row.source_id}\u0000${row.agent}\u0000${blockId}`;
-  return `${row.source_id}\u0000${row.agent}\u0000${row.start_time || ""}\u0000${row.end_time || ""}`;
-}
-
-function blockRowSortKey(row: TimedRow): string {
-  return `${row.end_time || ""}\u0000${String(int(row.total_tokens)).padStart(16, "0")}`;
-}
-
-function metadataObject(raw: unknown): Record<string, unknown> {
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(str(raw));
-    return isRecord(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
 }
 
 function fillTodayHourlyResidual(trend: Record<string, unknown>, refTime: Date, totals: {
