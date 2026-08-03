@@ -41,7 +41,37 @@
 `ingest.py:134-137` 校验它，**Worker 侧全文零命中**。受影响的 4 条测试
 （`test_ingest_contract.py` 3 条 + `test_server_services.py` 1 条）曾是这个行为唯一的守卫。
 
-### 阻断 P1：三份「合同 fixture」的生产者全部是即将被删的 Python 读模型
+### ~~阻断 P1：三份「合同 fixture」的生产者全部是即将被删的 Python 读模型~~（2026-08-02 已解除）
+
+> **本节是历史快照，阻断已解除。** 生成端与防陈旧守卫已迁到 Worker 侧：
+>
+> - 收集器（生成与校验共用的唯一实现）：`cloudflare/native-worker/test/golden/`
+> - 重新生成：`npm run cf:golden:gen`
+> - 防陈旧守卫：`cloudflare/native-worker/test/golden-freshness.test.ts`（value + api 合同，
+>   含确定性重放与结构下限）、`provider-slots-parity.test.ts`（13 场景逐条重放 + macOS fixture 派生）
+>
+> 迁移后实测（逐份复算，不是估算）：
+>
+> - `provider_slots_golden.json`：与 Python 产出**逐字节相同**（零 diff）。
+> - macOS owner fixture：**语义等价**，386 行改动全部是 key 重排——生成器统一改为
+>   排序键名输出（不排序时读模型调一下字段顺序就会让整份文件变成一个巨大的 diff）。
+> - `value_golden.json`：语义差异只有三类——`backend_mode` / `canonical_store`
+>   两个存储身份字段（原本就被 parity 的 `normalizeStoreMetadata` 掩掉）、
+>   `source_status` / `sources` 的数组顺序（原本被 `sortedSourceRows` 掩掉），
+>   以及 **14 处 `used_percent` / `remaining_percent` 由 `0.0` 变成 `0`**
+>   （Python float 与 JS number 的 JSON 表示差异，值相等、下游解码无影响；
+>   `test/golden/shape.ts` 的 `floatFields` 就是为它存在的）。两处掩码现在都不再需要。
+> - `api_contract_golden.json`：差异正好等于原 `knownGoldenGaps` 清单——该清单已按预告删除。
+>
+> Python 侧已删除：`scripts/gen_value_golden.py`、`scripts/gen_provider_slots_golden.py`、
+> `tests/test_value_golden_freshness.py`、`tests/test_provider_slots_parity.py`、
+> `tests/test_api_contract.py`（含 #85 登记的那条 health counts 测试——
+> Worker 侧 `web_surface.test.ts` 已有同口径的真实数值断言）。
+>
+> **注意**：`tests/fixtures/contract/api_contract_golden.json` 的 owner 现在是 Worker 测试，
+> 但路径不在 `cloudflare/` 下，`scripts/verify.sh` 的 Worker 触发判据已相应加上该前缀。
+
+原始记录（解除前）：
 
 | fixture | 生成器 | 防陈旧守卫 | 删除后 |
 | --- | --- | --- | --- |

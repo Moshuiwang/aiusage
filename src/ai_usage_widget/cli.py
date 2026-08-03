@@ -27,7 +27,8 @@ from .lock import FileLock, LockAlreadyHeld
 from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
 from .limits_doctor import run_limits_doctor
 from .limits_runtime import LimitsRuntime, load_fixture_providers
-from .limits_push import push_limits_payload
+from .collector_store import CollectorStore, OutboxNotDrained
+from .limits_push import deliver_limits_payload, post_limits_payload, push_limits_payload
 from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
 from .mswusage_codex import build_report as build_mswusage_codex_report, read_local_codex_jsonl_lines
 from .mswusage_claude import build_report as build_mswusage_claude_report, read_local_claude_jsonl_lines
@@ -167,6 +168,34 @@ def main(argv: list[str] | None = None) -> int:
     push_limits_parser.add_argument("--timezone", default=None)
     push_limits_parser.add_argument("--dry-run", action="store_true", help="Collect and validate without posting")
     push_limits_parser.add_argument("--lock-file", default=None, help="Optional single-instance lock file")
+    push_limits_parser.add_argument(
+        "--config",
+        default=None,
+        help=(
+            "设备配置（含 outbox 块）。给了就走本地 outbox：断网时额度观测先落盘、"
+            "网络恢复后补推；不给则保持原来的直推行为。"
+        ),
+    )
+
+    outbox_status_parser = subparsers.add_parser(
+        "outbox-status", help="查看本地 outbox 还剩多少未投递数据"
+    )
+    outbox_status_parser.add_argument("--config", default="config/sources.local.json")
+
+    outbox_export_parser = subparsers.add_parser(
+        "outbox-export", help="把未投递数据导出成 JSON（不删除任何东西）"
+    )
+    outbox_export_parser.add_argument("--config", default="config/sources.local.json")
+    outbox_export_parser.add_argument("--dest", required=True, help="导出文件路径")
+
+    outbox_drain_parser = subparsers.add_parser(
+        "outbox-drain", help="导出后清空未投递数据（关闭 outbox 前的回退演练）"
+    )
+    outbox_drain_parser.add_argument("--config", default="config/sources.local.json")
+    outbox_drain_parser.add_argument("--export-to", required=True, help="清空前先导出到这个文件")
+    outbox_drain_parser.add_argument(
+        "--yes", action="store_true", help="确认清空。没有它就只导出不清空——不提供无条件清空的入口"
+    )
 
     install_limits_scheduler_parser = subparsers.add_parser(
         "install-limits-scheduler",
@@ -412,6 +441,23 @@ def main(argv: list[str] | None = None) -> int:
         }, ensure_ascii=False, sort_keys=True))
         return 0 if result.success else 1
 
+    if args.command in {"outbox-status", "outbox-export", "outbox-drain"}:
+        runner = {
+            "outbox-status": _run_outbox_status,
+            "outbox-export": _run_outbox_export,
+            "outbox-drain": _run_outbox_drain,
+        }[args.command]
+        try:
+            output = runner(args)
+        except OutboxNotDrained as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        except (ConfigError, OSError, ValueError, json.JSONDecodeError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(output, ensure_ascii=False, sort_keys=True))
+        return 0
+
     if args.command == "push-limits":
         try:
             if args.lock_file:
@@ -646,11 +692,28 @@ def _run_push_limits(args):
         "windows": [window.to_snapshot_dict() for window in result.windows],
     }
     push_response = None
+    delivered = None
+    push_ok = True
     if not args.dry_run:
         token = os.environ.get(args.token_env, "")
         if not token:
             raise ValueError(f"missing push token env: {args.token_env}")
-        push_response = push_limits_payload(args.url, token, payload, timeout=args.timeout)
+        outbox_config = _outbox_config_for_push_limits(getattr(args, "config", None))
+        if outbox_config is None:
+            # 没给设备配置（或配置里没有 outbox 块）：保持原来的直推路径，行为零变化。
+            push_response = push_limits_payload(args.url, token, payload, timeout=args.timeout)
+            delivered = True  # 直推路径失败会抛 ValueError，走不到这里
+        else:
+            push_response = deliver_limits_payload(
+                args.url,
+                token,
+                payload,
+                outbox_config=outbox_config,
+                timeout=args.timeout,
+                transport=post_limits_payload,
+            )
+            delivered = bool(push_response.get("delivered"))
+            push_ok = _push_is_acceptable(push_response)
 
     output = {
         "success": result.success,
@@ -668,8 +731,111 @@ def _run_push_limits(args):
     }
     if push_response is not None:
         output["push"] = push_response
-        output["windows_written"] = push_response.get("windows_written")
-    return output, result.success
+        output["delivered"] = delivered
+        # 直推路径的 push_response 就是服务端 JSON；outbox 路径把它包在 "response" 里。
+        output["windows_written"] = (push_response.get("response") or push_response).get("windows_written")
+    return output, result.success and push_ok
+
+
+def _outbox_config_for_push_limits(config_path: str | None):
+    """从设备配置里取 outbox 块。没给路径、或配置里没有该块，都返回 ``None``（走直推）。"""
+    if not config_path:
+        return None
+    return _load_device_config(config_path).outbox
+
+
+def _push_is_acceptable(push_response: dict) -> bool:
+    """一次 **outbox 形态**的投递结果算不算「可以退出 0」。
+
+    额度观测**已安全落盘等补推**不算失败：断网是常态，让 LaunchAgent 每次断网都报错，
+    真正的故障就会淹没在噪音里。但没落盘也没送到（认证挂了、磁盘满了、终态拒收）
+    必须是失败——那种情况下数据是真的没了。
+    """
+    if push_response.get("delivered"):
+        return True
+    return bool(push_response.get("queued"))
+
+
+def _load_device_config(config_path: str):
+    with open(config_path, "r", encoding="utf-8") as handle:
+        return validate_device_config(json.load(handle))
+
+
+def _require_outbox_config(config_path: str):
+    outbox = _load_device_config(config_path).outbox
+    if outbox is None:
+        raise ValueError(
+            f"设备配置 {config_path} 里没有 outbox 块：这台设备从未启用过本地 outbox，"
+            "没有未投递数据可查。"
+        )
+    return outbox
+
+
+def _run_outbox_status(args) -> dict:
+    outbox = _require_outbox_config(args.config)
+    path = Path(outbox.path).expanduser()
+    if not path.exists():
+        # 还没攒下任何东西时库文件根本不存在。这不是故障，也不该顺手把库建出来。
+        return {
+            "enabled": outbox.enabled,
+            "path": str(path),
+            "exists": False,
+            "undelivered": 0,
+            "pending": 0,
+            "dead_letters": 0,
+            "drained": True,
+            "next_step": "本地还没有缓冲任何数据，可以直接关闭 outbox。",
+        }
+    with CollectorStore.from_config(outbox) as store:
+        stats = store.stats()
+        undelivered = store.undelivered_count()
+        return {
+            "enabled": outbox.enabled,
+            "path": stats["path"],
+            "exists": True,
+            "undelivered": undelivered,
+            "pending": stats["pending"],
+            "dead_letters": stats["dead_letters"],
+            "drained": undelivered == 0,
+            "used_bytes": stats["used_bytes"],
+            "max_bytes": stats["max_bytes"],
+            "counters": {key: stats[key] for key in ("enqueued_total", "delivered_total", "expired_total", "dead_letter_total")},
+            "next_step": (
+                "还有未投递数据。恢复网络后继续上报直到清空；"
+                "确实要放弃就先 outbox-export 导出，再 outbox-drain --yes 清空。"
+                if undelivered
+                else "已排空，可以关闭 outbox 回退到直推。"
+            ),
+        }
+
+
+def _run_outbox_export(args) -> dict:
+    outbox = _require_outbox_config(args.config)
+    with CollectorStore.from_config(outbox) as store:
+        exported = store.export_undelivered(args.dest)
+    return {
+        "exported": exported,
+        "dest": str(Path(args.dest).expanduser()),
+        # 导出即丢弃是另一种静默丢失，所以这里明说数据还在。
+        "note": "导出不删除任何数据；确实要清空请用 outbox-drain --yes。",
+    }
+
+
+def _run_outbox_drain(args) -> dict:
+    outbox = _require_outbox_config(args.config)
+    with CollectorStore.from_config(outbox) as store:
+        exported = store.export_undelivered(args.export_to)
+        if not args.yes:
+            raise ValueError(
+                f"已导出 {exported} 条到 {args.export_to}，但未清空："
+                "清空需要显式加 --yes。没有无条件清空的入口。"
+            )
+        discarded = store.discard_undelivered(exported_to=args.export_to)
+    return {
+        "exported": exported,
+        "discarded": discarded,
+        "export_to": str(Path(args.export_to).expanduser()),
+    }
 
 
 def _limits_payload_observed_at(windows) -> str:

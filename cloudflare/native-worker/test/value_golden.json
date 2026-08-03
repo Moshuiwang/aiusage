@@ -310,12 +310,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -363,8 +363,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -470,39 +470,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "host": "macbook-pro",
-            "machine": "macbook-pro",
-            "observed_at": "2026-06-03T11:30:00+08:00",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok",
-            "version": {
-              "build_sha": null,
-              "collector_version": "0.3.0",
-              "compatible": true,
-              "config_schema_version": null,
-              "last_upgrade_finished_at": null,
-              "last_upgrade_from_version": null,
-              "last_upgrade_status": null,
-              "last_upgrade_to_version": null,
-              "min_supported_collector_version": "0.1.0",
-              "parser_schema_version": null,
-              "reason": "collector_version_current",
-              "release_channel": null,
-              "rollback_target_version": null,
-              "state": "current",
-              "target_collector_version": "0.3.0",
-              "verified": true
-            }
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -536,19 +503,19 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "host": "workstation-9",
-            "machine": "workstation-9",
-            "observed_at": "2026-06-03T10:00:00+08:00",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed",
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:30:00+08:00",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok",
             "version": {
               "build_sha": null,
-              "collector_version": "0.0.9",
-              "compatible": false,
+              "collector_version": "0.3.0",
+              "compatible": true,
               "config_schema_version": null,
               "last_upgrade_finished_at": null,
               "last_upgrade_from_version": null,
@@ -556,10 +523,10 @@
               "last_upgrade_to_version": null,
               "min_supported_collector_version": "0.1.0",
               "parser_schema_version": null,
-              "reason": "collector_version_below_minimum",
+              "reason": "collector_version_current",
               "release_channel": null,
               "rollback_target_version": null,
-              "state": "unsupported",
+              "state": "current",
               "target_collector_version": "0.3.0",
               "verified": true
             }
@@ -595,6 +562,39 @@
               "state": "unknown",
               "target_collector_version": "0.3.0",
               "verified": false
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "host": "workstation-9",
+            "machine": "workstation-9",
+            "observed_at": "2026-06-03T10:00:00+08:00",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
             }
           }
         ],
@@ -1295,8 +1295,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -1410,21 +1410,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "last_observed_at": "2026-06-03T11:30:00+08:00",
-            "last_pushed_at": "2026-06-03T11:30:00+08:00",
-            "machine": "macbook-pro",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok"
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -1440,15 +1425,15 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "last_observed_at": "2026-06-03T10:00:00+08:00",
-            "last_pushed_at": "2026-06-03T10:00:00+08:00",
-            "machine": "workstation-9",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed"
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:30:00+08:00",
+            "last_pushed_at": "2026-06-03T11:30:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok"
           },
           {
             "accuracy": {
@@ -1464,6 +1449,21 @@
             "platform": "darwin",
             "source_id": "mac-mini-dan",
             "status": "stale"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "last_observed_at": "2026-06-03T10:00:00+08:00",
+            "last_pushed_at": "2026-06-03T10:00:00+08:00",
+            "machine": "workstation-9",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed"
           }
         ],
         "timezone": "Asia/Shanghai",
@@ -2178,12 +2178,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -2231,8 +2231,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -2338,39 +2338,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "host": "macbook-pro",
-            "machine": "macbook-pro",
-            "observed_at": "2026-06-03T11:30:00+08:00",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok",
-            "version": {
-              "build_sha": null,
-              "collector_version": "0.3.0",
-              "compatible": true,
-              "config_schema_version": null,
-              "last_upgrade_finished_at": null,
-              "last_upgrade_from_version": null,
-              "last_upgrade_status": null,
-              "last_upgrade_to_version": null,
-              "min_supported_collector_version": "0.1.0",
-              "parser_schema_version": null,
-              "reason": "collector_version_current",
-              "release_channel": null,
-              "rollback_target_version": null,
-              "state": "current",
-              "target_collector_version": "0.3.0",
-              "verified": true
-            }
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -2404,19 +2371,19 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "host": "workstation-9",
-            "machine": "workstation-9",
-            "observed_at": "2026-06-03T10:00:00+08:00",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed",
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:30:00+08:00",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok",
             "version": {
               "build_sha": null,
-              "collector_version": "0.0.9",
-              "compatible": false,
+              "collector_version": "0.3.0",
+              "compatible": true,
               "config_schema_version": null,
               "last_upgrade_finished_at": null,
               "last_upgrade_from_version": null,
@@ -2424,10 +2391,10 @@
               "last_upgrade_to_version": null,
               "min_supported_collector_version": "0.1.0",
               "parser_schema_version": null,
-              "reason": "collector_version_below_minimum",
+              "reason": "collector_version_current",
               "release_channel": null,
               "rollback_target_version": null,
-              "state": "unsupported",
+              "state": "current",
               "target_collector_version": "0.3.0",
               "verified": true
             }
@@ -2463,6 +2430,39 @@
               "state": "unknown",
               "target_collector_version": "0.3.0",
               "verified": false
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "host": "workstation-9",
+            "machine": "workstation-9",
+            "observed_at": "2026-06-03T10:00:00+08:00",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
             }
           }
         ],
@@ -3015,8 +3015,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -3130,21 +3130,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "last_observed_at": "2026-06-03T11:30:00+08:00",
-            "last_pushed_at": "2026-06-03T11:30:00+08:00",
-            "machine": "macbook-pro",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok"
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -3160,15 +3145,15 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "last_observed_at": "2026-06-03T10:00:00+08:00",
-            "last_pushed_at": "2026-06-03T10:00:00+08:00",
-            "machine": "workstation-9",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed"
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:30:00+08:00",
+            "last_pushed_at": "2026-06-03T11:30:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok"
           },
           {
             "accuracy": {
@@ -3184,6 +3169,21 @@
             "platform": "darwin",
             "source_id": "mac-mini-dan",
             "status": "stale"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "last_observed_at": "2026-06-03T10:00:00+08:00",
+            "last_pushed_at": "2026-06-03T10:00:00+08:00",
+            "machine": "workstation-9",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed"
           }
         ],
         "timezone": "Asia/Shanghai",
@@ -3718,12 +3718,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -3771,8 +3771,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -3878,39 +3878,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "host": "macbook-pro",
-            "machine": "macbook-pro",
-            "observed_at": "2026-06-03T11:30:00+08:00",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok",
-            "version": {
-              "build_sha": null,
-              "collector_version": "0.3.0",
-              "compatible": true,
-              "config_schema_version": null,
-              "last_upgrade_finished_at": null,
-              "last_upgrade_from_version": null,
-              "last_upgrade_status": null,
-              "last_upgrade_to_version": null,
-              "min_supported_collector_version": "0.1.0",
-              "parser_schema_version": null,
-              "reason": "collector_version_current",
-              "release_channel": null,
-              "rollback_target_version": null,
-              "state": "current",
-              "target_collector_version": "0.3.0",
-              "verified": true
-            }
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -3944,19 +3911,19 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "host": "workstation-9",
-            "machine": "workstation-9",
-            "observed_at": "2026-06-03T10:00:00+08:00",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed",
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:30:00+08:00",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok",
             "version": {
               "build_sha": null,
-              "collector_version": "0.0.9",
-              "compatible": false,
+              "collector_version": "0.3.0",
+              "compatible": true,
               "config_schema_version": null,
               "last_upgrade_finished_at": null,
               "last_upgrade_from_version": null,
@@ -3964,10 +3931,10 @@
               "last_upgrade_to_version": null,
               "min_supported_collector_version": "0.1.0",
               "parser_schema_version": null,
-              "reason": "collector_version_below_minimum",
+              "reason": "collector_version_current",
               "release_channel": null,
               "rollback_target_version": null,
-              "state": "unsupported",
+              "state": "current",
               "target_collector_version": "0.3.0",
               "verified": true
             }
@@ -4003,6 +3970,39 @@
               "state": "unknown",
               "target_collector_version": "0.3.0",
               "verified": false
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "host": "workstation-9",
+            "machine": "workstation-9",
+            "observed_at": "2026-06-03T10:00:00+08:00",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
             }
           }
         ],
@@ -4891,8 +4891,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -5006,21 +5006,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "last_observed_at": "2026-06-03T11:30:00+08:00",
-            "last_pushed_at": "2026-06-03T11:30:00+08:00",
-            "machine": "macbook-pro",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok"
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -5036,15 +5021,15 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "last_observed_at": "2026-06-03T10:00:00+08:00",
-            "last_pushed_at": "2026-06-03T10:00:00+08:00",
-            "machine": "workstation-9",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed"
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:30:00+08:00",
+            "last_pushed_at": "2026-06-03T11:30:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok"
           },
           {
             "accuracy": {
@@ -5060,6 +5045,21 @@
             "platform": "darwin",
             "source_id": "mac-mini-dan",
             "status": "stale"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "last_observed_at": "2026-06-03T10:00:00+08:00",
+            "last_pushed_at": "2026-06-03T10:00:00+08:00",
+            "machine": "workstation-9",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed"
           }
         ],
         "timezone": "Asia/Shanghai",
@@ -5911,12 +5911,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -5964,8 +5964,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -6071,39 +6071,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "host": "macbook-pro",
-            "machine": "macbook-pro",
-            "observed_at": "2026-06-03T11:30:00+08:00",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok",
-            "version": {
-              "build_sha": null,
-              "collector_version": "0.3.0",
-              "compatible": true,
-              "config_schema_version": null,
-              "last_upgrade_finished_at": null,
-              "last_upgrade_from_version": null,
-              "last_upgrade_status": null,
-              "last_upgrade_to_version": null,
-              "min_supported_collector_version": "0.1.0",
-              "parser_schema_version": null,
-              "reason": "collector_version_current",
-              "release_channel": null,
-              "rollback_target_version": null,
-              "state": "current",
-              "target_collector_version": "0.3.0",
-              "verified": true
-            }
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -6137,19 +6104,19 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "host": "workstation-9",
-            "machine": "workstation-9",
-            "observed_at": "2026-06-03T10:00:00+08:00",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed",
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:30:00+08:00",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok",
             "version": {
               "build_sha": null,
-              "collector_version": "0.0.9",
-              "compatible": false,
+              "collector_version": "0.3.0",
+              "compatible": true,
               "config_schema_version": null,
               "last_upgrade_finished_at": null,
               "last_upgrade_from_version": null,
@@ -6157,10 +6124,10 @@
               "last_upgrade_to_version": null,
               "min_supported_collector_version": "0.1.0",
               "parser_schema_version": null,
-              "reason": "collector_version_below_minimum",
+              "reason": "collector_version_current",
               "release_channel": null,
               "rollback_target_version": null,
-              "state": "unsupported",
+              "state": "current",
               "target_collector_version": "0.3.0",
               "verified": true
             }
@@ -6196,6 +6163,39 @@
               "state": "unknown",
               "target_collector_version": "0.3.0",
               "verified": false
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "host": "workstation-9",
+            "machine": "workstation-9",
+            "observed_at": "2026-06-03T10:00:00+08:00",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
             }
           }
         ],
@@ -6795,8 +6795,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -6910,21 +6910,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "last_observed_at": "2026-06-03T11:30:00+08:00",
-            "last_pushed_at": "2026-06-03T11:30:00+08:00",
-            "machine": "macbook-pro",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok"
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -6940,15 +6925,15 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "last_observed_at": "2026-06-03T10:00:00+08:00",
-            "last_pushed_at": "2026-06-03T10:00:00+08:00",
-            "machine": "workstation-9",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed"
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:30:00+08:00",
+            "last_pushed_at": "2026-06-03T11:30:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok"
           },
           {
             "accuracy": {
@@ -6964,6 +6949,21 @@
             "platform": "darwin",
             "source_id": "mac-mini-dan",
             "status": "stale"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "last_observed_at": "2026-06-03T10:00:00+08:00",
+            "last_pushed_at": "2026-06-03T10:00:00+08:00",
+            "machine": "workstation-9",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed"
           }
         ],
         "timezone": "Asia/Shanghai",
@@ -7249,12 +7249,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -7302,8 +7302,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -7760,8 +7760,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -8193,12 +8193,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -8246,8 +8246,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -8704,8 +8704,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -9338,12 +9338,12 @@
             "observed_at": "2026-06-03T11:02:00+08:00",
             "official": false,
             "provider": "claude",
-            "remaining_percent": 0.0,
+            "remaining_percent": 0,
             "reset_at": "2026-06-03T15:00:00+08:00",
             "source_id": "claude-main",
             "source_type": "oauth_usage_api",
             "status": "provider_failed",
-            "used_percent": 0.0,
+            "used_percent": 0,
             "window": "5h",
             "window_duration_minutes": 300
           },
@@ -9391,8 +9391,8 @@
           }
         ],
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "codex_hourly": {
             "drift": {
               "status": "comparison_unavailable"
@@ -9498,39 +9498,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "host": "macbook-pro",
-            "machine": "macbook-pro",
-            "observed_at": "2026-06-03T11:30:00+08:00",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok",
-            "version": {
-              "build_sha": null,
-              "collector_version": "0.3.0",
-              "compatible": true,
-              "config_schema_version": null,
-              "last_upgrade_finished_at": null,
-              "last_upgrade_from_version": null,
-              "last_upgrade_status": null,
-              "last_upgrade_to_version": null,
-              "min_supported_collector_version": "0.1.0",
-              "parser_schema_version": null,
-              "reason": "collector_version_current",
-              "release_channel": null,
-              "rollback_target_version": null,
-              "state": "current",
-              "target_collector_version": "0.3.0",
-              "verified": true
-            }
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "host": "linux-dev",
@@ -9564,19 +9531,19 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "host": "workstation-9",
-            "machine": "workstation-9",
-            "observed_at": "2026-06-03T10:00:00+08:00",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed",
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:30:00+08:00",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok",
             "version": {
               "build_sha": null,
-              "collector_version": "0.0.9",
-              "compatible": false,
+              "collector_version": "0.3.0",
+              "compatible": true,
               "config_schema_version": null,
               "last_upgrade_finished_at": null,
               "last_upgrade_from_version": null,
@@ -9584,10 +9551,10 @@
               "last_upgrade_to_version": null,
               "min_supported_collector_version": "0.1.0",
               "parser_schema_version": null,
-              "reason": "collector_version_below_minimum",
+              "reason": "collector_version_current",
               "release_channel": null,
               "rollback_target_version": null,
-              "state": "unsupported",
+              "state": "current",
               "target_collector_version": "0.3.0",
               "verified": true
             }
@@ -9623,6 +9590,39 @@
               "state": "unknown",
               "target_collector_version": "0.3.0",
               "verified": false
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "host": "workstation-9",
+            "machine": "workstation-9",
+            "observed_at": "2026-06-03T10:00:00+08:00",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.0.9",
+              "compatible": false,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_below_minimum",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "unsupported",
+              "target_collector_version": "0.3.0",
+              "verified": true
             }
           }
         ],
@@ -10175,8 +10175,8 @@
           ]
         },
         "metadata": {
-          "backend_mode": "origin_direct",
-          "canonical_store": "origin_sqlite",
+          "backend_mode": "native_d1_unknown",
+          "canonical_store": "cloudflare_d1",
           "freshness_status": "ok",
           "limits_observed_at": "2026-06-03T11:03:00+08:00",
           "read_model_generated_at": "2026-06-03T12:00:00+08:00"
@@ -10290,21 +10290,6 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "macbook-pro \u00b7 alice",
-            "error_message": null,
-            "last_observed_at": "2026-06-03T11:30:00+08:00",
-            "last_pushed_at": "2026-06-03T11:30:00+08:00",
-            "machine": "macbook-pro",
-            "os_user": "alice",
-            "platform": "darwin",
-            "source_id": "mac-local",
-            "status": "ok"
-          },
-          {
-            "accuracy": {
-              "agents": [],
-              "status": "unknown"
-            },
             "display_name": "linux-dev \u00b7 bob",
             "error_message": null,
             "last_observed_at": "2026-06-03T11:31:00+08:00",
@@ -10320,15 +10305,15 @@
               "agents": [],
               "status": "unknown"
             },
-            "display_name": "workstation-9 \u00b7 cara",
-            "error_message": "Antigravity provider unavailable",
-            "last_observed_at": "2026-06-03T10:00:00+08:00",
-            "last_pushed_at": "2026-06-03T10:00:00+08:00",
-            "machine": "workstation-9",
-            "os_user": "cara",
-            "platform": "windows",
-            "source_id": "workstation-cara",
-            "status": "failed"
+            "display_name": "macbook-pro \u00b7 alice",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:30:00+08:00",
+            "last_pushed_at": "2026-06-03T11:30:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "alice",
+            "platform": "darwin",
+            "source_id": "mac-local",
+            "status": "ok"
           },
           {
             "accuracy": {
@@ -10344,6 +10329,21 @@
             "platform": "darwin",
             "source_id": "mac-mini-dan",
             "status": "stale"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "workstation-9 \u00b7 cara",
+            "error_message": "Antigravity provider unavailable",
+            "last_observed_at": "2026-06-03T10:00:00+08:00",
+            "last_pushed_at": "2026-06-03T10:00:00+08:00",
+            "machine": "workstation-9",
+            "os_user": "cara",
+            "platform": "windows",
+            "source_id": "workstation-cara",
+            "status": "failed"
           }
         ],
         "timezone": "Asia/Shanghai",

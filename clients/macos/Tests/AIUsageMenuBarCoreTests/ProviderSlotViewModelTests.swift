@@ -2,8 +2,11 @@ import Foundation
 import XCTest
 @testable import AIUsageMenuBarCore
 
-// provider-slots-owner-fixture.json is generated from the Python owner read model
-// via tests/test_provider_slots_parity._collect_records; keep test cases read-only.
+// provider-slots-owner-fixture.json is generated from the Cloudflare Worker read model
+// (cloudflare/native-worker/test/golden/, regenerate with `npm run cf:golden:gen`).
+// It is the mobile half of provider_slots_golden.json and is kept in sync by
+// cloudflare/native-worker/test/provider-slots-parity.test.ts. Never hand-edit it;
+// keep the test cases here read-only.
 final class ProviderSlotViewModelTests: XCTestCase {
     func testDecodesOwnerProviderSlotsAndCoverage() throws {
         let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")

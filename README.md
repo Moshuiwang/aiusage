@@ -76,6 +76,13 @@ scripts/verify.sh --full          # 强制全量
 scripts/verify.sh --explain-scope # 只看裁剪判定，不跑测试
 ```
 
+重新生成服务端合同 golden（`value_golden` / `provider_slots_golden` / `api_contract_golden`
+/ macOS owner fixture）——**只在 Worker 输出确实要变时才跑，跑完必须逐条复核 `git diff`**：
+
+```bash
+npm run cf:golden:gen
+```
+
 本地起**服务端**（Worker + 本地 D1，与生产同款实现）：
 
 ```bash
@@ -114,6 +121,25 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli push \
   --ledger-lookback-hours 48 \
   --lock-file /tmp/ai-usage-pusher.lock
 ```
+
+官方额度上报（给了 `--config` 才走本地 outbox：断网时观测先落盘、恢复后补推；不给就是直推）：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli push-limits \
+  --limits-config config/limits.local.json \
+  --url https://aiusage.chunbai.com/ingest-limits \
+  --config config/sources.local.json
+```
+
+本地 outbox 的运维入口（关闭 outbox 回退直推前必须先排空，**不允许静默丢弃**）：
+
+```bash
+PYTHONPATH=src python3 -m ai_usage_widget.cli outbox-status --config config/sources.local.json
+PYTHONPATH=src python3 -m ai_usage_widget.cli outbox-export --config config/sources.local.json --dest /tmp/outbox-export.json
+PYTHONPATH=src python3 -m ai_usage_widget.cli outbox-drain  --config config/sources.local.json --export-to /tmp/outbox-export.json --yes
+```
+
+`outbox-drain` 会先导出再清空，且必须显式加 `--yes`；没有无条件清空的入口。
 
 当前 macOS 本机生产上报由 LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒触发一次，实际运行 `/usr/bin/python3 -m ai_usage_widget.cli push`。它把最近窗口内有用量的 Codex / Claude 小时桶上报到 `https://aiusage.chunbai.com/ingest`，服务端按同一来源、账号、agent 和小时窗口 upsert；重复上报不会累加成假用量。
 

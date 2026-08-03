@@ -28,7 +28,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-from ai_usage_widget.collector_store import CollectorStore, OutboxConfig
+from ai_usage_widget.collector_store import KIND_LIMITS, CollectorStore, OutboxConfig
 from ai_usage_widget.config import DeviceConfig
 from ai_usage_widget.models import CommandResult
 from ai_usage_widget.pusher import DevicePusher, IngestHTTPClient
@@ -689,6 +689,38 @@ class TestSourceStatusHeartbeatDoesNotFloodTheOutbox(PusherOutboxTestCase):
             pusher.push()
             self.clock.advance(3600)
         self.assertEqual(store.pending_count(), 5)
+
+
+class TestKindIsolation(PusherOutboxTestCase):
+    """用量补推绝不能把排队中的额度观测打到 `/ingest`。
+
+    两者共用同一个 outbox 库（设备配置里同一个 `outbox` 块），但走两个不同的
+    ingest 端点。#87 把额度观测接进这个库之后，用量侧的补推如果不按 kind 过滤，
+    就会把额度 payload POST 到 `/ingest`，服务端拒收 → 判成终态 → 进死信，
+    一条本来能补推成功的观测就此消失。
+    """
+
+    def test_usage_flush_leaves_queued_limit_observations_alone(self) -> None:
+        outbox = OutboxConfig(enabled=True, path=str(self.db_path))
+        store = self.open_store()
+        store.enqueue(
+            {"schema_version": 1, "observed_at": "2026-06-03T11:00:00+08:00", "windows": [{"provider": "codex"}]},
+            kind=KIND_LIMITS,
+            dedupe_key="limits:codex",
+            ttl_seconds=3600.0,
+        )
+        result = self.make_pusher(self.make_config(outbox=outbox), store).push()
+
+        self.assertTrue(result.get("success"), result)
+        self.assertGreater(len(self.server.received_payloads), 0, "这一轮必须真的推了用量事实")
+        for payload in self.server.received_payloads:
+            self.assertNotIn("windows", payload, "额度观测被用量补推打到了 /ingest")
+        self.assertEqual(store.dead_letter_count(), 0, "额度观测被打进了死信表")
+        self.assertEqual(
+            [entry.kind for entry in store.pending(ignore_backoff=True)],
+            [KIND_LIMITS],
+            "额度观测必须原封不动留在队列里，等 push-limits 补推",
+        )
 
 
 class TestPayloadIsUnchangedByTheOutbox(PusherOutboxTestCase):
