@@ -1,9 +1,9 @@
 # Database Architecture
 
 本文是当前数据库结构的索引，不是迁移设计稿。字段、主键和写入行为以
-`src/ai_usage_widget/storage_sqlite.py`、`src/ai_usage_widget/models.py`
-和生产 Cloudflare D1 schema 为事实来源；本文只解释 AI Agent 应该先看哪里、
-哪些表是现状、哪些只是历史目标。
+`cloudflare/migrations/`（D1 schema）与 `cloudflare/native-worker/src/write-model.ts`
+（写入口径）为事实来源；本文只解释 AI Agent 应该先看哪里、
+哪些表是现状、哪些只是历史目标。Python 本地存储层已随 #74 删除。
 
 ## 当前生产数据库
 
@@ -17,12 +17,12 @@ Web、iPhone、Watch 和 macOS 菜单栏都通过 Cloudflare Worker API 读取�
 
 ## Schema 权威来源
 
-- 本地 schema owner：`src/ai_usage_widget/storage_sqlite.py` 的 `_ensure_schema()`。
-- 生产 schema owner：Cloudflare D1 migration / Worker 侧 schema；字段应与本地 adapter 保持兼容。
-- 数据模型 owner：`src/ai_usage_widget/models.py`。
-- 本地写入入口：`write_sqlite()`、`write_limit_windows()`。
-- 生产写入入口：Cloudflare Worker `/ingest`、`/ingest-limits`。
-- 读模型 owner：Cloudflare Worker summary API；本地 legacy 读模型仍由 `src/ai_usage_widget/snapshot_builder.py` 承载。
+- schema owner：`cloudflare/migrations/`（0001 是累计快照；守卫是
+  `tests/test_d1_schema_migration.py` 的显式列布局快照——#74 起不再镜像 Python 存储层）。
+- 采集端数据模型：`src/ai_usage_widget/models.py`（wire payload 侧）。
+- 写入入口：Cloudflare Worker `/ingest`、`/ingest-limits`（`write-model.ts`）。
+- 读模型 owner：`cloudflare/native-worker/src/read-model.ts` / `mobile-summary.ts`。
+- 采集端唯一本地库：`collector_store.py` 的 outbox（缓冲，不是档案）。
 
 不要从历史设计稿反推字段；新增字段必须先改代码和测试，再更新本文。
 

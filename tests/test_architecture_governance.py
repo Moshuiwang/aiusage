@@ -42,7 +42,22 @@ COLLECTOR_MODULE_GLOBS = (
 #: 这些 Python 模块**已随 #74 删除**。守卫保留：谁在采集端 import 这些名字，
 #: 要么是想复活服务端影子实现，要么是半迁移残留——两种都要当场红。
 SERVER_SIDE_MODULES = frozenset(
-    {"snapshot_builder", "mobile_summary", "server_services", "server"}
+    {
+        "server",
+        "server_services",
+        "ingest",
+        "snapshot_builder",
+        "snapshot_filters",
+        "snapshot_periods",
+        "snapshot_source_health",
+        "snapshot_trends",
+        "mobile_summary",
+        "normalize",
+        "storage_sqlite",
+        "storage_json",
+        "collector",
+        "timeutil",
+    }
 )
 
 #: 包名，用于识别 `from ai_usage_widget.snapshot_builder import ...` 这类**绝对导入**。
@@ -289,6 +304,9 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
             ("相对 from 包 import 模块", "from . import snapshot_builder"),
             ("绝对 import mobile_summary", "import ai_usage_widget.mobile_summary"),
             ("相对 import server_services", "from .server_services import build_health_response"),
+            ("已删存储层 storage_sqlite", "from .storage_sqlite import write_sqlite"),
+            ("已删 legacy collector", "import ai_usage_widget.collector"),
+            ("已删归一化 normalize", "from ai_usage_widget.normalize import normalize_ingest_request"),
         )
         for label, injected in mutations:
             with self.subTest(mutation=label):

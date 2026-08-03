@@ -1,7 +1,8 @@
 // Issue #58 阶段二在 Cloudflare Native Worker（生产权威实现）侧的版本合同。
 //
-// 口径唯一 owner 是 Python 侧 src/ai_usage_widget/version_contract.py，本文件的断言
-// 全部按那份实现的行为写；两侧字段名、状态名、拒绝语义必须逐字一致。
+// #74 之后口径唯一 owner 就是本目录的 src/version-contract.ts（Python 服务端判定已删除，
+// 只留采集端自报半边）。本文件的期望值是从删除前的 Python 实现逐字继承的行为合同：
+// 字段名、状态名、拒绝语义改动都必须是显式决策，不是重构副产品。
 import { readFile } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -40,10 +41,10 @@ function ingestPayload(overrides: AnyRecord = {}): AnyRecord {
 }
 
 describe.sequential("native TS Worker collector version contract", () => {
-  // Python 侧 `_safe_key` 是「超长 或 不匹配正则」两个条件。正则允许 `a_b_c…` 无限
+  // `_safe_key` 语义是「超长 或 不匹配正则」两个条件。正则允许 `a_b_c…` 无限
   // 拼接，所以长度上限不是冗余的：少了它，长 key 会原样回显进 400 响应体和服务端日志。
-  // 这些期望值直接对照 src/ai_usage_widget/version_contract.py::_safe_key 的行为。
-  it("redacts unknown keys exactly like the Python owner does", async () => {
+  // 这些期望值继承自删除前 Python owner 的 _safe_key 行为（#74 起本实现即权威）。
+  it("redacts unknown keys per the contract inherited from the deleted Python owner", async () => {
     const cases: Array<[string, boolean]> = [
       ["collector", true],
       ["last_upgrade_status", true],

@@ -1,17 +1,17 @@
 # Interface Architecture
 
 本文是当前服务接口的索引。HTTP path、请求校验和响应 shape 以
-`src/ai_usage_widget/server.py`、`server_services.py`、`ingest.py`、
-`mobile_summary.py` 和 `snapshot_builder.py` 为唯一权威来源。
+`cloudflare/native-worker/src/` 下的 Worker 实现为唯一权威来源
+（Python 服务端已随 #74 删除）。
 
 ## 单一权威来源
 
-- HTTP adapter：`src/ai_usage_widget/server.py`
-- 服务编排：`src/ai_usage_widget/server_services.py`
-- Usage ingest contract：`src/ai_usage_widget/ingest.py`
-- Limits contract：`src/ai_usage_widget/limits.py` + `server_services.validate_limits_ingest_payload()`
-- Web summary read model：`src/ai_usage_widget/snapshot_builder.py`
-- Mobile DTO：`src/ai_usage_widget/mobile_summary.py`
+- HTTP adapter：`cloudflare/native-worker/src/index.ts`
+- Usage / limits ingest contract：`cloudflare/native-worker/src/write-model.ts`
+  （采集端 wire 面常量在 `src/ai_usage_widget/limits.py` 与 `version_contract.py` 采集端半边）
+- Web summary read model：`cloudflare/native-worker/src/read-model.ts`
+- Mobile DTO：`cloudflare/native-worker/src/mobile-summary.ts`
+- 版本判定：`cloudflare/native-worker/src/version-contract.ts`
 
 旧的 `*-interface.md` 设计稿只作为历史参考，不再定义当前接口。
 
@@ -119,7 +119,7 @@
 
 ## Web Summary
 
-`GET /api/summary` 由 `snapshot_builder.py` 输出当前 v1 read model，顶层字段为：
+`GET /api/summary` 由 `read-model.ts` 输出当前 v1 read model，顶层字段为：
 
 - `schema_version`
 - `generated_at`

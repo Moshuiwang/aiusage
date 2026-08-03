@@ -59,7 +59,7 @@ FIXTURE_FILENAMES = {
     ENDPOINT_HEALTH: "health.json",
 }
 
-#: 固定 provider 槽位，顺序恒定。口径 owner 是 `snapshot_builder`，这里只核对顺序没变。
+#: 固定 provider 槽位，顺序恒定。口径 owner 是 Worker 读模型（read-model.ts），这里只核对顺序没变。
 SLOT_PROVIDERS = ("claude", "codex")
 
 DEFAULT_TOKEN_ENV = "AI_USAGE_READ_TOKEN"

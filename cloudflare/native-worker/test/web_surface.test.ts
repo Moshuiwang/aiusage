@@ -1,10 +1,9 @@
-import { execFile as execFileWithCallback } from "node:child_process";
+import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -17,7 +16,6 @@ const contractGoldenPath = path.join(repoRoot, "tests/fixtures/contract/api_cont
 const token = "contract-test-token";
 const sessionSecret = "cutover-session-secret";
 const fixedNow = "2026-06-03T12:00:00+08:00";
-const execFile = promisify(execFileWithCallback);
 
 describe.sequential("native TS Worker web surface", () => {
   let mf: Miniflare;
@@ -40,8 +38,8 @@ describe.sequential("native TS Worker web surface", () => {
     await mf.dispose();
   });
 
-  it("issues a Python-compatible session cookie on login", async () => {
-    const pythonValue = await pythonSessionCookieValue(sessionSecret);
+  it("issues the stable session cookie value inherited from the Python cutover era on login", async () => {
+    const expectedValue = await expectedSessionCookieValue(sessionSecret);
     const response = await mf.dispatchFetch("http://native.test/login", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -52,7 +50,7 @@ describe.sequential("native TS Worker web surface", () => {
     expect(response.status).toBe(303);
     expect(response.headers.get("Location")).toBe("/dashboard");
     expect(response.headers.get("Set-Cookie")).toBe(
-      `ai_usage_session=${pythonValue}; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`,
+      `ai_usage_session=${expectedValue}; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`,
     );
   });
 
@@ -544,26 +542,16 @@ describe.sequential("native TS Worker empty-database read surface", () => {
 });
 
 async function sessionCookieHeader(): Promise<string> {
-  return `ai_usage_session=${await pythonSessionCookieValue(sessionSecret)}`;
+  return `ai_usage_session=${await expectedSessionCookieValue(sessionSecret)}`;
 }
 
-async function pythonSessionCookieValue(secret: string): Promise<string> {
-  const script = `
-from ai_usage_widget.auth import TokenAuthenticator
-from ai_usage_widget.server import IngestAPIHandler
-
-class Server:
-    authenticator = TokenAuthenticator.from_values(${JSON.stringify(secret)})
-
-handler = object.__new__(IngestAPIHandler)
-handler.server = Server()
-print(handler._session_cookie_value())
-`;
-  const result = await execFile("python3", ["-c", script], {
-    cwd: repoRoot,
-    env: { ...process.env, PYTHONPATH: path.join(repoRoot, "src") },
-  });
-  return result.stdout.trim();
+// #74 之前这里 shell 出 Python，从 server.py 的 `_session_cookie_value()` 现算参考值
+// （「Worker 必须接受 Python 服务端签发的 cookie」的切换期合同）。Python 服务端已删除，
+// 但算法本身仍是合同：它决定既有浏览器会话在 Worker 部署间是否存活。所以在测试里
+// **独立**钉死同一算法（HMAC-SHA256(secret, "ai-usage-dashboard-session-v1") 的 hex），
+// 与 index.ts 的实现互为对照——服务端换算法会当场红，而不是让全部用户被静默登出。
+async function expectedSessionCookieValue(secret: string): Promise<string> {
+  return createHmac("sha256", secret).update("ai-usage-dashboard-session-v1").digest("hex");
 }
 
 async function readStatic(asset: string): Promise<string> {

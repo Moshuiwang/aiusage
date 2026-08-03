@@ -5,7 +5,7 @@
 ## 权威入口
 
 - 当前真实架构：本文。
-- SQLite 表结构索引：[`database.md`](database.md)；字段以 `storage_sqlite.py` 和 `models.py` 为准。
+- D1 表结构索引：[`database.md`](database.md)；schema 以 `cloudflare/migrations/` 为准（守卫：`tests/test_d1_schema_migration.py` 的显式列布局快照）。
 - 服务接口索引：[`interfaces.md`](interfaces.md)；接口以 `cloudflare/native-worker/src/index.ts`、`write-model.ts`、`read-model.ts`、`mobile-summary.ts` 为准。
 - 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
@@ -165,7 +165,7 @@ CLI / HTTP handler / clients
 - 禁止 Web 和 Mobile 各自定义不同的 usage 口径。
 - 禁止 iOS Widget 把 token 放入 shared UserDefaults 或 App Group 文件。
 - 禁止 Android、macOS、Windows 为了 UI 方便重新计算 usage / limits / source health。
-- 禁止直接把 `mobile/ios`、`mobile/ios-xcode` 或 `src/ai_usage_widget/static` 移到 `clients/` 而没有迁移任务包和验证。
+- 禁止直接把 `mobile/ios`、`mobile/ios-xcode` 或 `cloudflare/native-worker/static` 移到 `clients/` 而没有迁移任务包和验证。
 
 ## 测试规则
 

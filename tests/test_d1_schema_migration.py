@@ -556,8 +556,9 @@ class TestD1SchemaMigration(unittest.TestCase):
         EXISTS, and the chain replays 0001 first, so a wrong backfill in 0001 is
         inherited by the chain and both paths agree on the same wrong index.
         (Proven by mutation: renaming the indexed column in 0001 leaves the parity
-        test green.) It is also independent of the storage_sqlite.py mirror, which
-        is frozen and slated for deletion, so the invariant must not rest on it.
+        test green.) It is also independent of the deleted
+        storage_sqlite.py mirror (#74), so the invariant rests on nothing but
+        the migrations themselves.
 
         Method: build from 0001 alone, drop the indexes the migration owns, replay
         that migration, and compare -- the owning migration is the source of truth

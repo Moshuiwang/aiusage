@@ -50,7 +50,8 @@ describe("verify-cloud fixtures stay bound to the Worker owners", () => {
       );
       checked += 1;
     }
-    expect(checked, "必须核完两个 owner 对齐场景").toBe(OWNER_ALIGNED_SCENARIOS.length);
+    // 字面量而不是 OWNER_ALIGNED_SCENARIOS.length：清单被清空时 0===0 不许照样绿。
+    expect(checked, "必须核完两个 owner 对齐场景").toBe(2);
   });
 
   it("parity_mismatch 的 mobile fixture 必须真的与 owner 输出不一致", () => {
@@ -77,6 +78,6 @@ describe("verify-cloud fixtures stay bound to the Worker owners", () => {
       ).toEqual(expected);
       checked += 1;
     }
-    expect(checked, "必须核完全部三个场景").toBe(SCENARIOS.length);
+    expect(checked, "必须核完全部三个场景").toBe(3);
   });
 });

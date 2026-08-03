@@ -508,9 +508,9 @@ def _check_entry(environment: DoctorEnvironment) -> DoctorCheck:
 def looks_like_health_payload(body: str) -> bool:
     """确认这确实是本产品 `/api/health` 的响应，而不是随便一个 200。
 
-    origin (`server_services.build_health_response`) 与 Cloudflare Worker
-    (`buildHealthResponse`) 两侧都返回 `status: "ok"` + `backend_mode`，
-    这是跨实现的共同契约。captive portal / IdP 登录页给不出这个形状。
+    Cloudflare Worker (`buildHealthResponse`) 返回 `status: "ok"` + `backend_mode`
+    （#74 删除 Python 服务端后这是唯一实现，形状由 web_surface.test.ts 钉住）。
+    captive portal / IdP 登录页给不出这个形状。
     """
 
     try:

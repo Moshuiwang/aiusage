@@ -912,7 +912,7 @@ describe.sequential("native TS Worker write API parity", () => {
 
   it("老版本采集端仍在发的 ccusage_daily_status 被当未知字段忽略：不报错、不落库", async () => {
     // 跨实现一致性的 Worker 半边。Python 半边是
-    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`，
+    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldProbesStayValid`，
     // 读的是同一份探针文件、断言同一组可观测结果。
     //
     // 证明方式不是「返回了 200 就算忽略」——那太弱：字段完全可能被解析后写进某张表。
@@ -961,10 +961,11 @@ describe.sequential("native TS Worker write API parity", () => {
   });
 
   it("老版本采集端仍在发的 ccusage_blocks_report 被当未知字段忽略：不报错、不解析、不落库", async () => {
-    // #91 停采 blocks 后的跨实现一致性，Worker 半边。Python 半边是
-    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`，
-    // 读的是同一份探针文件、断言同一组可观测结果。结构与上面 #78 那条同构，
-    // 区别只在场景：blocks 子进程只有 ccusage daily 成功后才会跑，所以探针钉在 ok 场景。
+    // #91 停采 blocks 后的行为守卫。#74 删除 Python ingest 后本用例是唯一服务端半边；
+    // 探针自身的有效性（基座不带该字段、场景钉死）由
+    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldProbesStayValid` 守。
+    // 结构与上面 #78 那条同构，区别只在场景：blocks 子进程只有 ccusage daily
+    // 成功后才会跑，所以探针钉在 ok 场景。
     const probe = JSON.parse(await readFile(legacyBlocksProbePath, "utf8")) as {
       field: string;
       scenario: string;
