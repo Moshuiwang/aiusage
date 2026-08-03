@@ -101,6 +101,43 @@ class TestPgrepWaitLoopGuard(unittest.TestCase):
         )
 
 
+class TestRawMergeGuard(unittest.TestCase):
+    """裸 `gh pr merge` 必须走 `scripts/merge_pr.sh`（PM 2026-08-03 决策 A 方案）。
+
+    免费私有仓库没有服务端 branch protection，「CI 全绿才能合并」的强制性
+    由 merge_pr.sh + 本拦截共同承担。merge_pr.sh 内部的 gh 调用不经过本 hook
+    （hook 只扫 Bash 工具的命令文本），所以拦掉裸调用不会拦掉唯一入口自己。
+    """
+
+    def test_blocks_plain_gh_pr_merge(self) -> None:
+        result = _run(_hook_input("gh pr merge 99 --merge --delete-branch"))
+        self.assertEqual(result.returncode, BLOCK, result.stdout)
+        self.assertIn("merge_pr.sh", result.stderr, "拦下来必须给出唯一入口")
+
+    def test_blocks_gh_pr_merge_after_a_separator(self) -> None:
+        for command in (
+            "git push && gh pr merge 99",
+            "true; gh pr merge 99 --squash",
+            "( gh pr merge 99 )",
+        ):
+            with self.subTest(command=command):
+                self.assertEqual(_run(_hook_input(command)).returncode, BLOCK, command)
+
+    def test_allows_merge_pr_script(self) -> None:
+        self.assertEqual(_run(_hook_input("scripts/merge_pr.sh 99 --merge")).returncode, ALLOW)
+
+    def test_allows_merely_mentioning_the_phrase_in_text(self) -> None:
+        self.assertEqual(
+            _run(_hook_input('echo "以后不要直接 gh pr merge，改走脚本"')).returncode,
+            ALLOW,
+        )
+
+    def test_allows_other_gh_pr_subcommands(self) -> None:
+        for command in ("gh pr view 99", "gh pr checks 99 --watch", "gh pr create --draft"):
+            with self.subTest(command=command):
+                self.assertEqual(_run(_hook_input(command)).returncode, ALLOW, command)
+
+
 class TestGuardFailsOpen(unittest.TestCase):
     """门禁本身不能把工作卡死：输入解析不了时一律放行。"""
 

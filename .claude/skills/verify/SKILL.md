@@ -13,7 +13,9 @@ scripts/verify.sh --python-only  # 快速：只跑 Python 约 85s
 ```
 
 **收口口径：本地 targeted 绿 = 等级 3；全量套件交给 PR CI（等级 4）。**
-main 分支保护要求四个 check 全绿才能合并，所以全量不会被绕过——
+PR 合并的唯一入口是 `scripts/merge_pr.sh`（四个 check 全 SUCCESS 才执行合并，
+裸 `gh pr merge` 被 bash_guard 拦截；免费私有仓库无服务端 branch protection，
+强制性在仓库内实现），所以全量不会被绕过——
 它只是从「本机排队 6-8 分钟」挪到了「GitHub 并行 3 分钟」。
 本地全量 `verify.sh` 仍可用，但只是可选复核，**不再是收口必要条件**
 （2026-08-03 实测：一整轮交付里本地全量跑了约 10 次、共约 1 小时，

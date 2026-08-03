@@ -35,7 +35,9 @@
 
 - 验证入口 `scripts/verify.sh`（全量）/ `--python-only`（快速）。
   **收口口径（2026-08-03 起）：本地 targeted 测试绿 = 等级 3，全量套件交给 PR CI
-  （main 分支保护要求四个 check 全绿才能合并）。本地全量是可选复核，不是收口必要条件。**
+  （合并唯一入口 `scripts/merge_pr.sh`，四个 check 全 SUCCESS 才执行；裸 `gh pr merge`
+  被 bash_guard 拦截——免费私有仓库无服务端 branch protection，强制性在仓库内实现）。
+  本地全量是可选复核，不是收口必要条件。**
   TDD 先红后绿与变异证据永远在本地做，CI 替代不了。细则见 `/verify`。
 - 所有开发任务遵守 TDD：先写失败测试并确认它因目标行为缺失而失败，再实现最小代码。
   不得为了让测试通过而弱化断言、改预期值或缩小验收。

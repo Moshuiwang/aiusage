@@ -30,4 +30,17 @@ if printf '%s' "$CMD" | grep -qE '(^|[;&|(])[[:space:]]*(until|while)\b.*\bpgrep
   exit 2
 fi
 
+# 3) 裸 gh pr merge：免费私有仓库无服务端 branch protection，「CI 全绿才能合并」的
+# 强制性由 scripts/merge_pr.sh 承担（PM 2026-08-03 决策 A 方案）。锚定到命令位置，
+# 提及该词组的文本（echo / 提交信息 / Issue 评论）不拦；merge_pr.sh 内部的 gh 调用
+# 不经过本 hook（hook 只扫 Bash 工具的命令文本），不会拦到唯一入口自己。
+if printf '%s' "$CMD" | grep -qE '(^|[;&|(])[[:space:]]*gh[[:space:]]+pr[[:space:]]+merge\b'; then
+  {
+    echo "【bash_guard 拦截】裸 gh pr merge 可以在 CI 红着的时候合并成功——本仓库没有服务端 branch protection。"
+    echo "改用唯一入口：scripts/merge_pr.sh <PR号> [--merge --delete-branch 等参数]"
+    echo "它会先核对四个必需 check 全部 SUCCESS 再执行合并，红/缺席/进行中都会拒绝。"
+  } >&2
+  exit 2
+fi
+
 exit 0
