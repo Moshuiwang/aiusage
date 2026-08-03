@@ -1,8 +1,9 @@
 // 版本合同：采集端 / 服务端版本字段口径、四态判定与最低支持版本策略。
 //
-// **口径唯一 owner 是 `src/ai_usage_widget/version_contract.py`**，本文件是它在
-// Cloudflare Native Worker（生产权威实现）侧的等价移植。常量、状态名、字段名、
-// 判定优先级与拒绝语义必须与 Python 侧逐字一致；要改口径先改 Python 侧。
+// **服务端判定的唯一 owner 是本文件**（#67 决策，2026-08-02：服务端收敛为
+// Cloudflare Worker + D1 单实现）。`src/ai_usage_widget/version_contract.py` 只保留
+// 采集端自报部分（`pusher.py` / `config.py` 在用），它的服务端判定部分已冻结、随 #74 删除。
+// 在两份实现并存期间，常量、状态名、字段名、判定优先级与拒绝语义仍必须逐字一致。
 //
 // 安全边界：所有版本字段都用收紧的字面量白名单校验（semver / 十六进制 SHA /
 // 枚举 / ISO 时间戳）。token、绝对路径、命令行参数等形态无法通过校验，
@@ -95,6 +96,19 @@ export const SERVER_VERSION_FIELDS = [
   "ingest_schema_version",
   "min_supported_collector_version",
   "target_collector_version",
+];
+
+/**
+ * 呈现端版本字段（Mac / iPhone / Watch / Web），只定合同不实现客户端。
+ *
+ * 与 Python 侧 `PRESENTATION_VERSION_FIELDS` 一样，唯一消费者是文档合同测试
+ * （`test/version-contract-doc.test.ts`）：它保证「文档里的呈现端字段表」和
+ * 「代码声明的字段集合」不会各写一套。没有产品逻辑读它，这是刻意的。
+ */
+export const PRESENTATION_VERSION_FIELDS = [
+  "app_version",
+  "build_number",
+  "data_contract_version",
 ];
 
 /** 服务端判定「明确不兼容」后返回的错误类型。不是静默 200，也不是静默丢弃。 */

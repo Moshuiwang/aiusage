@@ -10,7 +10,7 @@
 - 项目地图和目录边界：[`../project-map.md`](../project-map.md)。
 - 根部 [`../architecture.md`](../architecture.md) 只保留指针和 Round 8 迁移记录。
 - Cloudflare/D1 当前生产事实：[`cloudflare-migration-remaining-work.md`](cloudflare-migration-remaining-work.md)。
-- 版本字段清单、四态判定与升级边界：[`version-and-upgrade-contract.md`](version-and-upgrade-contract.md)；口径以 `version_contract.py` 为准。
+- 版本字段清单、四态判定与升级边界：[`version-and-upgrade-contract.md`](version-and-upgrade-contract.md)；服务端判定口径以 `cloudflare/native-worker/src/version-contract.ts` 为准，采集端自报口径以 `version_contract.py` 为准。
 - **服务端单实现收敛决策（#67，2026-08-02）**：[`server-path-consolidation-decision.md`](server-path-consolidation-decision.md)。
   服务端路径的权威已转移到 Cloudflare Worker + D1，Python 服务端模块已冻结。
   **本文下面的「模块 Owner」与「新功能放置规则」两节受该决策约束，冲突时以决策文档为准。**
