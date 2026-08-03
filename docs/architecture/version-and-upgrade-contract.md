@@ -148,8 +148,11 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 
 ## 已知缺口
 
-> 本节是自由散文，不在任何文档合同测试的解析范围内（#93 的守卫只覆盖字段表、四态表、
-> 最低支持版本与权威入口清单），**只能靠人核**——历史上文档里唯一过期的就是本节（#94）。
+> 本节是自由散文。除全文级卫生检查（断链、绝对家目录/凭据形态，
+> `tests/test_version_contract_doc.py` 的 Hygiene 组）外，本节不在任何**结构化**
+> 文档合同断言的解析范围内（#93 的守卫只覆盖字段表、四态表、
+> 最低支持版本与权威入口清单），事实是否过期**只能靠人核**——
+> 历史上文档里唯一过期的就是本节（#94）。
 > 因此每条都必须写明证据与复核日期。本节最近一次逐条实测复核：2026-08-03（#94）。
 
 ### 已闭合（不再是缺口，留档防止重复评估）
@@ -157,15 +160,16 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 | 原缺口 | 闭合证据 |
 | --- | --- |
 | 读取侧（`/api/summary` 的 `source_status[].version`、顶层 `version_health`、`/api/health` 的 `versions`）在 Worker 上缺席 | #63（commit `95a34d5`）按当初预告的唯一干净路径交付：`0007` 迁移给 `source_report_states` 加 `collector_version` 列，ingest 写入时物化，读取侧产出在 `read-model.ts`（`version_health`、`source_status[].version`）与 `index.ts`（`/api/health` 的 `versions`）。生产 D1 已应用 `0005`–`0007` 并发布 Worker，线上 smoke 回读到 `version_health` 与 10 项 `version` 子对象（#81，证据等级 5+回读） |
-| 「两边都没有新字段所以 parity 对得上」的假绿形态 | #74 P1 迁移（PR #89）：四份合同 golden 的生成端与防陈旧守卫都在 Worker 侧（`cloudflare/native-worker/test/golden/` + `golden-freshness.test.ts`，重新生成走 `npm run cf:golden:gen`），golden 记录 Worker 自己的输出，陈旧会立刻变红 |
+| 「两边都没有新字段所以 parity 对得上」的假绿形态 | #74 P1 迁移（PR #89）：四份合同 golden 的生成端与防陈旧守卫都在 Worker 侧（`cloudflare/native-worker/test/golden/` + `golden-freshness.test.ts`，`provider_slots_golden.json` 与 macOS owner fixture 的守卫在 `provider-slots-parity.test.ts`，重新生成走 `npm run cf:golden:gen`），golden 记录 Worker 自己的输出，陈旧会立刻变红 |
 | Worker 无条件往 `collection_runs.collector_version` 写死占位值 `"0.1.0"` | 已改为只写采集端真实上报的版本，没上报写 NULL（`write-model.ts` 的 collection_runs 插入路径）；读取侧口径同时改为只看 `source_report_states`，其存量行版本列为 NULL → 判 `unknown`，不会把占位值当真值展示（#81 smoke：`unknown=10` 即此形态） |
 
 ### 仍开
 
 - `collection_runs` 审计历史里升级前写入的存量 `"0.1.0"` 行，仍无法与真正在跑 0.1.0 的
   设备区分——但它已不进任何读取侧口径（读取侧只看 `source_report_states`）。
-  仍然**不要给 `"0.1.0"` 开特例**（会误伤真的在跑 0.1.0 的设备）；这些行随设备重新上报
-  自然被新记录取代，不需要治理动作。
+  仍然**不要给 `"0.1.0"` 开特例**（会误伤真的在跑 0.1.0 的设备）；`collection_runs`
+  是追加表，这些旧行不会被新上报覆盖，但会随保留期清理（`index.ts` 的
+  `DELETE FROM collection_runs WHERE collected_at < ?`）自然过期，不需要治理动作。
 - 版本健康口径下服务端只**持久化** `collector_version`（`collection_runs.collector_version`
   与 `source_report_states.collector_version` 两列）。`config_schema_version`、
   `parser_schema_version`、`release_channel`、`build_sha`、`last_upgrade_*` 只在 ingest

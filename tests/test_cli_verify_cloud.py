@@ -885,10 +885,12 @@ class TestVerifyCloudHttpFailuresNeverLeakOrCrash(unittest.TestCase):
 class TestVerifyCloudNamesUncheckableDimensions(unittest.TestCase):
     """后端没有版本读取侧时，不能报「核对通过」。
 
-    生产权威实现（Cloudflare Worker）今天不返回 `source_status[].version`、
-    也不返回 `/api/health` 的 `versions`（Issue #63 的已知缺口）。如果 verify-cloud
-    对此判 exit 0，就把 #63 的缺口翻译成了绿灯：无图形界面的用户拿到「核对通过」，
-    而「哪台设备还在跑旧采集器」——#58 存在的唯一理由——从头到尾没被核对过。
+    写这组用例时（#60），生产 Worker 还不返回 `source_status[].version` 与
+    `/api/health` 的 `versions`；该缺口后来已由 #63 交付、#81 部署回读闭合。
+    但这组行为仍然必要：任何后端（旧版本、降级形态、其他部署）缺这两个维度时，
+    verify-cloud 若判 exit 0，就是把缺口翻译成绿灯——无图形界面的用户拿到
+    「核对通过」，而「哪台设备还在跑旧采集器」——#58 存在的唯一理由——
+    从头到尾没被核对过。
 
     未核对不等于核对通过。缺维度必须说出来。
     """
