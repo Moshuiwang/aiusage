@@ -130,8 +130,9 @@ class TestChangeScope(StopGateTestCase):
     def test_cloudflare_change_demands_explicit_worker_evidence(self) -> None:
         """cloudflare/ 有改动仍然阻止收口，但索要的证据是 targeted 测试 + PR CI（2026-08-03 口径）。
 
-        不再索要本地全量 verify.sh：全量套件由 PR CI 承担（main 分支保护要求
-        四个 check 全绿才能合并），本地全量降级为可选复核。
+        不再索要本地全量 verify.sh：全量套件由 PR CI 承担（合并唯一入口
+        scripts/merge_pr.sh 强制四个 check 全 SUCCESS，见 test_merge_pr_gate），
+        本地全量降级为可选复核。
         """
         path = self.repo / "cloudflare" / "native-worker" / "src" / "index.ts"
         path.parent.mkdir(parents=True)

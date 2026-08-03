@@ -122,7 +122,7 @@ if [ "$NEED_WORKER" -eq 1 ]; then
     echo "【收口被阻止】cloudflare/ 有改动。"
     echo "收口口径（2026-08-03 起）：跑改动对应的 targeted Worker 测试并在汇报中给出结果："
     echo "    npx --prefix cloudflare/native-worker vitest run --config cloudflare/native-worker/vitest.config.ts <改动相关的 test 文件>"
-    echo "全量套件交给 PR CI（main 分支保护要求四个 check 全绿才能合并）；"
+    echo "全量套件交给 PR CI（合并唯一入口 scripts/merge_pr.sh 强制四个 check 全 SUCCESS）；"
     echo "本地全量 scripts/verify.sh --full 仍可用，但只是可选复核，不是收口必要条件。"
     echo "targeted 已绿、或确实无法在本机验证时，创建 .claude/.skip-stop-gate（一次性）"
     echo "并在收口汇报中写明依据与证据等级。"
