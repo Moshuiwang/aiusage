@@ -3,16 +3,21 @@
 对应 GitHub Issue #58 阶段一。目标是让用户能回答两个问题：**哪台设备还在跑旧采集器**、
 **各端是不是在消费同一版数据合同**；并且在采集端明显不兼容时，服务端有明确、可解释的处理方式。
 
-> **事实源是代码。** 本文的字段清单、四态和阈值都以 `src/ai_usage_widget/version_contract.py` 为准。
-> `tests/test_version_contract_doc.py` 会把本文的表格解析出来，和代码常量与真实判定行为逐项比对，
-> 对不上就红。文档与代码冲突时以代码为准。
+> **事实源是代码。** 服务端与呈现端的字段清单、四态和阈值以
+> `cloudflare/native-worker/src/version-contract.ts` 为准（#67 决策：服务端判定权威在 Worker）；
+> 采集端自报的字段清单与上报路径以 `src/ai_usage_widget/version_contract.py` 为准。
+> 两半各有一份文档合同测试把本文的表格解析出来、和代码常量与真实判定行为逐项比对，对不上就红：
+> 服务端半边在 `cloudflare/native-worker/test/version-contract-doc.test.ts`，
+> 采集端半边在 `tests/test_version_contract_doc.py`。文档与代码冲突时以代码为准。
 
 ## 权威入口
 
-- 版本字段口径、四态判定、最低支持版本策略：`src/ai_usage_widget/version_contract.py`（唯一 owner）。
-- 上报 payload 校验与敏感字段边界：`src/ai_usage_widget/ingest.py`。
-- 兼容判定与拒绝动作：`src/ai_usage_widget/server_services.py`。
-- 来源健康读模型：`src/ai_usage_widget/snapshot_source_health.py`。
+- 服务端版本字段口径、四态判定、最低支持版本策略：
+  `cloudflare/native-worker/src/version-contract.ts`（唯一 owner）。
+- 采集端自报版本字段：`src/ai_usage_widget/version_contract.py`（`pusher.py` / `config.py` 在用）。
+- 上报 payload 校验与敏感字段边界：`cloudflare/native-worker/src/write-model.ts`。
+- 兼容判定与拒绝动作：`cloudflare/native-worker/src/index.ts`。
+- 来源健康读模型：`cloudflare/native-worker/src/read-model.ts`。
 - 模块 owner 总表与依赖方向：[`architecture.md`](architecture.md)。
 - 接口索引：[`interfaces.md`](interfaces.md)。
 - 表结构索引：[`database.md`](database.md)。
@@ -48,13 +53,13 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 
 | 字段 | 类型 | Owner | 说明 |
 | --- | --- | --- | --- |
-| `api_version` | semver 字符串 | `src/ai_usage_widget/version_contract.py` | HTTP 接口合同版本，接口本体由 `server.py` 承载。 |
-| `read_model_version` | semver 字符串 | `src/ai_usage_widget/version_contract.py` | `/api/summary` 读模型合同版本，读模型本体由 `snapshot_builder.py` 承载。 |
-| `ingest_schema_version` | 整数 | `src/ai_usage_widget/version_contract.py` | 服务端当前接受的 ingest payload schema 版本。 |
-| `min_supported_collector_version` | semver 字符串 | `src/ai_usage_widget/version_contract.py` | 最低支持采集端版本，常量 `MIN_SUPPORTED_COLLECTOR_VERSION`，低于它就拒绝。 |
-| `target_collector_version` | semver 字符串 | `src/ai_usage_widget/version_contract.py` | 目标采集端版本，常量 `TARGET_COLLECTOR_VERSION`，低于它只提示。 |
+| `api_version` | semver 字符串 | `cloudflare/native-worker/src/version-contract.ts` | HTTP 接口合同版本，接口本体由 `index.ts` 承载。 |
+| `read_model_version` | semver 字符串 | `cloudflare/native-worker/src/version-contract.ts` | `/api/summary` 读模型合同版本，读模型本体由 `read-model.ts` 承载。 |
+| `ingest_schema_version` | 整数 | `cloudflare/native-worker/src/version-contract.ts` | 服务端当前接受的 ingest payload schema 版本。 |
+| `min_supported_collector_version` | semver 字符串 | `cloudflare/native-worker/src/version-contract.ts` | 最低支持采集端版本，常量 `MIN_SUPPORTED_COLLECTOR_VERSION`，低于它就拒绝。 |
+| `target_collector_version` | semver 字符串 | `cloudflare/native-worker/src/version-contract.ts` | 目标采集端版本，常量 `TARGET_COLLECTOR_VERSION`，低于它只提示。 |
 
-阈值本身不写进本文，避免文档和代码两份口径。要看当前值直接读 `version_contract.py`。
+阈值本身不写进本文，避免文档和代码两份口径。要看当前值直接读 `version-contract.ts`。
 
 ### 呈现端版本字段
 
@@ -62,7 +67,7 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 | --- | --- | --- | --- |
 | `app_version` | semver 字符串 | `clients/` | 各呈现端 App 的用户可见版本：Web、iPhone、Apple Watch、macOS 菜单栏、Android。 |
 | `build_number` | 字符串 | `clients/` | 构建号；Web 用部署 build，Apple 平台用 `CFBundleVersion`。 |
-| `data_contract_version` | semver 字符串 | `src/ai_usage_widget/mobile_summary.py` | 呈现端消费的数据合同版本，由 DTO owner 定义，客户端不得自行改写。**尚未实现**：`mobile_summary` 当前输出的是 `schema_version`，本轮只定 owner。 |
+| `data_contract_version` | semver 字符串 | `cloudflare/native-worker/src/mobile-summary.ts` | 呈现端消费的数据合同版本，由 DTO owner 定义，客户端不得自行改写。**尚未实现**：mobile DTO 当前输出的是 `schema_version`，本轮只定 owner。 |
 
 呈现端的更新渠道（App Store / TestFlight / Web 部署）和用户可见版本入口**不在本轮范围**，
 必须回 Mac 侧另拆 Story 验收。本文只固定字段名和归属，避免各端各写一套。
@@ -142,7 +147,8 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
   `/ingest` 接受并校验 `collector_release`、缺块降级为 `unknown`、不合法值明确拒绝、
   版本不兼容返回 400 `collector_version_unsupported` 且当次上报完全不落库、响应回写 `version` 块，
   以及把采集端真实上报的版本写进 `collection_runs.collector_version`（没上报就写 NULL）。
-  口径实现见 `cloudflare/native-worker/src/version-contract.ts`，它是 `version_contract.py` 的等价移植。
+  口径实现见 `cloudflare/native-worker/src/version-contract.ts`（#67 之后它就是服务端判定权威本体，
+  不再是「Python 的移植」）。
 - **读取侧（`/api/summary` 的 `source_status[].version`、顶层 `version_health`、`/api/health` 的
   `versions`）在 Worker 上仍然缺席**，因此「哪台设备还在跑旧采集器」这个用户结果在生产上仍拿不到。
   卡点是结构性的，不是遗漏：Python 读模型从 `source_reports JOIN collection_runs` 取每个来源的
