@@ -6,9 +6,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ai_usage_widget.storage_sqlite import _ensure_schema
-
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS_DIR = REPO_ROOT / "cloudflare" / "migrations"
 MIGRATION_SQL = MIGRATIONS_DIR / "0001_initial_schema.sql"
@@ -84,6 +81,299 @@ D1_ONLY_TABLE_COLUMNS = {
         # disagree on column order.
         ("collector_version", "TEXT", 0, None, 0),
     ],
+}
+
+
+# Fresh-install schema, deliberately spelled out (#74: replaces the deleted
+# `storage_sqlite._ensure_schema` mirror test). The literal *is* the guard: any
+# schema change must edit this snapshot in the same reviewable diff, otherwise
+# a column added, dropped or retyped in 0001 lands silently. Regenerating this
+# block from 0001 and comparing would be circular and guard nothing.
+# `usage_blocks` is absent on purpose: #91 stopped collection, no reader or
+# writer remains on either side, and 0008 drops the table from deployed D1.
+FRESH_INSTALL_TABLE_COLUMNS = {
+    "ai_accounts": [
+        ('provider', 'TEXT', 1, None, 1),
+        ('account_id', 'TEXT', 1, None, 2),
+        ('account_label', 'TEXT', 1, None, 0),
+        ('display_name', 'TEXT', 0, None, 0),
+        ('subscription', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "collection_runs": [
+        ('id', 'INTEGER', 0, None, 1),
+        ('collected_at', 'TEXT', 1, None, 0),
+        ('timezone', 'TEXT', 1, None, 0),
+        ('collector_version', 'TEXT', 0, None, 0),
+        ('status', 'TEXT', 1, None, 0),
+    ],
+    "limit_windows": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('provider', 'TEXT', 1, None, 2),
+        ('window', 'TEXT', 1, None, 3),
+        ('used_percent', 'REAL', 1, None, 0),
+        ('remaining_percent', 'REAL', 1, None, 0),
+        ('reset_at', 'TEXT', 1, None, 0),
+        ('window_duration_minutes', 'INTEGER', 1, None, 0),
+        ('source_type', 'TEXT', 1, None, 0),
+        ('confidence', 'TEXT', 1, None, 0),
+        ('status', 'TEXT', 1, None, 0),
+        ('observed_at', 'TEXT', 1, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "machines": [
+        ('machine_id', 'TEXT', 0, None, 1),
+        ('machine_name', 'TEXT', 1, None, 0),
+        ('host', 'TEXT', 0, None, 0),
+        ('platform', 'TEXT', 1, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "os_identities": [
+        ('machine_id', 'TEXT', 1, None, 1),
+        ('os_user', 'TEXT', 1, None, 2),
+        ('display_name', 'TEXT', 1, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "source_accuracy": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('agent', 'TEXT', 1, None, 2),
+        ('provenance', 'TEXT', 1, None, 0),
+        ('collector_version', 'TEXT', 0, None, 0),
+        ('parser_schema_version', 'INTEGER', 0, None, 0),
+        ('mode', 'TEXT', 1, None, 0),
+        ('lookback_hours', 'REAL', 0, None, 0),
+        ('coverage_start', 'TEXT', 0, None, 0),
+        ('coverage_end', 'TEXT', 0, None, 0),
+        ('report_digest', 'TEXT', 0, None, 0),
+        ('facts_digest', 'TEXT', 0, None, 0),
+        ('scan_complete', 'INTEGER', 1, '0', 0),
+        ('read_errors', 'INTEGER', 1, '0', 0),
+        ('unresolved_mismatch', 'INTEGER', 1, '0', 0),
+        ('matching_full_scans', 'INTEGER', 1, '0', 0),
+        ('accuracy_status', 'TEXT', 1, None, 0),
+        ('verified_at', 'TEXT', 0, None, 0),
+        ('metadata_json', 'TEXT', 0, None, 0),
+        ('observed_at', 'TEXT', 1, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "source_identities": [
+        ('source_id', 'TEXT', 0, None, 1),
+        ('host', 'TEXT', 0, None, 0),
+        ('machine', 'TEXT', 0, None, 0),
+        ('os_user', 'TEXT', 0, None, 0),
+        ('platform', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "source_report_states": [
+        ('source_id', 'TEXT', 0, None, 1),
+        ('collected_at', 'TEXT', 1, None, 0),
+        ('report_type', 'TEXT', 1, None, 0),
+        ('command', 'TEXT', 1, None, 0),
+        ('status', 'TEXT', 1, None, 0),
+        ('ccusage_version', 'TEXT', 0, None, 0),
+        ('first_period', 'TEXT', 0, None, 0),
+        ('last_period', 'TEXT', 0, None, 0),
+        ('error_type', 'TEXT', 0, None, 0),
+        ('error_message', 'TEXT', 0, None, 0),
+        ('collector_version', 'TEXT', 0, None, 0),
+    ],
+    "source_reports": [
+        ('id', 'INTEGER', 0, None, 1),
+        ('run_id', 'INTEGER', 1, None, 0),
+        ('source_id', 'TEXT', 1, None, 0),
+        ('report_type', 'TEXT', 1, None, 0),
+        ('command', 'TEXT', 1, None, 0),
+        ('status', 'TEXT', 1, None, 0),
+        ('ccusage_version', 'TEXT', 0, None, 0),
+        ('first_period', 'TEXT', 0, None, 0),
+        ('last_period', 'TEXT', 0, None, 0),
+        ('error_type', 'TEXT', 0, None, 0),
+        ('error_message', 'TEXT', 0, None, 0),
+    ],
+    "usage_daily": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('date', 'TEXT', 1, None, 2),
+        ('agent', 'TEXT', 1, None, 3),
+        ('input_tokens', 'INTEGER', 1, '0', 0),
+        ('output_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_creation_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_read_tokens', 'INTEGER', 1, '0', 0),
+        ('total_tokens', 'INTEGER', 1, '0', 0),
+        ('total_cost', 'REAL', 0, None, 0),
+        ('metadata_json', 'TEXT', 0, None, 0),
+        ('raw_json', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "usage_daily_models": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('date', 'TEXT', 1, None, 2),
+        ('agent', 'TEXT', 1, None, 3),
+        ('model_name', 'TEXT', 1, None, 4),
+        ('input_tokens', 'INTEGER', 1, '0', 0),
+        ('output_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_creation_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_read_tokens', 'INTEGER', 1, '0', 0),
+        ('total_tokens', 'INTEGER', 1, '0', 0),
+        ('cost', 'REAL', 0, None, 0),
+        ('raw_json', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "usage_daily_rollups": [
+        ('date', 'TEXT', 1, None, 1),
+        ('bucket_start', 'TEXT', 1, None, 0),
+        ('bucket_end', 'TEXT', 1, None, 0),
+        ('source_id', 'TEXT', 1, None, 2),
+        ('machine_id', 'TEXT', 1, None, 3),
+        ('os_user', 'TEXT', 1, None, 4),
+        ('ai_provider', 'TEXT', 1, None, 5),
+        ('ai_account_id', 'TEXT', 1, None, 6),
+        ('agent', 'TEXT', 1, None, 7),
+        ('client', 'TEXT', 1, None, 8),
+        ('attribution_confidence', 'TEXT', 1, None, 9),
+        ('provenance', 'TEXT', 1, None, 10),
+        ('input_tokens', 'INTEGER', 1, None, 0),
+        ('output_tokens', 'INTEGER', 1, None, 0),
+        ('cache_creation_tokens', 'INTEGER', 1, None, 0),
+        ('cache_read_tokens', 'INTEGER', 1, None, 0),
+        ('reasoning_output_tokens', 'INTEGER', 1, None, 0),
+        ('total_tokens', 'INTEGER', 1, None, 0),
+        ('event_count', 'INTEGER', 1, None, 0),
+        ('session_count', 'INTEGER', 1, None, 0),
+        ('fact_count', 'INTEGER', 1, None, 0),
+    ],
+    "usage_hourly": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('hour', 'TEXT', 1, None, 2),
+        ('agent', 'TEXT', 1, None, 3),
+        ('input_tokens', 'INTEGER', 1, '0', 0),
+        ('output_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_creation_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_read_tokens', 'INTEGER', 1, '0', 0),
+        ('total_tokens', 'INTEGER', 1, '0', 0),
+        ('total_cost', 'REAL', 0, None, 0),
+        ('metadata_json', 'TEXT', 0, None, 0),
+        ('raw_json', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "usage_hourly_facts": [
+        ('fact_id', 'TEXT', 0, None, 1),
+        ('source_id', 'TEXT', 1, None, 0),
+        ('machine_id', 'TEXT', 1, None, 0),
+        ('os_user', 'TEXT', 1, None, 0),
+        ('ai_provider', 'TEXT', 1, None, 0),
+        ('ai_account_id', 'TEXT', 1, None, 0),
+        ('agent', 'TEXT', 1, None, 0),
+        ('client', 'TEXT', 0, None, 0),
+        ('window_start', 'TEXT', 1, None, 0),
+        ('window_end', 'TEXT', 1, None, 0),
+        ('timezone', 'TEXT', 1, None, 0),
+        ('input_tokens', 'INTEGER', 1, '0', 0),
+        ('output_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_creation_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_read_tokens', 'INTEGER', 1, '0', 0),
+        ('reasoning_output_tokens', 'INTEGER', 1, '0', 0),
+        ('total_tokens', 'INTEGER', 1, '0', 0),
+        ('total_cost', 'REAL', 0, None, 0),
+        ('event_count', 'INTEGER', 1, '0', 0),
+        ('session_count', 'INTEGER', 1, '0', 0),
+        ('attribution_confidence', 'TEXT', 1, None, 0),
+        ('provenance', 'TEXT', 1, None, 0),
+        ('account_evidence_json', 'TEXT', 0, None, 0),
+        ('metadata_json', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "usage_hourly_models": [
+        ('fact_id', 'TEXT', 1, None, 1),
+        ('model', 'TEXT', 1, None, 2),
+        ('input_tokens', 'INTEGER', 1, '0', 0),
+        ('output_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_creation_tokens', 'INTEGER', 1, '0', 0),
+        ('cache_read_tokens', 'INTEGER', 1, '0', 0),
+        ('reasoning_output_tokens', 'INTEGER', 1, '0', 0),
+        ('total_tokens', 'INTEGER', 1, '0', 0),
+        ('total_cost', 'REAL', 0, None, 0),
+        ('metadata_json', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "usage_hourly_rollups": [
+        ('bucket_start', 'TEXT', 1, None, 1),
+        ('bucket_end', 'TEXT', 1, None, 0),
+        ('source_id', 'TEXT', 1, None, 2),
+        ('machine_id', 'TEXT', 1, None, 3),
+        ('os_user', 'TEXT', 1, None, 4),
+        ('ai_provider', 'TEXT', 1, None, 5),
+        ('ai_account_id', 'TEXT', 1, None, 6),
+        ('agent', 'TEXT', 1, None, 7),
+        ('client', 'TEXT', 1, None, 8),
+        ('attribution_confidence', 'TEXT', 1, None, 9),
+        ('provenance', 'TEXT', 1, None, 10),
+        ('input_tokens', 'INTEGER', 1, None, 0),
+        ('output_tokens', 'INTEGER', 1, None, 0),
+        ('cache_creation_tokens', 'INTEGER', 1, None, 0),
+        ('cache_read_tokens', 'INTEGER', 1, None, 0),
+        ('reasoning_output_tokens', 'INTEGER', 1, None, 0),
+        ('total_tokens', 'INTEGER', 1, None, 0),
+        ('event_count', 'INTEGER', 1, None, 0),
+        ('session_count', 'INTEGER', 1, None, 0),
+        ('fact_count', 'INTEGER', 1, None, 0),
+    ],
+}
+
+FRESH_INSTALL_CREATED_INDEXES = {
+    "ai_accounts": {
+    },
+    "collection_runs": {
+        "idx_collection_runs_collected_at": (0, 0, ('collected_at',)),
+    },
+    "limit_windows": {
+    },
+    "machines": {
+    },
+    "os_identities": {
+    },
+    "source_accuracy": {
+        "idx_source_accuracy_status": (0, 0, ('accuracy_status', 'source_id', 'agent')),
+    },
+    "source_identities": {
+    },
+    "source_report_states": {
+    },
+    "source_reports": {
+        "idx_source_reports_run_id": (0, 0, ('run_id',)),
+    },
+    "usage_daily": {
+    },
+    "usage_daily_models": {
+    },
+    "usage_daily_rollups": {
+        "idx_usage_daily_rollups_date": (0, 0, ('date',)),
+    },
+    "usage_hourly": {
+    },
+    "usage_hourly_facts": {
+        "idx_usage_hourly_facts_account": (0, 0, ('ai_provider', 'ai_account_id', 'window_start')),
+        "idx_usage_hourly_facts_agent": (0, 0, ('agent', 'window_start')),
+        "idx_usage_hourly_facts_machine_user": (0, 0, ('machine_id', 'os_user', 'window_start')),
+        "idx_usage_hourly_facts_source": (0, 0, ('source_id', 'window_start')),
+        "idx_usage_hourly_facts_unique_hour": (1, 0, ('source_id', 'agent', 'client', 'window_start', 'window_end', 'ai_provider', 'ai_account_id', 'attribution_confidence', 'provenance')),
+        "idx_usage_hourly_facts_window": (0, 0, ('window_start', 'window_end')),
+    },
+    "usage_hourly_models": {
+    },
+    "usage_hourly_rollups": {
+        "idx_usage_hourly_rollups_bucket": (0, 0, ('bucket_start',)),
+    },
 }
 
 
@@ -182,40 +472,40 @@ def _auto_indexes(conn: sqlite3.Connection, table: str) -> dict[str, tuple]:
 
 
 class TestD1SchemaMigration(unittest.TestCase):
-    def test_initial_d1_migration_matches_sqlite_schema(self) -> None:
+    maxDiff = None
+
+    def test_fresh_install_schema_matches_declared_snapshot(self) -> None:
+        """0001 落成的表、列与显式索引必须逐项等于声明的快照（#74 自立 schema 守卫）。
+
+        接替已删除的 `storage_sqlite._ensure_schema` 镜像比对：比对基准从「另一份
+        实现」换成「本文件里的显式字面量」，列名、类型、NOT NULL、默认值、主键
+        位次、索引定义任何一项漂移都会红，且修复必须同时改快照——schema 变更
+        从此必须是同一个 diff 里看得见的两处改动。
+        """
         self.assertTrue(MIGRATION_SQL.exists(), f"Missing migration: {MIGRATION_SQL}")
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            sqlite_path = Path(tmpdir) / "sqlite.sqlite"
-            d1_path = Path(tmpdir) / "d1.sqlite"
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
+            actual_tables = _user_tables(conn)
+            actual_columns = {table: _table_columns(conn, table) for table in actual_tables}
+            actual_indexes = {table: _created_indexes(conn, table) for table in actual_tables}
 
-            with sqlite3.connect(sqlite_path) as conn:
-                _ensure_schema(conn)
-                expected_tables = _user_tables(conn)
-                expected_columns = {table: _table_columns(conn, table) for table in expected_tables}
-                expected_indexes = {table: _created_indexes(conn, table) for table in expected_tables}
-
-            with sqlite3.connect(d1_path) as conn:
-                conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
-                actual_tables = _user_tables(conn)
-                actual_columns = {table: _table_columns(conn, table) for table in actual_tables}
-                actual_indexes = {table: _created_indexes(conn, table) for table in actual_tables}
-
-            canonical_actual_tables = [table for table in actual_tables if table not in D1_ONLY_TABLE_COLUMNS]
-            canonical_actual_columns = {
-                table: columns for table, columns in actual_columns.items() if table not in D1_ONLY_TABLE_COLUMNS
-            }
-            canonical_actual_indexes = {
-                table: indexes for table, indexes in actual_indexes.items() if table not in D1_ONLY_TABLE_COLUMNS
-            }
-
-            self.assertEqual(canonical_actual_tables, expected_tables)
-            self.assertEqual(canonical_actual_columns, expected_columns)
-            self.assertEqual(canonical_actual_indexes, expected_indexes)
-            for table, expected_columns in D1_ONLY_TABLE_COLUMNS.items():
-                self.assertIn(table, actual_tables)
-                self.assertEqual(actual_columns[table], expected_columns)
-                self.assertEqual(actual_indexes[table], {})
+        self.assertEqual(actual_tables, sorted(FRESH_INSTALL_TABLE_COLUMNS))
+        self.assertEqual(
+            actual_columns,
+            {table: [tuple(col) for col in cols] for table, cols in FRESH_INSTALL_TABLE_COLUMNS.items()},
+        )
+        self.assertEqual(actual_indexes, FRESH_INSTALL_CREATED_INDEXES)
+        # 结构下限：快照必须仍然覆盖一个真实规模的 schema，
+        # 「快照被清空 + schema 被清空」不许产生同一个绿。
+        self.assertGreaterEqual(len(FRESH_INSTALL_TABLE_COLUMNS), 16)
+        self.assertGreaterEqual(sum(len(cols) for cols in FRESH_INSTALL_TABLE_COLUMNS.values()), 200)
+        self.assertIn("usage_hourly_facts", FRESH_INSTALL_TABLE_COLUMNS)
+        self.assertNotIn(
+            "usage_blocks",
+            FRESH_INSTALL_TABLE_COLUMNS,
+            "usage_blocks 已随 #74 删除（#91 停采后零读零写）；谁要复活它必须走新决策",
+        )
 
     def test_full_migration_chain_matches_fresh_schema(self) -> None:
         """A brand-new D1 gets 0001 alone in this repo's fresh-install path, while a
@@ -266,8 +556,9 @@ class TestD1SchemaMigration(unittest.TestCase):
         EXISTS, and the chain replays 0001 first, so a wrong backfill in 0001 is
         inherited by the chain and both paths agree on the same wrong index.
         (Proven by mutation: renaming the indexed column in 0001 leaves the parity
-        test green.) It is also independent of the storage_sqlite.py mirror, which
-        is frozen and slated for deletion, so the invariant must not rest on it.
+        test green.) It is also independent of the deleted
+        storage_sqlite.py mirror (#74), so the invariant rests on nothing but
+        the migrations themselves.
 
         Method: build from 0001 alone, drop the indexes the migration owns, replay
         that migration, and compare -- the owning migration is the source of truth

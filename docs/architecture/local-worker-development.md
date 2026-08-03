@@ -126,12 +126,9 @@ Token 是 `wrangler.local.toml` 里的 `AIUSAGE_TOKEN = "contract-test-token"`�
 
 ## 与 Python 服务端的关系
 
-`server.py` 那条链已按 #67 决策**冻结**，见 `.claude/rules/architecture.md`「Python 服务端冻结」。
-它当前仍能跑（`test_web_server.py` 等仍绿），但：
-
-- **不要**在它上面开发新功能或新字段——新字段的唯一去处是 `cloudflare/native-worker/src/*.ts`
-- **不要**因为「Worker 加了、顺手同步一份」而改它
-- 它随 #74 删除
+`server.py` 那条链已按 #67 决策于 **#74 删除**（2026-08-03，历史代码见 tag
+`pre-server-deletion-eee4f35`）。服务端唯一实现就是本文档描述的 Worker；
+新字段的唯一去处是 `cloudflare/native-worker/src/*.ts` + `cloudflare/migrations/`。
 
 ## 已知限制
 

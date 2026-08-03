@@ -84,8 +84,8 @@
 
 - 每个 OS 用户只在自己的账户上下文运行采集；`wang` 不读 `/home/ubuntu`；
   不从 Mac 读取、同步或解析远程 `~/.claude`、`~/.codex` 原始日志目录。
-- 汇聚端不通过 SSH 拉取，只接受设备 push 的结构化 payload。`collector.py` / SSH 是 legacy，
-  新功能不得依赖。
+- 汇聚端不通过 SSH 拉取，只接受设备 push 的结构化 payload。legacy 的 `collector.py` /
+  SSH 拉取路径已随 #74 删除，不得复活。
 - 官方额度：只有 `official == true && confidence == "observed" && status == "ok"` 才能当可信官方额度
   展示。`ccusage daily` / `blocks` 是本地估算，**不能伪装成官方额度**；`estimated` / `missing` /
   `unsupported` 必须降级展示。

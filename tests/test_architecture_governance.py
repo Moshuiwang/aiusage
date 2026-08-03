@@ -38,11 +38,26 @@ COLLECTOR_MODULE_GLOBS = (
     "deploy_*.py",
 )
 
-#: 服务端读模型与 HTTP 编排。按 #67 决策服务端权威已转移到 Worker + D1，
-#: 这些 Python 模块已冻结并随 #74 删除。采集端一旦 import 它们，删除就会连带打断采集端——
-#: 那正是「Python / TS / 半迁移三种状态并存」最难收拾的形态。
+#: 服务端读模型与 HTTP 编排的模块名。#67 决策服务端权威转移到 Worker + D1，
+#: 这些 Python 模块**已随 #74 删除**。守卫保留：谁在采集端 import 这些名字，
+#: 要么是想复活服务端影子实现，要么是半迁移残留——两种都要当场红。
 SERVER_SIDE_MODULES = frozenset(
-    {"snapshot_builder", "mobile_summary", "server_services", "server"}
+    {
+        "server",
+        "server_services",
+        "ingest",
+        "snapshot_builder",
+        "snapshot_filters",
+        "snapshot_periods",
+        "snapshot_source_health",
+        "snapshot_trends",
+        "mobile_summary",
+        "normalize",
+        "storage_sqlite",
+        "storage_json",
+        "collector",
+        "timeutil",
+    }
 )
 
 #: 包名，用于识别 `from ai_usage_widget.snapshot_builder import ...` 这类**绝对导入**。
@@ -247,12 +262,12 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
     这条边界的实际含义：**Python 服务端可以被删掉，而采集端一行不受影响。**
 
     #67 决策服务端收敛为 Worker + D1 单实现，`snapshot_builder` / `mobile_summary` /
-    `server_services` / `server` 已冻结并随 #74 删除。而采集端要跑在用户的 Mac / Linux 上
+    `server_services` / `server` 已随 #74 删除。而采集端要跑在用户的 Mac / Linux 上
     读本机 ccusage、mswusage 与 OS 用户上下文——Worker 沙箱结构上做不到，所以它永远是
     Python。两者之间只应有 HTTP payload 这一条边。
 
-    一旦采集端 import 了服务端模块，#74 的删除就会连带打断采集端，而那时人会倾向于
-    「先把服务端留着」——于是三种状态长期并存，正是决策要消灭的东西。
+    删除后本守卫依然在岗：这些名字若再次成为采集端依赖（无论是复活影子实现
+    还是新建同名模块），当场红，而不是等到 ImportError 在生产设备上炸。
     """
 
     def test_no_collector_module_imports_the_server_read_model(self) -> None:
@@ -289,6 +304,9 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
             ("相对 from 包 import 模块", "from . import snapshot_builder"),
             ("绝对 import mobile_summary", "import ai_usage_widget.mobile_summary"),
             ("相对 import server_services", "from .server_services import build_health_response"),
+            ("已删存储层 storage_sqlite", "from .storage_sqlite import write_sqlite"),
+            ("已删 legacy collector", "import ai_usage_widget.collector"),
+            ("已删归一化 normalize", "from ai_usage_widget.normalize import normalize_ingest_request"),
         )
         for label, injected in mutations:
             with self.subTest(mutation=label):
@@ -306,21 +324,24 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
             "from .config import DeviceConfig\n"
             "from . import models\n"
             "from ai_usage_widget.version_contract import local_collector_release\n"
-            "import ai_usage_widget.timeutil\n"
+            "import ai_usage_widget.timezones\n"
         )
         self.assertEqual(_server_import_violations(ast.parse(benign)), [])
 
 
 class TestArchitectureGovernance(unittest.TestCase):
     def test_architecture_doc_records_current_owners_and_legacy_boundary(self) -> None:
+        # #74 之后架构总文档必须记录 Worker 侧的当前 owner 与「Python 服务端已删除」
+        # 这一事实本身——地图指向已删代码比没有地图更糟。
         text = (ROOT / "docs" / "architecture" / "architecture.md").read_text(encoding="utf-8")
         normalized = text.casefold()
 
         for required in [
             "DevicePusher",
-            "server_services.py",
-            "snapshot_builder.py",
-            "mobile_summary.py",
+            "write-model.ts",
+            "read-model.ts",
+            "mobile-summary.ts",
+            "已随 #74 删除",
         ]:
             with self.subTest(required=required):
                 self.assertIn(required, text)

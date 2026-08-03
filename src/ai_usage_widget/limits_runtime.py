@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Protocol
 
 from .limits import LimitContractError, LimitWindow, parse_limit_window
-from .storage_sqlite import write_limit_windows
 
 
 class LimitsProvider(Protocol):
@@ -19,14 +18,13 @@ class LimitsProvider(Protocol):
 class ProviderRuntimeResult:
     provider: str
     status: str
-    windows_written: int
+    windows_collected: int
     error_type: str | None = None
 
 
 @dataclass(frozen=True)
 class LimitsRuntimeResult:
     success: bool
-    windows_written: int
     provider_results: list[ProviderRuntimeResult]
     windows: list[LimitWindow]
 
@@ -48,15 +46,19 @@ class FixtureLimitsProvider:
 
 
 class LimitsRuntime:
+    """采集官方额度窗口，只在内存里返回结果。
+
+    PM-2（2026-08-03）：本地 SQLite 落库已停止——#72 之后仓库内零读取方，
+    云端 D1 是唯一正本。上报走 `push-limits`（直接推 `result.windows`）。
+    """
+
     def __init__(
         self,
         *,
-        db_path: str,
         timezone: str,
         providers: Dict[str, LimitsProvider],
         now_provider=None,
     ) -> None:
-        self.db_path = db_path
         self.timezone = timezone
         self.providers = providers
         self.now_provider = now_provider or _default_now
@@ -65,7 +67,6 @@ class LimitsRuntime:
         self,
         *,
         provider_names: list[str],
-        dry_run: bool = False,
     ) -> LimitsRuntimeResult:
         if not provider_names:
             raise ValueError("no limits providers enabled")
@@ -88,7 +89,7 @@ class LimitsRuntime:
                     ProviderRuntimeResult(
                         provider=provider_name,
                         status="provider_failed",
-                        windows_written=0 if dry_run else len(windows),
+                        windows_collected=len(windows),
                         error_type="provider_failed",
                     )
                 )
@@ -100,24 +101,13 @@ class LimitsRuntime:
                 ProviderRuntimeResult(
                     provider=provider_name,
                     status="ok" if provider_available else "unavailable",
-                    windows_written=0 if dry_run else len(windows),
+                    windows_collected=len(windows),
                     error_type=None if provider_available else "provider_unavailable",
                 )
             )
 
-        if dry_run:
-            return LimitsRuntimeResult(
-                success=all(result.status == "ok" for result in provider_results),
-                windows_written=0,
-                provider_results=provider_results,
-                windows=all_windows,
-            )
-
-        write_limit_windows(self.db_path, all_windows, seen_at=seen_at)
-
         return LimitsRuntimeResult(
             success=all(result.status == "ok" for result in provider_results),
-            windows_written=len(all_windows),
             provider_results=provider_results,
             windows=all_windows,
         )

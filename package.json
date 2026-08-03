@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cf:pages:deploy": "wrangler pages deploy src/ai_usage_widget/static --project-name aiusage-dashboard",
+    "cf:pages:deploy": "wrangler pages deploy cloudflare/native-worker/static --project-name aiusage-dashboard",
     "cf:worker:deploy": "wrangler deploy",
     "cf:worker:dev": "wrangler dev --local",
     "cf:native:test": "vitest run --config cloudflare/native-worker/vitest.config.ts",

@@ -371,7 +371,7 @@ class D1LegacyBackfillTest(unittest.TestCase):
 
     def _archived_snapshot(self) -> dict[str, list[tuple[object, ...]]]:
         result: dict[str, list[tuple[object, ...]]] = {}
-        for table in ("usage_daily", "usage_daily_models", "usage_hourly", "usage_blocks"):
+        for table in ("usage_daily", "usage_daily_models", "usage_hourly"):
             result[table] = [
                 tuple(row)
                 for row in self.conn.execute(f"SELECT * FROM {table} ORDER BY 1, 2, 3").fetchall()

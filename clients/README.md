@@ -8,7 +8,7 @@
 - `android/`：目标落点是 Android App 和 Android Widget，复用 `/api/mobile/summary`，不重新定义 usage / limits 口径。
 - `macos/`：目标落点是菜单栏或轻量桌面入口，不再把 macOS Widget 作为新产品主线。
 - `windows/`：目标落点是托盘或轻量桌面入口，完整体验优先打开 Web dashboard。
-- `web/`：目标落点是 Web dashboard；现有生产静态资源暂时仍在 `src/ai_usage_widget/static`。
+- `web/`：目标落点是 Web dashboard；现有生产静态资源在 `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管）。
 
 迁移规则：
 

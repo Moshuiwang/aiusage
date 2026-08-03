@@ -8,7 +8,7 @@
 
 - **Device push pipeline**：每台设备在自己的账户上下文运行本机 Python pusher，读取本机 Codex / Claude / `ccusage` 结构化用量并主动 push。
 - **Usage Ledger**：本机只上传去敏后的小时用量事实，不上传 `.codex` / `.claude` 原始日志、prompt、response、tool output 或原始路径；服务端负责去重、入账和聚合。
-- **Canonical store**：生产 canonical store 是 Cloudflare D1（SQLite-compatible serverless SQL）；本地 SQLite 只作为 legacy/local compatibility 和迁移参考。
+- **Canonical store**：生产 canonical store 是 Cloudflare D1（SQLite-compatible serverless SQL）。#74 起服务端没有本地 SQLite；采集端唯一的本地库是 outbox 缓冲（`collector_store.py`）。
 - **Web presentation**：Web dashboard 是当前完整查看入口；CLI report 只读派生快照。
 - **Client direction**：后续客户端按 `clients/` 分层，iPhone/iOS Widget 是已落地方向，macOS 走菜单栏或轻量桌面入口，Windows 走托盘或轻量桌面入口，Android 复用移动端摘要合同。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
@@ -38,7 +38,7 @@ packages/
 迁移期保留现有实现路径：
 
 - iOS Swift Package / Xcode 工程暂时仍在 `mobile/ios` 和 `mobile/ios-xcode`。
-- Web dashboard 静态资源暂时仍在 `src/ai_usage_widget/static`。
+- Web dashboard 静态资源在 `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管）。
 - legacy macOS Widget 暂时仍在 `widget/macos` 和 `widget/macos-xcode`，只作历史兼容。
 
 不要为了“目录好看”直接移动现有 iOS 或 Web 文件；迁移必须单独开任务包，先补构建或路由验证。
@@ -92,8 +92,8 @@ scripts/dev_worker.sh --seed      # 应用 migrations + 灌示例数据 + 起服
 需要 Node >= 22。完全离线可用（首次 `npm ci` 之后）。
 详见 [`docs/architecture/local-worker-development.md`](docs/architecture/local-worker-development.md)。
 
-> Python 服务端（`cli server`）已按 #67 决策**冻结**，不再是开发入口，随 #74 删除。
-> 采集端仍是 Python，照常开发。
+> Python 服务端（`cli server` 及整条读模型路径）已按 #67 决策于 #74 **删除**，
+> 服务端唯一实现是 Cloudflare Worker + D1。采集端仍是 Python，照常开发。
 
 只跑 Python 测试：
 
@@ -101,16 +101,8 @@ scripts/dev_worker.sh --seed      # 应用 migrations + 灌示例数据 + 起服
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 ```
 
-Legacy/local compatibility：本地采集 daily usage：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
-  --config config/sources.local.json \
-  --output data/latest.json \
-  --sqlite data/usage.sqlite
-```
-
-当前 V2 推荐主线是 `DevicePusher push -> /ingest`。上面的 `collect` 命令只作为 legacy/local compatibility 和本地验证入口，不作为新部署主路径。
+> legacy 的 `cli collect`（本地采集写 `latest.json` / 本地 SQLite）已随 #74 删除；
+> 采集主线是 `DevicePusher push -> /ingest`。
 
 HTTP push 终端侧命令：
 
@@ -143,21 +135,8 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli outbox-drain  --config config/sour
 
 当前 macOS 本机生产上报由 LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒触发一次，实际运行 `/usr/bin/python3 -m ai_usage_widget.cli push`。它把最近窗口内有用量的 Codex / Claude 小时桶上报到 `https://aiusage.chunbai.com/ingest`，服务端按同一来源、账号、agent 和小时窗口 upsert；重复上报不会累加成假用量。
 
-服务端 SQLite 在线备份：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli backup \
-  --db data/usage.sqlite \
-  --backup-dir data/backups \
-  --keep 14 \
-  --max-total-mb 512
-```
-
-服务端健康检查：
-
-```bash
-curl -H "Authorization: Bearer <token>" http://127.0.0.1:8000/api/health
-```
+生产健康检查走 `verify-cloud health`（下方）或
+`curl -H "Authorization: Bearer <token>" https://aiusage.chunbai.com/api/health`。
 
 云端数据只读核对（无图形界面的环境用它自行判定数值对不对）：
 
@@ -183,12 +162,11 @@ official / confidence / status）、`health`（各来源最后上报时间、新
 它证明的是**数据正确**，不证明**用户看得到**：Mac Popover / iPhone / Watch 的
 界面验收不能用它替代。
 
-离线 fixture 采集 official limits 并写入 SQLite：
+离线 fixture 采集 official limits（只打印，不落任何本地库——PM-2，云端 D1 是唯一正本）：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
-  --provider-fixture tests/fixtures/limits_runtime_fixture.json \
-  --sqlite data/usage.sqlite
+  --provider-fixture tests/fixtures/limits_runtime_fixture.json
 ```
 
 使用本地 limits config 采集 official limits：
@@ -196,14 +174,6 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --limits-config config/limits.local.json
-```
-
-部署前 dry-run 验证 limits config，不写 SQLite / latest：
-
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
-  --limits-config config/limits.local.json \
-  --dry-run
 ```
 
 只检查 limits config 并输出脱敏 provider plan：
@@ -214,7 +184,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --check-config
 ```
 
-真实 smoke 前做本机 readiness 诊断，不读取 auth 内容、不写 SQLite / latest：
+真实 smoke 前做本机 readiness 诊断，不读取 auth 内容：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
@@ -222,7 +192,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --doctor
 ```
 
-`config/limits.local.json` 支持同一 provider 的多个账号实例。为每个实例设置稳定的 `source_id`，SQLite / snapshot 会用它区分账号，避免两个 Claude 账号互相覆盖。Claude CLI provider 会先解析 `/usage` 文本；如果当前 Claude Code 只返回订阅说明，会回退读取同一配置目录下的 `active_limits.json` 当前额度 cache；如果 cache 也不存在，会执行一个极短 probe 来解析 session limit reset 文本，此时只生成 session window，不推断 weekly window。第二个 Claude Code 配置目录可以通过脱敏的 `env` map 表达，例如：
+`config/limits.local.json` 支持同一 provider 的多个账号实例。为每个实例设置稳定的 `source_id`，云端 D1 会用它区分账号，避免两个 Claude 账号互相覆盖。Claude CLI provider 会先解析 `/usage` 文本；如果当前 Claude Code 只返回订阅说明，会回退读取同一配置目录下的 `active_limits.json` 当前额度 cache；如果 cache 也不存在，会执行一个极短 probe 来解析 session limit reset 文本，此时只生成 session window，不推断 weekly window。第二个 Claude Code 配置目录可以通过脱敏的 `env` map 表达，例如：
 
 ```json
 {
@@ -242,8 +212,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider codex \
-  --codex-auth-file /path/to/codex/auth.json \
-  --sqlite data/usage.sqlite
+  --codex-auth-file /path/to/codex/auth.json
 ```
 
 显式指定 Codex app-server RPC 采集 rate limits：
@@ -252,8 +221,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider codex \
   --codex-rpc \
-  --codex-rpc-sock /path/to/codex-app-server.sock \
-  --sqlite data/usage.sqlite
+  --codex-rpc-sock /path/to/codex-app-server.sock
 ```
 
 显式指定 Claude auth 文件和 Usage API URL 采集 OAuth usage：
@@ -262,8 +230,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider claude \
   --claude-auth-file /path/to/claude/auth.json \
-  --claude-usage-url https://example.invalid/claude/usage \
-  --sqlite data/usage.sqlite
+  --claude-usage-url https://example.invalid/claude/usage
 ```
 
 显式指定 Claude CLI `/usage` 采集 usage：
@@ -271,8 +238,7 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli collect-limits \
   --provider claude \
-  --claude-cli \
-  --sqlite data/usage.sqlite
+  --claude-cli
 ```
 
 > `sync-widget` 与 `collect --sync-widget` 已于 #72 移除。它们把 `latest.json` 同步进
@@ -315,7 +281,7 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 - [architecture/interfaces.md](./docs/architecture/interfaces.md)：当前 HTTP / summary / mobile 接口索引。
 - [product-brief.md](./docs/product-brief.md)：产品定位、能力域、阶段边界和关键技术决策。
 - [archive/INDEX.md](./docs/archive/INDEX.md)：历史设计稿和 review 记录索引。
-- [operations.md](./docs/operations.md)：个人 Ingest 服务端运维、配置与备份文档。
+- [operations-python-server.md](./docs/archive/legacy/operations-python-server.md)：已删除的 Python Ingest 服务端历史运维文档（#74 归档）。
 - [schedulers.md](./docs/schedulers.md)：各平台终端定时任务配置文档。
 - [subscription-usage-source.md](./docs/subscription-usage-source.md)：limits/quota 数据源方向。
 

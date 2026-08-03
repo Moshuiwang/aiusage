@@ -14,7 +14,8 @@ DAILY_PROVENANCE = "historical_ccusage_fallback_v1"
 HOURLY_PROVENANCE = "legacy_hourly_archive_backfill_v1"
 MIN_START_DATE = "2026-05-18"
 MISSING_ACCOUNT_REASON = "missing account requires an explicit identity map"
-LEGACY_TABLES = ("usage_daily", "usage_daily_models", "usage_hourly", "usage_blocks")
+# usage_blocks 已随 #74 删除（0008）：#91 停采后零读零写，导出库不再含该表。
+LEGACY_TABLES = ("usage_daily", "usage_daily_models", "usage_hourly")
 LEDGER_TABLES = (
     "usage_hourly_facts",
     "usage_hourly_models",

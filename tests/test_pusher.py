@@ -538,7 +538,7 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
     # `test_pusher_sends_full_ccusage_blocks_report_when_available` 已随 #91 删除：
     # 采集端不再跑 `ccusage blocks`，也不再上报 `ccusage_blocks_report`。
     # 停采守卫在 tests/test_collector_payload_contract.py（DROPPED_LEGACY_FIELDS +
-    # OK 场景命令序列），向后兼容探针见同文件 TestDroppedLegacyFieldIsIgnoredByBothImplementations。
+    # OK 场景命令序列），向后兼容探针的有效性守卫见同文件 TestDroppedLegacyFieldProbesStayValid（服务端行为半边在 ingest.test.ts）。
 
     def test_pusher_ccusage_failure(self) -> None:
         """测试 ccusage 命令执行失败时仍会上报 source 失败状态"""

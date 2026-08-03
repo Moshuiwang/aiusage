@@ -209,6 +209,21 @@ class TestVerifyScope(unittest.TestCase):
         self.assertIn("worker=run", out, out)
         self.assertIn("python=run", out, out)
 
+    def test_worker_owned_verify_cloud_fixture_runs_worker(self) -> None:
+        """改 `tests/fixtures/verify_cloud/` 下的 fixture 必须跑 Worker 测试。
+
+        #74 删除 Python 读模型后，这批 fixture 的 owner 绑定守卫是
+        `verify-cloud-fixtures.test.ts`（mobile DTO 与版本块由 Worker owner 现算比对），
+        但 fixture 路径不在 `cloudflare/` 下。判据漏掉该前缀时，单独手改 fixture
+        会让唯一的防手写守卫被静默跳过。
+        """
+        path = self.repo / "tests" / "fixtures" / "verify_cloud" / "healthy" / "summary.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n", encoding="utf-8")
+        out = self._explain()
+        self.assertIn("worker=run", out, out)
+        self.assertIn("python=run", out, out)
+
     def test_worker_owned_macos_fixture_runs_worker(self) -> None:
         """改 macOS owner fixture 必须跑 Worker 测试。
 

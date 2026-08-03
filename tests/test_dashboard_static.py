@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STATIC = ROOT / "src" / "ai_usage_widget" / "static"
+STATIC = ROOT / "cloudflare" / "native-worker" / "static"
 
 
 def _read(name: str) -> str:

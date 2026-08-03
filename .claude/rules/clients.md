@@ -4,7 +4,7 @@ paths:
   - "clients/**"
   - "widget/**"
   - "packages/**"
-  - "src/ai_usage_widget/static/**"
+  - "cloudflare/native-worker/static/**"
 ---
 
 # 客户端目录现状（迁移期，勿擅自搬）
@@ -14,7 +14,7 @@ paths:
 | 内容 | 当前位置 | 目标落点 |
 | --- | --- | --- |
 | iOS App / Widget | `mobile/ios`、`mobile/ios-xcode` | `clients/ios` |
-| Web dashboard 静态资源 | `src/ai_usage_widget/static` | `clients/web` |
+| Web dashboard 静态资源 | `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管） | `clients/web` |
 | macOS 菜单栏 | `clients/macos` | `clients/macos` |
 | legacy macOS Widget | `widget/macos`、`widget/macos-xcode` | 仅历史兼容，**非后续主线** |
 

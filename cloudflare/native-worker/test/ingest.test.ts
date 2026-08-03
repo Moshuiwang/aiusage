@@ -106,7 +106,6 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(counts.usage_daily).toBe(0);
     expect(counts.usage_daily_models).toBe(0);
     expect(counts.usage_hourly).toBe(0);
-    expect(counts.usage_blocks).toBe(0);
   });
 
   it("keeps repeated ingest payload batches idempotent without token or source health drift", async () => {
@@ -156,12 +155,6 @@ describe.sequential("native TS Worker write API parity", () => {
           source_id, hour, agent, input_tokens, output_tokens, cache_creation_tokens,
           cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
         ) VALUES ('archive-source', '2026-01-01T00:00:00+08:00', 'codex', 1, 2, 3, 4, 10, 0, '2026-01-01', '2026-01-01')
-      `),
-      db.prepare(`
-        INSERT INTO usage_blocks (
-          source_id, start_time, end_time, agent, input_tokens, output_tokens,
-          cache_creation_tokens, cache_read_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
-        ) VALUES ('archive-source', '2026-01-01T00:00:00+08:00', '2026-01-01T01:00:00+08:00', 'codex', 1, 2, 3, 4, 10, 0, '2026-01-01', '2026-01-01')
       `),
     ]);
     const before = await archivedLegacyRows(db);
@@ -411,7 +404,6 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(counts.usage_daily).toBe(0);
     expect(counts.usage_daily_models).toBe(0);
     expect(counts.usage_hourly).toBe(0);
-    expect(counts.usage_blocks).toBe(0);
     expect(counts.usage_hourly_facts).toBeGreaterThanOrEqual(largePayloads.length * 72);
     expect(counts.collection_runs).toBe(largePayloads.length);
     expect(counts.source_reports).toBe(largePayloads.length);
@@ -821,7 +813,6 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(counts.usage_daily).toBe(0);
     expect(counts.usage_daily_models).toBe(0);
     expect(counts.usage_hourly).toBe(0);
-    expect(counts.usage_blocks).toBe(0);
   });
 
   it("收下采集端上报的采集失败 payload，并把失败原因记进来源健康", async () => {
@@ -921,7 +912,7 @@ describe.sequential("native TS Worker write API parity", () => {
 
   it("老版本采集端仍在发的 ccusage_daily_status 被当未知字段忽略：不报错、不落库", async () => {
     // 跨实现一致性的 Worker 半边。Python 半边是
-    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`，
+    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldProbesStayValid`，
     // 读的是同一份探针文件、断言同一组可观测结果。
     //
     // 证明方式不是「返回了 200 就算忽略」——那太弱：字段完全可能被解析后写进某张表。
@@ -970,10 +961,11 @@ describe.sequential("native TS Worker write API parity", () => {
   });
 
   it("老版本采集端仍在发的 ccusage_blocks_report 被当未知字段忽略：不报错、不解析、不落库", async () => {
-    // #91 停采 blocks 后的跨实现一致性，Worker 半边。Python 半边是
-    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldIsIgnoredByBothImplementations`，
-    // 读的是同一份探针文件、断言同一组可观测结果。结构与上面 #78 那条同构，
-    // 区别只在场景：blocks 子进程只有 ccusage daily 成功后才会跑，所以探针钉在 ok 场景。
+    // #91 停采 blocks 后的行为守卫。#74 删除 Python ingest 后本用例是唯一服务端半边；
+    // 探针自身的有效性（基座不带该字段、场景钉死）由
+    // `tests/test_collector_payload_contract.py::TestDroppedLegacyFieldProbesStayValid` 守。
+    // 结构与上面 #78 那条同构，区别只在场景：blocks 子进程只有 ccusage daily
+    // 成功后才会跑，所以探针钉在 ok 场景。
     const probe = JSON.parse(await readFile(legacyBlocksProbePath, "utf8")) as {
       field: string;
       scenario: string;
@@ -1024,12 +1016,6 @@ describe.sequential("native TS Worker write API parity", () => {
       expect(await readLegacyProbeState(), `形状 ${JSON.stringify(shape)} 改变了落库结果`).toEqual(cleanState);
     }
 
-    // 4. usage_blocks 表为空。据实说明这条的强度：write-model.ts 从来就没有写入
-    //    usage_blocks 的代码路径，所以它对本次摘除是恒真的，单独不构成证据；
-    //    真正会红的守卫是上面的 declared 断言（重新声明即红）与形状回放（恢复
-    //    isRecord 校验即 400 红）。留着它只为把「该表是只读归档」的口径写成可执行的。
-    const counts = await tableCounts();
-    expect(counts.usage_blocks).toBe(0);
   });
 
   it("采集端发出的每个顶层字段都必须是 Worker 已声明并解析的 ingest 字段", async () => {
@@ -1139,8 +1125,8 @@ describe.sequential("native TS Worker write API parity", () => {
       reports: await read("SELECT DISTINCT source_id, status, error_type, error_message FROM source_reports ORDER BY source_id"),
       accuracy: await read("SELECT source_id, agent, provenance, facts_digest, accuracy_status FROM source_accuracy ORDER BY source_id, agent"),
       identities: await read("SELECT source_id, host, machine, os_user, platform FROM source_identities ORDER BY source_id"),
-      // #91：blocks 快照的天然落点。字段真被重新解析并持久化，第一个变的就是这张表。
-      usageBlocks: await read("SELECT source_id, start_time, end_time, agent, total_tokens FROM usage_blocks ORDER BY source_id, start_time"),
+      // #91 时这里还比对 usage_blocks 快照；#74 已删表（0008），字段若被重新解析并
+      // 持久化，会先撞上「表不存在」或落进上面这些仍在比对的表里。
     };
   }
 
@@ -1259,7 +1245,6 @@ describe.sequential("native TS Worker write API parity", () => {
       "usage_daily",
       "usage_daily_models",
       "usage_hourly",
-      "usage_blocks",
       "source_identities",
       "machines",
       "os_identities",
@@ -1279,7 +1264,7 @@ describe.sequential("native TS Worker write API parity", () => {
 
   async function archivedLegacyRows(db: D1Database): Promise<Record<string, unknown[]>> {
     const rows: Record<string, unknown[]> = {};
-    for (const table of ["usage_daily", "usage_daily_models", "usage_hourly", "usage_blocks"]) {
+    for (const table of ["usage_daily", "usage_daily_models", "usage_hourly"]) {
       const result = await db.prepare(`SELECT * FROM ${table} ORDER BY 1, 2, 3, 4`).all();
       rows[table] = result.results ?? [];
     }
@@ -1418,7 +1403,6 @@ async function resetDatabase(db: D1Database): Promise<void> {
     "machines",
     "limit_windows",
     "source_identities",
-    "usage_blocks",
     "usage_hourly",
     "usage_daily_models",
     "usage_daily",

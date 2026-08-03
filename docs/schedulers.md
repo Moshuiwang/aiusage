@@ -8,16 +8,9 @@
 
 ## 1. 定时任务启动命令基线
 
-各平台定时调度底层调用的 Python 推送命令为：
+> legacy 的 `cli collect`（本地采集写 `latest.json` / 本地 SQLite）已随 #74 删除。
 
-```bash
-PYTHONPATH=src python3 -m ai_usage_widget.cli collect \
-  --config config/sources.local.json \
-  --output data/latest.json \
-  --sqlite data/usage.sqlite
-```
-
-V2 HTTP push 部署应使用终端侧 pusher 命令：
+各平台定时调度底层调用的是终端侧 pusher 命令：
 
 ```bash
 PYTHONPATH=src python3 -m ai_usage_widget.cli push \
@@ -87,7 +80,7 @@ launchctl kickstart -k gui/$(id -u)/com.chunbai.aiusage.pusher
 
 limits provider 必须在拥有对应 Codex / Claude credential 的当前 macOS 用户上下文运行。不要用 `root` 或其他用户代跑，否则 CLI/keychain/app-server socket 可能不可见。
 
-如果只想写入本机 SQLite，可以继续使用 `collect-limits`。如果要持续推送到生产，应使用 TP-V2-042 提供的 `install-limits-scheduler`，它会生成本机 LaunchAgent、runner 脚本、日志目录和 0600 token env 文件。
+`collect-limits` 只采集并打印（#74/PM-2 起不写任何本地库）。要持续推送到生产，应使用 `install-limits-scheduler`，它会生成本机 LaunchAgent、runner 脚本、日志目录和 0600 token env 文件。
 
 部署前先 dry-run，确认不会写文件且输出不包含 token：
 
@@ -332,13 +325,13 @@ PYTHONPATH=src python3 -m ai_usage_widget.cli doctor \
 
 limits provider 应使用用户级 systemd timer，并在拥有 Codex / Claude credential 的 OS 用户下运行。不要用 `root` 代跑普通用户的 Claude/Codex credential。
 
-部署前先 dry-run：
+部署前先验证 limits config（`collect-limits` 本身不落库，直接跑即是无副作用验证）：
 
 ```bash
 PYTHONPATH=%h/ai-usage-widget/src \
 python3 -m ai_usage_widget.cli collect-limits \
   --limits-config %h/ai-usage-widget/config/limits.local.json \
-  --dry-run
+  --check-config
 ```
 
 Service：
@@ -408,13 +401,13 @@ python.exe -m ai_usage_widget.cli push --config C:\path\to\ai-usage-widget\confi
 
 ### 4.3 Official Limits Collector
 
-在拥有 Claude / Codex 登录态的 Windows 用户上下文执行 dry-run：
+在拥有 Claude / Codex 登录态的 Windows 用户上下文验证 limits config：
 
 ```powershell
 $env:PYTHONPATH="C:\path\to\ai-usage-widget\src"
 python.exe -m ai_usage_widget.cli collect-limits `
   --limits-config C:\path\to\ai-usage-widget\config\limits.local.json `
-  --dry-run
+  --check-config
 ```
 
 Task Scheduler 操作配置：

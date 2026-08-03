@@ -1,10 +1,9 @@
 // Issue #63 C 组：Cloudflare Native Worker 读取侧三个出口的版本读模型。
 //
-// 口径唯一 owner 是 Python 侧：
-//   - `source_status[].version` = `public_version_view(evaluate_collector_release({"collector_version": ...}))`
-//     （`src/ai_usage_widget/snapshot_source_health.py` 的 `_version_summary`）
-//   - 顶层 `version_health` = `build_version_health(source_status)`（`snapshot_builder.py`）
-//   - `/api/health` 的 `versions` = `build_version_health(source_status)`（`server_services.py`）
+// #74 之后口径唯一 owner 是本目录的 src/：
+//   - `source_status[].version` = `publicVersionView(evaluateCollectorRelease(...))`（read-model.ts）
+//   - 顶层 `version_health` 与 `/api/health` 的 `versions` = `buildVersionHealth(source_status)`
+//     （version-contract.ts）。语义从删除前的 Python 读模型逐字继承。
 // Worker 必须逐字一致：字段名、状态名、reason 名、排序规则都不允许分叉。
 //
 // 语义红线（#63 2026-08-02 修订）：物化下来的版本是「**最后一次被服务端成功接收的版本**」，

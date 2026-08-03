@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
+import inspect
 import os
-import sqlite3
 import tempfile
 import unittest
+from pathlib import Path
 
 from ai_usage_widget.limits import LimitWindow
 from ai_usage_widget.limits_runtime import LimitsRuntime, ProviderRuntimeResult
@@ -26,18 +26,7 @@ class FailingProvider:
 
 
 class TestLimitsRuntime(unittest.TestCase):
-    def setUp(self) -> None:
-        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".sqlite")
-        self.out_fd, self.out_path = tempfile.mkstemp(suffix=".json")
-
-    def tearDown(self) -> None:
-        os.close(self.db_fd)
-        os.close(self.out_fd)
-        for path in [self.db_path, self.out_path]:
-            if os.path.exists(path):
-                os.remove(path)
-
-    def test_runtime_writes_fake_provider_windows_and_rebuilds_snapshot(self) -> None:
+    def test_runtime_collects_fake_provider_windows_in_memory_only(self) -> None:
         codex_window = LimitWindow(
             provider="codex",
             window="session",
@@ -66,31 +55,29 @@ class TestLimitsRuntime(unittest.TestCase):
         claude = FakeProvider([claude_window])
 
         result = LimitsRuntime(
-            db_path=self.db_path,
             timezone="Asia/Shanghai",
             providers={"codex": codex, "claude": claude},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
         ).collect(provider_names=["codex", "claude"])
 
         self.assertTrue(result.success)
-        self.assertEqual(result.windows_written, 2)
         self.assertEqual([row.provider for row in result.provider_results], ["codex", "claude"])
+        self.assertEqual([row.windows_collected for row in result.provider_results], [1, 1])
         self.assertEqual(codex.calls, 1)
         self.assertEqual(claude.calls, 1)
 
-        with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute(
-                "SELECT provider, window, source_type, confidence, status FROM limit_windows ORDER BY provider"
-            ).fetchall()
-
-        self.assertEqual(rows, [
-            ("claude", "week", "oauth_usage_api", "observed", "ok"),
-            ("codex", "session", "runtime_api", "observed", "ok"),
-        ])
-
-        # 原先这里还断言「latest.json 里能读到 limits」。那条快照重建路径依赖
-        # snapshot_builder（服务端读模型），已按 #72 剪断——采集端不再重建快照，
-        # 断言的对象不存在了。limit_windows 写入是本模块真正的职责，上面已断言。
+        # 采集结果只存在于返回值里（PM-2：本地 SQLite 落库已停止，D1 是唯一正本）。
+        # 强度对齐原先的 limit_windows 行断言：字段逐项钉死，不只数个数。
+        self.assertEqual(
+            sorted(
+                (w.provider, w.window, w.source_type, w.confidence, w.status)
+                for w in result.windows
+            ),
+            [
+                ("claude", "week", "oauth_usage_api", "observed", "ok"),
+                ("codex", "session", "runtime_api", "observed", "ok"),
+            ],
+        )
 
     def test_runtime_collects_multiple_instances_of_same_provider(self) -> None:
         main_window = LimitWindow(
@@ -123,7 +110,6 @@ class TestLimitsRuntime(unittest.TestCase):
         work = FakeProvider([work_window])
 
         result = LimitsRuntime(
-            db_path=self.db_path,
             timezone="Asia/Shanghai",
             providers={"claude-main": main, "claude-w": work},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
@@ -133,18 +119,16 @@ class TestLimitsRuntime(unittest.TestCase):
         self.assertEqual([row.provider for row in result.provider_results], ["claude-main", "claude-w"])
         self.assertEqual(main.calls, 1)
         self.assertEqual(work.calls, 1)
-        with sqlite3.connect(self.db_path) as conn:
-            rows = conn.execute(
-                "SELECT source_id, provider, window, used_percent FROM limit_windows ORDER BY source_id"
-            ).fetchall()
-        self.assertEqual(rows, [
-            ("claude-main", "claude", "session", 20.0),
-            ("claude-w", "claude", "session", 50.0),
-        ])
+        self.assertEqual(
+            sorted((w.source_id, w.provider, w.window, w.used_percent) for w in result.windows),
+            [
+                ("claude-main", "claude", "session", 20.0),
+                ("claude-w", "claude", "session", 50.0),
+            ],
+        )
 
-    def test_runtime_writes_failed_window_without_local_history_fallback(self) -> None:
+    def test_runtime_reports_failed_window_without_local_history_fallback(self) -> None:
         result = LimitsRuntime(
-            db_path=self.db_path,
             timezone="Asia/Shanghai",
             providers={"codex": FailingProvider()},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
@@ -152,15 +136,18 @@ class TestLimitsRuntime(unittest.TestCase):
 
         self.assertFalse(result.success)
         self.assertEqual(result.provider_results, [
-            ProviderRuntimeResult(provider="codex", status="provider_failed", windows_written=1, error_type="provider_failed")
+            ProviderRuntimeResult(
+                provider="codex",
+                status="provider_failed",
+                windows_collected=1,
+                error_type="provider_failed",
+            )
         ])
-
-        with sqlite3.connect(self.db_path) as conn:
-            row = conn.execute(
-                "SELECT provider, window, source_type, confidence, status FROM limit_windows"
-            ).fetchone()
-
-        self.assertEqual(row, ("codex", "unknown", "provider_runtime", "missing", "provider_failed"))
+        # 失败如实进结果，不用本地历史兜底（官方额度红线的采集端一侧）。
+        self.assertEqual(
+            [(w.provider, w.window, w.source_type, w.confidence, w.status) for w in result.windows],
+            [("codex", "unknown", "provider_runtime", "missing", "provider_failed")],
+        )
 
     def test_runtime_does_not_report_cached_only_provider_as_success(self) -> None:
         cached = LimitWindow(
@@ -178,34 +165,38 @@ class TestLimitsRuntime(unittest.TestCase):
         )
 
         result = LimitsRuntime(
-            db_path=self.db_path,
             timezone="Asia/Shanghai",
             providers={"claude-main": FakeProvider([cached])},
             now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["claude-main"], dry_run=True)
+        ).collect(provider_names=["claude-main"])
 
         self.assertFalse(result.success)
         self.assertEqual(result.provider_results, [
             ProviderRuntimeResult(
                 provider="claude-main",
                 status="unavailable",
-                windows_written=0,
+                windows_collected=1,
                 error_type="provider_unavailable",
             )
         ])
         self.assertEqual(result.windows, [cached])
 
-    def test_runtime_dry_run_collects_without_writing_sqlite_or_snapshot(self) -> None:
-        os.close(self.db_fd)
-        os.close(self.out_fd)
-        if os.path.exists(self.db_path):
-            os.remove(self.db_path)
-        if os.path.exists(self.out_path):
-            os.remove(self.out_path)
-        self.db_fd = os.open(os.devnull, os.O_RDONLY)
-        self.out_fd = os.open(os.devnull, os.O_RDONLY)
+    def test_runtime_never_touches_local_sqlite(self) -> None:
+        """PM-2（2026-08-03）：collect-limits 停止写本地 SQLite，云端 D1 是唯一正本。
 
-        codex_window = LimitWindow(
+        三层钉死，防止落库路径被「顺手」加回来：
+        1. 构造面：`LimitsRuntime` 不再接受 `db_path`；
+        2. 源码面：模块不得 import storage_sqlite / sqlite3；
+        3. 行为面：collect 在空目录里跑完不产生任何文件。
+        """
+        signature = inspect.signature(LimitsRuntime.__init__)
+        self.assertNotIn("db_path", signature.parameters)
+
+        source = Path(inspect.getsourcefile(LimitsRuntime)).read_text(encoding="utf-8")
+        self.assertNotIn("storage_sqlite", source)
+        self.assertNotIn("sqlite3", source)
+
+        window = LimitWindow(
             provider="codex",
             window="session",
             used_percent=41.2,
@@ -217,53 +208,39 @@ class TestLimitsRuntime(unittest.TestCase):
             confidence="observed",
             status="ok",
         )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = os.getcwd()
+            os.chdir(tmpdir)
+            try:
+                result = LimitsRuntime(
+                    timezone="Asia/Shanghai",
+                    providers={"codex": FakeProvider([window])},
+                    now_provider=lambda: "2026-06-03T10:02:00+08:00",
+                ).collect(provider_names=["codex"])
+            finally:
+                os.chdir(cwd)
+            self.assertTrue(result.success)
+            self.assertEqual(os.listdir(tmpdir), [])
 
-        result = LimitsRuntime(
-            db_path=self.db_path,
-            timezone="Asia/Shanghai",
-            providers={"codex": FakeProvider([codex_window])},
-            now_provider=lambda: "2026-06-03T10:02:00+08:00",
-        ).collect(provider_names=["codex"], dry_run=True)
-
-        self.assertTrue(result.success)
-        self.assertEqual(result.windows_written, 0)
-        self.assertEqual(result.provider_results[0].windows_written, 0)
-        self.assertFalse(os.path.exists(self.db_path))
-        self.assertFalse(os.path.exists(self.out_path))
-
-    def test_runtime_rejects_unknown_provider_without_writing(self) -> None:
+    def test_runtime_rejects_unknown_provider(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             LimitsRuntime(
-                db_path=self.db_path,
                 timezone="Asia/Shanghai",
                 providers={},
                 now_provider=lambda: "2026-06-03T10:02:00+08:00",
             ).collect(provider_names=["gemini"])
 
         self.assertIn("unsupported limits provider", str(ctx.exception))
-        with sqlite3.connect(self.db_path) as conn:
-            tables = {
-                row[0]
-                for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            }
-        self.assertNotIn("limit_windows", tables)
 
-    def test_runtime_rejects_empty_provider_list_without_writing(self) -> None:
+    def test_runtime_rejects_empty_provider_list(self) -> None:
         with self.assertRaises(ValueError) as ctx:
             LimitsRuntime(
-                db_path=self.db_path,
                 timezone="Asia/Shanghai",
                 providers={},
                 now_provider=lambda: "2026-06-03T10:02:00+08:00",
             ).collect(provider_names=[])
 
         self.assertIn("no limits providers enabled", str(ctx.exception))
-        with sqlite3.connect(self.db_path) as conn:
-            tables = {
-                row[0]
-                for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            }
-        self.assertNotIn("limit_windows", tables)
 
 
 if __name__ == "__main__":

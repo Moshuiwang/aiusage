@@ -107,23 +107,8 @@ CREATE TABLE IF NOT EXISTS usage_hourly (
   PRIMARY KEY(source_id, hour, agent)
 );
 
-CREATE TABLE IF NOT EXISTS usage_blocks (
-  source_id TEXT NOT NULL,
-  start_time TEXT NOT NULL,
-  end_time TEXT NOT NULL,
-  agent TEXT NOT NULL,
-  input_tokens INTEGER NOT NULL DEFAULT 0,
-  output_tokens INTEGER NOT NULL DEFAULT 0,
-  cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
-  cache_read_tokens INTEGER NOT NULL DEFAULT 0,
-  total_tokens INTEGER NOT NULL DEFAULT 0,
-  total_cost REAL,
-  metadata_json TEXT,
-  raw_json TEXT,
-  first_seen_at TEXT NOT NULL,
-  last_seen_at TEXT NOT NULL,
-  PRIMARY KEY(source_id, start_time, end_time, agent)
-);
+-- usage_blocks 已随 #74 删除：#91 停采 `ccusage blocks` 后该表零写入零读取，
+-- 部署库由 0008_drop_usage_blocks.sql 收敛到同一形状。
 
 CREATE TABLE IF NOT EXISTS source_identities (
   source_id TEXT PRIMARY KEY,
