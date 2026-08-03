@@ -1,4 +1,4 @@
-// Generated from src/ai_usage_widget/static for native Worker parity.
+// Generated from cloudflare/native-worker/static (PM-1: 静态资源随 #74 归 Worker 管).
 // Regenerate when the Python dashboard static files change.
 
 export const STATIC_ASSETS: Record<string, string> = {

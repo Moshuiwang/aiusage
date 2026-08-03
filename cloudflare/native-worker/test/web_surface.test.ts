@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
-const staticRoot = path.join(repoRoot, "src/ai_usage_widget/static");
+const staticRoot = path.join(repoRoot, "cloudflare/native-worker/static");
 const contractGoldenPath = path.join(repoRoot, "tests/fixtures/contract/api_contract_golden.json");
 const token = "contract-test-token";
 const sessionSecret = "cutover-session-secret";
@@ -92,7 +92,7 @@ describe.sequential("native TS Worker web surface", () => {
     expect(await authenticatedDashboard.text()).toBe(expectedDashboard);
   });
 
-  it("serves static assets byte-for-byte from src/ai_usage_widget/static behind session auth", async () => {
+  it("serves static assets byte-for-byte from cloudflare/native-worker/static behind session auth", async () => {
     const cookie = await sessionCookieHeader();
 
     for (const asset of ["dashboard.css", "dashboard.js", "index.html", "login.html"]) {
