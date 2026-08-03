@@ -261,7 +261,7 @@ PYEOF
 **废弃只有 10 行**（在第 5.2 / 5.3 / 5.5 / 6.1 / 6.4 / 6.5 节，每条都写了理由；
 其中 5.5 三行与 6.1 / 6.4 各一行是 #90、#91 交付后由原归属改判的）。
 「废弃」占比这么低是本表的主要结论之一：#74 删掉的 3989 行里，绝大多数行为**不是消失，
-而是换 owner**——所以删除的真正代价不是「少了几个测试」，而是「146 条要在 Worker 侧有等价守卫」。
+而是换 owner**——所以删除的真正代价不是「少了几个测试」，而是「145 条（标记行口径，见上表）要在 Worker 侧有等价守卫」。
 
 其中标 ⚠️（Worker 侧当前无对应覆盖）的共 **67 条**，加上阻断 P0 的 4 条待定，
 共 **71 条**在删除时会造成真实覆盖下降。逐类见第 7 节。
@@ -444,7 +444,7 @@ PYEOF
 | 382 | `test_naive_short_quota_reset_does_not_crash_period_summary` | 缺时区的 reset 不导致崩溃 | **合同**（PS `12-naive-limit-timestamps` mobile） | 已覆盖 |
 | 410 | `test_adds_safe_account_and_plan_labels_to_quota_windows` | 额度窗口带安全的账户/套餐标签 | **合同**（`value_golden.json`，`account_plan_label` 21 处 / `account_label` 21 处） | 已覆盖 |
 | 460 | `test_uses_safe_ai_accounts_when_hourly_usage_is_empty` | 小时用量为空时回落 `ai_accounts` | **迁 W** ✅（部分假阴性 + #90 块 15 补端到端） | DTO 半边其实已被 #90 块 6 的单元用例覆盖（「从多个来源合并」「两账号不猜」的对照组都走纯 `ai_accounts` 输入）；缺的是**从 D1 出发**的链路，已由 `parity.test.ts` ai_accounts 回落用例补上（清空事实 → 窗口标签 `Claude Team`/`Pro`、`Codex Team`/`Pro 20x`） |
-| 500 | `test_maps_openai_ai_account_metadata_to_codex_quota` | openai 账户元数据映射到 codex 额度 | **迁 W** ⚠️（`mobile-summary.test.ts` 🆕） | 同上 |
+| 500 | `test_maps_openai_ai_account_metadata_to_codex_quota` | openai 账户元数据映射到 codex 额度 | **迁 W** ⚠️（`mobile-summary.test.ts` 🆕） | 原理由引用的 L460 已在 #90 块 15 改写，不再适用。#99 审查实测：provider 别名归一（openai→codex）的 DTO 半边已由 `mobile-summary.test.ts` 「provider 别名按 canonical 归一」覆盖，本行疑似与 L69/L244 同类的假阴性，改判留给块 6 复核 |
 | 541 | `test_merges_same_ai_account_metadata_from_hourly_and_account_registry` | 两个来源的同一账户元数据合并 | **迁 W** ⚠️（`mobile-summary.test.ts` 🆕） | `mobile-summary.ts:473 mergeAccountContext` 已实现，无用例 |
 | 588 | `test_redacts_unsafe_account_labels` | 不安全账户标签被脱敏 | **迁 W** ⚠️（`mobile-summary.test.ts` 🆕） | `mobile-summary.ts:488 safeAccountLabel` 已实现；Worker 测试目录 `redact` 只在 `version-contract.test.ts` 命中，移动端脱敏无用例。**这是安全相关的覆盖缺口** |
 | 621 | `test_humanizes_safe_unknown_plan_labels_without_internal_separators` | 未知套餐名人性化且不漏内部分隔符 | **迁 W** ⚠️（`mobile-summary.test.ts` 🆕） | `mobile-summary.ts:500 safePlanLabel` / `:517 titlePlanPart` 已实现，无用例 |
@@ -727,6 +727,11 @@ import 自 `mobile_summary.build_mobile_summary`（第 23 行）与 `version_con
 
 ## 7. 抽查结果：71 条「说迁过去 / 说有接替，但 Worker 侧其实没测」
 
+> **本节是 #74 开工门禁当时的快照**（基准 `1d7a856`），此后未逐行维护。
+> 逐块闭合进度以 **#90 的缺口台账（issue 评论）为准**：截至 2026-08-03，
+> #90 声明范围内的全部缺口块已闭合（#92 / #93 / #99 三个 PR），
+> 表中仍写「无用例」的行不代表现状。
+
 这是本表最重要的输出：**67 条标 ⚠️ + 4 条阻断 P0 的待定 = 71 条**，
 占 249 的 **28.5%**。按缺口的成块程度排序：
 
@@ -744,7 +749,7 @@ import 自 `mobile_summary.build_mobile_summary`（第 23 行）与 `version_con
 | 10 | **版本状态词表与严重度** | 3 | 常量已存在，无词表级断言 | 词表被误改不会红 |
 | 11 | **provider 归属的三条边界路径** | 3 | 13 个场景 SQL 里 `'unknown'` / `'anthropic'` **零命中**，且无「无 canonical provider」场景 | 「用量静默消失」这类最难发现的错失去守卫 |
 | 12 | **多账户额度窗口** | 2 | `seed.sql` 的 `limit_windows` 每个 provider 只有 1 个 `source_id`（共 4 条），Worker 测试 `multi_account` **零命中** | 多账户用户的额度展示无守卫 |
-| 13 | **来源健康的两条边界** | 2 | `machine` 与网络 `host` 分离、版本块整块省略，均无用例 | 同机多用户身份混淆无守卫 |
+| 13 | ~~**来源健康的两条边界**~~ | 2 → **0** | **两半实测均已覆盖**：`machine`/`host` 分离——读侧 `web_surface.test.ts`、写侧 `ingest.test.ts` 各有钉死断言，优先级翻转即红（#90 块 15 实测：假阴性）；版本块整块省略——`version-contract.test.ts`「整块省略判 collector_release_missing，版本字段为空判 collector_version_missing」（#90 块 13 交付） | 缺口关闭 |
 | 14 | **跨实现守恒断言** | 1 | `provider-slots-parity.test.ts` 只做 `toEqual(golden)`，**不独立重算守恒** | golden 若被错误重生成，无人发现——正是 AGENTS.md 点名的失效模式 |
 | 15 | ~~**其余零散**~~（空库 summary、四周期必须互不相同、~~台账部分覆盖时保留残差~~、混合 confidence 逐账户可见、~~读侧 bestLimitWindows 择优~~、`ai_accounts` 无事实时的回落、全零来源为空、每周期都保留新鲜短窗、~~machine 名覆盖 host~~） | 9 → **6 补齐 + 1 换对象补 / 1 架构取代 + 1 假阴性** | **#90 块 15 实测收口**：6 条真缺口直接补（空库、四周期、混合 confidence、ai_accounts 回落、全零、短窗）；「读侧 bestLimitWindows 择优」前提失效（PK 使同键第二行不可达），换对象补成「同 provider 第二来源端到端」；「保留残差」是被架构取代的行为（读模型不读 usage_daily），不补；「machine 覆盖 host」读写两半均为假阴性（已有断言），不补。逐条判定见第 5–6 节对应行 | — |
 | | **合计** | **71**（其中 3 条经 #90 块 15 实测为假缺口——machine/host 读写两半假阴性 + 残差一条架构取代，实际缺口 ≤ 68） | | |
