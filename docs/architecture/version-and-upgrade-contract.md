@@ -148,37 +148,30 @@ Issue 原文写的是「collector/runtime 版本」。本决策**合并为一个
 
 ## 已知缺口
 
-- **生产权威实现（Cloudflare Native Worker + D1）只实现了本合同的写入侧。** 已经对齐的部分：
-  `/ingest` 接受并校验 `collector_release`、缺块降级为 `unknown`、不合法值明确拒绝、
-  版本不兼容返回 400 `collector_version_unsupported` 且当次上报完全不落库、响应回写 `version` 块，
-  以及把采集端真实上报的版本写进 `collection_runs.collector_version`（没上报就写 NULL）。
-  口径实现见 `cloudflare/native-worker/src/version-contract.ts`（#67 之后它就是服务端判定权威本体，
-  不再是「Python 的移植」）。
-- **读取侧（`/api/summary` 的 `source_status[].version`、顶层 `version_health`、`/api/health` 的
-  `versions`）在 Worker 上仍然缺席**，因此「哪台设备还在跑旧采集器」这个用户结果在生产上仍拿不到。
-  卡点是结构性的，不是遗漏：Python 读模型从 `source_reports JOIN collection_runs` 取每个来源的
-  `collector_version`，而 Worker 的读路径按 #40 / #41 两次生产修复（降低 D1 读取量）被硬门禁
-  锁死只能读 `source_report_states`——`cloudflare/native-worker/test/web_surface.test.ts`
-  的「reads current source health from the per-source state model」用例会直接拦住任何在
-  `read-model.ts` / `index.ts` 里回查审计表的写法。而 `source_report_states` 没有版本列。
-  要闭合这条缺口只有一条干净路径：给 `source_report_states` 加 `collector_version` 列
-  （D1-only 表，不影响 `test_d1_schema_migration.py` 的 Python↔D1 逐列相等），由 ingest 写入时
-  一并物化，并由 Ops 在 macOS 侧对生产 D1 执行迁移。**这属于另一个 Story，需要显式授权。**
-- 上一条带来的附带风险**已换了形态**（#74 P1，2026-08-02）：
-  `cloudflare/native-worker/test/value_golden.json` 不再由 Python 读模型生成。
-  生成端与防陈旧守卫都在 Worker 侧（`cloudflare/native-worker/test/golden/` +
-  `golden-freshness.test.ts`，重新生成走 `npm run cf:golden:gen`），
-  golden 记录的是 Worker 自己的输出，陈旧会立刻变红。
-  所以「两边都没有新字段所以对得上」这个假绿形态已经不存在——
-  但**版本列的覆盖缺口本身没有被闭合**：`source_report_states` 仍然没有 `collector_version` 列，
-  上一条描述的那条干净路径仍然待做，仍需显式授权。
-- **升级前 Worker 写下的存量行带占位假值 `0.1.0`。** 本轮之前 Worker 无条件往
-  `collection_runs.collector_version` 写死 `"0.1.0"`，而 Python 读模型把这一列当真值读。
-  这些历史行在对应设备下次上报之前，**无法与真正在跑 0.1.0 的设备区分**。
-  不要在读模型里给 `"0.1.0"` 开特例（会误伤真的在跑 0.1.0 的设备）；正确做法是等设备重新上报覆盖。
-- 服务端目前只**持久化** `collector_version`（复用 `collection_runs.collector_version` 列）。
-  `config_schema_version`、`parser_schema_version`、`release_channel`、`build_sha`、
-  `last_upgrade_*` 只在 ingest 当次参与判定并回写到响应里，**尚未落库**，
-  因此来源健康列表里这些字段为空。补齐需要一次 D1 schema 迁移，属于另一个 Story。
+> 本节是自由散文，不在任何文档合同测试的解析范围内（#93 的守卫只覆盖字段表、四态表、
+> 最低支持版本与权威入口清单），**只能靠人核**——历史上文档里唯一过期的就是本节（#94）。
+> 因此每条都必须写明证据与复核日期。本节最近一次逐条实测复核：2026-08-03（#94）。
+
+### 已闭合（不再是缺口，留档防止重复评估）
+
+| 原缺口 | 闭合证据 |
+| --- | --- |
+| 读取侧（`/api/summary` 的 `source_status[].version`、顶层 `version_health`、`/api/health` 的 `versions`）在 Worker 上缺席 | #63（commit `95a34d5`）按当初预告的唯一干净路径交付：`0007` 迁移给 `source_report_states` 加 `collector_version` 列，ingest 写入时物化，读取侧产出在 `read-model.ts`（`version_health`、`source_status[].version`）与 `index.ts`（`/api/health` 的 `versions`）。生产 D1 已应用 `0005`–`0007` 并发布 Worker，线上 smoke 回读到 `version_health` 与 10 项 `version` 子对象（#81，证据等级 5+回读） |
+| 「两边都没有新字段所以 parity 对得上」的假绿形态 | #74 P1 迁移（PR #89）：四份合同 golden 的生成端与防陈旧守卫都在 Worker 侧（`cloudflare/native-worker/test/golden/` + `golden-freshness.test.ts`，重新生成走 `npm run cf:golden:gen`），golden 记录 Worker 自己的输出，陈旧会立刻变红 |
+| Worker 无条件往 `collection_runs.collector_version` 写死占位值 `"0.1.0"` | 已改为只写采集端真实上报的版本，没上报写 NULL（`write-model.ts` 的 collection_runs 插入路径）；读取侧口径同时改为只看 `source_report_states`，其存量行版本列为 NULL → 判 `unknown`，不会把占位值当真值展示（#81 smoke：`unknown=10` 即此形态） |
+
+### 仍开
+
+- `collection_runs` 审计历史里升级前写入的存量 `"0.1.0"` 行，仍无法与真正在跑 0.1.0 的
+  设备区分——但它已不进任何读取侧口径（读取侧只看 `source_report_states`）。
+  仍然**不要给 `"0.1.0"` 开特例**（会误伤真的在跑 0.1.0 的设备）；这些行随设备重新上报
+  自然被新记录取代，不需要治理动作。
+- 版本健康口径下服务端只**持久化** `collector_version`（`collection_runs.collector_version`
+  与 `source_report_states.collector_version` 两列）。`config_schema_version`、
+  `parser_schema_version`、`release_channel`、`build_sha`、`last_upgrade_*` 只在 ingest
+  当次参与判定并回写到响应里，**尚未落库**，因此来源健康列表里这些字段为空。
+  补齐需要一次 D1 schema 迁移，属于另一个 Story。
+  （注意别混淆：`source_accuracy.parser_schema_version` 是准确度追踪线的列，
+  不是版本健康口径的落库。）
 - 自升级演练、各呈现端更新渠道与用户可见版本入口、诊断页 UI 展示：均未实现，
   需要真实设备 / Mac / Ops 侧执行。
