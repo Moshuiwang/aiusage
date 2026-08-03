@@ -450,6 +450,214 @@ describe.sequential("native TS Worker read-only API parity", () => {
   // 而 `blockRows` 从来就是空数组、`usage_blocks` 表从来没被读模型查询过——
   // 这条断言**由构造恒成立**，什么都没守。判定见 #90。
 
+  // #90 块 15：四周期必须互不相同。
+  // value golden 守的是「等于当时的值」；如果一次周期口径回归把四条窗口坍缩成同一条，
+  // 再被 `cf:golden:gen` 错误地重新祝福，golden 与 freshness 会一起报绿。
+  // 这条从产物独立断言周期语义本身，不依赖 golden。
+  it("today/week/month/all 返回真实不同的聚合窗口，不是换 label", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await applySqlFile(db, seedSqlPath);
+    const { buildSummary } = await import("../src/read-model");
+    const { buildMobileSummary } = await import("../src/mobile-summary");
+
+    const expected: Record<string, Shape> = {
+      today: { start_date: "2026-06-03", end_date: "2026-06-03", total_tokens: 4700, granularity: "hour" },
+      week: { start_date: "2026-05-28", end_date: "2026-06-03", total_tokens: 8300, granularity: "day" },
+      month: { start_date: "2026-05-05", end_date: "2026-06-03", total_tokens: 11300, granularity: "day" },
+      all: { start_date: null, end_date: "2026-06-03", total_tokens: 12600, granularity: "day" },
+    };
+    const totals: number[] = [];
+    const windows: string[] = [];
+    for (const [period, want] of Object.entries(expected)) {
+      const web = await buildSummary(db, {
+        date: "2026-06-03", period, timezone: "Asia/Shanghai", currentTime: fixedNow,
+      });
+      const summary = web.summary as Shape;
+      expect(summary.start_date, `${period} start_date`).toBe(want.start_date);
+      expect(summary.end_date, `${period} end_date`).toBe(want.end_date);
+      expect(summary.total_tokens, `${period} total_tokens`).toBe(want.total_tokens);
+      expect((web.trend as Shape).granularity, `${period} granularity`).toBe(want.granularity);
+      const mobile = buildMobileSummary(web) as Record<string, Shape>;
+      expect(mobile.period.id, `mobile ${period} id`).toBe(period);
+      expect(mobile.period.total_tokens, `mobile ${period} total`).toBe(want.total_tokens);
+      totals.push(Number(summary.total_tokens));
+      windows.push(`${summary.start_date}..${summary.end_date}`);
+    }
+    // 不变量本体：四条聚合窗口两两不同——总量互不相同，窗口边界也互不相同。
+    expect(totals).toHaveLength(4);
+    expect(new Set(totals).size).toBe(4);
+    expect(new Set(windows).size).toBe(4);
+  });
+
+  // #90 块 15：同账户混合 confidence 逐账户可见。
+  // `confidence_breakdown` / attribution_confidence == "mixed" 此前在全部 Worker 测试里零命中；
+  // seed 每个账户只有一种 confidence，聚合分支从未被回放过。
+  it("同一账户混合 confidence 时逐账户可见，不同账户互不污染", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await applySqlFile(db, seedSqlPath);
+    await db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
+        session_count, attribution_confidence, provenance, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "fact-mac-20260603-10-inferred", "mac-local", "macbook-pro", "alice", "claude", "claude-main",
+      "claude", "cli", "2026-06-03T10:00:00+08:00", "2026-06-03T11:00:00+08:00",
+      "Asia/Shanghai", 155, 0, 0, 0, 0, 155, null, 1, 1,
+      "account_observed_usage_inferred", "seed",
+      "2026-06-03T10:00:00+08:00", "2026-06-03T11:30:00+08:00",
+    ).run();
+
+    const { buildSummary } = await import("../src/read-model");
+    const web = await buildSummary(db, {
+      date: "2026-06-03", period: "today", timezone: "Asia/Shanghai", currentTime: fixedNow,
+    });
+    const accountHourly = web.account_hourly as Shape;
+    const accounts = accountHourly.by_ai_account as Shape[];
+    // 结构下限：今天恰好两个账户（claude-main + codex-main），少一个都说明查询本身塌了。
+    expect(accounts).toHaveLength(2);
+
+    const claude = accounts.find((row) => row.account_id === "claude-main") as Shape;
+    expect(claude.total_tokens).toBe(3255);
+    expect(claude.attribution_confidence).toBe("mixed");
+    expect(claude.confidence_breakdown).toEqual([
+      { confidence: "observed", total_tokens: 3100 },
+      { confidence: "account_observed_usage_inferred", total_tokens: 155 },
+    ]);
+
+    // 对照组：单一 confidence 的账户不许被邻居的混合状态污染。
+    const codex = accounts.find((row) => row.account_id === "codex-main") as Shape;
+    expect(codex.attribution_confidence).toBe("observed");
+    expect(codex.confidence_breakdown).toEqual([
+      { confidence: "observed", total_tokens: 1600 },
+    ]);
+
+    // 顶层汇总必须与逐账户能对上（独立重算，不抄实现的中间量）。
+    expect(accountHourly.confidence_breakdown).toEqual([
+      { confidence: "observed", total_tokens: 4700 },
+      { confidence: "account_observed_usage_inferred", total_tokens: 155 },
+    ]);
+  });
+
+  // #90 块 15：`ai_accounts` 无事实时的回落。
+  // 读模型半边（fetchAiAccounts：事实表全空时 ai_accounts 仍要产出、by_ai_account 为空）
+  // 与 DTO 半边（accountContextFrom 从 ai_accounts 拿标签挂到额度窗口）此前只有
+  // 手写 snapshot 的单元覆盖，从 D1 出发的这条链路没有被回放过。
+  it("小时事实全空时 ai_accounts 仍然产出，额度窗口标签从 ai_accounts 回落", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await applySqlFile(db, seedSqlPath);
+    for (const table of ["usage_hourly_models", "usage_hourly_facts", "usage_hourly_rollups", "usage_daily_rollups"]) {
+      await db.prepare(`DELETE FROM ${table}`).run();
+    }
+
+    const { buildSummary } = await import("../src/read-model");
+    const { buildMobileSummary } = await import("../src/mobile-summary");
+    const web = await buildSummary(db, {
+      date: "2026-06-03", period: "today", timezone: "Asia/Shanghai", currentTime: fixedNow,
+    });
+    expect((web.summary as Shape).total_tokens).toBe(0);
+    expect((web.account_hourly as Shape).by_ai_account).toEqual([]);
+    // 已知账户一个都不许丢，字段映射逐一钉死（label 来自 account_label 列）。
+    expect(web.ai_accounts).toEqual([
+      {
+        provider: "antigravity", account_id: "ag-main", label: "Antigravity Lab",
+        display_name: "Antigravity Lab", subscription: "team", last_seen_at: "2026-06-03T10:00:00+08:00",
+      },
+      {
+        provider: "claude", account_id: "claude-main", label: "Claude Team",
+        display_name: "Claude Team", subscription: "pro", last_seen_at: "2026-06-03T11:30:00+08:00",
+      },
+      {
+        provider: "codex", account_id: "codex-main", label: "Codex Team",
+        display_name: "Codex Team", subscription: "pro", last_seen_at: "2026-06-03T11:31:00+08:00",
+      },
+    ]);
+
+    const mobile = buildMobileSummary(web) as Record<string, Shape>;
+    const windows = mobile.limits.windows as Shape[];
+    // 结构下限：三个可信窗口都在（claude week + codex 5h + codex week），
+    // 否则下面的标签断言会对着空数组恒真。
+    expect(windows).toHaveLength(3);
+    for (const window of windows) {
+      const want = window.provider === "claude"
+        ? { account_label: "Claude Team", account_plan_label: "Pro" }
+        : { account_label: "Codex Team", account_plan_label: "Pro 20x" };
+      expect(window, `${window.provider}:${window.window} 的账户标签必须从 ai_accounts 回落`)
+        .toMatchObject(want);
+    }
+  });
+
+  // #90 块 15：同 provider 出现第二个额度来源时，移动端只呈现一个来源的窗口。
+  // 前几轮实测：读侧 `bestLimitWindows` 的 per-key 择优在 Worker 不可达
+  // （0003 迁移后 (source_id, provider, window) 是主键，同键第二行根本进不了库），
+  // 真正活着的择优链路是 buildLimitStatus 选来源 → selectedLimitSources → DTO 过滤。
+  // seed 每个 provider 只有一个来源，这条链路对「第二来源」从未被 D1 级 fixture 回放过。
+  it("同 provider 第二个额度来源出现时，移动端只跟随最新来源，绝不混合", async () => {
+    await mf.dispose();
+    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    await applySqlFile(db, seedSqlPath);
+    await db.prepare(`
+      INSERT INTO limit_windows (
+        source_id, provider, window, used_percent, remaining_percent, reset_at,
+        window_duration_minutes, source_type, confidence, status, observed_at,
+        first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "codex-backup", "codex", "5h", 91.5, 8.5, "2026-06-03T15:30:00+08:00",
+      300, "runtime_api", "observed", "ok", "2026-06-03T10:30:00+08:00",
+      "2026-06-03T10:30:00+08:00", "2026-06-03T10:30:00+08:00",
+    ).run();
+
+    const { buildSummary } = await import("../src/read-model");
+    const { buildMobileSummary } = await import("../src/mobile-summary");
+    const request = { date: "2026-06-03", period: "today", timezone: "Asia/Shanghai", currentTime: fixedNow };
+
+    // 第一段：备用来源较旧（10:30 < codex-main 的 11:01），codex 槽位仍归 codex-main。
+    const web = await buildSummary(db, request);
+    // 结构下限：dashboard 的 limits 必须真的多出这一行（4 → 5），
+    // 证明第二来源确实进了读模型——否则下面的「不出现」全部恒真。
+    expect(web.limits as Shape[]).toHaveLength(5);
+    expect((web.limits as Shape[]).filter((row) => row.source_id === "codex-backup")).toHaveLength(1);
+    const codexStatus = (web.limit_status as Shape[]).find((row) => row.provider === "codex") as Shape;
+    expect(codexStatus.source_id).toBe("codex-main");
+
+    const mobile = buildMobileSummary(web) as Record<string, Shape>;
+    const windows = mobile.limits.windows as Shape[];
+    expect(windows).toHaveLength(3);
+    expect(windows.filter((row) => row.provider === "codex").map((row) => row.source_id))
+      .toEqual(["codex-main", "codex-main"]);
+    expect(windows.some((row) => row.used_percent === 91.5), "备用来源的百分比不许混进来").toBe(false);
+
+    // 第二段：备用来源变成最新（11:59 > 11:01），codex 槽位必须整体切换过去，
+    // 且 codex-main 的窗口一条都不许残留——「跟随最新」是语义，不是静态名单。
+    await db.prepare(
+      "UPDATE limit_windows SET observed_at = ?, first_seen_at = ?, last_seen_at = ? WHERE source_id = ?",
+    ).bind("2026-06-03T11:59:00+08:00", "2026-06-03T11:59:00+08:00", "2026-06-03T11:59:00+08:00", "codex-backup").run();
+    const webAfter = await buildSummary(db, request);
+    const codexStatusAfter = (webAfter.limit_status as Shape[]).find((row) => row.provider === "codex") as Shape;
+    expect(codexStatusAfter.source_id).toBe("codex-backup");
+    const mobileAfter = buildMobileSummary(webAfter) as Record<string, Shape>;
+    const windowsAfter = mobileAfter.limits.windows as Shape[];
+    expect(windowsAfter.map((row) => [row.provider, row.window, row.source_id])).toEqual([
+      ["claude", "week", "claude-main"],
+      ["codex", "5h", "codex-backup"],
+    ]);
+    expect(windowsAfter.find((row) => row.source_id === "codex-backup")?.used_percent).toBe(91.5);
+  });
+
   async function recordValue(name: string, requestPath: string): Promise<ContractRecord> {
     const response = await mf.dispatchFetch(`http://native.test${requestPath}`, {
       headers: { Authorization: `Bearer ${token}` },

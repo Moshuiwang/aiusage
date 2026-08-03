@@ -468,6 +468,87 @@ describe.sequential("native TS Worker web surface", () => {
   });
 });
 
+// #90 块 15：空库 summary。
+// 全部现有读路径用例都跑在已 seed 的库上；「上线首日 / 数据被清空」这个真实形态
+// （表全建好、一行数据都没有）此前从未回放过——聚合、metadata、额度、版本健康里
+// 任何一处「默认有数据」的写法（空数组取 [0]、Math.max(...[])、排序后取尾）都只会在这里炸。
+describe.sequential("native TS Worker empty-database read surface", () => {
+  let mf: Miniflare;
+
+  beforeEach(async () => {
+    mf = await createMiniflare({
+      AIUSAGE_TOKEN: token,
+      AIUSAGE_NOW: fixedNow,
+    });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await applySchema(db);
+    // 刻意不 seed：这是「合法的空快照而不是 500」这条断言的全部前提。
+  });
+
+  afterEach(async () => {
+    await mf.dispose();
+  });
+
+  it("空库时 /api/summary 返回合法空快照而不是 500", async () => {
+    const response = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03&period=today", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as Record<string, any>;
+
+    expect(body.schema_version).toBe(1);
+    expect(body.summary).toMatchObject({
+      period: "today", date: "2026-06-03",
+      total_tokens: 0, input_tokens: 0, output_tokens: 0,
+      cache_creation_tokens: 0, cache_read_tokens: 0,
+    });
+    // 结构下限：空快照不是「响应体也空」——合同要求的顶层键一个都不许少。
+    for (const key of [
+      "generated_at", "timezone", "summary", "groups", "items", "trend", "source_status",
+      "version_health", "limits", "limit_status", "provider_slots", "provider_usage_coverage",
+      "account_hourly", "ai_accounts", "metadata",
+    ]) {
+      expect(key in body, `空快照缺少顶层键 ${key}`).toBe(true);
+    }
+    expect(body.groups).toEqual({ by_machine: [], by_account: [], by_agent: [] });
+    expect(body.items).toEqual([]);
+    expect(body.source_status).toEqual([]);
+    expect(body.limits).toEqual([]);
+    expect(body.limit_status).toEqual([]);
+    expect(body.ai_accounts).toEqual([]);
+    expect(body.account_hourly).toMatchObject({ total_tokens: 0, by_ai_account: [] });
+    // today 的小时轴在空库下仍然是完整的 24 点全零，不是空数组。
+    expect(body.trend.points).toHaveLength(24);
+    expect(body.trend.points.every((point: Record<string, unknown>) => point.total_tokens === 0)).toBe(true);
+    // 版本健康在零来源时产出全零 counts，而不是整块消失。
+    expect(body.version_health.needs_attention).toEqual([]);
+    const counts = body.version_health.counts as Record<string, number>;
+    expect(Object.keys(counts).length).toBeGreaterThanOrEqual(5);
+    expect(Object.values(counts).every((value) => value === 0)).toBe(true);
+    // 固定 provider 槽位空库时也必须在：两个槽位、用量与额度都如实标 missing。
+    expect(body.provider_slots.map((slot: Record<string, any>) => [slot.provider, slot.usage.status, slot.quota.status]))
+      .toEqual([["claude", "missing", "missing"], ["codex", "missing", "missing"]]);
+  });
+
+  it("空库时 /api/mobile/summary 返回合法空 DTO 而不是 500", async () => {
+    const response = await mf.dispatchFetch("http://native.test/api/mobile/summary?date=2026-06-03&period=today", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json() as Record<string, any>;
+
+    expect(body.schema_version).toBe(1);
+    expect(body.period).toMatchObject({ id: "today", total_tokens: 0 });
+    expect(body.sources).toEqual([]);
+    expect(body.breakdown).toEqual({
+      by_machine: [], by_os_user: [], by_agent: [], by_model: [], by_date: [],
+    });
+    expect(body.limits).toMatchObject({ observed_count: 0, total_count: 0, windows: [] });
+    expect(body.provider_slots.map((slot: Record<string, any>) => [slot.provider, slot.usage.status, slot.quota.status]))
+      .toEqual([["claude", "missing", "missing"], ["codex", "missing", "missing"]]);
+  });
+});
+
 async function sessionCookieHeader(): Promise<string> {
   return `ai_usage_session=${await pythonSessionCookieValue(sessionSecret)}`;
 }
