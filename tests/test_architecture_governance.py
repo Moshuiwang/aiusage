@@ -38,9 +38,9 @@ COLLECTOR_MODULE_GLOBS = (
     "deploy_*.py",
 )
 
-#: 服务端读模型与 HTTP 编排。按 #67 决策服务端权威已转移到 Worker + D1，
-#: 这些 Python 模块已冻结并随 #74 删除。采集端一旦 import 它们，删除就会连带打断采集端——
-#: 那正是「Python / TS / 半迁移三种状态并存」最难收拾的形态。
+#: 服务端读模型与 HTTP 编排的模块名。#67 决策服务端权威转移到 Worker + D1，
+#: 这些 Python 模块**已随 #74 删除**。守卫保留：谁在采集端 import 这些名字，
+#: 要么是想复活服务端影子实现，要么是半迁移残留——两种都要当场红。
 SERVER_SIDE_MODULES = frozenset(
     {"snapshot_builder", "mobile_summary", "server_services", "server"}
 )
@@ -247,12 +247,12 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
     这条边界的实际含义：**Python 服务端可以被删掉，而采集端一行不受影响。**
 
     #67 决策服务端收敛为 Worker + D1 单实现，`snapshot_builder` / `mobile_summary` /
-    `server_services` / `server` 已冻结并随 #74 删除。而采集端要跑在用户的 Mac / Linux 上
+    `server_services` / `server` 已随 #74 删除。而采集端要跑在用户的 Mac / Linux 上
     读本机 ccusage、mswusage 与 OS 用户上下文——Worker 沙箱结构上做不到，所以它永远是
     Python。两者之间只应有 HTTP payload 这一条边。
 
-    一旦采集端 import 了服务端模块，#74 的删除就会连带打断采集端，而那时人会倾向于
-    「先把服务端留着」——于是三种状态长期并存，正是决策要消灭的东西。
+    删除后本守卫依然在岗：这些名字若再次成为采集端依赖（无论是复活影子实现
+    还是新建同名模块），当场红，而不是等到 ImportError 在生产设备上炸。
     """
 
     def test_no_collector_module_imports_the_server_read_model(self) -> None:
@@ -306,7 +306,7 @@ class TestCollectorDoesNotDependOnServerReadModel(unittest.TestCase):
             "from .config import DeviceConfig\n"
             "from . import models\n"
             "from ai_usage_widget.version_contract import local_collector_release\n"
-            "import ai_usage_widget.timeutil\n"
+            "import ai_usage_widget.timezones\n"
         )
         self.assertEqual(_server_import_violations(ast.parse(benign)), [])
 

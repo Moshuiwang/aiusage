@@ -230,7 +230,7 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
 
     def test_brand_surfaces_do_not_use_placeholder_chart_icon(self) -> None:
         surfaces = {
-            "web": ROOT / "src" / "ai_usage_widget" / "static" / "index.html",
+            "web": ROOT / "cloudflare" / "native-worker" / "static" / "index.html",
             "ios": ROOT / "mobile" / "ios" / "Sources" / "AIUsageMobileCore" / "AIUsageMobileRootView.swift",
             "widget": (
                 ROOT

@@ -861,23 +861,19 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         return json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
-class TestDroppedLegacyFieldIsIgnoredByBothImplementations(unittest.TestCase):
-    """向后兼容：老版本采集端仍会发已摘除的字段，两侧都必须忽略它。
+class TestDroppedLegacyFieldProbesStayValid(unittest.TestCase):
+    """向后兼容：老版本采集端仍会发已摘除的字段，服务端必须忽略它。
 
     覆盖两个历史字段：#78 的 ``ccusage_daily_status`` 与 #91 的 ``ccusage_blocks_report``，
-    探针清单见 ``LEGACY_PROBES``。这是**跨实现**测试的 Python 半边。Worker 半边在
-    ``cloudflare/native-worker/test/ingest.test.ts``（「老版本采集端仍在发的 …」两条用例），
-    读的是**同一批**探针定义并断言**同一组可观测结果**：
+    探针清单见 ``LEGACY_PROBES``。服务端行为半边（接受、不解析、不落库）在
+    ``cloudflare/native-worker/test/ingest.test.ts``（「老版本采集端仍在发的 …」两条用例）——
+    #74 删除 Python ingest 后，Worker 是唯一服务端实现，那两条用例就是全部行为守卫。
 
-    1. 请求被接受，不报错（Python 不抛 ``IngestValidationError``，Worker 返回 200）；
-    2. 字段不被解析（Python 的 ``IngestRequest`` 上没有这个属性；Worker 的
-       ``IngestRequest`` 声明里没有这个字段）、不落库（Worker 侧断言 D1 可观测结果
-       与不带该字段时逐行相等）。
-
-    探针 payload 不是手写的：基座取自 owner 模块 ``pusher.py`` 产出的 fixture
-    （探针各自钉死的场景那条记录），再叠加冻结在探针文件里的字段取值。
-    那份取值本身是摘除前从真实 pusher 捕获的，当前 pusher 已经产不出它，
-    所以它只能冻结、不能重新生成——这一点在探针文件里写明了。
+    本类守探针**自身的有效性**（Python 侧仅剩的职责）：基座取自 owner 模块
+    ``pusher.py`` 产出的 fixture（探针各自钉死的场景那条记录），再叠加冻结在探针文件里
+    的字段取值。那份取值是摘除前从真实 pusher 捕获的，当前 pusher 已经产不出它，
+    所以只能冻结、不能重新生成——探针文件里写明了这一点。基座若重新长出该字段、
+    或场景选择漂移，探针就名存实亡，这里会红。
     """
 
     maxDiff = None
@@ -925,38 +921,6 @@ class TestDroppedLegacyFieldIsIgnoredByBothImplementations(unittest.TestCase):
                     f"{probe['field']} 的探针必须重放 {expected_scenario} 场景：摘除前 pusher "
                     "只在那个场景发该字段，换成别的场景这条跨实现覆盖就名存实亡",
                 )
-
-    def test_python_ingest_accepts_and_ignores_the_dropped_field(self) -> None:
-        """Python 侧：不报错、不解析、不带进 ``IngestRequest``。
-
-        **每一个形状都要过**，不只老采集端正常发出的那个：Worker 对未知顶层字段是
-        「无论什么形状都忽略」，Python 侧只要对某个形状还会拒收，两个实现就不一致。
-        `bypass_values` 里的形状正是被删掉的那些校验器当年会拒收的——
-        只断言正面形状的话，把校验原样加回来这条断言照样绿（真踩过：#78 变异 2a
-        一开始没能让这里变红）。
-        """
-        from ai_usage_widget.ingest import validate_ingest_payload
-
-        for path, _expected_scenario in LEGACY_PROBES:
-            probe = _legacy_probe(path)
-            shapes = [probe["value"], *probe["bypass_values"]]
-            self.assertGreater(len(shapes), 1, "绕过形状清单不能为空，否则只覆盖了正面路径")
-
-            for shape in shapes:
-                with self.subTest(field=probe["field"], shape=shape):
-                    payload = _legacy_probe_payload(probe, shape)
-                    payload["observed_at"] = LEGACY_PROBE_OBSERVED_AT
-
-                    req = validate_ingest_payload(payload)
-
-                    self.assertEqual(req.source_id, payload["source_id"])
-                    self.assertFalse(
-                        hasattr(req, probe["field"]),
-                        f"IngestRequest 仍然带着 {probe['field']}——Python 侧还在解析这个字段，"
-                        "与生产用的 Worker（把它当未知字段忽略）行为不一致",
-                    )
-                    # 账本用量必须照常被解析：忽略历史字段不等于连用量一起丢掉。
-                    self.assertEqual(len(req.usage_hourly_facts), len(payload["usage_hourly_facts"]))
 
 
 def _fixture_record(name: str) -> dict[str, Any]:

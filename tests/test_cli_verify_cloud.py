@@ -20,8 +20,6 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from ai_usage_widget import cli, verify_cloud
-from ai_usage_widget.mobile_summary import build_mobile_summary
-from ai_usage_widget.version_contract import build_version_health
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "verify_cloud"
@@ -612,40 +610,20 @@ class TestVerifyCloudOutputCarriesNoSecrets(unittest.TestCase):
                                 self.assertNotIn(forbidden, err)
 
 
-class TestVerifyCloudFixturesStayBoundToReadModel(unittest.TestCase):
-    """fixture 不是手写的想象：mobile DTO 与版本健康都由真正的 owner 现算出来对齐。
+class TestVerifyCloudFixtureScenarioCoverage(unittest.TestCase):
+    """fixture 的场景覆盖度断言（纯结构，不耦合读模型）。
 
-    读模型改了形状而 fixture 没跟上，这里会红——否则 verify-cloud 会一直核对一份过时的幻想。
+    「fixture 必须由 owner 现算对齐」的守卫已随 #74 迁到 Worker 侧
+    `cloudflare/native-worker/test/verify-cloud-fixtures.test.ts`（块 8 接替）：
+    mobile DTO 对 `buildMobileSummary`、版本块对 `buildVersionHealth`、
+    负面 fixture 的有效性各有断言，改这批 fixture 会触发 Worker 测试
+    （scripts/verify.sh 的触发判据含 tests/fixtures/verify_cloud/ 前缀）。
     """
 
     maxDiff = None
 
     def _load(self, scenario: Path, name: str):
         return json.loads((scenario / name).read_text(encoding="utf-8"))
-
-    def test_mobile_fixture_is_what_the_mobile_dto_owner_produces(self) -> None:
-        for scenario in (HEALTHY, DEGRADED):
-            with self.subTest(scenario=scenario.name):
-                summary = self._load(scenario, "summary.json")
-                self.assertEqual(
-                    build_mobile_summary(summary),
-                    self._load(scenario, "mobile_summary.json"),
-                )
-
-    def test_parity_mismatch_fixture_really_diverges_from_the_owner_output(self) -> None:
-        summary = self._load(PARITY_MISMATCH, "summary.json")
-        self.assertNotEqual(
-            build_mobile_summary(summary),
-            self._load(PARITY_MISMATCH, "mobile_summary.json"),
-        )
-
-    def test_version_blocks_match_the_version_contract_owner(self) -> None:
-        for scenario in (HEALTHY, DEGRADED, PARITY_MISMATCH):
-            with self.subTest(scenario=scenario.name):
-                summary = self._load(scenario, "summary.json")
-                expected = build_version_health(summary["source_status"])
-                self.assertEqual(summary["version_health"], expected)
-                self.assertEqual(self._load(scenario, "health.json")["versions"], expected)
 
     def test_degraded_fixture_really_covers_all_four_limit_trust_states(self) -> None:
         summary = self._load(DEGRADED, "summary.json")

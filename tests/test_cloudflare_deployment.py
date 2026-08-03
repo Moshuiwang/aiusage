@@ -85,7 +85,7 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("不要用 `curl -I`", readme)
         self.assertIn("--resolve aiusage.chunbai.com:443:<Cloudflare IP>", readme)
         for asset in ["index.html", "dashboard.css", "dashboard.js", "login.html"]:
-            self.assertTrue((ROOT / "src" / "ai_usage_widget" / "static" / asset).exists())
+            self.assertTrue((ROOT / "cloudflare" / "native-worker" / "static" / asset).exists())
 
     def test_operations_handoff_points_to_actual_ops_workspace(self) -> None:
         handoff = (ROOT / "cloudflare" / "OPERATIONS_HANDOFF.md").read_text(encoding="utf-8")
