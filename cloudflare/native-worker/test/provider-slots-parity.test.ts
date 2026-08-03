@@ -175,11 +175,20 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
   });
 
   it("同一 provider 下两个账号时只展示最新观测的那个，不许把两份百分比混在一起", () => {
-    // #90 块 12。`selectedLimitSources`（mobile 侧择优）与 `bestLimitWindows`（读侧去重）
-    // 在测试里原本零命中——同 provider 多 source_id 只在 08 号出现过一次，
-    // 而那是「官方 vs 本地估算」，不是两个真实账号。
-    // 不择优的后果是两个账号的百分比混在一起：用户看到的数字既不是 A 的也不是 B 的。
+    // #90 块 12。同 provider 多 source_id 此前只在 08 号出现过一次，而那是
+    // 「官方 vs 本地估算」，不是两个真实账号。不择优的后果是两个账号的百分比混在一起：
+    // 用户看到的数字既不是 A 的也不是 B 的。
+    //
+    // **这条守的到底是谁**（审查纠正过一次，别再指错）：是 `read-model.ts` 的
+    // `buildLimitStatus`（每 provider 选最新观测来源）+ `providerQuotaSlot`（按选定来源
+    // 过滤窗口）。**不是** `selectedLimitSources`——那个只影响 mobile 的 `limits.windows`，
+    // 而本 golden 只记 `provider_slots` 与 `provider_usage_coverage`；且它的择新分支在
+    // `limit_status` 已给出 provider 时被 continue 跳过，本场景恰好给出了。
+    // 也**不是** `bestLimitWindows`——它的 key 含 source_id，同 provider 两个账号
+    // 根本不会被它去重。这两个函数目前仍然零守卫。
     const byName = new Map(golden.map((record) => [record.name, record]));
+    // 两个端点的 provider_slots 逐字节相同，这个循环不产生额外覆盖；
+    // 保留只是为了「两个端点都必须有这条记录」这一层。
     for (const [endpoint] of providerSlotsEndpoints) {
       const record = byName.get(`15-two-accounts-one-provider:${endpoint}`);
       expect(record, `15 号场景的 ${endpoint} 记录必须存在`).toBeTruthy();

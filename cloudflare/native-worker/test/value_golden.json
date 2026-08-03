@@ -546,6 +546,39 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -1002,7 +1035,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 1,
+            "current": 2,
             "rollback_available": 0,
             "unknown": 1,
             "unsupported": 1,
@@ -1448,6 +1481,21 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
+            "status": "ok"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:33:00+08:00",
+            "last_pushed_at": "2026-06-03T11:33:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
             "status": "ok"
           },
           {
@@ -2455,6 +2503,39 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -2679,7 +2760,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 1,
+            "current": 2,
             "rollback_available": 0,
             "unknown": 1,
             "unsupported": 1,
@@ -3242,6 +3323,21 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
+            "status": "ok"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:33:00+08:00",
+            "last_pushed_at": "2026-06-03T11:33:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
             "status": "ok"
           },
           {
@@ -4069,6 +4165,39 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -4615,7 +4744,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 1,
+            "current": 2,
             "rollback_available": 0,
             "unknown": 1,
             "unsupported": 1,
@@ -5192,6 +5321,21 @@
             "os_user": "alice",
             "platform": "darwin",
             "source_id": "mac-local",
+            "status": "ok"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:33:00+08:00",
+            "last_pushed_at": "2026-06-03T11:33:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
             "status": "ok"
           },
           {
@@ -6336,6 +6480,39 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -6546,7 +6723,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 1,
+            "current": 2,
             "rollback_available": 0,
             "unknown": 1,
             "unsupported": 1,
@@ -7191,6 +7368,21 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:33:00+08:00",
+            "last_pushed_at": "2026-06-03T11:33:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
@@ -7764,6 +7956,39 @@
               "target_collector_version": "0.3.0",
               "verified": true
             }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
           }
         ],
         "summary": {
@@ -7916,7 +8141,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 1,
+            "current": 2,
             "rollback_available": 0,
             "unknown": 0,
             "unsupported": 0,
@@ -9941,6 +10166,39 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "host": "mac-mini",
@@ -10165,7 +10423,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 1,
+            "current": 2,
             "rollback_available": 0,
             "unknown": 1,
             "unsupported": 1,
@@ -10735,6 +10993,21 @@
               "agents": [],
               "status": "unknown"
             },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:33:00+08:00",
+            "last_pushed_at": "2026-06-03T11:33:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok"
+          },
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
             "display_name": "mac-mini \u00b7 dan",
             "error_message": null,
             "last_observed_at": "2026-06-03T08:30:00+08:00",
@@ -11179,7 +11452,41 @@
           "unattributed_tokens": 0
         },
         "schema_version": 1,
-        "source_status": [],
+        "source_status": [
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "host": "macbook-pro",
+            "machine": "macbook-pro",
+            "observed_at": "2026-06-03T11:33:00+08:00",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok",
+            "version": {
+              "build_sha": null,
+              "collector_version": "0.3.0",
+              "compatible": true,
+              "config_schema_version": null,
+              "last_upgrade_finished_at": null,
+              "last_upgrade_from_version": null,
+              "last_upgrade_status": null,
+              "last_upgrade_to_version": null,
+              "min_supported_collector_version": "0.1.0",
+              "parser_schema_version": null,
+              "reason": "collector_version_current",
+              "release_channel": null,
+              "rollback_target_version": null,
+              "state": "current",
+              "target_collector_version": "0.3.0",
+              "verified": true
+            }
+          }
+        ],
         "summary": {
           "account": "carol",
           "cache_creation_tokens": 50,
@@ -11317,7 +11624,7 @@
         },
         "version_health": {
           "counts": {
-            "current": 0,
+            "current": 1,
             "rollback_available": 0,
             "unknown": 0,
             "unsupported": 0,
@@ -11596,7 +11903,23 @@
           "unattributed_tokens": 0
         },
         "schema_version": 1,
-        "sources": [],
+        "sources": [
+          {
+            "accuracy": {
+              "agents": [],
+              "status": "unknown"
+            },
+            "display_name": "macbook-pro \u00b7 carol",
+            "error_message": null,
+            "last_observed_at": "2026-06-03T11:33:00+08:00",
+            "last_pushed_at": "2026-06-03T11:33:00+08:00",
+            "machine": "macbook-pro",
+            "os_user": "carol",
+            "platform": "darwin",
+            "source_id": "mac-local-carol",
+            "status": "ok"
+          }
+        ],
         "timezone": "Asia/Shanghai",
         "trend": {
           "end_date": "2026-06-03",

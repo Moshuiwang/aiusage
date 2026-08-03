@@ -14,7 +14,10 @@ INSERT INTO collection_runs (id, collected_at, timezone, collector_version, stat
   (1, '2026-06-03T11:30:00+08:00', 'Asia/Shanghai', '0.3.0', 'ok'),
   (2, '2026-06-03T11:31:00+08:00', 'Asia/Shanghai', '0.2.0', 'ok'),
   (3, '2026-06-03T10:00:00+08:00', 'Asia/Shanghai', '0.0.9', 'partial'),
-  (4, '2026-06-03T08:30:00+08:00', 'Asia/Shanghai', NULL, 'ok');
+  (4, '2026-06-03T08:30:00+08:00', 'Asia/Shanghai', NULL, 'ok'),
+  -- #90 块 9：carol 与 alice 同机。少了这一行，carol 在任何响应的设备健康列表里
+  -- 都不出现，golden 会把「按 carol 过滤 → 一台设备都看不到」记录成正确输出。
+  (5, '2026-06-03T11:33:00+08:00', 'Asia/Shanghai', '0.3.0', 'ok');
 
 INSERT INTO source_reports (
   id, run_id, source_id, report_type, command, status, ccusage_version,
@@ -23,7 +26,8 @@ INSERT INTO source_reports (
   (1, 1, 'mac-local', 'daily', 'seed.sql', 'ok', NULL, '2026-05-29', '2026-06-03', NULL, NULL),
   (2, 2, 'linux-dev-bob', 'daily', 'seed.sql', 'ok', NULL, '2026-05-15', '2026-06-03', NULL, NULL),
   (3, 3, 'workstation-cara', 'daily', 'seed.sql', 'failed', NULL, '2026-06-01', '2026-06-01', 'provider_failed', 'Antigravity provider unavailable'),
-  (4, 4, 'mac-mini-dan', 'daily', 'seed.sql', 'ok', NULL, '2026-04-10', '2026-04-10', NULL, NULL);
+  (4, 4, 'mac-mini-dan', 'daily', 'seed.sql', 'ok', NULL, '2026-04-10', '2026-04-10', NULL, NULL),
+  (5, 5, 'mac-local-carol', 'daily', 'seed.sql', 'ok', NULL, '2026-06-02', '2026-06-02', NULL, NULL);
 
 -- collector_version 跟着「该来源最新一次报告」所属的 collection_run 一起物化：
 -- 它记录的是最后一次被服务端成功接收的采集端版本。

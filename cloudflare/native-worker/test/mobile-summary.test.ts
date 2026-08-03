@@ -158,8 +158,15 @@ describe("mobile account and plan labels", () => {
       "eyJhbGciOiJIUzI1NiJ9.payload",     // JWT
       "Bearer abcdef123456",              // 授权头原文
       "authorization: token abc",         // 字段名 + 值
-      "/Users/wangzhipeng/.claude/auth.json", // 本机路径 + 凭据文件
+      "/Users/wangzhipeng/.claude/auth.json", // 本机路径 + 凭据文件（同时命中三条规则）
       "/home/wangzp/.codex/auth.json",
+      // **纯路径**：不含 auth.json / .claude / .codex，只靠路径前缀这一条规则拦。
+      // 少了这三条，上面那两条会同时命中凭据文件规则，路径规则本身从未被求值——
+      // 把 safeAccountLabel 的 "/users/" "/home/" "\\users\\" 三项删掉，全量测试仍然全绿
+      // （审查实测过）。此后账户标签是本机路径时会原样送到 iPhone / Watch 屏幕上。
+      "/Users/wangzhipeng/Documents",
+      "/home/wangzp/projects/ai-usage",
+      "C:\\Users\\alice\\AppData",       // Windows 形态，此前零覆盖
       "x".repeat(121),                    // 超长：整段日志被灌进来的形态
     ];
     for (const value of unsafe) {

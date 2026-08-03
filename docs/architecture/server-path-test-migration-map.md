@@ -370,8 +370,8 @@ ADR 第 7.2 节的 61 是在 #71 / #72 落地**之前**统计的。实测当前 
 | 880 | `test_source_health_staleness_and_never_seen` | stale / never-seen / 今日零用量但在线 三态区分 | **迁 W**（`web_surface.test.ts:251` / `:263`） | 已覆盖（含 ok / failed / stale） |
 | 956 | `test_build_snapshot_week_period_aggregates_date_range` | week 按真实日期范围聚合并输出趋势序列 | **合同**（`value_golden.json` → `summary-week`） | 已覆盖 |
 | 1071 | `test_today_period_uses_calendar_day_hourly_trend` | today 用所选日 00:00–23:00 小时事实 | **合同**（`value_golden.json` → `summary-today`，`granularity` 14 处） | 已覆盖 |
-| 1141 | `test_today_period_spreads_ccusage_blocks_across_overlapping_hours` | 5 小时 block 分摊到覆盖的小时，上午用量不消失 | **迁 W** ⚠️（`parity.test.ts` 🆕） | `read-model.ts:902 addBlockToHourBuckets` 已实现；`parity.test.ts:540` 只测**反面**（不混入归档 block 快照），正面分摊无用例；`value_golden` 里 `ccusage_block` 零命中 |
-| 1218 | `test_today_period_dedupes_cumulative_ccusage_block_snapshots` | 累计式 block 快照去重 | **迁 W** ⚠️（`parity.test.ts` 🆕） | `read-model.ts:941 dedupeCumulativeBlockRows` 已实现，Worker 侧无用例 |
+| 1141 | `test_today_period_spreads_ccusage_blocks_across_overlapping_hours` | 5 小时 block 分摊到覆盖的小时，上午用量不消失 | **废弃**（#90 判定）| ~~`read-model.ts:902 addBlockToHourBuckets`~~ **已于 #90 删除**：`blockRows` 恒为空数组、`usage_blocks` 表在读模型里从未被查询，该函数不可达。`parity.test.ts` 那条「不混入归档 block 快照」也是**恒真**断言，已一并删除。采集端仍在白采 blocks，见 #91 |
+| 1218 | `test_today_period_dedupes_cumulative_ccusage_block_snapshots` | 累计式 block 快照去重 | **废弃**（#90 判定）| ~~`read-model.ts:941 dedupeCumulativeBlockRows`~~ **已于 #90 删除**：同上，不可达 |
 | 1313 | `test_codex_drift_does_not_create_current_hour_residual_spike` | codex 漂移不制造当前小时假尖峰 | **迁 W** ⚠️（`parity.test.ts` 🆕） | `read-model.ts:1070 codexHourlyContext` 已实现；Worker 侧 `drift` 只在 `ingest.test.ts`（写侧）命中，读侧无用例 |
 | 1374 | `test_codex_drift_with_all_daily_baseline_does_not_double_count_trend` | all-daily 基线下漂移不重复计数 | **迁 W** ⚠️（`parity.test.ts` 🆕） | 同上 |
 | 1435 | `test_today_hourly_trend_is_capped_to_period_total_when_hourly_exceeds_daily` | 小时序列超过日总量时按比例压回 | **迁 W** ⚠️（`parity.test.ts` 🆕） | `read-model.ts:1014 capTodayHourlyToPeriodTotals` 已实现；Worker 测试目录 `cap` **零命中** |
@@ -713,7 +713,7 @@ import 自 `mobile_summary.build_mobile_summary`（第 23 行）与 `version_con
 | 2 | **`test_version_contract_doc.py` 的服务端半边** | 7 | Worker 侧**没有任何文档合同测试文件**；`PRESENTATION_VERSION_FIELDS` 在 `version-contract.ts` 里未见导出 | 「文档与代码不一致会红」这条守卫整体消失（见 PM-6） |
 | 3 | **`compareVersions` 无单元用例** | 6 | `version-contract.ts:147` 已实现；Worker 全部版本测试都是 HTTP 端到端级 | semver 数值序、prerelease 优先级、build metadata、beta 通道判定全部失去直接保护 |
 | 4 | **版本判定细节（枚举拒绝 / 优先级 / 超前 / 回报策略 / 嵌套脱敏 / update_available 不拒收）** | 6 | 实现都在 `version-contract.ts`，用例只覆盖了 unsupported 与四态读取面 | 判定策略被误改不会红 |
-| 5 | **today 趋势的五条派生规则** | 5 | `read-model.ts` 的 `addBlockToHourBuckets`(902) / `dedupeCumulativeBlockRows`(941) / `codexHourlyContext`(1070) / `capTodayHourlyToPeriodTotals`(1014) 全部已实现；Worker 测试目录 **`cap` 零命中**、`drift` 只在写侧命中、正面 block 分摊无用例 | 假尖峰、重复计数、上午用量消失、超额趋势——这几类**用户直接看得见的错**失去守卫 |
+| 5 | ~~**today 趋势的五条派生规则**~~ | 5 → **2** | **#90 实测：本条前提已失效。** `blockRows` 恒为空、`usage_blocks` 从未被读模型查询，故 `addBlockToHourBuckets` / `dedupeCumulativeBlockRows` 是**死代码**（已删除）；`capTodayHourlyToPeriodTotals` 虽被调用但唯一的溢出来源就是 block——把它整个改成 `return;`，全量 Worker 测试**结果一字不变**（刻意保留，防御性钳位）。活路径的 2 条已由 `today-trend.test.ts` 补齐 | 给死代码写守卫产出的是「已经守住了」的假象，比没有守卫更糟 |
 | 6 | **移动端账户/套餐标签的安全处理** | 5 | `mobile-summary.ts:488 safeAccountLabel` / `:500 safePlanLabel` / `:517 titlePlanPart` / `:473 mergeAccountContext` 已实现；`redact` 关键字在 Worker 测试里只命中 `version-contract.test.ts` | **安全相关**：账户标签脱敏、套餐名人性化、多来源合并全部无用例 |
 | 7 | ~~**`ccusage_daily_status` 整个字段（阻断 P0 / #78）**~~ | 0 | **已收口**：字段从采集端摘除，两侧一致忽略，向后兼容由跨实现探针守住 | 缺口关闭。残留的已知代价是「ccusage 挂了但账本可用」时失败原因不再上报，见第 1 节 |
 | 8 | **`verify-cloud` fixture 的 owner 绑定** | 4 | fixture 的 owner 从 Python 读模型换边后，无等价「fixture 由 owner 产出」守卫；`api_contract_golden` 的 Worker 侧生成器同样缺位 | fixture 退回手写状态，违反 AGENTS.md「fixture 必须由 owner 模块产出」 |

@@ -306,6 +306,19 @@ describe.sequential("golden 防陈旧守卫", () => {
     const machines = (filtered.groups as AnyRecord).by_machine as AnyRecord[];
     expect(machines.flatMap((row) => ((row.users as AnyRecord[]) ?? []).map((user) => String(user.account))),
       "过滤后不许出现别的 OS 用户").toEqual(["carol"]);
+
+    // 设备健康这一面同样要按 OS 用户过滤，而且**不能整块空掉**。
+    // carol 原本没有采集报告行，golden 曾把「按 carol 过滤 → 一台设备都看不到」
+    // 记录成正确输出——那样将来「过滤后健康列表被清空」的回归会被照单接受。
+    const filteredSources = (filtered.source_status as AnyRecord[]) ?? [];
+    expect(filteredSources.map((row) => String(row.source_id)), "过滤后必须只剩 carol 那台，且不能为空")
+      .toEqual(["mac-local-carol"]);
+    // 结构下限：未过滤时同机两个来源都在——两个集合必须不同，否则「过滤生效」无从谈起。
+    const allSources = ((unfiltered.source_status as AnyRecord[]) ?? []).map((row) => String(row.source_id));
+    expect(allSources, "未过滤时 alice 与 carol 两台都要在").toEqual(
+      expect.arrayContaining(["mac-local", "mac-local-carol"]),
+    );
+    expect(allSources.length, "未过滤的来源数必须多于过滤后").toBeGreaterThan(filteredSources.length);
   });
 
   it("api_contract_golden.json 等于此刻 Worker 实录出来的结果", async () => {
