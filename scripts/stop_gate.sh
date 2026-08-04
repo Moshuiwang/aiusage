@@ -66,13 +66,24 @@ self_chain() {
 }
 
 find_residue() {
-  local snapshot chain
+  local snapshot chain executable argv0
   snapshot="$(process_snapshot)"
   chain="$(self_chain "$snapshot" "${AIUSAGE_STOP_GATE_SELF_PID:-$$}")"
   printf '%s\n' "$snapshot" | while read -r pid ppid comm args; do
     [ -z "$pid" ] && continue
     case "$chain" in *" $pid "*) continue ;; esac
-    case "${comm##*/}" in
+    executable="${comm##*/}"
+    case "$executable" in
+      node|nodejs|wrangler|workerd) ;;
+      *)
+        # macOS 的 `ps comm` 只有 16 字节，绝对路径会被截成 `/Users/...`，
+        # 不能据此否定真实 node/workerd。argv 第一个词仍是可执行文件路径；
+        # bash -c 的第一个词是 bash，所以不会重引入“只是提到 wrangler dev”误报。
+        argv0="${args%% *}"
+        executable="${argv0##*/}"
+        ;;
+    esac
+    case "$executable" in
       node|nodejs|wrangler)
         case "$args" in *wrangler*) ;; *) continue ;; esac
         case " $args " in *" dev "*) printf '%s\n' "$pid" ;; esac

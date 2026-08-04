@@ -424,14 +424,17 @@ class TimerScopeTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            environment = deploy_doctor.collect_environment(
-                config_path=str(config_path),
-                timer_unit="ai-usage-pusher-linux-biai-wangzp.timer",
-                timer_scope=scope,
-                env={},
-                probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
-                command_runner=runner,
-            )
+            # 这组用例验证 Linux systemd scope；测试宿主可以是 Mac，不能让
+            # sys.platform 把注入的 command_runner 短路掉。
+            with mock.patch.object(deploy_doctor.sys, "platform", "linux"):
+                environment = deploy_doctor.collect_environment(
+                    config_path=str(config_path),
+                    timer_unit="ai-usage-pusher-linux-biai-wangzp.timer",
+                    timer_scope=scope,
+                    env={},
+                    probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
+                    command_runner=runner,
+                )
         return recorded, environment
 
     def test_user_scope_queries_the_user_manager(self) -> None:
@@ -582,13 +585,15 @@ class UnitPythonPathTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            environment = deploy_doctor.collect_environment(
-                config_path=str(config_path),
-                timer_unit="ai-usage-pusher.timer",
-                env={},
-                probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
-                command_runner=runner,
-            )
+            # 这是 Linux service Environment 合同，不应随测试宿主 OS 改变。
+            with mock.patch.object(deploy_doctor.sys, "platform", "linux"):
+                environment = deploy_doctor.collect_environment(
+                    config_path=str(config_path),
+                    timer_unit="ai-usage-pusher.timer",
+                    env={},
+                    probe=lambda url, headers, timeout: deploy_doctor.EntryProbe(url=url, status=200),
+                    command_runner=runner,
+                )
 
         self.assertTrue(
             any("ai-usage-pusher.service" in argv for argv in recorded),
