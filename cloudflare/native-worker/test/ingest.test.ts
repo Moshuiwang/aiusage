@@ -1,11 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { applySchema, applySqlText, bundleWorker } from "./golden/harness";
 
 type ContractRecord = {
   name: string;
@@ -33,10 +31,8 @@ type CollectorPayloadRecord = {
 };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
 const sourceReportStatesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0004_source_report_states.sql");
 const auditIndexesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0005_audit_retention_indexes.sql");
-const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const writeModelPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts");
 const fixturePath = path.join(repoRoot, "tests/fixtures/native_worker_ingest_payloads.json");
 // 采集端（Python `DevicePusher`）真实发出的 /ingest payload。由 owner 模块产出，不是手写的。
@@ -1342,22 +1338,6 @@ async function ingestRequestFieldContract(): Promise<{ declared: string[]; parse
   };
 }
 
-async function bundleWorker(): Promise<string> {
-  const outdir = path.join(tmpdir(), `aiusage-native-worker-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  await mkdir(outdir, { recursive: true });
-  const outfile = path.join(outdir, "index.mjs");
-  await build({
-    entryPoints: [workerEntry],
-    outfile,
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    target: "es2022",
-    sourcemap: false,
-  });
-  return readFile(outfile, "utf8");
-}
-
 async function createMiniflare(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
   const bundleScript = await bundleWorker();
   return new Miniflare({
@@ -1373,46 +1353,6 @@ async function createMiniflare(extraBindings: Record<string, string> = {}): Prom
       ...extraBindings,
     },
   });
-}
-
-async function applySchema(db: D1Database): Promise<void> {
-  await applySqlText(db, await readFile(schemaPath, "utf8"));
-  await resetDatabase(db);
-}
-
-async function applySqlText(db: D1Database, sqlText: string): Promise<void> {
-  const sql = sqlText
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n");
-  for (const statement of sql.split(";")) {
-    const trimmed = statement.trim();
-    if (trimmed) {
-      await db.prepare(trimmed).run();
-    }
-  }
-}
-
-async function resetDatabase(db: D1Database): Promise<void> {
-  const tables = [
-    "usage_hourly_models",
-    "usage_hourly_facts",
-    "source_accuracy",
-    "ai_accounts",
-    "os_identities",
-    "machines",
-    "limit_windows",
-    "source_identities",
-    "usage_hourly",
-    "usage_daily_models",
-    "usage_daily",
-    "source_report_states",
-    "source_reports",
-    "collection_runs",
-  ];
-  for (const table of tables) {
-    await db.prepare(`DELETE FROM ${table}`).run();
-  }
 }
 
 function maskVolatile(value: unknown, fieldName = "", parentName = ""): unknown {

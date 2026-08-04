@@ -31,7 +31,11 @@ export async function providerSlotsScenarios(): Promise<string[]> {
   return entries.filter((name) => name.endsWith(".sql")).map((name) => name.replace(/\.sql$/, "")).sort();
 }
 
-/** 单个场景的重放。每个场景一个干净的库：共用 D1 会让上一条的额度窗口漏进下一条。 */
+/**
+ * 单个场景的重放。场景之间共用池化实例（#101），「干净」靠 acquireWorker 取用时的
+ * resetDatabase 保证——上一条的额度窗口漏进下一条这件事，由 golden 防陈旧守卫兜底
+ * （实测把重置去掉会红 15 条，正是窗口跨场景泄漏的形态）。
+ */
 export async function collectProviderSlotsScenario(scenario: string): Promise<ProviderSlotsRecord[]> {
   return withWorker({ now: fixedNow }, async ({ db, fetchRaw }) => {
     await applySqlFile(db, path.join(providerSlotsScenarioDir, `${scenario}.sql`));

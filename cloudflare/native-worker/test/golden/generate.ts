@@ -21,6 +21,7 @@ import {
   repoRoot,
   valueGoldenPath,
 } from "./paths";
+import { disposeWorkers } from "./harness";
 import { collectProviderSlotsRecords, macosOwnerFixtureFrom } from "./provider-slots-golden";
 import { collectValueGoldenRecords } from "./value-golden";
 
@@ -55,11 +56,16 @@ async function writeJson(filePath: string, records: unknown[]): Promise<void> {
 }
 
 export async function generateGoldens(): Promise<void> {
-  await writeJson(valueGoldenPath, await collectValueGoldenRecords());
+  try {
+    await writeJson(valueGoldenPath, await collectValueGoldenRecords());
 
-  const providerSlots = await collectProviderSlotsRecords();
-  await writeJson(providerSlotsGoldenPath, providerSlots);
-  await writeJson(macosOwnerFixturePath, macosOwnerFixtureFrom(providerSlots));
+    const providerSlots = await collectProviderSlotsRecords();
+    await writeJson(providerSlotsGoldenPath, providerSlots);
+    await writeJson(macosOwnerFixturePath, macosOwnerFixtureFrom(providerSlots));
 
-  await writeJson(apiContractGoldenPath, await collectApiContractRecords());
+    await writeJson(apiContractGoldenPath, await collectApiContractRecords());
+  } finally {
+    // 池化实例不再随 withWorker 逐次销毁；这里不收尾，workerd 子进程会吊住 node 不退出。
+    await disposeWorkers();
+  }
 }
