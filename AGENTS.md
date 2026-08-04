@@ -27,7 +27,7 @@
   - 领域：`area:collector` / `area:worker` / `area:client-mac` / `area:client-ios` /
     `area:tooling` / `area:docs`。
 
-开工先领取对应 Issue 并把 Status 设为 `In progress`；同一变更只能有一个主实施代理。
+开工先领取对应 Issue；研发 Agent 不负责维护 Project Status，同一变更只能有一个主实施代理。
 新工作直接开 Issue，用产品语言描述用户结果。**V1/V2 任务包体系已于 2026-08-01 整体归档，
 不要再新增 `TP-V2-nnn` 编号。**
 
