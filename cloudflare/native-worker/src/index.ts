@@ -78,6 +78,13 @@ function html(payload: string, status = 200, extraHeaders: Record<string, string
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    if (backendMode(env) === "native_d1_production" && !authTokens(env).length) {
+      return json({
+        status: "error",
+        error_type: "auth_unconfigured",
+        message: "Authentication is not configured",
+      }, 503);
+    }
     const url = new URL(request.url);
     if (url.pathname === "/login") {
       if (request.method === "GET") return loginPage();
@@ -140,7 +147,7 @@ export default {
           // Cache availability must not affect a user's ability to read current data.
         }
       }
-      const date = url.searchParams.get("date") ?? currentDate();
+      const date = url.searchParams.get("date") ?? currentDate(env);
       const requestParams = {
         date,
         period: url.searchParams.get("period") ?? "today",
@@ -285,7 +292,8 @@ function verifyToken(supplied: string | null | undefined, env: Env): boolean {
 
 function authTokens(env: Env): string[] {
   const values: string[] = [];
-  if (env.AIUSAGE_TOKEN) values.push(env.AIUSAGE_TOKEN);
+  const primaryToken = (env.AIUSAGE_TOKEN ?? "").trim();
+  if (primaryToken) values.push(primaryToken);
   for (const item of (env.AIUSAGE_TOKEN_SPECS ?? "").split(",")) {
     const trimmed = item.trim();
     if (!trimmed) continue;
@@ -490,9 +498,9 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#x27;");
 }
 
-function currentDate(): string {
+function currentDate(env: Env): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
+    timeZone: env.AIUSAGE_TIMEZONE ?? "Asia/Shanghai",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

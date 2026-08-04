@@ -347,6 +347,22 @@ describe.sequential("native TS Worker write API parity", () => {
         ('2026-05-01T01:00:00+08:00', '2026-05-01T01:59:59+08:00', 'old-source', 'old', 'alice', 'openai', 'old', 'codex', 'codex', 'observed', 'test', 1, 0, 0, 0, 0, 1, 1, 1, 1),
         ('2026-06-23T01:00:00+08:00', '2026-06-23T01:59:59+08:00', 'fresh-source', 'fresh', 'alice', 'openai', 'fresh', 'codex', 'codex', 'observed', 'test', 1, 0, 0, 0, 0, 1, 1, 1, 1)
     `).run();
+    await db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+        cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
+        session_count, attribution_confidence, provenance, first_seen_at, last_seen_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      "retained-old-fact", "old-source", "old", "alice", "openai", "old", "codex", "codex",
+      "2026-05-01T01:00:00+08:00", "2026-05-01T02:00:00+08:00", "Asia/Shanghai",
+      1, 0, 0, 0, 0, 1, null, 1, 1, "observed", "test",
+      "2026-05-01T01:00:00+08:00", "2026-05-01T01:00:00+08:00",
+    ).run();
+    const factsBeforePrune = await db.prepare("SELECT count(*) AS count FROM usage_hourly_facts")
+      .first<{ count: number }>();
+    expect(factsBeforePrune?.count).toBe(1);
 
     const worker = await mf.getWorker();
     const scheduled = await worker.scheduled({
@@ -366,6 +382,9 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(usageRows?.count).toBe(1);
     const rollups = await db.prepare("SELECT count(*) AS count FROM usage_hourly_rollups").first<{ count: number }>();
     expect(rollups?.count).toBe(1);
+    const factsAfterPrune = await db.prepare("SELECT count(*) AS count FROM usage_hourly_facts")
+      .first<{ count: number }>();
+    expect(factsAfterPrune?.count).toBe(factsBeforePrune?.count);
   });
 
   it("uses indexes for the bounded audit-retention lookup", async () => {
