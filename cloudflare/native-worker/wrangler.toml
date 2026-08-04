@@ -9,10 +9,14 @@ AIUSAGE_BACKEND_MODE = "native_d1_production"
 
 [triggers]
 # Cloudflare cron uses UTC; this runs at 03:17 Asia/Shanghai.
-crons = ["17 19 * * *"]
+crons = ["17 19 * * *", "23 18 1 * *"]
 
 [[d1_databases]]
 binding = "AIUSAGE_DB"
 database_name = "aiusage-prod-db"
 database_id = "be19e4de-4fa3-446c-8028-0d31ff0bb9f2"
 migrations_dir = "../migrations"
+
+[[r2_buckets]]
+binding = "AIUSAGE_BACKUPS"
+bucket_name = "aiusage-backups"

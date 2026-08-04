@@ -1,4 +1,5 @@
 import { buildHealthSourceStatus, buildMobile, buildSummary } from "./read-model";
+import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
 import { buildVersionHealth } from "./version-contract";
 import { STATIC_ASSETS } from "./static-assets";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
@@ -6,6 +7,7 @@ import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./wr
 
 export interface Env {
   AIUSAGE_DB: D1Database;
+  AIUSAGE_BACKUPS?: R2Bucket;
   AIUSAGE_TOKEN?: string;
   AIUSAGE_TOKEN_SPECS?: string;
   AIUSAGE_SESSION_SECRET?: string;
@@ -182,6 +184,10 @@ export default {
     const scheduledTime = Number(controller.scheduledTime || 0)
       ? new Date(controller.scheduledTime)
       : new Date();
+    if (controller.cron === MONTHLY_BACKUP_CRON) {
+      await backupCanonicalTables(env, scheduledTime);
+      return;
+    }
     await pruneAuditTables(env.AIUSAGE_DB, scheduledTime);
     if (env.AIUSAGE_SUPABASE_URL && env.AIUSAGE_SUPABASE_SECRET_KEY) {
       try {
