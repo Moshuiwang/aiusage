@@ -46,6 +46,8 @@ jobs:
           cache: npm
       - name: Install JavaScript dependencies
         run: npm ci
+      - name: Type-check Native Worker source
+        run: npm run cf:native:typecheck
       - name: Run Native Worker tests
         run: npm run cf:native:test
 

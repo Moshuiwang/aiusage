@@ -6,7 +6,9 @@
     "cf:pages:deploy": "wrangler pages deploy cloudflare/native-worker/static --project-name aiusage-dashboard",
     "cf:worker:deploy": "wrangler deploy",
     "cf:worker:dev": "wrangler dev --local",
+    "cf:native:typecheck": "tsc --noEmit -p cloudflare/native-worker/tsconfig.src.json",
     "cf:native:test": "vitest run --config cloudflare/native-worker/vitest.config.ts",
+    "cf:native:verify": "npm run cf:native:typecheck && npm run cf:native:test",
     "cf:golden:gen": "node scripts/gen_goldens.mjs",
     "cf:native:dev": "WRANGLER_LOG_PATH=.wrangler/logs wrangler dev --config cloudflare/native-worker/wrangler.local.toml --local"
   },

@@ -1,3 +1,4 @@
+import json
 import re
 import unittest
 from pathlib import Path
@@ -5,9 +6,30 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+PACKAGE_JSON = ROOT / "package.json"
+VERIFY_SCRIPT = ROOT / "scripts" / "verify.sh"
 
 
 class TestGitHubActionsCI(unittest.TestCase):
+    def test_worker_source_typecheck_is_mandatory_locally_and_in_ci(self) -> None:
+        scripts = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))["scripts"]
+        self.assertEqual(
+            scripts["cf:native:typecheck"],
+            "tsc --noEmit -p cloudflare/native-worker/tsconfig.src.json",
+        )
+        self.assertIn(
+            "npm run cf:native:typecheck && npm run cf:native:test",
+            scripts["cf:native:verify"],
+        )
+        self.assertTrue(
+            "npm run cf:native:verify" in VERIFY_SCRIPT.read_text(encoding="utf-8"),
+            "scripts/verify.sh must run the typecheck-and-test Worker gate",
+        )
+        self.assertIn(
+            "npm run cf:native:typecheck",
+            WORKFLOW.read_text(encoding="utf-8"),
+        )
+
     def test_worker_job_uses_an_npm_lockfile(self) -> None:
         self.assertTrue(
             (ROOT / "package-lock.json").is_file(),
@@ -46,6 +68,7 @@ class TestGitHubActionsCI(unittest.TestCase):
         commands = (
             "PYTHONPATH=src python3 -m unittest discover -s tests -v",
             "npm ci",
+            "npm run cf:native:typecheck",
             "npm run cf:native:test",
             "swift test --package-path clients/macos",
             "swift test --package-path mobile/ios",
