@@ -1,17 +1,14 @@
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Miniflare } from "miniflare";
 import { beforeEach, describe, expect, it } from "vitest";
 import { acquireWorker, applySchema, bundleWorker } from "./golden/harness";
+import { apiContractGoldenPath, fixedNow, repoRoot, token } from "./golden/paths";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const staticRoot = path.join(repoRoot, "cloudflare/native-worker/static");
-const contractGoldenPath = path.join(repoRoot, "tests/fixtures/contract/api_contract_golden.json");
-const token = "contract-test-token";
+// 仅属于登录 Cookie 行为测试，不是 golden 合同的共享输入。
 const sessionSecret = "cutover-session-secret";
-const fixedNow = "2026-06-03T12:00:00+08:00";
 
 describe.sequential("native TS Worker web surface", () => {
   let mf: Miniflare;
@@ -190,7 +187,7 @@ describe.sequential("native TS Worker web surface", () => {
   // （收集器的 `staleCollectedAt`），所以 counts 的键含 "stale"、non_ok 里有一条 stale。
   // Worker 不折算时只会产出 ["ok"] 和空 non_ok，这里必红。
   it("reproduces the committed contract golden shape for /api/health source_status", async () => {
-    const golden = JSON.parse(await readFile(contractGoldenPath, "utf8")) as Array<Record<string, any>>;
+    const golden = JSON.parse(await readFile(apiContractGoldenPath, "utf8")) as Array<Record<string, any>>;
     const goldenHealth = golden.find((record) => record.name === "health-after-limits");
     expect(goldenHealth, "golden 里应当有 health-after-limits").toBeTruthy();
     const expectedShape = goldenHealth!.response.body.shape.fields.source_status;
@@ -679,7 +676,7 @@ async function seedMinimalUsage(db: D1Database): Promise<void> {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       "minimal-fact", "mac-local", "macbook-pro", "alice", "claude", "claude-alice", "claude", "test",
-      "2026-06-03T11:00:00+08:00", "2026-06-03T12:00:00+08:00", "Asia/Shanghai",
+      "2026-06-03T11:00:00+08:00", fixedNow, "Asia/Shanghai",
       100, 150, 50, 0, 0, 300, null, 1, 1, "observed", "test",
       "2026-06-03T11:55:00+08:00", "2026-06-03T11:55:00+08:00",
     ),
