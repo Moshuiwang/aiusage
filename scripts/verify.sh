@@ -148,11 +148,11 @@ fi
 echo
 if [ "$RUN_WORKER" -eq 0 ]; then
   WORKER_SKIP_REASON="$SCOPE_DECISION"
-  echo "=== [2/2] Cloudflare Worker 测试：跳过 ==="
+  echo "=== [2/2] Cloudflare Worker 验证：跳过 ==="
   echo "原因：$SCOPE_DECISION"
   echo "如需强制跑：scripts/verify.sh --full；查看判定依据：scripts/verify.sh --explain-scope"
 else
-  echo "=== [2/2] Cloudflare Worker 测试（vitest） ==="
+  echo "=== [2/2] Cloudflare Worker 验证（TypeScript + vitest） ==="
   # 本项目要求 Node >= 22（CI 用 22）。系统 node 可能更旧，优先用 nvm 里的 22+。
   NVM_NODE="$(ls -d "$HOME"/.nvm/versions/node/v2[2-9].* 2>/dev/null | sort -V | tail -1)"
   if [ -n "$NVM_NODE" ]; then
@@ -167,7 +167,7 @@ else
   elif [ ! -d node_modules ]; then
     WORKER_SKIP_REASON="node_modules 不存在，请先运行 npm ci"
   else
-    WK_OUT="$(npm run cf:native:test 2>&1)"
+    WK_OUT="$(npm run cf:native:verify 2>&1)"
     WK_CODE=$?
     echo "$WK_OUT" | tail -6
     if [ "$WK_CODE" -eq 0 ]; then
@@ -190,9 +190,9 @@ else
   echo "Python 测试   : $PY_RESULT"
 fi
 if [ -n "$WORKER_SKIP_REASON" ]; then
-  echo "Worker 测试   : 未运行（${WORKER_SKIP_REASON}）"
+  echo "Worker 验证   : 未运行（${WORKER_SKIP_REASON}）"
 else
-  echo "Worker 测试   : $WORKER_RESULT"
+  echo "Worker 验证   : $WORKER_RESULT"
 fi
 echo
 echo "统一入口未覆盖、需按对应环境另行验证的项："
