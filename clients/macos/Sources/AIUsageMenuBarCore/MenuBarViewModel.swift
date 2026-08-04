@@ -550,21 +550,24 @@ public enum MenuBarViewModel {
         _ quota: MobileProviderQuota,
         hasVisibleWindow: Bool
     ) -> String {
-        if hasVisibleWindow {
+        if hasVisibleWindow, quota.status == "available" {
             return "官方额度"
         }
-        guard let reason = quota.reason, !reason.isEmpty else {
-            return "额度暂不可用"
+        let label: String? = quota.reason.flatMap { reason in
+            guard !reason.isEmpty else { return nil }
+            switch reason {
+            case "no_data": return "暂无数据"
+            case "stale": return "数据已过期"
+            case "unverified": return "未验证"
+            case "unsupported": return "暂不支持"
+            case "unavailable", "failed", "provider_failed": return "读取失败"
+            default: return reason
+            }
         }
-        let label: String
-        switch reason {
-        case "no_data": label = "暂无数据"
-        case "stale": label = "数据已过期"
-        case "unverified": label = "未验证"
-        case "unsupported": label = "暂不支持"
-        case "unavailable", "failed", "provider_failed": label = "读取失败"
-        default: label = reason
+        if hasVisibleWindow {
+            return "最近成功值 · \(label ?? "当前不可用")"
         }
+        guard let label else { return "额度暂不可用" }
         return "额度暂不可用 · \(label)"
     }
 

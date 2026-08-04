@@ -234,13 +234,20 @@ final class ProviderSlotViewModelTests: XCTestCase {
         let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
         let sourceWindow = try XCTUnwrap(record.providerSlots.first { $0.provider == "claude" }?.quota.windows.first)
 
-        for quotaStatus in ["missing", "stale", "unsupported", "failed"] {
+        let degradedCases = [
+            (status: "missing", reason: "no_data", availability: "最近成功值 · 暂无数据"),
+            (status: "stale", reason: "stale", availability: "最近成功值 · 数据已过期"),
+            (status: "unsupported", reason: "unsupported", availability: "最近成功值 · 暂不支持"),
+            (status: "failed", reason: "failed", availability: "最近成功值 · 读取失败"),
+        ]
+
+        for degradedCase in degradedCases {
             let slot = MobileProviderSlot(
                 provider: "claude",
                 usage: .missing,
                 quota: MobileProviderQuota(
-                    status: quotaStatus,
-                    reason: quotaStatus,
+                    status: degradedCase.status,
+                    reason: degradedCase.reason,
                     lastVerifiedAt: sourceWindow.observedAt,
                     sourceID: sourceWindow.sourceID,
                     sourceType: sourceWindow.sourceType,
@@ -253,9 +260,14 @@ final class ProviderSlotViewModelTests: XCTestCase {
                 now: try date("2026-06-03T11:10:00+08:00")
             )
             let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-            XCTAssertEqual(ring.outerPctText, "--", "status: \(quotaStatus)")
-            XCTAssertEqual(ring.innerPctText, "78%", "status: \(quotaStatus)")
-            XCTAssertNotEqual(ring.innerTimeText, "--", "status: \(quotaStatus)")
+            XCTAssertEqual(ring.outerPctText, "--", "status: \(degradedCase.status)")
+            XCTAssertEqual(ring.innerPctText, "78%", "status: \(degradedCase.status)")
+            XCTAssertNotEqual(ring.innerTimeText, "--", "status: \(degradedCase.status)")
+            XCTAssertEqual(
+                ring.availabilityText,
+                degradedCase.availability,
+                "status: \(degradedCase.status)"
+            )
         }
     }
 

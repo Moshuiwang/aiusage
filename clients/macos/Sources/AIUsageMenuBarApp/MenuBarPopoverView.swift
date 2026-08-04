@@ -510,6 +510,11 @@ struct QuotaRingItem: View {
                         color: Color(red: data.outerRed, green: data.outerGreen, blue: data.outerBlue))
                 ringRow(key: data.innerLabel, pct: data.innerPctText, time: data.innerTimeText,
                         color: Color(red: data.innerRed, green: data.innerGreen, blue: data.innerBlue))
+                Text(data.availabilityText)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(data.availabilityText == "官方额度" ? Color.secondary : Color.orange)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(data.updatedText)
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
