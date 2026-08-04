@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -10,64 +9,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class CloudflareDeploymentContracts(unittest.TestCase):
     def test_wrangler_binds_current_native_entrypoint_resources(self) -> None:
-        config = (ROOT / "wrangler.toml").read_text(encoding="utf-8")
+        config = (ROOT / "cloudflare" / "native-worker" / "wrangler.toml").read_text(encoding="utf-8")
 
         self.assertIn('name = "aiusage-api"', config)
-        self.assertIn('main = "cloudflare/aiusage-api-worker.js"', config)
-        self.assertIn('ENVIRONMENT = "development"', config)
-        self.assertIn(
-            'ORIGIN_BASE_URL = "https://aiusage-native-staging.chunbai.workers.dev"',
-            config,
-        )
-        self.assertNotIn("vpn2.chunbai.com", config)
+        self.assertIn('main = "src/index.ts"', config)
+        self.assertIn("workers_dev = false", config)
+        self.assertIn('AIUSAGE_BACKEND_MODE = "native_d1_production"', config)
         self.assertIn('pattern = "aiusage.chunbai.com/*"', config)
-        self.assertNotIn('pattern = "aiusage.chunbai.com/api/*"', config)
-        self.assertNotIn('pattern = "aiusage.chunbai.com/ingest"', config)
-        self.assertNotIn('pattern = "aiusage.chunbai.com/ingest-limits"', config)
         self.assertIn('binding = "AIUSAGE_DB"', config)
-        self.assertIn('database_name = "aiusage-dev-db"', config)
-        self.assertIn('database_id = "35ba085b-f437-41a1-b3c4-9bba30ec4723"', config)
-        self.assertIn('binding = "AIUSAGE_KV"', config)
-        self.assertIn('id = "ce0c08082b034abcb2012b91eed9991a"', config)
-        self.assertIn('binding = "AIUSAGE_ASSETS"', config)
-        self.assertIn('bucket_name = "aiusage-dev-assets"', config)
-
-    def test_worker_proxies_web_api_and_ingest_paths_without_secret_literals(self) -> None:
-        worker = (ROOT / "cloudflare" / "aiusage-api-worker.js").read_text(encoding="utf-8")
-
-        self.assertIn("ORIGIN_BASE_URL", worker)
-        for path_marker in [
-            "WEB_PATH_MARKERS",
-            "api/mobile/summary",
-            "api/summary",
-            "api/health",
-            "static/dashboard.js",
-            "static/dashboard.css",
-            "login",
-            "dashboard",
-            "ingest-limits",
-        ]:
-            with self.subTest(path_marker=path_marker):
-                self.assertIn(path_marker, worker)
-        self.assertIn('pathname === "/"', worker)
-        self.assertIn('pathname === "/dashboard"', worker)
-        self.assertIn('pathname === "/login"', worker)
-        self.assertIn('pathname.startsWith("/static/")', worker)
-        self.assertIn('pathname.startsWith("/api/")', worker)
-        self.assertIn('pathname === "/ingest"', worker)
-        self.assertIn('pathname === "/ingest-limits"', worker)
-        self.assertIn("Cloudflare Worker only handles AI Usage web, API, and ingest paths.", worker)
-        self.assertIn("await request.arrayBuffer()", worker)
-        self.assertNotIn("request.body", worker)
-        self.assertIn("buildProxyInit", worker)
-        self.assertIn("Cache-Control", worker)
-        self.assertIn("no-store", worker)
-        self.assertIn("Vary", worker)
-        self.assertIn("Authorization", worker)
-        self.assertIn("Cookie", worker)
-        self.assertNotRegex(worker, re.compile(r"[a-f0-9]{40,}", re.IGNORECASE))
-        self.assertNotIn("AI_USAGE_INGEST_TOKEN =", worker)
-        self.assertNotIn("AI_USAGE_INGEST_TOKENS =", worker)
+        self.assertIn('database_name = "aiusage-prod-db"', config)
+        self.assertIn('database_id = "be19e4de-4fa3-446c-8028-0d31ff0bb9f2"', config)
+        self.assertIn('binding = "AIUSAGE_BACKUPS"', config)
+        self.assertIn('bucket_name = "aiusage-backups"', config)
+        self.assertIn('crons = ["17 19 * * *", "23 18 1 * *"]', config)
+        self.assertFalse((ROOT / "wrangler.toml").exists())
+        self.assertFalse((ROOT / "cloudflare" / "aiusage-api-worker.js").exists())
 
     def test_pages_is_not_the_current_dashboard_success_path(self) -> None:
         package_json = (ROOT / "package.json").read_text(encoding="utf-8")
@@ -78,8 +34,9 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("cf:worker:deploy", package_json)
         self.assertIn("aiusage.chunbai.com/*", readme)
         self.assertIn("Cloudflare Native Worker + D1", readme)
-        self.assertIn("VPN2 旧 AI Usage 后端已经下线", readme)
-        self.assertIn("Pages 静态化不是当前用户入口", readme)
+        self.assertIn("VPN2 旧 AI Usage 后端", readme)
+        self.assertIn("Dashboard 页面由 Native Worker 直接提供", readme)
+        self.assertNotIn("cf:pages:deploy", package_json)
         self.assertIn("生产入口已经切到 Cloudflare Worker + D1", root_readme)
         self.assertIn("VPN2 旧后端不再承载 AI Usage 读写链路", root_readme)
         self.assertIn("不要用 `curl -I`", readme)

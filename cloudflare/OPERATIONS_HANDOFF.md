@@ -12,22 +12,23 @@ codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check "<Cloudfl
 
 ## 应用侧输入
 
-- Native Worker：`/Users/wangzhipeng/Documents/ai-usage-widget/cloudflare/native-worker/`
-- 入口 Worker / 路由配置：`/Users/wangzhipeng/Documents/ai-usage-widget/wrangler.toml`
-- 目标入口 Worker：`aiusage-api`
-- 目标 Native Worker：`aiusage-native-staging`
+- Native Worker：`cloudflare/native-worker/`
+- 入口 Worker / 路由配置：`cloudflare/native-worker/wrangler.toml`
+- 生产 Worker：`aiusage-api`
 - D1：`aiusage-prod-db`
+- R2：`aiusage-backups`
 - 目标域名：`aiusage.chunbai.com`
-- 当前 route：`aiusage.chunbai.com/*`
+- 当前 route：`aiusage.chunbai.com/*` → `aiusage-api`
 - 当前 canonical store：Cloudflare D1
-- VPN2：旧 AI Usage 后端已下线，只作为历史回退/审计对象，不参与当前读写。
+- workers.dev：生产已关闭；不以 workers.dev 作为用户入口。
+- VPN2、legacy proxy、Pages Dashboard：已退出当前读写链路。
 
 ## 运维 Agent 任务
 
-1. 使用 Cloudflare 凭据部署或检查 Native Worker / 入口 Worker。
-2. 确认 `aiusage.chunbai.com/*` 由 Worker 接管，不被 Pages 占位入口抢走。
-3. 确认 API health 返回 D1 canonical store。
-4. 执行线上 smoke。
+1. 使用 Cloudflare 凭据检查或部署 `cloudflare/native-worker/wrangler.toml`。
+2. 确认 `aiusage.chunbai.com/*` 指向 `aiusage-api`，不被 Pages 占用。
+3. 确认 API health 返回 D1 canonical store，且生产没有 Supabase 旁路密钥。
+4. 执行线上 smoke；月度备份首跑前不得宣告 O3 完成。
 
 历史账本一次性补齐不走常规部署步骤，必须使用
 [`D1_LEGACY_BACKFILL_HANDOFF.md`](D1_LEGACY_BACKFILL_HANDOFF.md) 的独立检查、分批写入和回退流程。

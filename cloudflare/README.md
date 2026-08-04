@@ -4,18 +4,16 @@
 
 ## 资源
 
-- Pages project: `aiusage-dashboard`
 - Worker: `aiusage-api`
-- D1 binding: `AIUSAGE_DB`
-- KV binding: `AIUSAGE_KV`
-- R2 binding: `AIUSAGE_ASSETS`
+- D1 binding: `AIUSAGE_DB` → `aiusage-prod-db`
+- R2 binding: `AIUSAGE_BACKUPS` → `aiusage-backups`
 - Domain: `aiusage.chunbai.com`
 
 ## 当前策略
 
-当前生产读写都走 Cloudflare D1。VPN2 旧 AI Usage 后端已经下线，不再承载当前读写链路。当前事实见 [`../docs/architecture/cloudflare-migration-remaining-work.md`](../docs/architecture/cloudflare-migration-remaining-work.md)。
+当前生产读写都走 Cloudflare D1。VPN2 旧 AI Usage 后端、legacy proxy 和 Pages Dashboard 均不再承载当前用户链路。
 
-生产入口 Worker 路由由仓库根 `wrangler.toml` 声明：
+生产入口 Worker 路由由 `cloudflare/native-worker/wrangler.toml` 声明：
 
 - `aiusage.chunbai.com/*`
 
@@ -29,18 +27,12 @@
 - `/ingest`
 - `/ingest-limits`
 
-Pages 静态化不是当前用户入口。`aiusage-dashboard` Pages 项目可以保留，但不要让它承载 Web 登录或 Dashboard 主路径。
+Dashboard 页面由 Native Worker 直接提供。旧 `aiusage-dashboard` Pages 项目已删除。
 
 ## 应用侧部署命令
 
 ```bash
 npm run cf:worker:deploy
-```
-
-`cf:pages:deploy` 只作为后续静态化准备，不用于本轮用户入口验收：
-
-```bash
-npm run cf:pages:deploy
 ```
 
 真实 Cloudflare 部署和线上验证必须交给 `/Users/wangzhipeng/Documents/ops` 的运维 Agent，入口见 [`OPERATIONS_HANDOFF.md`](OPERATIONS_HANDOFF.md)。不要假定旧 `cloud-flare` 目录存在。

@@ -84,8 +84,8 @@ else
 
   # Python 侧：判据**比「不含 cloudflare/」严格得多**，因为仍有 Python 测试会读
   # cloudflare/ 下的内容——migrations/（test_d1_schema_migration）、native-worker/test/ 的
-  # 采集端 payload fixture（test_collector_payload_contract）、aiusage-api-worker.js、
-  # worker.ts、README.md、OPERATIONS_HANDOFF.md（test_cloudflare_deployment 等治理测试）。
+  # 采集端 payload fixture（test_collector_payload_contract）、Worker 配置、README.md、
+  # OPERATIONS_HANDOFF.md（test_cloudflare_deployment 等治理测试）。
   # 按「改了 cloudflare/ 就跳 Python」做会静默漏跑这些。
   #
   # 唯一能证明不影响 Python 的范围是 TS 源码目录：实测 tests/ 与 scripts/ 下无一处读

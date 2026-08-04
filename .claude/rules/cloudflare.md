@@ -10,11 +10,12 @@ paths:
 
 - 生产入口 `https://aiusage.chunbai.com`，由 **Cloudflare Worker + D1** 承载。
   canonical store 是 **Cloudflare D1**（SQLite-compatible serverless SQL，不是 PostgreSQL）。
-- 入口 Worker = `aiusage-api`（`cloudflare/aiusage-api-worker.js`，路由 `aiusage.chunbai.com/*`），
-  按 `wrangler.toml` 的 `ORIGIN_BASE_URL` 回源；Native Worker = `cloudflare/native-worker/`。
+- 入口 Worker = `aiusage-api`（`cloudflare/native-worker/`，路由 `aiusage.chunbai.com/*`），
+  直接读写 Cloudflare D1；不再经过 legacy proxy、VPN2 或 Pages。
 - **VPN2 旧 Python 后端已下线**，不再参与读写链路。文档里仍写「回源 vpn2.chunbai.com:8443」的
-  段落是历史内容，以 `wrangler.toml` 和代码为准。
-- 仓库根 `wrangler.toml` 的 D1/KV/R2 绑定是 dev 资源；`SHADOW_INGEST_URL` 是 secret，不在 toml 里。
+  段落是历史内容，以 `cloudflare/native-worker/wrangler.toml` 和 Native 代码为准。
+- 正式配置唯一入口是 `cloudflare/native-worker/wrangler.toml`，绑定生产 D1 `aiusage-prod-db` 和 R2 `aiusage-backups`，
+  并声明每日维护与每月首日备份 Cron。生产不配置 `SHADOW_INGEST_URL` 或 Supabase 旁路密钥。
 
 ## 运维边界（本机不可执行）
 
