@@ -8,6 +8,8 @@
 ## 当前生产事实
 
 - 生产入口：`https://aiusage.chunbai.com`，由 Cloudflare Worker + Cloudflare D1 承载。
+- 生产 Worker：`aiusage-api`，Route 为 `aiusage.chunbai.com/*`；workers.dev 直连已关闭，Pages 项目已删除。
+- 生产备份：R2 bucket `aiusage-backups`；Worker 配置了每日维护和每月首日备份 Cron。
 - 数据库类型：Cloudflare D1，SQLite-compatible serverless SQL，不是 PostgreSQL。
 - VPN2 旧 AI Usage 后端已下线，不再参与读写链路。
 - 本机上报：macOS LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒运行 Python pusher。
@@ -20,15 +22,15 @@
   tag `pre-server-deletion-eee4f35`）。本地开发跑 `scripts/dev_worker.sh`（wrangler dev +
   本地 D1，与生产同款实现）。随 #74 落地的还有：静态资源搬到
   `cloudflare/native-worker/static/`（PM-1）、`collect-limits` 停止写本地 SQLite（PM-2，
-  云端 D1 是唯一正本）、`supabase-sync.ts` 按 PM 意向保留（PM-5，代码内无已知消费者）。
+  云端 D1 是唯一正本）。生产 Worker 不再配置 Supabase 旁路密钥；历史同步模块不属于生产用户链路。
 - **版本可见性已上线**：`/api/summary` 的 `source_status[].version` 与顶层 `version_health`、
   `/api/health` 的 `versions` 返回各设备版本状态。语义是「**最后一次被服务端成功接收的版本**」，
   不是「设备当前运行的版本」——不兼容 payload 在写库之前就被拒绝。
-- **D1 迁移已到 `0008`**。`0001_initial_schema.sql` 是**累计快照**：0002/0003/0004/0006 的成果、
+- **D1 迁移已到 `0009`**。`0001_initial_schema.sql` 是**累计快照**：0002/0003/0004/0006 的成果、
   0005 的两个审计索引（#75 已回填）、以及 0008 的 `usage_blocks` 删表（#74，0001 已同步不再建表）
-  都收敛在里面，「只跑 0001 的新建库」与迁移链落到同一套表、列与索引。守卫在
+  都收敛在里面，「只跑 0001 的新建库」与迁移链落到同一套表、列与索引；0009 增加拒收上报审计表。守卫在
   `tests/test_d1_schema_migration.py`：显式列布局快照（#74 起不再镜像 Python 存储层）、
-  两条建库路径 schema 比对、owner 迁移索引重放。**生产 D1 的 0008 尚未执行，归 Ops（Mac 侧）**。
+  两条建库路径 schema 比对、owner 迁移索引重放。**生产 D1 的 0008、0009 已执行并由 Ops 回读确认**。
 
 > D1 体量等会随时间变化的数字不在此维护，需要时直接查。
 

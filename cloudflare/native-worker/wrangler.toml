@@ -1,15 +1,20 @@
-name = "aiusage-native-staging"
+name = "aiusage-api"
 main = "src/index.ts"
 compatibility_date = "2026-06-21"
-workers_dev = true
+workers_dev = false
 
 [vars]
 AIUSAGE_TIMEZONE = "Asia/Shanghai"
 AIUSAGE_BACKEND_MODE = "native_d1_production"
 
 [triggers]
-# Cloudflare cron uses UTC; this runs at 03:17 Asia/Shanghai.
+# Cloudflare cron uses UTC; these run at 03:17 Asia/Shanghai and on the first
+# day of each month at 02:23 Asia/Shanghai.
 crons = ["17 19 * * *", "23 18 1 * *"]
+
+[[routes]]
+pattern = "aiusage.chunbai.com/*"
+zone_name = "chunbai.com"
 
 [[d1_databases]]
 binding = "AIUSAGE_DB"
