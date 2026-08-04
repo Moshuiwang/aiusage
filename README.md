@@ -66,6 +66,28 @@ limits/quota source 仍是后续可插拔能力，见 `docs/subscription-usage-s
 - Mac 不同步或解析远程 `.claude`、`.codex` 原始日志目录。
 - `config/sources.local.json`、`data/latest.json`、`data/usage.sqlite` 不提交。
 
+## 安装与升级（采集端，#124）
+
+三个 OS 同一条命令（uv 单文件自举、自管 Python 版本）：
+
+```bash
+# 安装/升级到指定版本（发版即打 tag，tag 与 COLLECTOR_VERSION 同名，如 v0.3.0；
+# tag 随发版才存在，可先用分支名或 commit 验证通道）
+uv tool install "ai-usage-widget @ git+https://github.com/Moshuiwang/aiusage@<tag>"
+
+# 没有 uv 时先装它（Linux/Mac；Windows 用 powershell 版安装脚本）
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+- **版本单源**：包版本动态取自 `version_contract.COLLECTOR_VERSION`（pyproject 不手写版本，
+  `tests/test_version_single_source.py` 守着）。发版流程 = 升 `COLLECTOR_VERSION` → 打同名 tag。
+- **定时单元**：`deploy_units.py` 渲染三个 OS 的定时任务（systemd / launchd / Windows Task
+  Scheduler）。Windows 侧用 `render_windows_task_xml()` 生成任务 XML（UTF-16 写盘），
+  `schtasks /Create /TN <任务名> /XML <文件>` 导入；任务名见 `CollectorUnitSpec.windows_task_name`。
+- **体检**：`ai-usage-widget doctor` 认得两种部署形态——版本化 release 目录，以及
+  uv tool install / pip 的已安装包（版本可追溯）。
+- 自动升级暂不开启（#106/D7 决策）：升级 = 重跑一条 `uv tool install ...@新tag`。
+
 ## 常用命令
 
 验证（唯一入口，会按改动面自动裁剪：不动 `cloudflare/` 就不跑 Worker 测试）：

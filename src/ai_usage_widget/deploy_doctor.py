@@ -207,6 +207,8 @@ class DoctorEnvironment:
     observed_identity: Mapping[str, str] = field(default_factory=dict)
     release_dir: Optional[str] = None
     release_manifest: Optional[Mapping[str, Any]] = None
+    #: 已安装分发（uv tool install / pip）的版本；None 表示不是打包通道安装。
+    installed_distribution_version: Optional[str] = None
     python_path: Sequence[str] = ()
     imported_from: Optional[str] = None
     #: timer 对应 service unit 里的 `Environment=`。这才是 Issue 里出事故的那一份
@@ -244,6 +246,9 @@ class DoctorEnvironment:
             },
             release_dir=release.get("path"),
             release_manifest=release.get("manifest"),
+            installed_distribution_version=(
+                str(dict(data.get("installed_distribution") or {}).get("version") or "") or None
+            ),
             python_path=[str(item) for item in (data.get("python_path") or [])],
             imported_from=data.get("imported_from"),
             unit_environment=(
@@ -618,11 +623,20 @@ def _check_timezone(environment: DoctorEnvironment) -> DoctorCheck:
 
 def _check_runtime_release(environment: DoctorEnvironment) -> DoctorCheck:
     if not environment.release_dir:
+        # uv tool install / pip 的打包通道没有 /opt release 目录，但分发本身带版本，
+        # 同样可追溯（#124 的安装通道标准化）。只在没有 release 目录时才走这条，
+        # 避免用包元数据掩盖一个坏掉的 release 部署。
+        installed = str(environment.installed_distribution_version or "").strip()
+        if installed:
+            return _ok(
+                "runtime_release",
+                f"已安装包 ai-usage-widget {installed}（uv tool install / pip 打包通道，版本可追溯）",
+            )
         return _fail(
             "runtime_release",
             REASON_RUNTIME_RELEASE_UNVERSIONED,
             "运行目录未知，无法确认部署的是哪一版代码",
-            "用版本化 release 目录部署，禁止部署不可追溯的现场代码。",
+            "用版本化 release 目录部署（或 uv tool install 打包安装），禁止部署不可追溯的现场代码。",
         )
     manifest = environment.release_manifest or {}
     version = str(manifest.get("version") or "").strip()
@@ -727,7 +741,15 @@ def _check_timer(environment: DoctorEnvironment) -> DoctorCheck:
     unit = environment.timer_unit
     scope = environment.timer_scope or TIMER_SCOPE_USER
     if not environment.timer_supported:
-        # 本机是 Linux 开发机，没有 Mac 可验收，所以不假实现 launchd 分支。
+        # 只实现了 systemd 检查；其他平台不假实现，但提示必须指向该平台真实的定时机制。
+        platform = str((environment.observed_identity or {}).get("platform") or "")
+        if platform == "windows":
+            return _unknown(
+                "timer_schedule",
+                f"本平台的定时任务由 Task Scheduler 管理，doctor 尚未实现 schtasks 检查，"
+                f"{unit} 的未来触发未经验证",
+                '在 Windows 侧用 schtasks /Query /TN "<任务名>" /V 人工确认（需在 Windows 侧执行）。',
+            )
         return _unknown(
             "timer_schedule",
             f"本平台的定时任务由 launchd 管理，doctor 尚未实现 launchd 检查，"
@@ -986,6 +1008,7 @@ def collect_environment(
         observed_identity=_observed_identity(),
         release_dir=resolved_release_dir,
         release_manifest=release_manifest,
+        installed_distribution_version=_installed_distribution_version(),
         python_path=python_path,
         imported_from=str(Path(__file__).resolve().parent / "__init__.py"),
         unit_environment=unit_environment,
@@ -997,6 +1020,32 @@ def collect_environment(
         reference_time=reference_time,
         secret_values=secret_values,
     )
+
+
+def _installed_distribution_version(search_path: Optional[Sequence[str]] = None) -> Optional[str]:
+    """真正安装的分发（uv tool install / pip，`.dist-info`）的版本，否则 None。
+
+    只认 `.dist-info`：源码树构建残留的 `*.egg-info` 会让 `PYTHONPATH=src` 直跑的
+    「现场代码」也能查到版本——那正是 runtime_release 守卫要拦的形态，不能被
+    包元数据掩盖。定位器形态未知时按未安装处理（守卫方向宁缺勿滥）。
+    `search_path` 仅测试注入用，默认 None 走进程 sys.path。
+    """
+
+    try:
+        from importlib import metadata
+    except ImportError:  # pragma: no cover - Python >= 3.9 恒有
+        return None
+    kwargs: Dict[str, Any] = {"name": "ai-usage-widget"}
+    if search_path is not None:
+        kwargs["path"] = list(search_path)
+    for distribution in metadata.Distribution.discover(**kwargs):
+        locator = getattr(distribution, "_path", None)
+        if locator is None or not str(locator).endswith(".dist-info"):
+            continue
+        version = str(distribution.version or "").strip()
+        if version:
+            return version
+    return None
 
 
 def _service_unit_name(timer_unit: str) -> str:
