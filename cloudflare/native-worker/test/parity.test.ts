@@ -455,7 +455,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
       expect(summary.end_date, `${period} end_date`).toBe(want.end_date);
       expect(summary.total_tokens, `${period} total_tokens`).toBe(want.total_tokens);
       expect((web.trend as Shape).granularity, `${period} granularity`).toBe(want.granularity);
-      const mobile = buildMobileSummary(web) as Record<string, Shape>;
+      const mobile = buildMobileSummary(web) as unknown as Record<string, Shape>;
       expect(mobile.period.id, `mobile ${period} id`).toBe(period);
       expect(mobile.period.total_tokens, `mobile ${period} total`).toBe(want.total_tokens);
       totals.push(Number(summary.total_tokens));
@@ -555,7 +555,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
       },
     ]);
 
-    const mobile = buildMobileSummary(web) as Record<string, Shape>;
+    const mobile = buildMobileSummary(web) as unknown as Record<string, Shape>;
     const windows = mobile.limits.windows as Shape[];
     // 结构下限：三个可信窗口都在（claude week + codex 5h + codex week），
     // 否则下面的标签断言会对着空数组恒真。
@@ -603,7 +603,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
     const codexStatus = (web.limit_status as Shape[]).find((row) => row.provider === "codex") as Shape;
     expect(codexStatus.source_id).toBe("codex-main");
 
-    const mobile = buildMobileSummary(web) as Record<string, Shape>;
+    const mobile = buildMobileSummary(web) as unknown as Record<string, Shape>;
     const windows = mobile.limits.windows as Shape[];
     expect(windows).toHaveLength(3);
     expect(windows.filter((row) => row.provider === "codex").map((row) => row.source_id))
@@ -618,7 +618,7 @@ describe.sequential("native TS Worker read-only API parity", () => {
     const webAfter = await buildSummary(db, request);
     const codexStatusAfter = (webAfter.limit_status as Shape[]).find((row) => row.provider === "codex") as Shape;
     expect(codexStatusAfter.source_id).toBe("codex-backup");
-    const mobileAfter = buildMobileSummary(webAfter) as Record<string, Shape>;
+    const mobileAfter = buildMobileSummary(webAfter) as unknown as Record<string, Shape>;
     const windowsAfter = mobileAfter.limits.windows as Shape[];
     expect(windowsAfter.map((row) => [row.provider, row.window, row.source_id])).toEqual([
       ["claude", "week", "claude-main"],

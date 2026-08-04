@@ -12,7 +12,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { buildMobileSummary } from "../src/mobile-summary";
+import { buildMobileSummary as buildMobileSummaryTyped } from "../src/mobile-summary";
+import type { SummarySnapshot } from "../src/read-model/shared";
+
+// #130：夹具快照是宽类型，走 unknown 桥接直调 DTO（运行时 coercion 兜底）。
+const buildMobileSummary = (snapshot: Record<string, unknown>) =>
+  buildMobileSummaryTyped(snapshot as unknown as SummarySnapshot);
 import { buildVersionHealth } from "../src/version-contract";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
