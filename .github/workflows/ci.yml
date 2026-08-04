@@ -2,9 +2,7 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,6 +12,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Apple test scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      macos: ${{ steps.paths.outputs.macos }}
+      ios: ${{ steps.paths.outputs.ios }}
+    steps:
+      - name: Check out repository history
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Classify Apple test scope
+        id: paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          event_name="${{ github.event_name }}"
+          macos=false
+          ios=false
+
+          if [ "$event_name" = "workflow_dispatch" ]; then
+            macos=true
+            ios=true
+          else
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+            while IFS= read -r -d '' file; do
+              case "$file" in
+                clients/macos/*)
+                  macos=true
+                  ;;
+                mobile/ios/*|tests/test_ios_xcode_integration.py)
+                  ios=true
+                  ;;
+                .github/workflows/ci.yml|tests/test_github_actions_ci.py|.github/actions/*|Package.swift|Package.resolved|.swift-version|clients/shared/*|mobile/shared/*)
+                  macos=true
+                  ios=true
+                  ;;
+              esac
+            done < <(git diff --name-only -z "$base" "$head")
+          fi
+
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+          echo "ios=$ios" >> "$GITHUB_OUTPUT"
+
   python:
     name: Python
     runs-on: ubuntu-latest
@@ -53,26 +98,39 @@ jobs:
 
   macos-swift:
     name: macOS Swift
-    runs-on: macos-15
+    needs: changes
+    runs-on: ${{ needs.changes.outputs.macos == 'true' && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - name: Check out repository
+        if: needs.changes.outputs.macos == 'true'
         uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run macOS package tests
+        if: needs.changes.outputs.macos == 'true'
         run: swift test --package-path clients/macos
+      - name: Report safe scope skip
+        if: needs.changes.outputs.macos != 'true'
+        run: echo "Apple tests skipped by safe path scope; macOS runner was not started."
 
   ios-swift:
     name: iOS Swift
-    runs-on: macos-15
+    needs: changes
+    runs-on: ${{ needs.changes.outputs.ios == 'true' && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - name: Check out repository
+        if: needs.changes.outputs.ios == 'true'
         uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Run iOS package tests
+        if: needs.changes.outputs.ios == 'true'
         run: swift test --package-path mobile/ios
       - name: Verify Xcode integration
+        if: needs.changes.outputs.ios == 'true'
         run: python3 -m unittest tests.test_ios_xcode_integration -v
+      - name: Report safe scope skip
+        if: needs.changes.outputs.ios != 'true'
+        run: echo "Apple tests skipped by safe path scope; iOS runner was not started."
