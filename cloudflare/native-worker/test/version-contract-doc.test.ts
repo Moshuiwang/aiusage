@@ -99,8 +99,9 @@ const AUTHORITY_ENTRIES = [
     mustReference: ["buildVersionHealth", "version_health"],
   },
   {
+    // #126：/api/health 装配随拆分移入 health.ts（index.ts 只剩路由分发）。
     duty: "`/api/health` 的 `versions` 块",
-    owner: "cloudflare/native-worker/src/index.ts",
+    owner: "cloudflare/native-worker/src/health.ts",
     mustReference: ["buildVersionHealth"],
   },
 ];

@@ -377,7 +377,11 @@ describe.sequential("native TS Worker web surface", () => {
   });
 
   it("reads current source health from the per-source state model", async () => {
-    const indexSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/index.ts"), "utf8");
+    // #126 拆分后入口面 = index.ts + 拆出的 auth/health/http 三个模块，守卫覆盖整组。
+    const entryFiles = ["index.ts", "auth.ts", "health.ts", "http.ts"];
+    const indexSource = (await Promise.all(
+      entryFiles.map((name) => readFile(path.join(repoRoot, "cloudflare/native-worker/src", name), "utf8")),
+    )).join("\n");
     // #126 目录化后读模型 = 兼容入口 + read-model/ 目录全部模块，守卫覆盖整个目录，
     // 防止有人把被禁的 SQL 写进任何一个子模块。
     const readModelDir = path.join(repoRoot, "cloudflare/native-worker/src/read-model");
