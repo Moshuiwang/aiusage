@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Miniflare } from "miniflare";
@@ -33,7 +33,20 @@ type CollectorPayloadRecord = {
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const sourceReportStatesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0004_source_report_states.sql");
 const auditIndexesMigrationPath = path.join(repoRoot, "cloudflare/migrations/0005_audit_retention_indexes.sql");
-const writeModelPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts");
+// #126 目录化后 write-model = 兼容入口 + write-model/ 目录全部模块；
+// 源码级守卫读整个目录，防止被禁形态藏进任何一个子模块。
+const writeModelBarrelPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts");
+const writeModelDirPath = path.join(repoRoot, "cloudflare/native-worker/src/write-model");
+
+async function readWriteModelSource(): Promise<string> {
+  const moduleNames = (await readdir(writeModelDirPath)).sort();
+  if (moduleNames.length < 7) throw new Error("write-model/ 目录不该少于 7 个模块");
+  const pieces = [await readFile(writeModelBarrelPath, "utf8")];
+  for (const name of moduleNames) {
+    pieces.push(await readFile(path.join(writeModelDirPath, name), "utf8"));
+  }
+  return pieces.join("\n");
+}
 const fixturePath = path.join(repoRoot, "tests/fixtures/native_worker_ingest_payloads.json");
 // 采集端（Python `DevicePusher`）真实发出的 /ingest payload。由 owner 模块产出，不是手写的。
 // 采集端永远是 Python、服务端是 TS，「采集端 payload ↔ 服务端 ingest」是一条消灭不掉的
@@ -434,7 +447,7 @@ describe.sequential("native TS Worker write API parity", () => {
   });
 
   it("guards large ingest and limits writes against per-row remote D1 write awaits", async () => {
-    const source = await readFile(writeModelPath, "utf8");
+    const source = await readWriteModelSource();
     expect(source).toContain("db.batch(");
     expect(source).not.toMatch(/for \(const item of dailyItems\)\s+rowsWritten \+= await upsertDailyItem/);
     expect(source).not.toMatch(/for \(const item of hourlyItems\)\s+rowsWritten \+= await upsertHourlyItem/);
@@ -1336,7 +1349,7 @@ function maskedFieldPaths(value: unknown, trail = "$"): string[] {
  * `declared` 是 `type IngestRequest` 的声明，`parsed` 是 `validateIngestPayload` 真正取出的字段。
  */
 async function ingestRequestFieldContract(): Promise<{ declared: string[]; parsed: string[] }> {
-  const source = await readFile(writeModelPath, "utf8");
+  const source = await readWriteModelSource();
   const declaration = source.match(/type IngestRequest = \{([\s\S]*?)\n\};/);
   expect(declaration, "write-model.ts 必须仍然声明 type IngestRequest").not.toBeNull();
   // 先断言锚点存在再 slice：indexOf 找不到会返回 -1，slice(-1) 拿到的是源码最后一个字符，

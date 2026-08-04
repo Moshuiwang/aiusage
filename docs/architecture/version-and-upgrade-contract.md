@@ -15,8 +15,9 @@
 - 服务端版本字段口径、四态判定、最低支持版本策略：
   `cloudflare/native-worker/src/version-contract.ts`（唯一 owner）。
 - 采集端自报版本字段：`src/ai_usage_widget/version_contract.py`（`pusher.py` / `config.py` 在用）。
-- 上报 payload 校验与敏感字段边界：`cloudflare/native-worker/src/write-model.ts`。
-- 兼容判定与拒绝动作：`cloudflare/native-worker/src/write-model.ts`（判定与 400 的
+- 上报 payload 校验与敏感字段边界：`cloudflare/native-worker/src/write-model/validate.ts`
+  （#126 目录化后 `write-model.ts` 只是兼容入口）。
+- 兼容判定与拒绝动作：`cloudflare/native-worker/src/write-model/handlers.ts`（判定与 400 的
   `error_type` 都在写库之前定；`index.ts` 只按 `exc.status` 把 `WriteValidationError`
   序列化成响应，不参与判定）。
 - 来源健康读模型（`/api/summary` 的 `source_status[].version` 与顶层 `version_health`）：

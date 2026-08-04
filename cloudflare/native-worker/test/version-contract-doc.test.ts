@@ -79,13 +79,15 @@ const AUTHORITY_ENTRIES = [
     mustReference: ["COLLECTOR_VERSION_FIELDS"],
   },
   {
+    // #126 目录化后 wire 归一化在 validate.ts；write-model.ts 只是兼容入口。
     duty: "上报 payload 校验与敏感字段边界",
-    owner: "cloudflare/native-worker/src/write-model.ts",
+    owner: "cloudflare/native-worker/src/write-model/validate.ts",
     mustReference: ["normalizeCollectorRelease"],
   },
   {
+    // #126 目录化后判定与拒绝动作在写编排入口 handlers.ts。
     duty: "兼容判定与拒绝动作",
-    owner: "cloudflare/native-worker/src/write-model.ts",
+    owner: "cloudflare/native-worker/src/write-model/handlers.ts",
     mustReference: ["evaluateCollectorRelease", "UNSUPPORTED_ERROR_TYPE"],
   },
   {
