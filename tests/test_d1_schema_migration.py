@@ -13,6 +13,9 @@ LIMIT_STABLE_KEY_MIGRATION_SQL = MIGRATIONS_DIR / "0003_limit_window_stable_key.
 COLLECTOR_VERSION_MIGRATION_SQL = (
     MIGRATIONS_DIR / "0007_source_report_states_collector_version.sql"
 )
+REJECTED_INGEST_MIGRATION_SQL = (
+    MIGRATIONS_DIR / "0009_rejected_ingest_attempts.sql"
+)
 
 # The source_report_states layout as it exists on a database already migrated to
 # 0006. Deliberately spelled out instead of replayed from 0001/0004: 0001 was
@@ -137,6 +140,15 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('display_name', 'TEXT', 1, None, 0),
         ('first_seen_at', 'TEXT', 1, None, 0),
         ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "rejected_ingest_attempts": [
+        ('source_id_claimed', 'TEXT', 1, None, 1),
+        ('error_type', 'TEXT', 1, None, 2),
+        ('path', 'TEXT', 1, None, 0),
+        ('day', 'TEXT', 1, None, 3),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+        ('count', 'INTEGER', 1, '1', 0),
     ],
     "source_accuracy": [
         ('source_id', 'TEXT', 1, None, 1),
@@ -342,6 +354,9 @@ FRESH_INSTALL_CREATED_INDEXES = {
     },
     "os_identities": {
     },
+    "rejected_ingest_attempts": {
+        "idx_rejected_ingest_attempts_last_seen": (0, 0, ('last_seen_at',)),
+    },
     "source_accuracy": {
         "idx_source_accuracy_status": (0, 0, ('accuracy_status', 'source_id', 'agent')),
     },
@@ -546,6 +561,50 @@ class TestD1SchemaMigration(unittest.TestCase):
         )
         for table, expected_columns in D1_ONLY_TABLE_COLUMNS.items():
             self.assertEqual(chain_columns[table], expected_columns)
+
+    def test_rejected_ingest_migration_matches_fresh_schema_on_its_real_upgrade_path(self) -> None:
+        """0009 must create the same table as cumulative 0001 when the table is absent.
+
+        The full-chain test cannot prove this: current 0001 already creates the table,
+        so 0009's IF NOT EXISTS path is a no-op there. Apply 0009 to an empty legacy
+        database and compare columns, PK auto-index and explicit indexes independently.
+        """
+        self.assertTrue(
+            REJECTED_INGEST_MIGRATION_SQL.exists(),
+            f"Missing migration: {REJECTED_INGEST_MIGRATION_SQL}",
+        )
+
+        with sqlite3.connect(":memory:") as fresh_conn:
+            fresh_conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
+            fresh_columns = _table_columns(fresh_conn, "rejected_ingest_attempts")
+            fresh_indexes = _created_indexes(fresh_conn, "rejected_ingest_attempts")
+            fresh_auto_indexes = _auto_indexes(fresh_conn, "rejected_ingest_attempts")
+
+        with sqlite3.connect(":memory:") as upgraded_conn:
+            upgraded_conn.executescript(
+                REJECTED_INGEST_MIGRATION_SQL.read_text(encoding="utf-8")
+            )
+            upgraded_tables = _user_tables(upgraded_conn)
+            upgraded_columns = _table_columns(upgraded_conn, "rejected_ingest_attempts")
+            upgraded_indexes = _created_indexes(upgraded_conn, "rejected_ingest_attempts")
+            upgraded_auto_indexes = _auto_indexes(upgraded_conn, "rejected_ingest_attempts")
+
+        self.assertEqual(upgraded_tables, ["rejected_ingest_attempts"])
+        self.assertEqual(upgraded_columns, fresh_columns)
+        self.assertEqual(
+            upgraded_columns,
+            FRESH_INSTALL_TABLE_COLUMNS["rejected_ingest_attempts"],
+        )
+        self.assertEqual(upgraded_indexes, fresh_indexes)
+        self.assertEqual(
+            upgraded_indexes,
+            FRESH_INSTALL_CREATED_INDEXES["rejected_ingest_attempts"],
+        )
+        self.assertEqual(upgraded_auto_indexes, fresh_auto_indexes)
+        self.assertEqual(
+            list(upgraded_auto_indexes.values()),
+            [("pk", 1, ("source_id_claimed", "error_type", "day"))],
+        )
 
     def test_backfilled_indexes_match_their_owning_migration(self) -> None:
         """Every index a later migration declares must already exist in a 0001-only

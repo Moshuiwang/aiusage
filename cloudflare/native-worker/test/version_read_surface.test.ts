@@ -413,17 +413,20 @@ describe.sequential("native TS Worker version read surface", () => {
     const versions = health.versions as AnyRecord;
 
     expect(versions, "/api/health must expose versions").toBeTruthy();
-    expect(Object.keys(versions).sort()).toEqual(["counts", "needs_attention", "server"]);
+    expect(Object.keys(versions).sort()).toEqual(["counts", "needs_attention", "rejected_recent", "server"]);
     expect(versions.server).toEqual(EXPECTED_SERVER_BLOCK);
     expect(Object.keys(versions.counts).sort()).toEqual(ALL_VERSION_STATE_KEYS);
     expect(versions.counts).toEqual(EXPECTED_COUNTS);
+    expect(versions.rejected_recent).toEqual([]);
     expect((versions.needs_attention as AnyRecord[]).map((row) => row.source_id))
       .toEqual(EXPECTED_NEEDS_ATTENTION_ORDER);
     for (const row of versions.needs_attention as AnyRecord[]) {
       expect(Object.keys(row).sort(), `${row.source_id} needs_attention field set`).toEqual(NEEDS_ATTENTION_FIELDS);
     }
-    // 两个出口的 versions / version_health 是同一个 build_version_health 的产物，不允许分叉。
-    expect(versions).toEqual(summary.version_health);
+    // 两个出口的版本判定核心仍是同一个 build_version_health 产物；只有健康端额外暴露
+    // 写入拒绝观测，不能把服务端审计数据扩散进面向客户端的 summary 合同。
+    const { rejected_recent: _rejectedRecent, ...versionCore } = versions;
+    expect(versionCore).toEqual(summary.version_health);
   });
 });
 

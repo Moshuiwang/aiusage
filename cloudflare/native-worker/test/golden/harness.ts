@@ -218,6 +218,7 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     "usage_daily",
     "usage_hourly_rollups",
     "usage_daily_rollups",
+    "rejected_ingest_attempts",
     "source_report_states",
     "source_reports",
     "collection_runs",
