@@ -17,7 +17,9 @@
 - Bash hook（`scripts/bash_guard.sh`）：`pkill -f` 与 `until/while + pgrep` 等待循环会被
   直接拦下并给出替代手法——这两个坑在 #68 里各踩过 3 次以上。
 - 后台纪律：拿到 subagent 报告后立刻停掉它（TaskStop），「拿到结果」≠「它停了」；
-  等长任务用 `run_in_background`（完成会自动唤醒），不手写 sleep 轮询。
+  等长任务用 `run_in_background`（完成会自动唤醒），不手写 sleep 轮询。并行 subagent 的临时产物
+  必须使用各自唯一前缀，禁止修改仓库级 git config；并行分支合并后必须在合并结果上重跑测试，
+  不能拼接各分支各自的绿色结论。
 
 ## 不加载的目录
 
