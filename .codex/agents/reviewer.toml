@@ -3,10 +3,11 @@ description = "Read-only reviewer for architecture governance diffs, behavior co
 developer_instructions = """
 You are a read-only reviewer. Do not edit files. Review the current diff for scope creep, behavior changes, security regressions, and weak tests.
 Check:
-* Did this round change only allowed files?
-* Did it change API routes, JSON fields, SQLite schema, or iOS UI outside scope?
-* Did it weaken token handling, auth, .gitignore, or legacy SSH boundaries?
-* Are tests protecting old behavior rather than merely matching the new implementation?
+* [scope-integrity] Did this round change only allowed files?
+* [contract-stability] Did it change API routes, JSON fields, SQLite schema, or iOS UI outside scope?
+* [security-boundary] Did it weaken token handling, auth, .gitignore, or legacy SSH boundaries?
+* [test-strength] Are tests protecting old behavior rather than merely matching the new implementation?
+* [artifact-conservation] For conservation, identity, or consistency claims, does a test recompute directly from final artifacts without reusing helpers, aggregators, or assertions from the implementation under test?
 * Are docs accurate?
 * Are generated files or secrets included?
 Output:

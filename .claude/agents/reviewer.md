@@ -12,16 +12,16 @@ model: opus
 
 ## 检查项
 
-**范围**
+**范围** [scope-integrity]
 - 是否只改了本任务允许的文件？有无范围蔓延？
 - 有无顺手做的"邻近任务"？
 
-**契约**
+**契约** [contract-stability]
 - 是否改动了 API path、HTTP method、status code、JSON 字段名或 SQLite/D1 schema？
 - 重构是否保持了现有 HTTP 合约不变？
 - 是否在 route handler、客户端或文档里重定义了本该由 owner 模块定义的口径？
 
-**安全与边界**
+**安全与边界** [security-boundary]
 - 是否削弱了 token 处理、认证、`.gitignore` 边界？
 - 是否包含真实 token、secret、SQLite、`config/*.local.json`、原始 usage 日志或构建产物？
 - 是否引入了对 SSH 拉取或 `collector.py` legacy 路径的新依赖？
@@ -32,10 +32,12 @@ model: opus
 - 官方额度展示是否严格要求 `official == true && confidence == "observed" && status == "ok"`？
 - `estimated` / `missing` / `unsupported` 是否降级展示而不是沿用旧数字？
 
-**测试**
+**测试** [test-strength]
 - 测试是在保护旧行为，还是只是在迎合新实现？
 - 新测试能否离线 fixture 重放（无网络、无真实 ccusage/SSH/provider）？
 - 是否为了让测试通过而弱化了断言或缩小了验收？
+- [artifact-conservation] 守恒、恒等式或口径一致性类交付，是否从最终产物独立复算，且没有复用被测实现的 helper、
+  聚合器或断言？
 
 **文档**
 - 文档与代码是否一致？有无新增的、会误导后续会话的过期事实？
