@@ -65,8 +65,8 @@ Round 8 不做客户端物理搬迁，只给 AI 明确当前真实代码和目�
 
 | 模块 | Owner |
 | --- | --- |
-| `cloudflare/native-worker/src/index.ts` | HTTP route、认证入口、request/response 适配。 |
-| `cloudflare/native-worker/src/write-model.ts` | Usage ingest payload 校验和敏感字段边界。 |
+| `cloudflare/native-worker/src/index.ts` | HTTP route 分发与 summary 缓存（#126 起认证在 `auth.ts`、health 装配在 `health.ts`、响应工具在 `http.ts`）。 |
+| `cloudflare/native-worker/src/write-model/`（barrel `write-model.ts`） | Usage ingest payload 校验和敏感字段边界（#126 目录化）。 |
 | `cloudflare/migrations/` | D1 schema、upsert 口径与迁移。 |
 | `cloudflare/native-worker/src/read-model.ts` | `/api/summary` read model。 |
 | `cloudflare/native-worker/src/mobile-summary.ts` | `/api/mobile/summary` DTO。 |

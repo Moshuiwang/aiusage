@@ -1,9 +1,11 @@
-import { buildHealthSourceStatus, buildMobile, buildSummary } from "./read-model";
+import { buildMobile, buildSummary } from "./read-model";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
-import { buildVersionHealth } from "./version-contract";
 import { STATIC_ASSETS } from "./static-assets";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
+import { authTokens, handleLogin, isAuthenticated, loginPage } from "./auth";
+import { AUDIT_RETENTION_DAYS, backendMode, buildHealthResponse, referenceTime } from "./health";
+import { json, securityHeaders, text } from "./http";
 
 export interface Env {
   AIUSAGE_DB: D1Database;
@@ -20,63 +22,13 @@ export interface Env {
   AIUSAGE_SUPABASE_SECRET_KEY?: string;
 }
 
-const SESSION_COOKIE_NAME = "ai_usage_session";
-const SESSION_COOKIE_MESSAGE = "ai-usage-dashboard-session-v1";
 const STATIC_CONTENT_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
   ".html": "text/html; charset=utf-8",
 };
-const LOCAL_ESTIMATE_SOURCE_TYPES = [
-  "active_limits_cache",
-  "local_history_estimate",
-  "ccusage_daily",
-  "ccusage_blocks",
-  "session_log_estimate",
-];
-const AUDIT_RETENTION_DAYS = 7;
 const HOURLY_ROLLUP_RETENTION_DAYS = 30;
 const SUMMARY_CACHE_TTL_SECONDS = 60;
-
-function securityHeaders(): Record<string, string> {
-  return {
-    "X-Content-Type-Options": "nosniff",
-    "Referrer-Policy": "same-origin",
-  };
-}
-
-function json(payload: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
-  return new Response(JSON.stringify(payload), {
-    status,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      ...securityHeaders(),
-      ...extraHeaders,
-    },
-  });
-}
-
-function text(payload: string, status = 200, extraHeaders: Record<string, string> = {}): Response {
-  return new Response(payload, {
-    status,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      ...securityHeaders(),
-      ...extraHeaders,
-    },
-  });
-}
-
-function html(payload: string, status = 200, extraHeaders: Record<string, string> = {}): Response {
-  return new Response(payload, {
-    status,
-    headers: {
-      "Content-Type": "text/html; charset=utf-8",
-      ...securityHeaders(),
-      ...extraHeaders,
-    },
-  });
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -290,93 +242,6 @@ function cacheResponse(cached: Response, status: "HIT"): Response {
   return new Response(cached.body, { status: cached.status, headers });
 }
 
-async function handleLogin(request: Request, env: Env): Promise<Response> {
-  let token = "";
-  const contentType = request.headers.get("Content-Type") ?? "";
-  const body = await request.text();
-  if (contentType.includes("application/json")) {
-    try {
-      const payload = JSON.parse(body) as Record<string, unknown>;
-      token = String(payload.token ?? "");
-    } catch (_exc) {
-      return loginPage("Invalid login payload", 400);
-    }
-  } else {
-    token = new URLSearchParams(body).get("token") ?? "";
-  }
-
-  if (!verifyToken(token, env)) return loginPage("Invalid token", 401);
-
-  return new Response(null, {
-    status: 303,
-    headers: {
-      Location: "/dashboard",
-      "Set-Cookie": await sessionCookieHeader(env),
-      ...securityHeaders(),
-    },
-  });
-}
-
-async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
-  if (!authTokens(env).length) return true;
-  const authHeader = request.headers.get("Authorization") ?? "";
-  if (authHeader.toLowerCase().startsWith("bearer ") && verifyToken(authHeader.slice(7).trim(), env)) {
-    return true;
-  }
-  const cookie = request.headers.get("Cookie") ?? "";
-  const expectedSession = await sessionCookieValue(sessionSecret(env));
-  return cookie.split(";").some((part) => {
-    const [name, ...rest] = part.trim().split("=");
-    return name === SESSION_COOKIE_NAME && rest.join("=") === expectedSession;
-  });
-}
-
-function verifyToken(supplied: string | null | undefined, env: Env): boolean {
-  const tokens = authTokens(env);
-  if (!tokens.length) return true;
-  if (!supplied) return false;
-  return tokens.some((token) => token === supplied);
-}
-
-function authTokens(env: Env): string[] {
-  const values: string[] = [];
-  const primaryToken = (env.AIUSAGE_TOKEN ?? "").trim();
-  if (primaryToken) values.push(primaryToken);
-  for (const item of (env.AIUSAGE_TOKEN_SPECS ?? "").split(",")) {
-    const trimmed = item.trim();
-    if (!trimmed) continue;
-    const separator = trimmed.indexOf(":");
-    const token = separator >= 0 ? trimmed.slice(separator + 1).trim() : trimmed;
-    if (token && !values.includes(token)) values.push(token);
-  }
-  return values;
-}
-
-function sessionSecret(env: Env): string {
-  return env.AIUSAGE_SESSION_SECRET ?? authTokens(env)[0] ?? "";
-}
-
-async function sessionCookieHeader(env: Env): Promise<string> {
-  return `${SESSION_COOKIE_NAME}=${await sessionCookieValue(sessionSecret(env))}; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`;
-}
-
-async function sessionCookieValue(token: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(token),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(SESSION_COOKIE_MESSAGE));
-  return Array.from(new Uint8Array(signature)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function loginPage(message = "", status = 200): Response {
-  const errorBlock = message ? `<p class="error">${escapeHtml(message)}</p>` : "";
-  return html(STATIC_ASSETS["login.html"].replace("{{ERROR_BLOCK}}", errorBlock), status);
-}
-
 function staticAssetResponse(assetName: string): Response {
   const normalized = normalizeAssetName(assetName);
   if (!normalized) return json({ status: "error", error_type: "not_found", message: "Static asset not found" }, 404);
@@ -400,173 +265,6 @@ function normalizeAssetName(assetName: string): string | null {
   return assetName;
 }
 
-async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
-  const [sourceRows, latestCollectedAt, sizeBytes, limitsReport, rejectedRecent] = await Promise.all([
-    latestSourceStatuses(env.AIUSAGE_DB),
-    latestMetadataTime(env.AIUSAGE_DB),
-    databaseSizeProxy(env.AIUSAGE_DB),
-    buildLimitsHealth(env.AIUSAGE_DB),
-    recentRejectedIngestAttempts(env.AIUSAGE_DB, referenceTime(env)),
-  ]);
-  // Issue #77：source_status.counts / non_ok 与 versions 数的是**同一份**条目
-  // （`buildHealthSourceStatus`），status 一律带 120 分钟过期折算，参照时刻取
-  // `AIUSAGE_NOW`。跟的是 Python 参考实现的口径：server_services.py 的 counts 直接数
-  // latest.json 里 source_status[].status，而那个 status 在 snapshot_source_health.py
-  // 已经过了 `_status_with_staleness()`。
-  //
-  // 这里曾经数行上的**原始** status（#63 之前的既有行为），结果是同一份响应里同一台
-  // 设备在 counts 里算 ok、在 versions.needs_attention 里显示 stale。#77 已统一，
-  // 不要再退回原始值：折算后的 status 才回答「这台设备现在是否可信」。
-  const healthSourceStatus = buildHealthSourceStatus(sourceRows, env.AIUSAGE_NOW);
-  const counts: Record<string, number> = {};
-  const nonOk: Record<string, string>[] = [];
-  for (const entry of healthSourceStatus) {
-    const status = String(entry.status || "unknown");
-    counts[status] = (counts[status] ?? 0) + 1;
-    if (status !== "ok") {
-      nonOk.push({
-        source_id: String(entry.source_id || ""),
-        status,
-      });
-    }
-  }
-  return {
-    status: "ok",
-    generated_at: env.AIUSAGE_NOW ?? new Date().toISOString(),
-    backend_mode: backendMode(env),
-    canonical_store: "cloudflare_d1",
-    database: {
-      path: "D1:AIUSAGE_DB",
-      size_bytes: sizeBytes,
-      exists: true,
-    },
-    snapshot: {
-      path: "D1:latest-snapshot-metadata",
-      exists: latestCollectedAt !== null,
-      updated_at: latestCollectedAt,
-    },
-    source_status: {
-      // total 必须与 counts / non_ok 数同一份条目（Python `server_services.py` 的
-      // `len(source_status)` 就是与 counts 同一个列表）。数 sourceRows 今天恰好等值，
-      // 但只要 buildHealthSourceStatus 将来加任何过滤，total 就会大于 counts 之和——
-      // 那正是 #77 刚消灭的那类「同一个块里两个数字口径不同」。
-      total: healthSourceStatus.length,
-      counts,
-      non_ok: nonOk,
-    },
-    // 版本判定核心沿用既有 `versions` 合同；rejected_recent 是仅健康端可见的服务端审计数据。
-    versions: {
-      ...buildVersionHealth(healthSourceStatus),
-      rejected_recent: rejectedRecent,
-    },
-    limits: limitsReport,
-  };
-}
-
-function backendMode(env: Env): string {
-  const configured = String(env.AIUSAGE_BACKEND_MODE ?? "").trim();
-  return configured || "native_d1_unknown";
-}
-
-/**
- * `/api/health` 需要的来源行：状态计数只用 `status`，`versions` 还需要
- * `collector_version`（判 state）、`collected_at`（当 observed_at）以及身份字段（拼 display_name）。
- *
- * 仍然只扫 `source_report_states`（每来源一行），外加一次按主键的 `source_identities` 关联，
- * 与原来同量级；**不回头 join `source_reports` × `collection_runs` 取版本**。
- */
-async function latestSourceStatuses(db: D1Database): Promise<Record<string, string | null>[]> {
-  const result = await db.prepare(`
-    SELECT s.source_id, s.status, s.collected_at, s.error_message, s.collector_version,
-           i.host, i.machine, i.os_user, i.platform
-    FROM source_report_states s
-    LEFT JOIN source_identities i ON i.source_id = s.source_id
-    ORDER BY s.source_id ASC
-  `).all<Record<string, string | null>>();
-  return result.results ?? [];
-}
-
-async function latestMetadataTime(db: D1Database): Promise<string | null> {
-  const row = await db.prepare("SELECT max(collected_at) AS updated_at FROM collection_runs")
-    .first<{ updated_at: string | null }>();
-  return row?.updated_at ?? null;
-}
-
-async function recentRejectedIngestAttempts(db: D1Database, now: Date): Promise<Record<string, unknown>[]> {
-  const cutoff = new Date(now.getTime() - AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  const result = await db.prepare(`
-    SELECT source_id_claimed, error_type, path, last_seen_at, count
-    FROM rejected_ingest_attempts
-    WHERE last_seen_at >= ?
-    ORDER BY last_seen_at DESC, source_id_claimed ASC, error_type ASC
-  `).bind(cutoff).all<{
-    source_id_claimed: string;
-    error_type: string;
-    path: string;
-    last_seen_at: string;
-    count: number;
-  }>();
-  return (result.results ?? []).map((row) => ({
-    ...row,
-    count: Number(row.count),
-  }));
-}
-
-async function buildLimitsHealth(db: D1Database): Promise<Record<string, unknown>> {
-  const placeholders = LOCAL_ESTIMATE_SOURCE_TYPES.map(() => "?").join(", ");
-  const effective = `status = 'ok' AND confidence = 'observed' AND source_type NOT IN (${placeholders})`;
-  const row = await db.prepare(`
-    SELECT
-      count(*) AS raw_window_count,
-      sum(CASE WHEN ${effective} THEN 1 ELSE 0 END) AS effective_window_count,
-      sum(CASE WHEN ${effective} THEN 0 ELSE 1 END) AS stale_window_count,
-      max(CASE WHEN ${effective} THEN observed_at ELSE NULL END) AS latest_observed_at
-    FROM limit_windows
-  `)
-    .bind(...LOCAL_ESTIMATE_SOURCE_TYPES, ...LOCAL_ESTIMATE_SOURCE_TYPES, ...LOCAL_ESTIMATE_SOURCE_TYPES)
-    .first<{
-      raw_window_count: number | null;
-      effective_window_count: number | null;
-      stale_window_count: number | null;
-      latest_observed_at: string | null;
-    }>();
-  return {
-    latest_observed_at: row?.latest_observed_at ?? null,
-    effective_window_count: Number(row?.effective_window_count ?? 0),
-    raw_window_count: Number(row?.raw_window_count ?? 0),
-    stale_window_count: Number(row?.stale_window_count ?? 0),
-  };
-}
-
-async function databaseSizeProxy(db: D1Database): Promise<number> {
-  const tables = [
-    "collection_runs",
-    "source_reports",
-    "source_report_states",
-    "rejected_ingest_attempts",
-    "source_identities",
-    "machines",
-    "os_identities",
-    "ai_accounts",
-    "usage_hourly_facts",
-    "usage_hourly_models",
-    "usage_hourly_rollups",
-    "usage_daily_rollups",
-    "limit_windows",
-  ];
-  let rows = 0;
-  for (const table of tables) {
-    const row = await db.prepare(`SELECT count(*) AS count FROM ${table}`).first<{ count: number }>();
-    rows += Number(row?.count ?? 0);
-  }
-  return rows;
-}
-
-function referenceTime(env: Env): Date {
-  const configured = env.AIUSAGE_NOW ? new Date(env.AIUSAGE_NOW) : new Date();
-  return Number.isNaN(configured.getTime()) ? new Date() : configured;
-}
-
 function dateInTimezone(date: Date, timezone: string): string {
   try {
     const parts = new Intl.DateTimeFormat("en-CA", {
@@ -580,15 +278,6 @@ function dateInTimezone(date: Date, timezone: string): string {
   } catch (_invalidTimezone) {
     return date.toISOString().slice(0, 10);
   }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#x27;");
 }
 
 function currentDate(env: Env): string {

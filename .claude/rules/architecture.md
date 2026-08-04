@@ -31,11 +31,13 @@ paths:
 
 | 关注点 | 唯一权威 | 状态 |
 | --- | --- | --- |
-| HTTP 路由 / 认证 / 登录 cookie / 静态文件 | `cloudflare/native-worker/src/index.ts`（静态资源在 `cloudflare/native-worker/static/`，PM-1） | `server.py` 已随 #74 删除；本地开发入口 `wrangler dev`（#71） |
-| ingest / limits ingest / summary / health 编排 | `cloudflare/native-worker/src/index.ts` + `write-model.ts` / `read-model.ts` | `server_services.py` 已随 #74 删除 |
-| ingest payload 校验 + 敏感字段边界 | `cloudflare/native-worker/src/write-model.ts` | `ingest.py` 已随 #74 删除 |
+| HTTP 路由 / 静态文件 | `cloudflare/native-worker/src/index.ts`（静态资源在 `cloudflare/native-worker/static/`，PM-1） | `server.py` 已随 #74 删除；本地开发入口 `wrangler dev`（#71）。#126 起 index 只剩路由分发 |
+| 认证 / 登录 cookie | `cloudflare/native-worker/src/auth.ts`（#126 自 index 拆出） | 同上 |
+| `/api/health` 装配与部署身份（backendMode） | `cloudflare/native-worker/src/health.ts`（#126 自 index 拆出） | 同上 |
+| ingest / limits ingest / summary 编排 | `cloudflare/native-worker/src/index.ts` + `write-model/handlers.ts` / `read-model/summary.ts` | `server_services.py` 已随 #74 删除 |
+| ingest payload 校验 + 敏感字段边界 | `cloudflare/native-worker/src/write-model/validate.ts`（barrel `write-model.ts`，#126 目录化） | `ingest.py` 已随 #74 删除 |
 | canonical store schema / upsert / 迁移 | `cloudflare/migrations/` | `storage_sqlite.py` 已随 #74 删除；schema 守卫改为 `test_d1_schema_migration.py` 的显式列布局快照（自立，不再镜像） |
-| Web summary 读模型（period/filter/trend/limits/hourly residual） | `cloudflare/native-worker/src/read-model.ts` | `snapshot_builder.py`（+ `snapshot_*.py` helper）已随 #74 删除 |
+| Web summary 读模型（period/filter/trend/limits/hourly residual） | `cloudflare/native-worker/src/read-model/`（barrel `read-model.ts`，#126 目录化：SQL=db / 健康=source-status / 趋势=trend / 账户小时=account-hourly / 额度=limits-select / 槽位=provider-slots / 编排=summary） | `snapshot_builder.py`（+ `snapshot_*.py` helper）已随 #74 删除 |
 | Mobile DTO | `cloudflare/native-worker/src/mobile-summary.ts` | `mobile_summary.py` 已随 #74 删除 |
 | 版本合同：服务端判定（四态、最低支持版本、拒绝不兼容 payload） | `cloudflare/native-worker/src/version-contract.ts` | `version_contract.py` 的服务端判定部分已随 #74 删除，Python 只剩采集端自报半边 |
 | 版本合同：采集端自报 | `version_contract.py`（采集端保留部分） | **留 Python**（`pusher.py`、`config.py` 在用），不冻结 |

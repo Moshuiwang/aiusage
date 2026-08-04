@@ -79,25 +79,29 @@ const AUTHORITY_ENTRIES = [
     mustReference: ["COLLECTOR_VERSION_FIELDS"],
   },
   {
+    // #126 目录化后 wire 归一化在 validate.ts；write-model.ts 只是兼容入口。
     duty: "上报 payload 校验与敏感字段边界",
-    owner: "cloudflare/native-worker/src/write-model.ts",
+    owner: "cloudflare/native-worker/src/write-model/validate.ts",
     mustReference: ["normalizeCollectorRelease"],
   },
   {
+    // #126 目录化后判定与拒绝动作在写编排入口 handlers.ts。
     duty: "兼容判定与拒绝动作",
-    owner: "cloudflare/native-worker/src/write-model.ts",
+    owner: "cloudflare/native-worker/src/write-model/handlers.ts",
     mustReference: ["evaluateCollectorRelease", "UNSUPPORTED_ERROR_TYPE"],
   },
   {
     // `buildVersionHealth` 一个符号不够：它在 `index.ts` 里也有（`/api/health` 那条）。
-    // `version_health` 只在 `read-model.ts` 里出现，它才是把这条职责钉死的那个符号。
+    // `version_health` 只在读模型编排里出现，它才是把这条职责钉死的那个符号。
+    // #126 目录化后编排在 `read-model/summary.ts`；`read-model.ts` 只是兼容入口。
     duty: "来源健康读模型",
-    owner: "cloudflare/native-worker/src/read-model.ts",
+    owner: "cloudflare/native-worker/src/read-model/summary.ts",
     mustReference: ["buildVersionHealth", "version_health"],
   },
   {
+    // #126：/api/health 装配随拆分移入 health.ts（index.ts 只剩路由分发）。
     duty: "`/api/health` 的 `versions` 块",
-    owner: "cloudflare/native-worker/src/index.ts",
+    owner: "cloudflare/native-worker/src/health.ts",
     mustReference: ["buildVersionHealth"],
   },
 ];
