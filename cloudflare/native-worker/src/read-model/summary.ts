@@ -16,7 +16,8 @@ import {
 } from "./shared";
 import type { LimitRow, ProviderUsageTotals, SummaryRequest } from "./shared";
 
-export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
+/** 阶段 1：读取 D1 输入与时间/周期边界。所有 SELECT 都发生在这里或 db.ts。 */
+async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
   const refTime = nowInTimezone(request.timezone, request.currentTime);
   const [periodId, startDate, endDate] = periodBounds(request.date, request.period);
   const hourAxisValues = periodId === "today" ? hourAxis(endDate) : [];
@@ -46,7 +47,17 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const allLimits = await fetchLimitWindows(db, null);
   const accountHourlyRows = await fetchAccountHourlyRows(db, startDate, endDate, request.timezone);
   const aiAccounts = await fetchAiAccounts(db);
+  return {
+    refTime, periodId, startDate, endDate, hourAxisValues, identities,
+    statusRows, accuracyRows, limits, allLimits, accountHourlyRows, aiAccounts,
+  };
+}
 
+type SummaryInputs = Awaited<ReturnType<typeof loadSummaryInputs>>;
+
+/** 阶段 2：过滤与投影——把账户小时行派生成日行/时行/模型分解等视图输入。 */
+async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: SummaryInputs) {
+  const { periodId, startDate, endDate, accountHourlyRows } = inputs;
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
@@ -96,7 +107,15 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     list.push(breakdown);
     modelsByItem.set(key, list);
   }
+  return { filteredAccountHourlyRows, canonicalProviderTokens, rows, hourlyRows, accountHourly, modelsByItem };
+}
 
+type DerivedRows = Awaited<ReturnType<typeof deriveUsageRows>>;
+
+/** 阶段 3：单遍聚合——items、总量、机器/账户/agent 分组与趋势累计器一次填齐。 */
+function aggregateUsage(request: SummaryRequest, inputs: SummaryInputs, derived: DerivedRows) {
+  const { startDate, endDate, identities } = inputs;
+  const { rows, canonicalProviderTokens, modelsByItem } = derived;
   const items: Record<string, unknown>[] = [];
   let totalTokens = 0;
   let inputTokens = 0;
@@ -242,6 +261,23 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
     .map(([name, total]) => ({ name, total_tokens: total }))
     .sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
 
+  return {
+    items, totalTokens, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens,
+    byMachine, byAccount, byAgent, providerUsage, agentTotals,
+    trendDates, trendByAgent, trendByTokenType, trendPoints,
+  };
+}
+
+type UsageAggregates = ReturnType<typeof aggregateUsage>;
+
+/** 阶段 4：趋势区块——today 走小时轴（残差回填 + 守恒封顶），其余周期走日轴。 */
+function buildTrendSection(inputs: SummaryInputs, derived: DerivedRows, aggregates: UsageAggregates) {
+  const { periodId, startDate, endDate, hourAxisValues, refTime } = inputs;
+  const { rows, hourlyRows } = derived;
+  const {
+    totalTokens, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens,
+    agentTotals, trendDates, trendByAgent, trendByTokenType, trendPoints,
+  } = aggregates;
   const codexContext = codexHourlyContext(rows, hourlyRows);
   let trend: Record<string, unknown>;
   if (periodId === "today") {
@@ -282,7 +318,24 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
         })),
     };
   }
+  return { trend, codexContext };
+}
 
+/** 阶段 5：装配快照。键位顺序与拆分前逐字一致，不得调整。 */
+function assembleSnapshot(
+  request: SummaryRequest,
+  inputs: SummaryInputs,
+  derived: DerivedRows,
+  aggregates: UsageAggregates,
+  trendSection: ReturnType<typeof buildTrendSection>,
+): Record<string, unknown> {
+  const { refTime, periodId, startDate, endDate, statusRows, accuracyRows, identities, limits, allLimits, aiAccounts } = inputs;
+  const { accountHourly } = derived;
+  const {
+    items, totalTokens, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens,
+    byMachine, byAccount, byAgent, providerUsage,
+  } = aggregates;
+  const { trend, codexContext } = trendSection;
   const limitStatus = buildLimitStatus(allLimits, refTime);
   const sourceStatus = buildSourceStatus(
     statusRows, accuracyRows, identities, refTime, request.machine, request.account,
@@ -330,6 +383,14 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   if (request.machine) (snapshot.summary as Record<string, unknown>).machine = request.machine;
   if (request.account) (snapshot.summary as Record<string, unknown>).account = request.account;
   return snapshot;
+}
+
+export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
+  const inputs = await loadSummaryInputs(db, request);
+  const derived = await deriveUsageRows(db, request, inputs);
+  const aggregates = aggregateUsage(request, inputs, derived);
+  const trendSection = buildTrendSection(inputs, derived, aggregates);
+  return assembleSnapshot(request, inputs, derived, aggregates, trendSection);
 }
 
 export async function buildMobile(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
