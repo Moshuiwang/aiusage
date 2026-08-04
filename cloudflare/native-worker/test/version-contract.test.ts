@@ -3,7 +3,7 @@
 // #74 之后口径唯一 owner 就是本目录的 src/version-contract.ts（Python 服务端判定已删除，
 // 只留采集端自报半边）。本文件的期望值是从删除前的 Python 实现逐字继承的行为合同：
 // 字段名、状态名、拒绝语义改动都必须是显式决策，不是重构副产品。
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -245,11 +245,18 @@ describe.sequential("native TS Worker collector version contract", () => {
   });
 
   it("never writes a placeholder collector version anywhere in the write model", async () => {
-    const writeModelSource = await readFile(
-      path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts"),
-      "utf8",
-    );
+    // #126 目录化后必须读整个 write-model/ 目录：只读 barrel 时本断言恒真（守卫失明）。
+    const writeModelDir = path.join(repoRoot, "cloudflare/native-worker/src/write-model");
+    const moduleNames = (await readdir(writeModelDir)).sort();
+    expect(moduleNames.length, "write-model/ 目录不该少于 7 个模块").toBeGreaterThanOrEqual(7);
+    const pieces = [await readFile(path.join(repoRoot, "cloudflare/native-worker/src/write-model.ts"), "utf8")];
+    for (const name of moduleNames) {
+      pieces.push(await readFile(path.join(writeModelDir, name), "utf8"));
+    }
+    const writeModelSource = pieces.join("\n");
 
+    // 结构下限：拼接结果必须真的包含 collection_runs 写入路径，否则「没匹配」毫无意义。
+    expect(writeModelSource).toContain("INSERT INTO collection_runs");
     expect(writeModelSource).not.toMatch(/collection_runs[\s\S]{0,400}?"0\.1\.0"/);
   });
 

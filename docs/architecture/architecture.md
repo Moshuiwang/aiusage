@@ -74,7 +74,7 @@ CLI / HTTP handler / clients
 
 | 模块 | Owner 职责 | 禁止承载 |
 | --- | --- | --- |
-| `cloudflare/native-worker/src/index.ts` | HTTP 路由、认证入口、request/response 适配、登录/cookie、静态文件（`cloudflare/native-worker/static/`）。 | 不承载业务口径计算。 |
+| `cloudflare/native-worker/src/index.ts` | HTTP 路由分发、summary 缓存、静态文件（`cloudflare/native-worker/static/`）。#126 起认证/登录 cookie 在 `auth.ts`、`/api/health` 装配与 backendMode 在 `health.ts`、响应工具在 `http.ts`。 | 不承载业务口径计算。 |
 | `cloudflare/native-worker/src/write-model/`（barrel `write-model.ts`，#126 目录化） | Ingest contract、payload 校验、敏感字段边界、D1 upsert。校验在 `validate.ts`、归一化在 `normalize.ts`、SQL 语句在 `statements.ts`、幂等 upsert 在 `upsert.ts`、对账在 `accuracy.ts`、编排在 `handlers.ts`。 | 不构建展示快照。 |
 | `cloudflare/native-worker/src/read-model/`（barrel `read-model.ts`，#126 目录化） | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。SQL 在 `db.ts`、来源健康在 `source-status.ts`、趋势在 `trend.ts`、账户小时在 `account-hourly.ts`、额度甄选在 `limits-select.ts`、槽位在 `provider-slots.ts`、编排在 `summary.ts`。 | 不把口径分散到 Web、Mobile 或 route。 |
 | `cloudflare/native-worker/src/mobile-summary.ts` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
