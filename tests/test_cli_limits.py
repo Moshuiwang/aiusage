@@ -6,12 +6,13 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from ai_usage_widget import cli
 from ai_usage_widget.limits import parse_limit_window
+from ai_usage_widget.limits_config import parse_limits_config
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -420,6 +421,77 @@ class TestCliLimits(unittest.TestCase):
         self.assertTrue(payload["dry_run"])
         self.assertEqual(payload["windows_collected"], 2)
         push_mock.assert_not_called()
+
+    def test_distinct_source_ids_each_get_their_own_runtime_provider(self) -> None:
+        """#144：Codex 与 Claude 必须各自占一个运行时槽位，谁也不能覆盖谁。
+
+        守恒下限：启用的提供方有几个，运行时映射就必须有几个——这一条从产物
+        （映射本身）独立数一遍，不依赖构建函数内部的任何计数。
+        """
+        config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [
+                    {"provider": "codex", "source_id": "tz-wangzp-codex", "rpc": True},
+                    {"provider": "claude", "source_id": "tz-wangzp-claude", "cli": True},
+                ],
+            }
+        )
+
+        providers = cli._providers_from_limits_config(config.enabled_providers)
+
+        self.assertEqual(len(providers), len(config.enabled_providers))
+        self.assertEqual(set(providers), {"tz-wangzp-codex", "tz-wangzp-claude"})
+        self.assertEqual(providers["tz-wangzp-codex"].provider_name, "codex")
+        self.assertEqual(providers["tz-wangzp-claude"].provider_name, "claude")
+        self.assertEqual(providers["tz-wangzp-codex"].source_id, "tz-wangzp-codex")
+        self.assertEqual(providers["tz-wangzp-claude"].source_id, "tz-wangzp-claude")
+
+    def test_collect_limits_rejects_duplicate_source_id_config(self) -> None:
+        """重复标识必须在采集开始前失败，而不是「成功」地只采了一个提供方。"""
+        config_fd, config_path = tempfile.mkstemp(suffix=".json")
+        os.close(config_fd)
+        try:
+            with open(config_path, "w", encoding="utf-8") as handle:
+                json.dump(
+                    {
+                        "timezone": "Asia/Shanghai",
+                        "providers": [
+                            {"provider": "codex", "source_id": "tz-wangzp", "rpc": True},
+                            {"provider": "claude", "source_id": "tz-wangzp", "cli": True},
+                        ],
+                    },
+                    handle,
+                )
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = cli.main(["collect-limits", "--limits-config", config_path])
+        finally:
+            if os.path.exists(config_path):
+                os.remove(config_path)
+
+        self.assertEqual(code, 1)
+        self.assertIn("tz-wangzp", stderr.getvalue())
+
+    def test_collect_limits_output_names_the_source_id_of_every_provider(self) -> None:
+        """验收输出必须能回答「哪个 source_id 采到了几条」，而不是只给一个 provider 名。"""
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = cli.main([
+                "collect-limits",
+                "--provider-fixture",
+                str(FIXTURES / "limits_runtime_fixture.json"),
+            ])
+
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(len(payload["providers"]), 2)
+        by_source = {item["source_id"]: item for item in payload["providers"]}
+        self.assertEqual(set(by_source), {"codex", "claude"})
+        for item in by_source.values():
+            self.assertEqual(item["status"], "ok")
+            self.assertEqual(item["windows_collected"], 1)
 
     def test_push_limits_rejects_existing_lock_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

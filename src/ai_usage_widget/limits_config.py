@@ -58,6 +58,7 @@ def parse_limits_config(payload: Dict[str, Any]) -> LimitsConfig:
         raise ConfigError("limits config providers must be a list")
 
     providers = [_parse_provider(item) for item in providers_payload]
+    _reject_duplicate_runtime_ids(providers)
     return LimitsConfig(
         timezone=timezone,
         sqlite_path=sqlite_path,
@@ -144,6 +145,33 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
         )
 
     raise ConfigError(f"unsupported limits provider: {provider}")
+
+
+def runtime_id(provider: LimitsProviderConfig) -> str:
+    """采集运行时用来给提供方分槽位的键。缺省时回落到 provider 名。"""
+    return provider.source_id or provider.provider
+
+
+def _reject_duplicate_runtime_ids(providers: List[LimitsProviderConfig]) -> None:
+    """启用的提供方之间不许共用运行时标识（#144）。
+
+    运行时以这个标识为字典键装配提供方，重名会让后加载的那个**静默覆盖**前者：
+    任务照常报成功，实际却重复采了同一个提供方，另一个提供方一条额度都没写。
+    这种失败没有任何声响，只能在配置校验阶段挡住。
+    """
+    seen: Dict[str, str] = {}
+    for provider in providers:
+        if not provider.enabled:
+            # 停用的提供方根本不进运行时映射，谈不上互相覆盖。
+            continue
+        key = runtime_id(provider)
+        if key in seen:
+            raise ConfigError(
+                f"limits config duplicate runtime id {key!r}: "
+                f"provider {seen[key]!r} and {provider.provider!r} would collide; "
+                "give each enabled provider its own source_id"
+            )
+        seen[key] = provider.provider
 
 
 def _reject_sensitive_fields(payload: Dict[str, Any]) -> None:
