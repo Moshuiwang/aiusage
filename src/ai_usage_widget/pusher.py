@@ -11,6 +11,7 @@ import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 import urllib.request
 import urllib.error
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -33,6 +34,22 @@ from .version_contract import (
     VersionContractError,
     local_collector_release,
 )
+
+
+@dataclass(frozen=True)
+class _CcusageCollection:
+    data: dict[str, Any]
+    usage_daily: list[dict[str, Any]]
+    failure: tuple[str, str, str] | None
+    daily_available: bool
+    session_report: dict[str, Any] | None
+
+
+@dataclass(frozen=True)
+class _MswusageCollection:
+    codex_report: dict[str, Any] | None
+    codex_status: dict[str, Any] | None
+    claude_report: dict[str, Any] | None
 
 
 class IngestHTTPClient:
@@ -241,26 +258,40 @@ class DevicePusher:
         self.ledger_coverage_start = ledger_coverage_start
 
     def push(self) -> Dict[str, Any]:
-        """
-        执行本地采集并主动将 daily usage payload 推送至 HTTP Ingest Server
-        """
-        # 1. 采集 ccusage 报告
-        # ccusage daily --json --timezone <config.timezone>
+        """执行本地采集并主动将 daily usage payload 推送至 HTTP Ingest Server。"""
+        ccusage = self._collect_ccusage()
+        mswusage = self._collect_mswusage(ccusage.data)
+
+        ledger_collection_available = (
+            mswusage.codex_report is not None
+            or mswusage.claude_report is not None
+        )
+        if ccusage.failure is not None and not ledger_collection_available:
+            status, error_type, error_message = ccusage.failure
+            return self._push_source_status(
+                status=status,
+                error_type=error_type,
+                error_message=error_message,
+            )
+        # 注意（#78 的已知代价）：ccusage 挂了但账本仍可用时，payload 仍是 ok 且不带
+        # ccusage 失败原因。要恢复这类诊断，需要两侧都实现的新字段，不能复活旧字段。
+        payload = self._build_payload(ccusage, mswusage)
+        headers = {"User-Agent": PRODUCT_USER_AGENT}
+        if self.config.token_env:
+            token = os.environ.get(self.config.token_env)
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
+        return self._deliver(payload, headers)
+
+    def _collect_ccusage(self) -> _CcusageCollection:
         argv = ["ccusage", "daily", "--json", "--timezone", self.config.timezone]
         res = self.executor(argv, float(self.config.timeout_seconds))
 
         ccusage_data: dict[str, Any] = {}
         usage_daily: list[dict[str, Any]] = []
-        # ccusage daily 的失败说明。#78 起它**只是本地变量**，不再作为 payload 字段
-        # （`ccusage_daily_status`）上报：生产服务端是 Cloudflare Worker，全文不认识那个
-        # 字段，发过去只会被静默丢弃。它现在唯一的去处是下面的「全失败」判定——
-        # ccusage 和账本同时不可用时，由 `_push_source_status` 走 collection_status /
-        # error_type / error_message 三个两侧都认识的字段如实上报。
-        # 元组形态是刻意的：它没有 dict 的形状，不可能被顺手塞回 payload。
         ccusage_daily_failure: tuple[str, str, str] | None = None
         ccusage_daily_available = False
 
-        # 2. 解析 ccusage 的数据并规范化 (TP-V2-006)
         if res.ok:
             try:
                 parsed_ccusage = json.loads(res.stdout) if res.stdout else {}
@@ -307,10 +338,15 @@ class DevicePusher:
                 except json.JSONDecodeError:
                     ccusage_session_report = None
 
-        # `ccusage blocks` 已由 #91 停采：block 快照在服务端零消费者（读侧死代码已在
-        # #90/PR #92 删除），继续采只是白跑子进程、白占上报带宽。老版本采集端仍会发的
-        # `ccusage_blocks_report` 由两侧当未知顶层字段忽略，不得重新采集或声明。
+        return _CcusageCollection(
+            data=ccusage_data,
+            usage_daily=usage_daily,
+            failure=ccusage_daily_failure,
+            daily_available=ccusage_daily_available,
+            session_report=ccusage_session_report,
+        )
 
+    def _collect_mswusage(self, ccusage_data: dict[str, Any]) -> _MswusageCollection:
         mswusage_codex_hourly_report = None
         codex_hourly_status = None
         mswusage_argv = [
@@ -373,25 +409,17 @@ class DevicePusher:
             except json.JSONDecodeError:
                 mswusage_claude_report = None
 
-        ledger_collection_available = (
-            mswusage_codex_hourly_report is not None
-            or mswusage_claude_report is not None
+        return _MswusageCollection(
+            codex_report=mswusage_codex_hourly_report,
+            codex_status=codex_hourly_status,
+            claude_report=mswusage_claude_report,
         )
-        if ccusage_daily_failure is not None and not ledger_collection_available:
-            status, error_type, error_message = ccusage_daily_failure
-            return self._push_source_status(
-                status=status,
-                error_type=error_type,
-                error_message=error_message,
-            )
-        # 注意（#78 的已知代价）：ccusage 挂了但账本仍可用时不走上面这条心跳，
-        # 而下面的 payload 是 `collection_status: "ok"` 且不带 error_type / error_message，
-        # 所以 **ccusage 自身的失败原因不再被上报**。此前由 `ccusage_daily_status` 携带，
-        # 但那个字段在生产（Worker）上零命中，本来就到不了任何人眼前。
-        # 要恢复这类诊断，需要的是一个两侧都实现的字段，不是把旧字段塞回来。
 
-        # 3. 组织 Ingest Payload
-        # ISO 8601 格式的 observed_at 时间戳
+    def _build_payload(
+        self,
+        ccusage: _CcusageCollection,
+        mswusage: _MswusageCollection,
+    ) -> Dict[str, Any]:
         observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
         payload = {
             "schema_version": self.config.schema_version,
@@ -404,18 +432,18 @@ class DevicePusher:
             "observed_at": observed_at,
             "collection_window": "daily",
             "collection_status": "ok",
-            "usage_daily": usage_daily,
+            "usage_daily": ccusage.usage_daily,
             COLLECTOR_RELEASE_FIELD: _local_collector_release(self.config),
         }
-        if ccusage_daily_available:
-            payload["ccusage_daily_report"] = ccusage_data
-        if ccusage_session_report is not None:
-            payload["ccusage_session_report"] = ccusage_session_report
-        if mswusage_codex_hourly_report is not None:
-            payload["mswusage_codex_hourly_report"] = mswusage_codex_hourly_report
+        if ccusage.daily_available:
+            payload["ccusage_daily_report"] = ccusage.data
+        if ccusage.session_report is not None:
+            payload["ccusage_session_report"] = ccusage.session_report
+        if mswusage.codex_report is not None:
+            payload["mswusage_codex_hourly_report"] = mswusage.codex_report
             hourly_facts = _usage_hourly_facts_from_mswusage(
                 self.config,
-                mswusage_codex_hourly_report,
+                mswusage.codex_report,
                 provider_key="codex",
                 default_provider="openai",
                 default_agent="codex",
@@ -423,15 +451,15 @@ class DevicePusher:
             )
             if hourly_facts:
                 payload["usage_hourly_facts"] = hourly_facts
-            ledger_run = _usage_ledger_run(mswusage_codex_hourly_report, hourly_facts, agent="codex")
+            ledger_run = _usage_ledger_run(mswusage.codex_report, hourly_facts, agent="codex")
             if ledger_run is not None:
                 payload.setdefault("usage_ledger_runs", []).append(ledger_run)
-        elif codex_hourly_status is not None:
-            payload["codex_hourly_status"] = codex_hourly_status
-        if mswusage_claude_report is not None:
+        elif mswusage.codex_status is not None:
+            payload["codex_hourly_status"] = mswusage.codex_status
+        if mswusage.claude_report is not None:
             hourly_facts = _usage_hourly_facts_from_mswusage(
                 self.config,
-                mswusage_claude_report,
+                mswusage.claude_report,
                 provider_key="claude",
                 default_provider="claude",
                 default_agent="claude",
@@ -439,19 +467,10 @@ class DevicePusher:
             )
             if hourly_facts:
                 payload.setdefault("usage_hourly_facts", []).extend(hourly_facts)
-            ledger_run = _usage_ledger_run(mswusage_claude_report, hourly_facts, agent="claude")
+            ledger_run = _usage_ledger_run(mswusage.claude_report, hourly_facts, agent="claude")
             if ledger_run is not None:
                 payload.setdefault("usage_ledger_runs", []).append(ledger_run)
-
-        # 4. 读取认证 Token 并准备 headers
-        headers = {"User-Agent": PRODUCT_USER_AGENT}
-        if self.config.token_env:
-            token = os.environ.get(self.config.token_env)
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-
-        # 5. 投递（直推 或 经本地 outbox 持久缓冲后补推）
-        return self._deliver(payload, headers)
+        return payload
 
     def _push_source_status(self, status: str, error_type: str, error_message: str) -> Dict[str, Any]:
         observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
