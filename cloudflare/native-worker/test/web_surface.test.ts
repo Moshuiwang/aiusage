@@ -1,16 +1,12 @@
 import { createHmac } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
 import { Miniflare } from "miniflare";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
+import { acquireWorker, applySchema, bundleWorker } from "./golden/harness";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
-const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 const staticRoot = path.join(repoRoot, "cloudflare/native-worker/static");
 const contractGoldenPath = path.join(repoRoot, "tests/fixtures/contract/api_contract_golden.json");
 const token = "contract-test-token";
@@ -21,7 +17,7 @@ describe.sequential("native TS Worker web surface", () => {
   let mf: Miniflare;
 
   beforeEach(async () => {
-    mf = await createMiniflare({
+    mf = await acquire({
       AIUSAGE_TOKEN: token,
       AIUSAGE_TOKEN_SPECS: "second:second-contract-test-token",
       AIUSAGE_SESSION_SECRET: sessionSecret,
@@ -29,13 +25,8 @@ describe.sequential("native TS Worker web surface", () => {
       AIUSAGE_BACKEND_MODE: "native_d1_production",
     });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await seedMinimalUsage(db);
     await seedHealthRows(db);
-  });
-
-  afterEach(async () => {
-    await mf.dispose();
   });
 
   it("issues the stable session cookie value inherited from the Python cutover era on login", async () => {
@@ -301,15 +292,13 @@ describe.sequential("native TS Worker web surface", () => {
   });
 
   it("fails closed when deployment identity is missing", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({
+    mf = await acquire({
       AIUSAGE_TOKEN: token,
       AIUSAGE_SESSION_SECRET: sessionSecret,
       AIUSAGE_NOW: fixedNow,
       AIUSAGE_BACKEND_MODE: "",
     });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await seedMinimalUsage(db);
     await seedHealthRows(db);
 
@@ -419,44 +408,65 @@ describe.sequential("native TS Worker web surface", () => {
     expect(payload.summary).toMatchObject({ total_tokens: 300 });
   });
 
+  // #101：下面两条用例测的是 summary cache 语义本身。池化实例强制关缓存
+  // （session cookie 是确定值，共享实例 + 活缓存会把上个用例的响应喂给下个用例），
+  // 所以这两条各自起专属实例、用完即销毁——是全套件仅剩的按用例建实例的地方。
   it("caches successful summary reads for one authenticated session without sharing query variants", async () => {
-    const cookie = await sessionCookieHeader();
-    const todayUrl = "http://native.test/api/summary?date=2026-06-03&period=today";
+    mf = await createLiveCacheMiniflare();
+    try {
+      const setupDb = await mf.getD1Database("AIUSAGE_DB");
+      await applySchema(setupDb);
+      await seedMinimalUsage(setupDb);
+      await seedHealthRows(setupDb);
+      const cookie = await sessionCookieHeader();
+      const todayUrl = "http://native.test/api/summary?date=2026-06-03&period=today";
 
-    const first = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
-    expect(first.status).toBe(200);
-    expect(first.headers.get("X-AIUsage-Cache")).toBe("MISS");
-    expect((await first.json() as Record<string, any>).summary.total_tokens).toBe(300);
+      const first = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
+      expect(first.status).toBe(200);
+      expect(first.headers.get("X-AIUsage-Cache")).toBe("MISS");
+      expect((await first.json() as Record<string, any>).summary.total_tokens).toBe(300);
 
-    const db = await mf.getD1Database("AIUSAGE_DB");
-    await db.prepare("UPDATE usage_daily SET total_tokens = 999 WHERE source_id = ? AND date = ? AND agent = ?")
-      .bind("mac-local", "2026-06-03", "codex")
-      .run();
+      const db = await mf.getD1Database("AIUSAGE_DB");
+      await db.prepare("UPDATE usage_daily SET total_tokens = 999 WHERE source_id = ? AND date = ? AND agent = ?")
+        .bind("mac-local", "2026-06-03", "codex")
+        .run();
 
-    const cached = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
-    expect(cached.headers.get("X-AIUsage-Cache")).toBe("HIT");
-    expect((await cached.json() as Record<string, any>).summary.total_tokens).toBe(300);
+      const cached = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
+      expect(cached.headers.get("X-AIUsage-Cache")).toBe("HIT");
+      expect((await cached.json() as Record<string, any>).summary.total_tokens).toBe(300);
 
-    const distinctQuery = await mf.dispatchFetch(
-      "http://native.test/api/summary?date=2026-06-03&period=week",
-      { headers: { Cookie: cookie } },
-    );
-    expect(distinctQuery.headers.get("X-AIUsage-Cache")).toBe("MISS");
-    expect((await distinctQuery.json() as Record<string, any>).summary.total_tokens).toBe(300);
+      const distinctQuery = await mf.dispatchFetch(
+        "http://native.test/api/summary?date=2026-06-03&period=week",
+        { headers: { Cookie: cookie } },
+      );
+      expect(distinctQuery.headers.get("X-AIUsage-Cache")).toBe("MISS");
+      expect((await distinctQuery.json() as Record<string, any>).summary.total_tokens).toBe(300);
 
-    const distinctCredential = await mf.dispatchFetch(todayUrl, {
-      headers: { Authorization: "Bearer second-contract-test-token" },
-    });
-    expect(distinctCredential.headers.get("X-AIUsage-Cache")).toBe("MISS");
-    expect((await distinctCredential.json() as Record<string, any>).summary.total_tokens).toBe(300);
+      const distinctCredential = await mf.dispatchFetch(todayUrl, {
+        headers: { Authorization: "Bearer second-contract-test-token" },
+      });
+      expect(distinctCredential.headers.get("X-AIUsage-Cache")).toBe("MISS");
+      expect((await distinctCredential.json() as Record<string, any>).summary.total_tokens).toBe(300);
+    } finally {
+      await mf.dispose();
+    }
   });
 
   it("does not cache unauthenticated summary responses", async () => {
-    const response = await mf.dispatchFetch("http://native.test/api/mobile/summary?date=2026-06-03&period=today");
+    mf = await createLiveCacheMiniflare();
+    try {
+      const setupDb = await mf.getD1Database("AIUSAGE_DB");
+      await applySchema(setupDb);
+      await seedMinimalUsage(setupDb);
+      await seedHealthRows(setupDb);
+      const response = await mf.dispatchFetch("http://native.test/api/mobile/summary?date=2026-06-03&period=today");
 
-    expect(response.status).toBe(401);
-    expect(response.headers.get("X-AIUsage-Cache")).toBeNull();
-    expect(response.headers.get("Cache-Control")).toBeNull();
+      expect(response.status).toBe(401);
+      expect(response.headers.get("X-AIUsage-Cache")).toBeNull();
+      expect(response.headers.get("Cache-Control")).toBeNull();
+    } finally {
+      await mf.dispose();
+    }
   });
 });
 
@@ -468,17 +478,12 @@ describe.sequential("native TS Worker empty-database read surface", () => {
   let mf: Miniflare;
 
   beforeEach(async () => {
-    mf = await createMiniflare({
+    mf = await acquire({
       AIUSAGE_TOKEN: token,
       AIUSAGE_NOW: fixedNow,
     });
-    const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     // 刻意不 seed：这是「合法的空快照而不是 500」这条断言的全部前提。
-  });
-
-  afterEach(async () => {
-    await mf.dispose();
+    // acquireWorker 在取用时已把数据清空，schema 建好、一行数据都没有。
   });
 
   it("空库时 /api/summary 返回合法空快照而不是 500", async () => {
@@ -558,22 +563,6 @@ async function readStatic(asset: string): Promise<string> {
   return readFile(path.join(staticRoot, asset), "utf8");
 }
 
-async function bundleWorker(): Promise<string> {
-  const outdir = path.join(tmpdir(), `aiusage-native-worker-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  await mkdir(outdir, { recursive: true });
-  const outfile = path.join(outdir, "index.mjs");
-  await build({
-    entryPoints: [workerEntry],
-    outfile,
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    target: "es2022",
-    sourcemap: false,
-  });
-  return readFile(outfile, "utf8");
-}
-
 /**
  * 合同 golden 的 shape 投影，用来直接和已提交的 `api_contract_golden.json` 比对。
  * 完整实现在 `test/golden/shape.ts`（golden 生成端的 owner）；这里是**刻意收窄的一份**，
@@ -621,54 +610,34 @@ function canonicalJson(value: unknown): string {
   return JSON.stringify(value);
 }
 
-async function createMiniflare(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
-  const bundleScript = await bundleWorker();
+/** #101：从共享池取实例；同绑定复用，数据由 acquireWorker 在取用时归零，schema 无需重复应用。 */
+async function acquire(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
+  const { mf } = await acquireWorker({ AIUSAGE_TIMEZONE: "Asia/Shanghai", ...extraBindings });
+  return mf;
+}
+
+/**
+ * 两条缓存用例的专属实例：summary cache 保持活性（池里的实例强制关缓存），
+ * bundle 走 harness 的进程级缓存，schema 由调用方自己 apply，用完必须 dispose。
+ */
+async function createLiveCacheMiniflare(): Promise<Miniflare> {
+  const script = await bundleWorker();
   return new Miniflare({
     modules: true,
-    script: bundleScript,
+    script,
     scriptPath: "index.mjs",
     compatibilityDate: "2026-06-21",
     d1Databases: ["AIUSAGE_DB"],
     bindings: {
       AIUSAGE_TOKEN: token,
       AIUSAGE_TIMEZONE: "Asia/Shanghai",
+      AIUSAGE_TOKEN_SPECS: "second:second-contract-test-token",
+      AIUSAGE_SESSION_SECRET: sessionSecret,
+      AIUSAGE_NOW: fixedNow,
+      AIUSAGE_BACKEND_MODE: "native_d1_production",
       AIUSAGE_CACHE_NAMESPACE: crypto.randomUUID(),
-      ...extraBindings,
     },
   });
-}
-
-async function applySchema(db: D1Database): Promise<void> {
-  const sql = (await readFile(schemaPath, "utf8"))
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n");
-  for (const statement of sql.split(";")) {
-    const trimmed = statement.trim();
-    if (trimmed) await db.prepare(trimmed).run();
-  }
-  await resetDatabase(db);
-}
-
-async function resetDatabase(db: D1Database): Promise<void> {
-  const tables = [
-    "usage_hourly_models",
-    "usage_hourly_facts",
-    "ai_accounts",
-    "os_identities",
-    "machines",
-    "limit_windows",
-    "source_identities",
-    "usage_hourly",
-    "usage_daily_models",
-    "usage_daily",
-    "source_report_states",
-    "source_reports",
-    "collection_runs",
-  ];
-  for (const table of tables) {
-    await db.prepare(`DELETE FROM ${table}`).run();
-  }
 }
 
 async function seedMinimalUsage(db: D1Database): Promise<void> {

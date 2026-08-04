@@ -1,12 +1,7 @@
-import { readFile } from "node:fs/promises";
-import { mkdir } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
 import { Miniflare } from "miniflare";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { fixedNow, staleCollectedAt, token } from "./golden/paths";
+import { beforeEach, describe, expect, it } from "vitest";
+import { acquireWorker, applySqlFile } from "./golden/harness";
+import { fixedNow, seedSqlPath, staleCollectedAt, token } from "./golden/paths";
 
 type ContractRecord = {
   name: string;
@@ -21,10 +16,6 @@ type ContractRecord = {
 
 type Shape = Record<string, unknown>;
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const schemaPath = path.join(repoRoot, "cloudflare/migrations/0001_initial_schema.sql");
-const seedSqlPath = path.join(repoRoot, "cloudflare/native-worker/test/seed.sql");
-const workerEntry = path.join(repoRoot, "cloudflare/native-worker/src/index.ts");
 // token / fixedNow / staleCollectedAt 从 golden 收集器那边 import，不在这里再抄一份：
 // `staleCollectedAt` 是本文件的 seed 与合同 golden 的场景之间的**语义绑定**——
 // 合同场景里必须有一台「超过 120 分钟没上报」的设备，否则过期折算这条口径
@@ -45,14 +36,9 @@ describe.sequential("native TS Worker read-only API parity", () => {
   let mf: Miniflare;
 
   beforeEach(async () => {
-    mf = await createMiniflare();
+    mf = await acquire();
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await seedUsageFixture(db);
-  });
-
-  afterEach(async () => {
-    await mf.dispose();
   });
 
   // 原先这里有两条 golden 比对（api 合同 shape、value 全量深比对）。
@@ -63,10 +49,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   // 历史回退稳定、小时事实查询有周期边界、额度失败即刻降级。
 
   it("keeps web and shared Apple mobile DTO summaries unchanged when archived legacy usage tables change", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    mf = await acquire({ AIUSAGE_NOW: fixedNow });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await applySqlFile(db, seedSqlPath);
     const { buildSummary } = await import("../src/read-model");
     const { buildMobileSummary } = await import("../src/mobile-summary");
@@ -104,10 +88,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   });
 
   it("keeps a reviewed historical daily fallback stable when later detailed facts coexist", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    mf = await acquire({ AIUSAGE_NOW: fixedNow });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await applySqlFile(db, seedSqlPath);
     await db.prepare(`
       INSERT INTO usage_daily_rollups (
@@ -251,10 +233,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   });
 
   it("fails closed immediately when a provider failure follows a successful quota read", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: "2026-06-03T10:31:00+08:00" });
+    mf = await acquire({ AIUSAGE_NOW: "2026-06-03T10:31:00+08:00" });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await seedUsageFixture(db);
     await db.batch([
       db.prepare(`
@@ -452,10 +432,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   // 再被 `cf:golden:gen` 错误地重新祝福，golden 与 freshness 会一起报绿。
   // 这条从产物独立断言周期语义本身，不依赖 golden。
   it("today/week/month/all 返回真实不同的聚合窗口，不是换 label", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    mf = await acquire({ AIUSAGE_NOW: fixedNow });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await applySqlFile(db, seedSqlPath);
     const { buildSummary } = await import("../src/read-model");
     const { buildMobileSummary } = await import("../src/mobile-summary");
@@ -493,10 +471,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   // `confidence_breakdown` / attribution_confidence == "mixed" 此前在全部 Worker 测试里零命中；
   // seed 每个账户只有一种 confidence，聚合分支从未被回放过。
   it("同一账户混合 confidence 时逐账户可见，不同账户互不污染", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    mf = await acquire({ AIUSAGE_NOW: fixedNow });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await applySqlFile(db, seedSqlPath);
     await db.prepare(`
       INSERT INTO usage_hourly_facts (
@@ -549,10 +525,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   // 与 DTO 半边（accountContextFrom 从 ai_accounts 拿标签挂到额度窗口）此前只有
   // 手写 snapshot 的单元覆盖，从 D1 出发的这条链路没有被回放过。
   it("小时事实全空时 ai_accounts 仍然产出，额度窗口标签从 ai_accounts 回落", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    mf = await acquire({ AIUSAGE_NOW: fixedNow });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await applySqlFile(db, seedSqlPath);
     for (const table of ["usage_hourly_models", "usage_hourly_facts", "usage_hourly_rollups", "usage_daily_rollups"]) {
       await db.prepare(`DELETE FROM ${table}`).run();
@@ -601,10 +575,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
   // 真正活着的择优链路是 buildLimitStatus 选来源 → selectedLimitSources → DTO 过滤。
   // seed 每个 provider 只有一个来源，这条链路对「第二来源」从未被 D1 级 fixture 回放过。
   it("同 provider 第二个额度来源出现时，移动端只跟随最新来源，绝不混合", async () => {
-    await mf.dispose();
-    mf = await createMiniflare({ AIUSAGE_NOW: fixedNow });
+    mf = await acquire({ AIUSAGE_NOW: fixedNow });
     const db = await mf.getD1Database("AIUSAGE_DB");
-    await applySchema(db);
     await applySqlFile(db, seedSqlPath);
     await db.prepare(`
       INSERT INTO limit_windows (
@@ -684,38 +656,10 @@ function bodyFor(records: ContractRecord[], name: string): Shape {
   return record?.response.body as Shape;
 }
 
-async function bundleWorker(): Promise<string> {
-  const outdir = path.join(tmpdir(), `aiusage-native-worker-${Date.now()}-${Math.random().toString(16).slice(2)}`);
-  await mkdir(outdir, { recursive: true });
-  const outfile = path.join(outdir, "index.mjs");
-  await build({
-    entryPoints: [workerEntry],
-    outfile,
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    target: "es2022",
-    sourcemap: false,
-  });
-  return readFile(outfile, "utf8");
-}
-
-async function createMiniflare(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
-  const bundleScript = await bundleWorker();
-  return new Miniflare({
-    modules: true,
-    script: bundleScript,
-    scriptPath: "index.mjs",
-    compatibilityDate: "2026-06-21",
-    d1Databases: ["AIUSAGE_DB"],
-    bindings: {
-      AIUSAGE_TOKEN: token,
-      AIUSAGE_TIMEZONE: "Asia/Shanghai",
-      AIUSAGE_CACHE_NAMESPACE: crypto.randomUUID(),
-      AIUSAGE_DISABLE_SUMMARY_CACHE: "true",
-      ...extraBindings,
-    },
-  });
+/** #101：从共享池取实例；同绑定复用，数据由 acquireWorker 在取用时归零，schema 无需重复应用。 */
+async function acquire(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
+  const { mf } = await acquireWorker({ AIUSAGE_TIMEZONE: "Asia/Shanghai", ...extraBindings });
+  return mf;
 }
 
 async function seedUsageFixture(db: D1Database): Promise<void> {
@@ -944,49 +888,6 @@ async function insertUsagePayload(
       0, 0, totalTokens, null, JSON.stringify(dailyRaw.modelBreakdowns[0]), row.now, row.now,
     ),
   ]);
-}
-
-async function applySchema(db: D1Database): Promise<void> {
-  await applySqlText(db, await readFile(schemaPath, "utf8"));
-  await resetDatabase(db);
-}
-
-async function applySqlFile(db: D1Database, filePath: string): Promise<void> {
-  await applySqlText(db, await readFile(filePath, "utf8"));
-}
-
-async function applySqlText(db: D1Database, sqlText: string): Promise<void> {
-  const sql = sqlText
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n");
-  for (const statement of sql.split(";")) {
-    const trimmed = statement.trim();
-    if (trimmed) {
-      await db.prepare(trimmed).run();
-    }
-  }
-}
-
-async function resetDatabase(db: D1Database): Promise<void> {
-  const tables = [
-    "usage_hourly_models",
-    "usage_hourly_facts",
-    "ai_accounts",
-    "os_identities",
-    "machines",
-    "limit_windows",
-    "source_identities",
-    "usage_hourly",
-    "usage_daily_models",
-    "usage_daily",
-    "source_report_states",
-    "source_reports",
-    "collection_runs",
-  ];
-  for (const table of tables) {
-    await db.prepare(`DELETE FROM ${table}`).run();
-  }
 }
 
 function maskVolatile(value: unknown, fieldName = ""): unknown {
