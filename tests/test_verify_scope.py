@@ -111,6 +111,21 @@ class TestVerifyScope(unittest.TestCase):
         self.assertIn("worker=skip", out, out)
         self.assertIn("python=run", out, out)
 
+    def test_required_worker_environment_missing_is_a_failure_not_level_three(self) -> None:
+        (self.repo / "cloudflare" / "worker.ts").write_text("changed\n", encoding="utf-8")
+        (self.repo / "tests" / "test_app.py").write_text("VALUE = 'seed'\n", encoding="utf-8")
+        result = subprocess.run(
+            [str(self.verify), "--full"],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            env={**os.environ, "AIUSAGE_VERIFY_BASE": "verify-base", "LC_ALL": "C.UTF-8"},
+        )
+
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("node_modules 不存在", result.stdout)
+        self.assertNotIn("证据等级 3（本地测试通过）", result.stdout)
+
     def test_cloudflare_change_runs_worker(self) -> None:
         """动了 cloudflare/：必须跑 Worker，漏跑就是假绿。"""
         (self.repo / "cloudflare" / "worker.ts").write_text("changed\n", encoding="utf-8")

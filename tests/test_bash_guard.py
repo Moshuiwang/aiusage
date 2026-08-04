@@ -154,5 +154,22 @@ class TestGuardFailsOpen(unittest.TestCase):
         self.assertEqual(_run(_hook_input("scripts/verify.sh --full")).returncode, ALLOW)
 
 
+class TestHeredocHandling(unittest.TestCase):
+    def test_forbidden_phrases_inside_heredoc_are_only_text(self) -> None:
+        command = """python3 <<'PY'
+pkill -f wrangler
+while pgrep wrangler; do echo waiting; done
+gh pr merge 99
+PY"""
+        self.assertEqual(_run(_hook_input(command)).returncode, ALLOW)
+
+    def test_real_command_after_heredoc_is_still_blocked(self) -> None:
+        command = """cat <<'EOF'
+文档正文里提到 pkill -f
+EOF
+pkill -f wrangler"""
+        self.assertEqual(_run(_hook_input(command)).returncode, BLOCK)
+
+
 if __name__ == "__main__":
     unittest.main()
