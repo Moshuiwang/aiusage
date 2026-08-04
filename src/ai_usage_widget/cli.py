@@ -35,7 +35,7 @@ from .pusher import DevicePusher
 from .verify_cloud import register_parser as register_verify_cloud_parser, run as run_verify_cloud
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-usage-widget")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -219,45 +219,69 @@ def main(argv: list[str] | None = None) -> int:
 
     register_verify_cloud_parser(subparsers)
 
-    args = parser.parse_args(argv)
-    if args.command == "verify-cloud":
-        return run_verify_cloud(args)
+    return parser
 
-    if args.command == "push":
-        try:
-            with open(args.config, "r", encoding="utf-8") as handle:
-                config_data = json.load(handle)
-            device_config = validate_device_config(config_data)
-            if args.lock_file:
-                with FileLock(args.lock_file):
-                    result = DevicePusher(
-                        device_config,
-                        ledger_mode=args.ledger_mode,
-                        ledger_lookback_hours=args.ledger_lookback_hours,
-                        ledger_coverage_start=args.ledger_coverage_start,
-                    ).push()
-            else:
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    handler = {
+        "verify-cloud": run_verify_cloud,
+        "push": _run_push,
+        "doctor": _run_doctor,
+        "install-collector": _run_install_collector,
+        "rollback-collector": _run_rollback_collector,
+        "backup": _run_backup,
+        "collect-limits": _run_collect_limits,
+        "outbox-status": _run_outbox,
+        "outbox-export": _run_outbox,
+        "outbox-drain": _run_outbox,
+        "push-limits": _run_push_limits_command,
+        "install-limits-scheduler": _run_install_limits_scheduler,
+        "mswusage-codex": _run_mswusage_codex,
+        "mswusage-claude": _run_mswusage_claude,
+    }.get(args.command)
+    if handler is None:
+        parser.error(f"unsupported command: {args.command}")
+        return 2
+    return handler(args)
+
+
+def _run_push(args) -> int:
+    try:
+        with open(args.config, "r", encoding="utf-8") as handle:
+            config_data = json.load(handle)
+        device_config = validate_device_config(config_data)
+        if args.lock_file:
+            with FileLock(args.lock_file):
                 result = DevicePusher(
                     device_config,
                     ledger_mode=args.ledger_mode,
                     ledger_lookback_hours=args.ledger_lookback_hours,
                     ledger_coverage_start=args.ledger_coverage_start,
                 ).push()
-        except LockAlreadyHeld as exc:
-            print(json.dumps({"success": False, "error_type": "lock_already_held", "error_message": str(exc)}), file=sys.stderr)
-            return 1
-        except (ConfigError, OSError, ValueError, json.JSONDecodeError) as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
-
-        output = json.dumps(result, ensure_ascii=False, sort_keys=True)
-        if result.get("success"):
-            print(output)
-            return 0
-        print(output, file=sys.stderr)
+        else:
+            result = DevicePusher(
+                device_config,
+                ledger_mode=args.ledger_mode,
+                ledger_lookback_hours=args.ledger_lookback_hours,
+                ledger_coverage_start=args.ledger_coverage_start,
+            ).push()
+    except LockAlreadyHeld as exc:
+        print(json.dumps({"success": False, "error_type": "lock_already_held", "error_message": str(exc)}), file=sys.stderr)
+        return 1
+    except (ConfigError, OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    if args.command == "doctor":
+    output = json.dumps(result, ensure_ascii=False, sort_keys=True)
+    if result.get("success"):
+        print(output)
+        return 0
+    print(output, file=sys.stderr)
+    return 1
+
+def _run_doctor(args) -> int:
         try:
             report = run_deploy_doctor(
                 config_path=args.config,
@@ -290,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report.to_dict(), ensure_ascii=False, sort_keys=True))
         return report.exit_code
 
-    if args.command == "install-collector":
+def _run_install_collector(args) -> int:
         try:
             plan = _collector_release_plan_from_args(args)
             result = install_release(plan, dry_run=args.dry_run)
@@ -304,7 +328,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("success") else 1
 
-    if args.command == "rollback-collector":
+def _run_rollback_collector(args) -> int:
         try:
             result = rollback_release(
                 Path(args.root).expanduser(),
@@ -322,7 +346,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("success") else 1
 
-    if args.command == "backup":
+def _run_backup(args) -> int:
         try:
             result = backup_sqlite(args.db, args.backup_dir, keep=args.keep, max_total_mb=args.max_total_mb)
         except (OSError, sqlite3.Error, ValueError) as exc:
@@ -331,7 +355,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
 
-    if args.command == "collect-limits":
+def _run_collect_limits(args) -> int:
         try:
             if args.doctor:
                 report = run_limits_doctor(args.limits_config)
@@ -408,7 +432,7 @@ def main(argv: list[str] | None = None) -> int:
         }, ensure_ascii=False, sort_keys=True))
         return 0 if result.success else 1
 
-    if args.command in {"outbox-status", "outbox-export", "outbox-drain"}:
+def _run_outbox(args) -> int:
         runner = {
             "outbox-status": _run_outbox_status,
             "outbox-export": _run_outbox_export,
@@ -425,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
         return 0
 
-    if args.command == "push-limits":
+def _run_push_limits_command(args) -> int:
         try:
             if args.lock_file:
                 with FileLock(args.lock_file):
@@ -441,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(output, ensure_ascii=False, sort_keys=True))
         return 0 if success else 1
 
-    if args.command == "install-limits-scheduler":
+def _run_install_limits_scheduler(args) -> int:
         try:
             scheduler_config = _limits_scheduler_config_from_args(args)
             result = install_limits_scheduler(
@@ -456,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
 
-    if args.command == "mswusage-codex":
+def _run_mswusage_codex(args) -> int:
         try:
             now = datetime.now(dt_timezone.utc).astimezone()
             since = _usage_ledger_since(args.mode, args.lookback_hours, now)
@@ -482,7 +506,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return 0
 
-    if args.command == "mswusage-claude":
+def _run_mswusage_claude(args) -> int:
         try:
             now = datetime.now(dt_timezone.utc).astimezone()
             since = _usage_ledger_since(args.mode, args.lookback_hours, now)
@@ -503,10 +527,6 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return 0
-
-    parser.error(f"unsupported command: {args.command}")
-    return 2
-
 
 def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
     providers = {}

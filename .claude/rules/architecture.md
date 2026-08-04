@@ -39,7 +39,7 @@ paths:
 | Mobile DTO | `cloudflare/native-worker/src/mobile-summary.ts` | `mobile_summary.py` 已随 #74 删除 |
 | 版本合同：服务端判定（四态、最低支持版本、拒绝不兼容 payload） | `cloudflare/native-worker/src/version-contract.ts` | `version_contract.py` 的服务端判定部分已随 #74 删除，Python 只剩采集端自报半边 |
 | 版本合同：采集端自报 | `version_contract.py`（采集端保留部分） | **留 Python**（`pusher.py`、`config.py` 在用），不冻结 |
-| 设备本机采集与 HTTP 上报 | `pusher.py`、`runners.py`、`mswusage_*.py` | **留 Python**，不冻结 |
+| 设备本机采集与 HTTP 上报 | `pusher.py`、`mswusage_*.py` | **留 Python**，不冻结 |
 | 采集端 payload 合同 fixture | `pusher.py`（owner 模块产出，**禁止手写**） | **留 Python**。生成 `scripts/gen_collector_payload_fixture.py`，防陈旧守卫 `tests/test_collector_payload_contract.py` |
 | 服务端合同 golden：`value_golden.json` / `provider_slots_golden.json` / `api_contract_golden.json` / macOS owner fixture | `cloudflare/native-worker/test/golden/`（收集器即 owner，**禁止手写**） | **权威已转移**（#74 P1）。生成 `npm run cf:golden:gen`，防陈旧守卫 `golden-freshness.test.ts` + `provider-slots-parity.test.ts`。Python 侧的 `gen_value_golden.py` / `gen_provider_slots_golden.py` / `test_value_golden_freshness.py` / `test_provider_slots_parity.py` / `test_api_contract.py` 已删除 |
 | 采集端本地 outbox / 可靠投递 | `collector_store.py` | **已建**（#73）。缓冲不是档案，历史权威永远在 D1。库路径**要求绝对路径**（默认 `~/.ai-usage/collector_outbox.sqlite`）——采集由 LaunchAgent/systemd 拉起时 cwd 是 `/` 或 `$HOME`，相对路径会导致同机开两个库且排空守卫误放行。<br>调用方：用量事实走 `pusher.py`，额度观测走 `limits_push.py::deliver_limits_payload`（#87 接线，`push-limits --config` 才启用）。额度带 TTL + 按槽位集合去重，用量不设 TTL 也绝不去重——两种可靠性语义不同，不要合并。运维入口 `outbox-status` / `outbox-export` / `outbox-drain` |
@@ -67,7 +67,7 @@ paths:
   **新字段唯一去处**是 `cloudflare/native-worker/src/*.ts` + `cloudflare/migrations/`；
   不允许在 Python 侧「顺手同步一份」——那正是单实现决策要消灭的形态。
 
-**不在删除名单内**（正常开发）：采集端全部模块——`pusher.py`、`runners.py`、`mswusage_*.py`、
+**不在删除名单内**（正常开发）：采集端全部模块——`pusher.py`、`mswusage_*.py`、
 `*_limits_provider.py`、`limits_*.py`、`collector_store.py`、`deploy_*.py`、`config.py`、
 `cli.py`、`models.py`、`timezones.py`、`lock.py`、`backup.py`、`auth.py`、`http_identity.py`、
 `d1_legacy_backfill.py`、`verify_cloud.py`、`version_contract.py` 的采集端自报部分。

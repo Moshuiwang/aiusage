@@ -19,7 +19,7 @@ Web、iPhone、Watch 和 macOS 菜单栏都通过 Cloudflare Worker API 读取�
 
 - schema owner：`cloudflare/migrations/`（0001 是累计快照；守卫是
   `tests/test_d1_schema_migration.py` 的显式列布局快照——#74 起不再镜像 Python 存储层）。
-- 采集端数据模型：`src/ai_usage_widget/models.py`（wire payload 侧）。
+- 采集端 payload owner：`src/ai_usage_widget/pusher.py`（`models.py` 只保留命令执行结果）。
 - 写入入口：Cloudflare Worker `/ingest`、`/ingest-limits`（`write-model.ts`）。
 - 读模型 owner：`cloudflare/native-worker/src/read-model.ts` / `mobile-summary.ts`。
 - 采集端唯一本地库：`collector_store.py` 的 outbox（缓冲，不是档案）。

@@ -35,7 +35,7 @@ Python 侧同时承担本地开发服务器与 golden 生成基准。
 必须同时看清的两个限制（决策前提）：
 
 - **重复的只是「服务端路径」，采集端搬不走。** `pusher`、四个额度 provider、`deploy_*`、
-  `mswusage_*`、CLI、`config`、`runners` 约 6568 行跑在用户的 Mac 和 Linux 机器上，要读 `ccusage`、
+  `mswusage_*`、CLI、`config` 等代码跑在用户的 Mac 和 Linux 机器上，要读 `ccusage`、
   调 `systemd` / `launchd`、读本机时区与 OS 用户上下文。Cloudflare Worker 是沙箱，结构上碰不到这些。
 - **单实现只能消掉 2026-08-01 那六类问题中的两类。** 另外四类（守恒测试断言了恒成立的等式、
   测试卡在超时边缘、golden 记录的是失败那次、「无凭据泄露」验证没执行到那条代码路径）根因是
@@ -154,7 +154,7 @@ Codex 复核指出 Phase 1（采集端本地库）与 Phase 2/3（服务端收�
 
 ### 5.3 留在 Python（采集端，本决策不动）
 
-`pusher.py`、`runners.py`、`mswusage_claude.py` / `mswusage_codex.py`、四个 `*_limits_provider.py`、
+`pusher.py`、`mswusage_claude.py` / `mswusage_codex.py`、四个 `*_limits_provider.py`、
 `limits_push.py` / `limits_doctor.py` / `limits_scheduler.py` / `limits_runtime.py` / `limits_config.py`、
 `deploy_doctor.py` / `deploy_units.py` / `deploy_release.py`、`config.py`、`cli.py`（采集子命令）、
 `normalize.py`、`models.py`、`timeutil.py` / `timezones.py`、`lock.py`、`backup.py`、`auth.py`。
