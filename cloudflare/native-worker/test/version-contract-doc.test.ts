@@ -90,9 +90,10 @@ const AUTHORITY_ENTRIES = [
   },
   {
     // `buildVersionHealth` 一个符号不够：它在 `index.ts` 里也有（`/api/health` 那条）。
-    // `version_health` 只在 `read-model.ts` 里出现，它才是把这条职责钉死的那个符号。
+    // `version_health` 只在读模型编排里出现，它才是把这条职责钉死的那个符号。
+    // #126 目录化后编排在 `read-model/summary.ts`；`read-model.ts` 只是兼容入口。
     duty: "来源健康读模型",
-    owner: "cloudflare/native-worker/src/read-model.ts",
+    owner: "cloudflare/native-worker/src/read-model/summary.ts",
     mustReference: ["buildVersionHealth", "version_health"],
   },
   {

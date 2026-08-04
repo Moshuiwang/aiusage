@@ -20,7 +20,7 @@
   `error_type` 都在写库之前定；`index.ts` 只按 `exc.status` 把 `WriteValidationError`
   序列化成响应，不参与判定）。
 - 来源健康读模型（`/api/summary` 的 `source_status[].version` 与顶层 `version_health`）：
-  `cloudflare/native-worker/src/read-model.ts`。
+  `cloudflare/native-worker/src/read-model/summary.ts`（#126 目录化后 `read-model.ts` 只是兼容入口）。
 - `/api/health` 的 `versions` 块：`cloudflare/native-worker/src/index.ts`（用
   `buildVersionHealth` 汇总，口径取自上面两条，自己不判版本）。
 - 模块 owner 总表与依赖方向：[`architecture.md`](architecture.md)。

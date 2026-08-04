@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { Miniflare } from "miniflare";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -378,7 +378,17 @@ describe.sequential("native TS Worker web surface", () => {
 
   it("reads current source health from the per-source state model", async () => {
     const indexSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/index.ts"), "utf8");
-    const readModelSource = await readFile(path.join(repoRoot, "cloudflare/native-worker/src/read-model.ts"), "utf8");
+    // #126 目录化后读模型 = 兼容入口 + read-model/ 目录全部模块，守卫覆盖整个目录，
+    // 防止有人把被禁的 SQL 写进任何一个子模块。
+    const readModelDir = path.join(repoRoot, "cloudflare/native-worker/src/read-model");
+    const moduleNames = (await readdir(readModelDir)).sort();
+    expect(moduleNames.length, "read-model/ 目录不该是空的").toBeGreaterThanOrEqual(8);
+    const readModelSource = [
+      await readFile(path.join(repoRoot, "cloudflare/native-worker/src/read-model.ts"), "utf8"),
+      ...(await Promise.all(
+        moduleNames.map((name) => readFile(path.join(readModelDir, name), "utf8")),
+      )),
+    ].join("\n");
 
     expect(indexSource).toContain("FROM source_report_states");
     expect(indexSource).not.toContain("FROM source_reports r");
