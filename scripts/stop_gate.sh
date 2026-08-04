@@ -10,7 +10,11 @@
 #   - src/ 或 tests/ 有改动         -> 跑 Python 全量，不绿则阻止
 #   - cloudflare/ 有改动            -> 不自动跑（太慢），但强制显式交代
 set -uo pipefail
-cd "$(dirname "$0")/.." || exit 0
+
+# hook 配置可以来自主检出，但判定对象必须是**当前会话**所在的工作树。
+# 从脚本自身路径定位会让并行 worktree 错查主检出，形成一边脏、另一边无法收口的死锁。
+REPO_ROOT="$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)" || exit 0
+cd "$REPO_ROOT" || exit 0
 
 # 不在 git 仓库时不拦截
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0

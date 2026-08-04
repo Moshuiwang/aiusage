@@ -179,6 +179,8 @@ else
   fi
   if [ -n "$WORKER_SKIP_REASON" ]; then
     echo "跳过：$WORKER_SKIP_REASON"
+    # “本应执行但环境不具备”不是按改动面合法裁剪，不能报等级 3。
+    FAILED=1
   fi
 fi
 

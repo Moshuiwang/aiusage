@@ -87,7 +87,12 @@ class StopGateTestCase(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def _run(self, snapshot: list[str] | None = None, use_real_ps: bool = False) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self,
+        snapshot: list[str] | None = None,
+        use_real_ps: bool = False,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         env = {**os.environ, "LC_ALL": "C.UTF-8"}
         if use_real_ps:
             env.pop("AIUSAGE_STOP_GATE_PS", None)
@@ -98,7 +103,7 @@ class StopGateTestCase(unittest.TestCase):
             env["AIUSAGE_STOP_GATE_SELF_PID"] = SELF_PID
         return subprocess.run(
             [str(self.repo / "scripts" / "stop_gate.sh")],
-            cwd=self.repo,
+            cwd=cwd or self.repo,
             capture_output=True,
             text=True,
             env=env,
@@ -106,6 +111,30 @@ class StopGateTestCase(unittest.TestCase):
 
 
 class TestChangeScope(StopGateTestCase):
+    def test_main_dirty_does_not_block_a_clean_worktree_session(self) -> None:
+        worktree = Path(self._tmp.name) / "feature-worktree"
+        _git(self.repo, "worktree", "add", "-q", "-b", "feature-clean", str(worktree))
+        (self.repo / "src" / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+        result = self._run(cwd=worktree)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_dirty_worktree_blocks_even_when_main_checkout_is_clean(self) -> None:
+        worktree = Path(self._tmp.name) / "dirty-worktree"
+        _git(self.repo, "worktree", "add", "-q", "-b", "feature-dirty", str(worktree))
+        (worktree / "src" / "app.py").write_text("VALUE = 3\n", encoding="utf-8")
+        (worktree / "tests" / "test_seed.py").write_text(
+            "import unittest\n\n\nclass T(unittest.TestCase):\n"
+            "    def test_broken(self) -> None:\n        self.assertEqual(1, 2)\n",
+            encoding="utf-8",
+        )
+
+        result = self._run(cwd=worktree)
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Python 测试未通过", result.stderr)
+
     def test_clean_worktree_passes(self) -> None:
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
