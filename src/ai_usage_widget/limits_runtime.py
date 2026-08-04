@@ -20,6 +20,9 @@ class ProviderRuntimeResult:
     status: str
     windows_collected: int
     error_type: str | None = None
+    #: 这次采集写进额度记录的来源标识。多账户下 provider 名不足以区分是谁，
+    #: 验收要回答的是「哪个 source_id 采到了几条」（#144）。
+    source_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,7 @@ class LimitsRuntime:
                         status="provider_failed",
                         windows_collected=len(windows),
                         error_type="provider_failed",
+                        source_id=source_id,
                     )
                 )
                 continue
@@ -103,6 +107,7 @@ class LimitsRuntime:
                     status="ok" if provider_available else "unavailable",
                     windows_collected=len(windows),
                     error_type=None if provider_available else "provider_unavailable",
+                    source_id=source_id,
                 )
             )
 

@@ -77,6 +77,40 @@ class ReleasePlan:
         ]
 
 
+def preflight_unit_paths(spec: CollectorUnitSpec) -> List[Dict[str, Any]]:
+    """启用/重载定时器**之前**，逐条确认单元里写的路径真实存在（#144）。
+
+    单元文件里的路径一旦落空，systemd 只会在自己的日志里失败：
+    `WorkingDirectory` 不存在 → 200/CHDIR，服务根本起不来；`EnvironmentFile`
+    缺失同样是致命错误。这两种失败都不会惊动任何人，采集就此停摆到下次人工巡检。
+    所以检查必须发生在 `systemctl enable` 之前，而不是留给 journal。
+
+    返回逐项结果（含通过项），调用方据此报告；路径值本身不是秘密，token 只存在于
+    `env_file` 的**内容**里，这里从不读取内容。
+    """
+
+    return [
+        _path_check("working_directory", spec.release_dir, want_dir=True),
+        _path_check("pythonpath", spec.python_path, want_dir=True),
+        _path_check("env_file", spec.env_file, want_dir=False),
+        _path_check("device_config", spec.config_path, want_dir=False),
+    ]
+
+
+def _path_check(name: str, path: str, *, want_dir: bool) -> Dict[str, Any]:
+    candidate = Path(path)
+    if not candidate.exists():
+        status = "missing"
+    elif want_dir and not candidate.is_dir():
+        status = "not_a_directory"
+    elif not want_dir and not candidate.is_file():
+        # 目录冒充文件时 systemd 读 EnvironmentFile 一样会失败：存在 ≠ 可用。
+        status = "not_a_file"
+    else:
+        status = "ok"
+    return {"name": name, "path": str(candidate), "status": status, "ok": status == "ok"}
+
+
 def default_command_runner(argv: Sequence[str]) -> int:  # pragma: no cover - 真实系统路径
     import subprocess
 
@@ -112,6 +146,7 @@ def install_release(
             "config_path": spec.config_path,
             "timer_scope": plan.timer_scope,
             "commands": plan.commands(),
+            "activated": False,
             "rolled_back": False,
         }
 
@@ -147,6 +182,21 @@ def install_release(
         "rolled_back": False,
     }
 
+    preflight = preflight_unit_paths(spec)
+    result["preflight"] = preflight
+    unusable = [check for check in preflight if not check["ok"]]
+    if unusable:
+        # 停在 systemctl 之前：宁可留一个「文件已就位但没激活」的可重跑状态，
+        # 也不要 enable 一个注定失败的 timer——后者的失败只写进 journal，没人看。
+        # 不回滚：文件本身没问题，补齐缺失路径后重跑 install 即幂等完成激活。
+        result["success"] = False
+        result["activated"] = False
+        result["error_type"] = "PreflightFailed"
+        result["error_message"] = "activation preflight failed: " + ", ".join(
+            f"{check['name']}={check['status']}" for check in unusable
+        )
+        return result
+
     try:
         _run_commands(commands, runner)
     except (ReleaseError, OSError) as exc:
@@ -154,6 +204,7 @@ def install_release(
         # 注意不要传新 plan 的 scope：回滚要按**上一个 release** 记录的 scope 操作，
         # 否则跨 scope 升级失败时会去另一个 manager 上重启一个不存在的单元。
         return _recover_from_failed_activation(root, unit_dir, runner, result, exc)
+    result["activated"] = True
     return result
 
 
@@ -166,6 +217,7 @@ def _recover_from_failed_activation(
 ) -> Dict[str, Any]:
     failed = dict(result)
     failed["success"] = False
+    failed["activated"] = False
     failed["error_type"] = exc.__class__.__name__
     failed["error_message"] = str(exc)
     failed["rollback_files_restored"] = False

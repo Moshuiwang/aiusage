@@ -23,6 +23,11 @@ class ReleaseRollbackDrillTests(unittest.TestCase):
         (self.source_dir / "ai_usage_widget").mkdir(parents=True)
         (self.source_dir / "ai_usage_widget" / "__init__.py").write_text("", encoding="utf-8")
 
+        # #144 起，缺 ingest env 文件就不许激活 timer；这些演练要的是**激活失败后**
+        # 的回滚行为，所以前置条件得先摆齐，别把演练堵在门禁上。
+        (self.root / "secrets").mkdir(parents=True)
+        (self.root / "secrets" / "ingest.env").write_text("# managed by ops\n", encoding="utf-8")
+
         self.device_config = {
             "schema_version": 1,
             "source_id": "linux-biai-wangzp",

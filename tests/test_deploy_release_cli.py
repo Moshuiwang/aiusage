@@ -50,6 +50,15 @@ class CollectorInstallCliTests(unittest.TestCase):
         self.commands.append(list(argv))
         return 0
 
+    def _seed_env_file(self) -> None:
+        """摆好 ingest token 的 env 文件。
+
+        #144 起它是激活 timer 的前置条件，但**不能放进 setUp**：dry-run 用例要断言
+        「一个文件都不碰」，预建 root 会把那条断言废掉。所以按用例显式调用。
+        """
+        (self.root / "secrets").mkdir(parents=True, exist_ok=True)
+        (self.root / "secrets" / "ingest.env").write_text("# managed by ops\n", encoding="utf-8")
+
     def _install_argv(self, version: str = "2026.08.01-1", revision: str = "06fa591") -> list[str]:
         return [
             "install-collector",
@@ -70,6 +79,7 @@ class CollectorInstallCliTests(unittest.TestCase):
         return code, json.loads(buffer.getvalue())
 
     def test_install_collector_installs_a_versioned_release_and_enables_the_timer(self) -> None:
+        self._seed_env_file()
         code, payload = self._run(self._install_argv())
 
         self.assertEqual(code, 0)
@@ -89,6 +99,7 @@ class CollectorInstallCliTests(unittest.TestCase):
         )
 
     def test_running_install_collector_twice_is_idempotent(self) -> None:
+        self._seed_env_file()
         self._run(self._install_argv())
         _, second = self._run(self._install_argv())
 
@@ -109,11 +120,13 @@ class CollectorInstallCliTests(unittest.TestCase):
         self.assertEqual(self.commands, [])
 
     def test_install_collector_passes_the_timer_scope_through(self) -> None:
+        self._seed_env_file()
         self._run(self._install_argv() + ["--timer-scope", "system"])
 
         self.assertIn(["systemctl", "--system", "daemon-reload"], self.commands)
 
     def test_rollback_collector_restores_the_previous_release(self) -> None:
+        self._seed_env_file()
         self._run(self._install_argv())
         self._run(self._install_argv(version="2026.08.02-1", revision="abc1234"))
 
@@ -130,6 +143,7 @@ class CollectorInstallCliTests(unittest.TestCase):
         self.assertEqual(os.readlink(self.root / "current"), "releases/2026.08.01-1")
 
     def test_rollback_collector_without_a_previous_release_fails_loudly(self) -> None:
+        self._seed_env_file()
         self._run(self._install_argv())
 
         code, payload = self._run(

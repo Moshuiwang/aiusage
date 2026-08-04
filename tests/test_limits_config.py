@@ -86,6 +86,73 @@ class TestLimitsConfig(unittest.TestCase):
                 }
             )
 
+    def test_rejects_duplicate_runtime_id_across_enabled_providers(self) -> None:
+        """#144：运行时以 source_id 为字典键，重名会让后加载的提供方静默覆盖前者。
+
+        线上表现是「任务成功、看板缺一类额度」——最坏的一种失败形态。
+        必须在配置校验阶段拒绝，且错误信息要能指出到底谁和谁撞了。
+        """
+        with self.assertRaises(ConfigError) as raised:
+            parse_limits_config(
+                {
+                    "timezone": "Asia/Shanghai",
+                    "providers": [
+                        {"provider": "codex", "source_id": "tz-wangzp", "rpc": True},
+                        {"provider": "claude", "source_id": "tz-wangzp", "cli": True},
+                    ],
+                }
+            )
+
+        message = str(raised.exception)
+        self.assertIn("tz-wangzp", message)
+        self.assertIn("codex", message)
+        self.assertIn("claude", message)
+
+    def test_rejects_duplicate_runtime_id_when_source_id_is_omitted(self) -> None:
+        """缺省 source_id 时运行时键回落到 provider 名，两条 codex 同样会互相覆盖。
+
+        绕过路径：只校验显式写出的 source_id 会漏掉这一种。
+        """
+        with self.assertRaises(ConfigError) as raised:
+            parse_limits_config(
+                {
+                    "timezone": "Asia/Shanghai",
+                    "providers": [
+                        {"provider": "codex", "auth_file": "/tmp/a.json"},
+                        {"provider": "codex", "rpc": True},
+                    ],
+                }
+            )
+
+        self.assertIn("codex", str(raised.exception))
+
+    def test_rejects_duplicate_runtime_id_between_explicit_and_default(self) -> None:
+        """显式写 source_id="codex" 与另一条缺省的 codex 也是同一个运行时键。"""
+        with self.assertRaises(ConfigError):
+            parse_limits_config(
+                {
+                    "timezone": "Asia/Shanghai",
+                    "providers": [
+                        {"provider": "codex", "source_id": "codex", "auth_file": "/tmp/a.json"},
+                        {"provider": "codex", "rpc": True},
+                    ],
+                }
+            )
+
+    def test_disabled_provider_does_not_trigger_duplicate_runtime_id(self) -> None:
+        """停用的提供方根本不进运行时映射，不该因为重名把整份配置判死。"""
+        config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [
+                    {"provider": "claude", "source_id": "tz-wangzp", "cli": True},
+                    {"provider": "codex", "source_id": "tz-wangzp", "enabled": False, "rpc": True},
+                ],
+            }
+        )
+
+        self.assertEqual([provider.source_id for provider in config.enabled_providers], ["tz-wangzp"])
+
     def test_load_limits_config_reads_json_file(self) -> None:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json") as handle:
             json.dump(

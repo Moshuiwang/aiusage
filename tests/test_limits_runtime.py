@@ -141,6 +141,7 @@ class TestLimitsRuntime(unittest.TestCase):
                 status="provider_failed",
                 windows_collected=1,
                 error_type="provider_failed",
+                source_id="codex",
             )
         ])
         # 失败如实进结果，不用本地历史兜底（官方额度红线的采集端一侧）。
@@ -177,6 +178,7 @@ class TestLimitsRuntime(unittest.TestCase):
                 status="unavailable",
                 windows_collected=1,
                 error_type="provider_unavailable",
+                source_id="claude-main",
             )
         ])
         self.assertEqual(result.windows, [cached])

@@ -29,6 +29,12 @@ class ReleaseInstallIdempotencyTests(unittest.TestCase):
         (self.source_dir / "ai_usage_widget" / "__pycache__").mkdir()
         (self.source_dir / "ai_usage_widget" / "__pycache__" / "cli.pyc").write_bytes(b"stale")
 
+        # ingest token 的 env 文件由运维单独放置，不由 install 生成；#144 起它是
+        # 激活前置条件（缺了就不许 enable timer），所以这里得先摆好。内容只是占位，
+        # 真实 token 永远不进仓库。
+        (self.root / "secrets").mkdir(parents=True)
+        (self.root / "secrets" / "ingest.env").write_text("# managed by ops\n", encoding="utf-8")
+
         self.device_config = {
             "schema_version": 1,
             "source_id": "linux-biai-wangzp",
@@ -198,6 +204,160 @@ class ReleaseInstallIdempotencyTests(unittest.TestCase):
 
         self.assertEqual(timer, deploy_units.render_timer_unit(spec))
         self.assertEqual(service, deploy_units.render_service_unit(spec))
+
+
+class ActivationPreflightTests(unittest.TestCase):
+    """#144 第 2 条：启用/重载定时器前必须先确认单元里写的路径都真实存在。
+
+    线上事故形态：旧 service 的 WorkingDirectory 指向已被删掉的目录，systemd
+    返回 200/CHDIR，采集从此停摆，直到人工巡检才发现。检查要发生在 systemctl
+    之前——单元一旦被 enable，失败就只写进 journal，没人看。
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.base = Path(self._tmp.name)
+        self.release = self.base / "current"
+        (self.release / "src").mkdir(parents=True)
+        self.env_file = self.base / "secrets" / "ingest.env"
+        self.env_file.parent.mkdir(parents=True)
+        self.env_file.write_text("# managed by ops\n", encoding="utf-8")
+        self.config_path = self.base / "config" / "device.json"
+        self.config_path.parent.mkdir(parents=True)
+        self.config_path.write_text("{}\n", encoding="utf-8")
+
+    def _spec(self, **overrides) -> deploy_units.CollectorUnitSpec:
+        fields = {
+            "source_id": "tz-wangzp",
+            "release_dir": str(self.release),
+            "config_path": str(self.config_path),
+            "env_file": str(self.env_file),
+            "lock_file": str(self.base / "run" / "pusher.lock"),
+        }
+        fields.update(overrides)
+        return deploy_units.CollectorUnitSpec(**fields)
+
+    def _failed_names(self, checks) -> list[str]:
+        return sorted(check["name"] for check in checks if not check["ok"])
+
+    def test_all_paths_present_passes_with_every_declared_path_checked(self) -> None:
+        checks = deploy_release.preflight_unit_paths(self._spec())
+
+        # 结构下限：不只看「没有失败项」，还要看确实逐条查了单元里声明的四个路径。
+        self.assertEqual(
+            sorted(check["name"] for check in checks),
+            ["device_config", "env_file", "pythonpath", "working_directory"],
+        )
+        self.assertEqual(self._failed_names(checks), [])
+        self.assertEqual(
+            {check["name"]: check["path"] for check in checks}["working_directory"],
+            str(self.release),
+        )
+
+    def test_missing_working_directory_is_reported(self) -> None:
+        checks = deploy_release.preflight_unit_paths(
+            self._spec(release_dir=str(self.base / "releases" / "已被删掉"))
+        )
+
+        self.assertIn("working_directory", self._failed_names(checks))
+        self.assertIn("pythonpath", self._failed_names(checks))
+
+    def test_missing_env_file_is_reported(self) -> None:
+        self.env_file.unlink()
+
+        checks = deploy_release.preflight_unit_paths(self._spec())
+
+        self.assertEqual(self._failed_names(checks), ["env_file"])
+
+    def test_missing_device_config_is_reported(self) -> None:
+        self.config_path.unlink()
+
+        checks = deploy_release.preflight_unit_paths(self._spec())
+
+        self.assertEqual(self._failed_names(checks), ["device_config"])
+
+    def test_preflight_does_not_report_a_directory_as_a_usable_file(self) -> None:
+        """EnvironmentFile 指到一个目录上，systemd 同样起不来——存在 ≠ 可用。"""
+        self.env_file.unlink()
+        self.env_file.mkdir()
+
+        checks = deploy_release.preflight_unit_paths(self._spec())
+
+        self.assertEqual(self._failed_names(checks), ["env_file"])
+
+
+class InstallPreflightGateTests(unittest.TestCase):
+    """预检失败时，install 必须停在 systemctl 之前——一条命令都不许跑。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        base = Path(self._tmp.name)
+        self.root = base / "deploy-root"
+        self.unit_dir = base / "systemd-user"
+        self.source_dir = base / "repo" / "src"
+        (self.source_dir / "ai_usage_widget").mkdir(parents=True)
+        (self.source_dir / "ai_usage_widget" / "__init__.py").write_text("", encoding="utf-8")
+        self.commands: list[list[str]] = []
+
+    def _runner(self, argv):
+        self.commands.append(list(argv))
+        return 0
+
+    def _install(self):
+        plan = deploy_release.ReleasePlan(
+            root=self.root,
+            unit_dir=self.unit_dir,
+            source_dir=self.source_dir,
+            version="2026.08.04-1",
+            revision="06fa591",
+            installed_at="2026-08-04T00:00:00+00:00",
+            unit_spec=deploy_units.CollectorUnitSpec(
+                source_id="tz-wangzp",
+                release_dir=str(self.root / "current"),
+                config_path=str(self.root / "config" / "device.json"),
+                env_file=str(self.root / "secrets" / "ingest.env"),
+                lock_file=str(self.root / "run" / "pusher.lock"),
+            ),
+            device_config={
+                "schema_version": 1,
+                "source_id": "tz-wangzp",
+                "host": "aiusage.example.invalid",
+                "machine": "biai-collector-01",
+                "os_user": "wangzp",
+                "platform": "linux",
+                "timezone": "Asia/Shanghai",
+                "server_url": "https://aiusage.example.invalid/ingest",
+                "token_env": "AI_USAGE_INGEST_TOKEN",
+            },
+        )
+        return deploy_release.install_release(plan, command_runner=self._runner)
+
+    def test_install_without_env_file_never_reloads_or_enables_the_timer(self) -> None:
+        result = self._install()
+
+        self.assertFalse(result["success"])
+        self.assertEqual(self.commands, [])
+        self.assertFalse(result["rolled_back"])
+        self.assertEqual(
+            sorted(check["name"] for check in result["preflight"] if not check["ok"]),
+            ["env_file"],
+        )
+
+    def test_install_proceeds_once_the_env_file_exists(self) -> None:
+        """门禁不是把安装堵死：补齐缺失文件后重跑，幂等地完成激活。"""
+        self._install()
+        env_file = self.root / "secrets" / "ingest.env"
+        env_file.write_text("# managed by ops\n", encoding="utf-8")
+
+        result = self._install()
+
+        self.assertTrue(result["success"])
+        self.assertIn(
+            ["systemctl", "--user", "enable", "--now", "ai-usage-pusher-tz-wangzp.timer"],
+            self.commands,
+        )
 
 
 if __name__ == "__main__":

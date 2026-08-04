@@ -23,7 +23,7 @@ from . import deploy_release as deploy_release_module
 from .deploy_release import ReleaseError, ReleasePlan, install_release, rollback_release
 from .deploy_units import CollectorUnitSpec
 from .lock import FileLock, LockAlreadyHeld
-from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, summarize_limits_config
+from .limits_config import ConfigError as LimitsConfigError, LimitsProviderConfig, load_limits_config, runtime_id, summarize_limits_config
 from .limits_doctor import run_limits_doctor
 from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .collector_store import CollectorStore, OutboxNotDrained
@@ -407,7 +407,7 @@ def _run_collect_limits(args) -> int:
             if args.providers and "claude" in args.providers and "claude" not in providers:
                 raise ValueError("claude provider requires --claude-auth-file and --claude-usage-url, --claude-cli, or --provider-fixture")
             provider_names = args.providers or (
-                [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
+                [runtime_id(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
             )
             runtime = LimitsRuntime(
                 timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
@@ -423,6 +423,7 @@ def _run_collect_limits(args) -> int:
             "providers": [
                 {
                     "provider": item.provider,
+                    "source_id": item.source_id or item.provider,
                     "status": item.status,
                     "windows_collected": item.windows_collected,
                     "error_type": item.error_type,
@@ -531,7 +532,7 @@ def _run_mswusage_claude(args) -> int:
 def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
     providers = {}
     for provider_config in configs:
-        runtime_key = _provider_runtime_key(provider_config)
+        runtime_key = runtime_id(provider_config)
         if provider_config.provider == "codex":
             codex_wham_provider = (
                 CodexWhamProvider(auth_file=provider_config.auth_file)
@@ -627,10 +628,6 @@ def _optional_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
-def _provider_runtime_key(provider_config: LimitsProviderConfig) -> str:
-    return provider_config.source_id or provider_config.provider
-
-
 def _tag_provider(provider, *, provider_name: str, source_id: str):
     setattr(provider, "provider_name", provider_name)
     setattr(provider, "source_id", source_id)
@@ -643,7 +640,7 @@ def _run_push_limits(args):
     if limits_config:
         providers.update(_providers_from_limits_config(limits_config.enabled_providers))
     provider_names = args.providers or (
-        [_provider_runtime_key(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
+        [runtime_id(provider) for provider in limits_config.enabled_providers] if limits_config else sorted(providers)
     )
     runtime = LimitsRuntime(
         timezone=args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
@@ -687,6 +684,7 @@ def _run_push_limits(args):
         "providers": [
             {
                 "provider": item.provider,
+                "source_id": item.source_id or item.provider,
                 "status": item.status,
                 "windows_collected": _count_windows_for_provider(result.windows, item.provider),
                 "error_type": item.error_type,
