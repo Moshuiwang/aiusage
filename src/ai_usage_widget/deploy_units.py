@@ -18,7 +18,8 @@ import plistlib
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
+from xml.sax.saxutils import escape as _xml_escape
 
 
 UNIT_PREFIX = "ai-usage-pusher"
@@ -69,6 +70,11 @@ class CollectorUnitSpec:
     @property
     def launchd_label(self) -> str:
         return f"{LAUNCHD_LABEL_PREFIX}.{self.source_id}" if self.source_id else LAUNCHD_LABEL_PREFIX
+
+    @property
+    def windows_task_name(self) -> str:
+        # Task Scheduler 任务名与 systemd basename 同源，三个 OS 用同一套命名。
+        return self.unit_basename
 
     @property
     def python_path(self) -> str:
@@ -169,8 +175,8 @@ def render_launchd_plist(spec: CollectorUnitSpec) -> bytes:
     return plistlib.dumps(payload, sort_keys=False)
 
 
-def _launchd_calendar_intervals(on_calendar: str) -> List[Dict[str, int]]:
-    """把 systemd 的 `*:0/30` 之类的表达式翻译成 launchd 的 Minute 列表。"""
+def _parse_minute_schedule(on_calendar: str) -> Tuple[int, int]:
+    """把 systemd 的 `*:0/30` 解析成（起始分钟, 步长分钟）；步长非法时按每小时一次处理。"""
 
     _, _, minute_spec = on_calendar.partition(":")
     minute_spec = minute_spec or "0"
@@ -184,8 +190,95 @@ def _launchd_calendar_intervals(on_calendar: str) -> List[Dict[str, int]]:
     except ValueError:
         step = 60
     if step <= 0 or step > 60:
-        return [{"Minute": start % 60}]
-    return [{"Minute": minute} for minute in range(start % 60, 60, step)]
+        step = 60
+    return start % 60, step
+
+
+def _launchd_calendar_intervals(on_calendar: str) -> List[Dict[str, int]]:
+    """把 systemd 的 `*:0/30` 之类的表达式翻译成 launchd 的 Minute 列表。"""
+
+    start, step = _parse_minute_schedule(on_calendar)
+    return [{"Minute": minute} for minute in range(start, 60, step)]
+
+
+WINDOWS_TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
+
+# StartBoundary 用固定历史日期：渲染必须是纯函数（同参数逐字节相同），
+# 才能沿用「模板与生成结果逐字节比对」的防漂移口径。
+_WINDOWS_START_BOUNDARY_DATE = "2026-01-01"
+
+
+def render_windows_task_xml(spec: CollectorUnitSpec) -> str:
+    """Windows Task Scheduler 侧对应物（第三个 OS，#124）。
+
+    - 周期语义与 systemd/launchd 同源：`*:0/30` → 每日 CalendarTrigger + PT30M 重复。
+    - `StartWhenAvailable` 是 `Persistent=` / `RunAtLoad` 的对应物：错过的触发在
+      开机或唤醒后补跑。
+    - Task Scheduler 的 XML 没有环境变量字段，PYTHONPATH 与 env 文件路径经
+      cmd.exe 的 `set` 注入命令行——与另两个 OS 相同，**绝不写入 token 值**。
+    - 导入方式：`schtasks /Create /TN <windows_task_name> /XML <file>`，
+      文件需以 UTF-16 编码写盘（与 XML 声明一致）。
+    """
+
+    start, step = _parse_minute_schedule(spec.on_calendar)
+    exec_command = " ".join(_windows_quote(part) for part in spec.exec_argv())
+    arguments = (
+        f'/c set "PYTHONPATH={spec.python_path}" && '
+        f'set "{ENV_FILE_VARIABLE}={spec.env_file}" && '
+        f"{exec_command}"
+    )
+    catch_up = "true" if spec.persistent else "false"
+    return (
+        '<?xml version="1.0" encoding="UTF-16"?>\n'
+        f'<Task version="1.2" xmlns="{WINDOWS_TASK_NAMESPACE}">\n'
+        "  <RegistrationInfo>\n"
+        f"    <Description>{_xml_escape(spec.service_description)}</Description>\n"
+        "  </RegistrationInfo>\n"
+        "  <Triggers>\n"
+        "    <CalendarTrigger>\n"
+        "      <Repetition>\n"
+        f"        <Interval>PT{step}M</Interval>\n"
+        "        <Duration>P1D</Duration>\n"
+        "        <StopAtDurationEnd>false</StopAtDurationEnd>\n"
+        "      </Repetition>\n"
+        f"      <StartBoundary>{_WINDOWS_START_BOUNDARY_DATE}T00:{start:02d}:00</StartBoundary>\n"
+        "      <Enabled>true</Enabled>\n"
+        "      <ScheduleByDay>\n"
+        "        <DaysInterval>1</DaysInterval>\n"
+        "      </ScheduleByDay>\n"
+        "    </CalendarTrigger>\n"
+        "  </Triggers>\n"
+        "  <Settings>\n"
+        "    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n"
+        "    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n"
+        "    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n"
+        f"    <StartWhenAvailable>{catch_up}</StartWhenAvailable>\n"
+        f"    <ExecutionTimeLimit>PT{spec.timeout_seconds}S</ExecutionTimeLimit>\n"
+        "  </Settings>\n"
+        "  <Actions>\n"
+        "    <Exec>\n"
+        "      <Command>cmd.exe</Command>\n"
+        f"      <Arguments>{_xml_escape(arguments)}</Arguments>\n"
+        f"      <WorkingDirectory>{_xml_escape(spec.release_dir)}</WorkingDirectory>\n"
+        "    </Exec>\n"
+        "  </Actions>\n"
+        "</Task>\n"
+    )
+
+
+def _windows_quote(part: str) -> str:
+    """cmd.exe 参数引号保护：Windows 路径带空格是常态（如 C:\\Program Files\\...）。"""
+
+    return f'"{part}"' if (" " in part or "\t" in part) else part
+
+
+def write_windows_task_xml(spec: CollectorUnitSpec, target: Path) -> None:
+    """按声明的编码（UTF-16）写盘，供 `schtasks /Create /XML` 导入。
+
+    渲染结果的 XML 声明是 UTF-16，用其他编码写盘会被 schtasks 判为 malformed。
+    """
+
+    target.write_text(render_windows_task_xml(spec), encoding="utf-16")
 
 
 def repository_template_spec() -> CollectorUnitSpec:

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import plistlib
+import re
+import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from ai_usage_widget import deploy_units
@@ -142,6 +145,120 @@ class LaunchdTemplateTests(unittest.TestCase):
             sorted(payload["EnvironmentVariables"]),
             ["AI_USAGE_ENV_FILE", "PYTHONPATH"],
         )
+
+
+_TASK_NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+
+
+class WindowsTaskTemplateTests(unittest.TestCase):
+    """#124：Windows Task Scheduler 是第三个 OS 的定时单元，同样只许代码生成。"""
+
+    def _xml(self, spec: "deploy_units.CollectorUnitSpec | None" = None) -> str:
+        self.assertTrue(
+            hasattr(deploy_units, "render_windows_task_xml"),
+            "Windows Task Scheduler 渲染器缺失（render_windows_task_xml）",
+        )
+        return deploy_units.render_windows_task_xml(spec or _sample_spec())
+
+    def test_windows_task_mirrors_calendar_command_and_workdir(self) -> None:
+        root = ET.fromstring(self._xml())
+
+        interval = root.findtext(
+            "t:Triggers/t:CalendarTrigger/t:Repetition/t:Interval", namespaces=_TASK_NS
+        )
+        self.assertEqual(interval, "PT30M")
+        start_boundary = root.findtext(
+            "t:Triggers/t:CalendarTrigger/t:StartBoundary", namespaces=_TASK_NS
+        )
+        self.assertTrue(
+            str(start_boundary).endswith("T00:00:00"),
+            f"StartBoundary 应从 on_calendar 的起始分钟推导，实际 {start_boundary}",
+        )
+        self.assertEqual(
+            root.findtext("t:Actions/t:Exec/t:WorkingDirectory", namespaces=_TASK_NS),
+            "/opt/ai-usage/current",
+        )
+        self.assertEqual(
+            root.findtext("t:Actions/t:Exec/t:Command", namespaces=_TASK_NS), "cmd.exe"
+        )
+        arguments = str(root.findtext("t:Actions/t:Exec/t:Arguments", namespaces=_TASK_NS))
+        self.assertIn(
+            "/usr/bin/python3 -m ai_usage_widget.cli push "
+            "--config /opt/ai-usage/config/device.json "
+            "--lock-file /opt/ai-usage/run/pusher.lock",
+            arguments,
+        )
+        self.assertIn("PYTHONPATH=/opt/ai-usage/current/src", arguments)
+        self.assertIn("AI_USAGE_ENV_FILE=/opt/ai-usage/secrets/ingest.env", arguments)
+
+    def test_windows_task_supports_catch_up_and_timeout(self) -> None:
+        root = ET.fromstring(self._xml())
+
+        self.assertEqual(
+            root.findtext("t:Settings/t:StartWhenAvailable", namespaces=_TASK_NS), "true"
+        )
+        self.assertEqual(
+            root.findtext("t:Settings/t:ExecutionTimeLimit", namespaces=_TASK_NS), "PT120S"
+        )
+
+    def test_windows_persistent_off_disables_catch_up(self) -> None:
+        spec = deploy_units.CollectorUnitSpec(
+            **{**_sample_spec().__dict__, "persistent": False}
+        )
+
+        root = ET.fromstring(self._xml(spec))
+
+        self.assertEqual(
+            root.findtext("t:Settings/t:StartWhenAvailable", namespaces=_TASK_NS), "false"
+        )
+
+    def test_windows_task_name_derives_from_source_id(self) -> None:
+        spec = _sample_spec()
+
+        self.assertTrue(
+            hasattr(spec, "windows_task_name"),
+            "CollectorUnitSpec 缺少 windows_task_name（Windows 任务名派生）",
+        )
+        self.assertEqual(spec.windows_task_name, "ai-usage-pusher-linux-biai-wangzp")
+
+    def test_windows_task_never_embeds_a_token_value(self) -> None:
+        root = ET.fromstring(self._xml())
+        arguments = str(root.findtext("t:Actions/t:Exec/t:Arguments", namespaces=_TASK_NS))
+
+        # 闭世界断言（对齐 launchd 的 EnvironmentVariables 全集比对）：
+        # 注入的环境变量恰好这两个，多一个 set（比如有人塞 TOKEN=）就红。
+        injected = re.findall(r'set "([A-Z_]+)=', arguments)
+        self.assertEqual(sorted(injected), ["AI_USAGE_ENV_FILE", "PYTHONPATH"])
+        self.assertIn('set "AI_USAGE_ENV_FILE=/opt/ai-usage/secrets/ingest.env"', arguments)
+        self.assertNotIn("Bearer", arguments)
+
+    def test_windows_command_quotes_paths_with_spaces(self) -> None:
+        spec = deploy_units.CollectorUnitSpec(
+            **{
+                **_sample_spec().__dict__,
+                "python_executable": r"C:\Program Files\Python\python.exe",
+            }
+        )
+
+        root = ET.fromstring(self._xml(spec))
+        arguments = str(root.findtext("t:Actions/t:Exec/t:Arguments", namespaces=_TASK_NS))
+
+        self.assertIn(r'"C:\Program Files\Python\python.exe" -m ai_usage_widget.cli push', arguments)
+
+    def test_windows_write_helper_encodes_utf16_as_declared(self) -> None:
+        self.assertTrue(
+            hasattr(deploy_units, "write_windows_task_xml"),
+            "缺少 UTF-16 写盘入口（write_windows_task_xml）",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "task.xml"
+
+            deploy_units.write_windows_task_xml(_sample_spec(), target)
+
+            raw = target.read_bytes()
+            self.assertIn(raw[:2], (b"\xff\xfe", b"\xfe\xff"), "UTF-16 BOM 缺失，与 XML 声明不一致")
+            root = ET.fromstring(raw.decode("utf-16"))
+            self.assertTrue(root.tag.endswith("Task"))
 
 
 if __name__ == "__main__":

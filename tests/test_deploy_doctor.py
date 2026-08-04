@@ -996,5 +996,92 @@ class SystemctlShowParserTests(unittest.TestCase):
         self.assertTrue(deploy_doctor.has_future_trigger(properties))
 
 
+class WindowsTimerCheckTests(unittest.TestCase):
+    """#124：非 systemd 平台的 timer 提示必须指向本平台真实的定时机制。"""
+
+    def test_windows_platform_points_to_task_scheduler_not_launchd(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment(
+            timer_unit="ai-usage-pusher-win-biai-wang",
+            timer_supported=False,
+            observed_identity={"platform": "windows", "machine": "x", "os_user": "u"},
+        )
+
+        check = deploy_doctor._check_timer(environment)
+
+        self.assertEqual(check.status, deploy_doctor.STATUS_UNKNOWN)
+        self.assertIn("Task Scheduler", check.detail)
+        self.assertIn("schtasks", check.remediation)
+        self.assertNotIn("launchd", check.detail)
+
+    def test_mac_platform_keeps_the_launchd_message(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment(
+            timer_unit="ai-usage-pusher-mac-biai-wang",
+            timer_supported=False,
+            observed_identity={"platform": "darwin", "machine": "x", "os_user": "u"},
+        )
+
+        check = deploy_doctor._check_timer(environment)
+
+        self.assertEqual(check.status, deploy_doctor.STATUS_UNKNOWN)
+        self.assertIn("launchd", check.detail)
+
+
+class InstalledDistributionProbeTests(unittest.TestCase):
+    """#124 review 修复：探测只认 .dist-info，源码树的 egg-info 残留不算安装通道。"""
+
+    def test_dist_info_distribution_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dist_info = Path(tmp) / "ai_usage_widget-0.3.0.dist-info"
+            dist_info.mkdir()
+            (dist_info / "METADATA").write_text(
+                "Metadata-Version: 2.1\nName: ai-usage-widget\nVersion: 0.3.0\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                deploy_doctor._installed_distribution_version(search_path=[tmp]), "0.3.0"
+            )
+
+    def test_source_tree_egg_info_is_not_an_installed_distribution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            egg_info = Path(tmp) / "ai_usage_widget.egg-info"
+            egg_info.mkdir()
+            (egg_info / "PKG-INFO").write_text(
+                "Metadata-Version: 2.1\nName: ai-usage-widget\nVersion: 0.3.0\n",
+                encoding="utf-8",
+            )
+
+            self.assertIsNone(
+                deploy_doctor._installed_distribution_version(search_path=[tmp]),
+                "egg-info 残留被当成了已安装分发——现场代码会被包元数据掩盖",
+            )
+
+
+class InstalledDistributionReleaseTests(unittest.TestCase):
+    """#124：uv tool install 的安装形态是有版本的，doctor 不得把它当不可追溯部署。"""
+
+    def test_uv_tool_install_layout_is_a_versioned_release(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment.from_fixture(
+            {
+                "device_config": {},
+                "installed_distribution": {"name": "ai-usage-widget", "version": "0.3.0"},
+            }
+        )
+
+        check = deploy_doctor._check_runtime_release(environment)
+
+        self.assertEqual(check.status, deploy_doctor.STATUS_OK)
+        self.assertIn("0.3.0", check.detail)
+        self.assertIn("已安装包", check.detail)
+
+    def test_missing_release_and_missing_distribution_still_fails(self) -> None:
+        environment = deploy_doctor.DoctorEnvironment.from_fixture({"device_config": {}})
+
+        check = deploy_doctor._check_runtime_release(environment)
+
+        self.assertEqual(check.status, deploy_doctor.STATUS_FAILED)
+        self.assertEqual(check.reason_code, "runtime_release_unversioned")
+
+
 if __name__ == "__main__":
     unittest.main()

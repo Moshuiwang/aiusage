@@ -1,4 +1,5 @@
 """AI usage widget collector."""
 
-__version__ = "0.1.0"
+from .version_contract import COLLECTOR_VERSION as __version__
 
+__all__ = ["__version__"]

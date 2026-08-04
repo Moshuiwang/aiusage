@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-usage-widget"
-version = "0.1.0"
 description = "Local collector for AI coding agent usage summaries."
 requires-python = ">=3.9"
+dynamic = ["version"]
 
 [project.scripts]
 ai-usage-widget = "ai_usage_widget.cli:main"
@@ -14,3 +14,7 @@ ai-usage-widget = "ai_usage_widget.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+# 版本单源（#124）：唯一事实源是采集端版本合同的 COLLECTOR_VERSION。
+# 不得在本文件或 __init__.py 再手写版本号——tests/test_version_single_source.py 守着。
+[tool.setuptools.dynamic]
+version = {attr = "ai_usage_widget.version_contract.COLLECTOR_VERSION"}

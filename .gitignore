@@ -34,6 +34,10 @@ auth.json
 /logs/
 *.local.log
 /.build/
+# Python 打包产物（uv tool install / python -m build 会在源码树留下）
+/build/
+/dist/
+*.egg-info/
 cloudflare/native-worker/tmp/
 # `npm run cf:golden:gen` 的临时打包产物（正常跑完会自己删，崩了会留下）
 cloudflare/native-worker/test/golden/.gen-entry.mjs
