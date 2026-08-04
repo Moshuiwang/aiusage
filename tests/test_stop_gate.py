@@ -199,6 +199,17 @@ class TestResidueDetection(StopGateTestCase):
         self.assertEqual(result.returncode, 2, result.stdout)
         self.assertIn("9201", result.stderr)
 
+    def test_truncated_macos_comm_uses_argv0(self) -> None:
+        """macOS `ps comm` 截断绝对路径时，真实 node 仍必须被识别。"""
+        result = self._run([
+            *BASE_SNAPSHOT,
+            "9204 8999 /Users/wangzhipe /Users/wangzhipeng/.nvm/versions/node/v22/bin/node "
+            "/repo/node_modules/wrangler/wrangler-dist/cli.js dev",
+        ])
+
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("9204", result.stderr)
+
     def test_wrangler_deploy_is_not_residue(self) -> None:
         """判据要的是独立的 `dev` 参数，不是「argv 里出现过 dev 这三个字母」。"""
         result = self._run([
@@ -235,23 +246,20 @@ class TestResidueDetection(StopGateTestCase):
         self.assertEqual(result.returncode, 2, result.stdout)
         self.assertIn("残留", result.stderr)
 
-    @unittest.skipUnless(shutil.which("bash"), "需要 bash 才能造出真实进程")
+    @unittest.skipUnless(shutil.which("node"), "需要 node 才能造出真实进程")
     def test_real_process_is_detected_through_the_real_ps_path(self) -> None:
         """注入路径能过不代表真实路径能过：这条用真实进程 + 真实 `ps` 跑一遍。
 
-        用 bash 的一份副本冒充 `node`（`comm` 取的是可执行文件名），argv 摆成
-        `node .../wrangler-dist/cli.js dev` 的形状——这是最难抓的那一种。
+        启动真实 node，argv 摆成 `node .../wrangler-dist/cli.js dev` 的形状——
+        不能复制 bash 冒充：macOS 的 `ps comm` 会保留原可执行文件名 `bash`。
         """
         fake_dir = Path(self._tmp.name) / "node_modules" / "wrangler" / "wrangler-dist"
         fake_dir.mkdir(parents=True)
-        fake_node = fake_dir / "node"
-        shutil.copy2(shutil.which("bash"), fake_node)
-        fake_node.chmod(0o755)
+        fake_cli = fake_dir / "cli.js"
+        fake_cli.write_text("setInterval(() => {}, 30_000);\n", encoding="utf-8")
 
-        # `-c "sleep 30"` 会被 bash 优化成 exec，进程名变回 sleep、argv 也塌掉，
-        # 伪装就没了（这正是本条用例第一版被静默跳过的原因）。多一条命令即可阻止该优化。
         process = subprocess.Popen(
-            [str(fake_node), "-c", "sleep 30; :", str(fake_dir / "cli.js"), "dev"],
+            [str(shutil.which("node")), str(fake_cli), "dev"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -268,8 +276,21 @@ class TestResidueDetection(StopGateTestCase):
             else:
                 self.skipTest("进程表里始终看不到伪装进程，跳过真实路径用例")
 
+            snapshot = subprocess.run(
+                ["ps", "-eo", "pid=,ppid=,comm=,args="],
+                capture_output=True,
+                text=True,
+            )
             result = self._run(use_real_ps=True)
-            self.assertEqual(result.returncode, 2, result.stdout)
+            process_line = next(
+                (line for line in snapshot.stdout.splitlines() if str(process.pid) in line),
+                "<目标进程未出现在完整 ps 快照>",
+            )
+            self.assertEqual(
+                result.returncode,
+                2,
+                f"stop_gate stdout={result.stdout!r} stderr={result.stderr!r} ps={process_line}",
+            )
             self.assertIn(str(process.pid), result.stderr)
         finally:
             process.send_signal(signal.SIGKILL)

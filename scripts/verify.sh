@@ -49,7 +49,7 @@ else
     COMMITTED_CHANGES="$(git diff --name-only "$VERIFY_BASE"...HEAD 2>/dev/null)"
     CHANGED_FILES="$(printf '%s\n%s\n' "$WORKTREE_CHANGES" "$COMMITTED_CHANGES" | grep -v '^$' | sort -u)"
   else
-    SCOPE_REASON="拿不到 base ref（$VERIFY_BASE），改动面不可信"
+    SCOPE_REASON="拿不到 base ref（${VERIFY_BASE}），改动面不可信"
   fi
 fi
 
@@ -63,7 +63,7 @@ elif [ "$FORCE_FULL" -eq 1 ]; then
 elif [ -n "$SCOPE_REASON" ]; then
   SCOPE_DECISION="退回全量：$SCOPE_REASON"
 elif [ -z "$CHANGED_FILES" ]; then
-  SCOPE_DECISION="退回全量：改动面为空（相对 $VERIFY_BASE 无差异，可能是刚合并或 base 不对）"
+  SCOPE_DECISION="退回全量：改动面为空（相对 ${VERIFY_BASE} 无差异，可能是刚合并或 base 不对）"
 else
   # Worker 侧：改动面涉及 cloudflare/ 才跑。
   #
@@ -79,7 +79,7 @@ else
     SCOPE_DECISION="改动面涉及 cloudflare/ 或 Worker 拥有的合同 fixture"
   else
     RUN_WORKER=0
-    SCOPE_DECISION="改动面不涉及 cloudflare/（相对 $VERIFY_BASE）"
+    SCOPE_DECISION="改动面不涉及 cloudflare/（相对 ${VERIFY_BASE}）"
   fi
 
   # Python 侧：判据**比「不含 cloudflare/」严格得多**，因为仍有 Python 测试会读
@@ -94,7 +94,7 @@ else
     :  # 有任何一个文件在该范围之外 → 照常跑 Python
   else
     RUN_PYTHON=0
-    SCOPE_DECISION="$SCOPE_DECISION；改动面全部在 cloudflare/native-worker/src/（Python 测试不读该目录）"
+    SCOPE_DECISION="${SCOPE_DECISION}；改动面全部在 cloudflare/native-worker/src/（Python 测试不读该目录）"
   fi
 fi
 
@@ -185,17 +185,17 @@ fi
 echo
 echo "================= 证据摘要 ================="
 if [ -n "$PY_SKIP_REASON" ]; then
-  echo "Python 测试   : 未运行（$PY_SKIP_REASON）"
+  echo "Python 测试   : 未运行（${PY_SKIP_REASON}）"
 else
   echo "Python 测试   : $PY_RESULT"
 fi
 if [ -n "$WORKER_SKIP_REASON" ]; then
-  echo "Worker 测试   : 未运行（$WORKER_SKIP_REASON）"
+  echo "Worker 测试   : 未运行（${WORKER_SKIP_REASON}）"
 else
   echo "Worker 测试   : $WORKER_RESULT"
 fi
 echo
-echo "本机（Linux）无法验证、必须回 Mac 侧执行的项："
+echo "统一入口未覆盖、需按对应环境另行验证的项："
 echo "  - iOS / macOS Swift 测试与构建（swift test / xcodebuild / xcodegen）"
 echo "  - 真实 Cloudflare 部署、Secrets、线上 smoke（走 Ops Agent）"
 echo "  - 真机 iPhone / Apple Watch 安装与截图验收"
