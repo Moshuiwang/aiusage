@@ -111,6 +111,11 @@ export default {
         return json(result.body, 200, { "X-AIUsage-Rows-Written": String(result.rowsWritten) });
       } catch (exc) {
         if (exc instanceof WriteValidationError) {
+          try {
+            await recordRejectedIngestAttempt(payload, exc, url.pathname, env);
+          } catch (_recordingError) {
+            // Rejection telemetry is best-effort and must never change the established response.
+          }
           return json({ status: "error", error_type: exc.errorType, message: exc.message }, exc.status);
         }
         return json({ status: "error", error_type: "write_failed", message: "Failed to save data" }, 500);
@@ -206,8 +211,45 @@ async function pruneAuditTables(db: D1Database, now: Date): Promise<void> {
       )
     `).bind(cutoff),
     db.prepare("DELETE FROM collection_runs WHERE collected_at < ?").bind(cutoff),
+    db.prepare("DELETE FROM rejected_ingest_attempts WHERE last_seen_at < ?").bind(cutoff),
     db.prepare("DELETE FROM usage_hourly_rollups WHERE bucket_start < ?").bind(hourlyRollupCutoff),
   ]);
+}
+
+async function recordRejectedIngestAttempt(
+  payload: unknown,
+  error: WriteValidationError,
+  path: string,
+  env: Env,
+): Promise<void> {
+  const observedAt = referenceTime(env);
+  const now = observedAt.toISOString();
+  const sourceIdClaimed = await claimedSourceId(payload, env.AIUSAGE_DB);
+  const day = dateInTimezone(observedAt, env.AIUSAGE_TIMEZONE ?? "Asia/Shanghai");
+  await env.AIUSAGE_DB.prepare(`
+    INSERT INTO rejected_ingest_attempts (
+      source_id_claimed, error_type, path, day, first_seen_at, last_seen_at, count
+    ) VALUES (?, ?, ?, ?, ?, ?, 1)
+    ON CONFLICT(source_id_claimed, error_type, day) DO UPDATE SET
+      path = excluded.path,
+      last_seen_at = excluded.last_seen_at,
+      count = rejected_ingest_attempts.count + 1
+  `).bind(sourceIdClaimed, error.errorType, path, day, now, now).run();
+}
+
+async function claimedSourceId(payload: unknown, db: D1Database): Promise<string> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "unknown";
+  const claimed = (payload as Record<string, unknown>).source_id;
+  if (typeof claimed !== "string") return "unknown";
+  const value = claimed.trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value)) return "unknown";
+  const known = await db.prepare(`
+    SELECT source_id FROM source_identities WHERE source_id = ?
+    UNION
+    SELECT source_id FROM source_report_states WHERE source_id = ?
+    LIMIT 1
+  `).bind(value, value).first<{ source_id: string }>();
+  return known?.source_id === value ? value : "unknown";
 }
 
 async function summaryCacheKey(request: Request, env: Env): Promise<Request> {
@@ -353,11 +395,12 @@ function normalizeAssetName(assetName: string): string | null {
 }
 
 async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
-  const [sourceRows, latestCollectedAt, sizeBytes, limitsReport] = await Promise.all([
+  const [sourceRows, latestCollectedAt, sizeBytes, limitsReport, rejectedRecent] = await Promise.all([
     latestSourceStatuses(env.AIUSAGE_DB),
     latestMetadataTime(env.AIUSAGE_DB),
     databaseSizeProxy(env.AIUSAGE_DB),
     buildLimitsHealth(env.AIUSAGE_DB),
+    recentRejectedIngestAttempts(env.AIUSAGE_DB, referenceTime(env)),
   ]);
   // Issue #77：source_status.counts / non_ok 与 versions 数的是**同一份**条目
   // （`buildHealthSourceStatus`），status 一律带 120 分钟过期折算，参照时刻取
@@ -405,8 +448,11 @@ async function buildHealthResponse(env: Env): Promise<Record<string, unknown>> {
       counts,
       non_ok: nonOk,
     },
-    // 键位与 src/ai_usage_widget/server_services.py 的 `versions` 一致：source_status 与 limits 之间。
-    versions: buildVersionHealth(healthSourceStatus),
+    // 版本判定核心沿用既有 `versions` 合同；rejected_recent 是仅健康端可见的服务端审计数据。
+    versions: {
+      ...buildVersionHealth(healthSourceStatus),
+      rejected_recent: rejectedRecent,
+    },
     limits: limitsReport,
   };
 }
@@ -440,6 +486,26 @@ async function latestMetadataTime(db: D1Database): Promise<string | null> {
   return row?.updated_at ?? null;
 }
 
+async function recentRejectedIngestAttempts(db: D1Database, now: Date): Promise<Record<string, unknown>[]> {
+  const cutoff = new Date(now.getTime() - AUDIT_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const result = await db.prepare(`
+    SELECT source_id_claimed, error_type, path, last_seen_at, count
+    FROM rejected_ingest_attempts
+    WHERE last_seen_at >= ?
+    ORDER BY last_seen_at DESC, source_id_claimed ASC, error_type ASC
+  `).bind(cutoff).all<{
+    source_id_claimed: string;
+    error_type: string;
+    path: string;
+    last_seen_at: string;
+    count: number;
+  }>();
+  return (result.results ?? []).map((row) => ({
+    ...row,
+    count: Number(row.count),
+  }));
+}
+
 async function buildLimitsHealth(db: D1Database): Promise<Record<string, unknown>> {
   const placeholders = LOCAL_ESTIMATE_SOURCE_TYPES.map(() => "?").join(", ");
   const effective = `status = 'ok' AND confidence = 'observed' AND source_type NOT IN (${placeholders})`;
@@ -471,6 +537,7 @@ async function databaseSizeProxy(db: D1Database): Promise<number> {
     "collection_runs",
     "source_reports",
     "source_report_states",
+    "rejected_ingest_attempts",
     "source_identities",
     "machines",
     "os_identities",
@@ -487,6 +554,26 @@ async function databaseSizeProxy(db: D1Database): Promise<number> {
     rows += Number(row?.count ?? 0);
   }
   return rows;
+}
+
+function referenceTime(env: Env): Date {
+  const configured = env.AIUSAGE_NOW ? new Date(env.AIUSAGE_NOW) : new Date();
+  return Number.isNaN(configured.getTime()) ? new Date() : configured;
+}
+
+function dateInTimezone(date: Date, timezone: string): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  } catch (_invalidTimezone) {
+    return date.toISOString().slice(0, 10);
+  }
 }
 
 function escapeHtml(value: string): string {

@@ -15528,6 +15528,41 @@
                   "length": 2,
                   "type": "array"
                 },
+                "rejected_recent": {
+                  "items": [
+                    {
+                      "fields": {
+                        "count": {
+                          "type": "int"
+                        },
+                        "error_type": {
+                          "type": "str",
+                          "value": "http_schema_invalid"
+                        },
+                        "last_seen_at": {
+                          "type": "str"
+                        },
+                        "path": {
+                          "type": "str",
+                          "value": "<masked>"
+                        },
+                        "source_id_claimed": {
+                          "type": "str"
+                        }
+                      },
+                      "keys": [
+                        "count",
+                        "error_type",
+                        "last_seen_at",
+                        "path",
+                        "source_id_claimed"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
                 "server": {
                   "fields": {
                     "api_version": {
@@ -15559,6 +15594,7 @@
               "keys": [
                 "counts",
                 "needs_attention",
+                "rejected_recent",
                 "server"
               ],
               "type": "object"
@@ -19104,6 +19140,70 @@
                   "length": 2,
                   "type": "array"
                 },
+                "rejected_recent": {
+                  "items": [
+                    {
+                      "fields": {
+                        "count": {
+                          "type": "int"
+                        },
+                        "error_type": {
+                          "type": "str",
+                          "value": "http_schema_invalid"
+                        },
+                        "last_seen_at": {
+                          "type": "str"
+                        },
+                        "path": {
+                          "type": "str",
+                          "value": "<masked>"
+                        },
+                        "source_id_claimed": {
+                          "type": "str"
+                        }
+                      },
+                      "keys": [
+                        "count",
+                        "error_type",
+                        "last_seen_at",
+                        "path",
+                        "source_id_claimed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "count": {
+                          "type": "int"
+                        },
+                        "error_type": {
+                          "type": "str",
+                          "value": "limit_schema_invalid"
+                        },
+                        "last_seen_at": {
+                          "type": "str"
+                        },
+                        "path": {
+                          "type": "str",
+                          "value": "<masked>"
+                        },
+                        "source_id_claimed": {
+                          "type": "str"
+                        }
+                      },
+                      "keys": [
+                        "count",
+                        "error_type",
+                        "last_seen_at",
+                        "path",
+                        "source_id_claimed"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
                 "server": {
                   "fields": {
                     "api_version": {
@@ -19135,6 +19235,7 @@
               "keys": [
                 "counts",
                 "needs_attention",
+                "rejected_recent",
                 "server"
               ],
               "type": "object"
