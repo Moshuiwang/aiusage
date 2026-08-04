@@ -1,12 +1,46 @@
+import type { SummarySnapshot } from "./read-model/shared";
+
 type AnyRecord = Record<string, unknown>;
 const LIMIT_STALE_AFTER_MS = 120 * 60 * 1000;
+
+/**
+ * #130：mobile DTO 的顶层结构。与 SummarySnapshot 同一原则——顶层键全量声明、
+ * 深层值渐进收紧；客户端读的每个顶层键改名/删除都会在这里被编译器抓住。
+ */
+export type MobileSummary = {
+  schema_version: number;
+  client: "ios";
+  generated_at: string;
+  timezone: string;
+  period: Record<string, unknown>;
+  trend: Record<string, unknown>;
+  sources: Record<string, unknown>[];
+  breakdown: {
+    by_machine: Record<string, unknown>[];
+    by_os_user: Record<string, unknown>[];
+    by_agent: Record<string, unknown>[];
+    by_model: Record<string, unknown>[];
+    by_date: Record<string, unknown>[];
+  };
+  limits: {
+    observed_count: number;
+    total_count: number;
+    windows: Record<string, unknown>[];
+    providers: Record<string, unknown>[];
+  };
+  provider_slots: Record<string, unknown>[];
+  provider_usage_coverage: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+};
 
 // Issue #61：固定的 provider 槽位。DTO 只裁剪 snapshot 的事实，不重算口径；
 // 额度缺失时只保留「最近一次验证时间」，不带任何百分比或 reset 时间。
 // 与 src/ai_usage_widget/mobile_summary.py 的 SLOT_PROVIDERS 保持逐字一致。
 const slotProviders = ["claude", "codex"];
 
-export function buildMobileSummary(snapshot: AnyRecord): AnyRecord {
+export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
+  // 类型守结构（顶层键漂移在编译期抓），coercion 守运行时（部分快照照旧宽容，
+  // 单测用最小 fixture 直调本函数依赖这层宽容——#130 只加严编译期，不改运行时行为）。
   const summary = dict(snapshot.summary);
   const trend = dict(snapshot.trend);
   const sourceStatus = list<AnyRecord>(snapshot.source_status);

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildMobileSummary } from "../src/mobile-summary";
+import { buildMobileSummary as buildMobileSummaryTyped } from "../src/mobile-summary";
+import type { SummarySnapshot } from "../src/read-model/shared";
+
+// #130：本文件用最小 fixture 直调 DTO，走 unknown 桥接保持宽入参；
+// 运行时宽容由 mobile-summary 的 dict/list coercion 兜底（刻意保留的行为）。
+const buildMobileSummary = (snapshot: Record<string, unknown>) =>
+  buildMobileSummaryTyped(snapshot as unknown as SummarySnapshot);
 
 describe("mobile trend agent classification", () => {
   it("groups gpt agents into Codex while preserving every point total", () => {

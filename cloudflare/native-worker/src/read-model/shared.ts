@@ -309,11 +309,56 @@ export {
   sumTokenType,
   toOffsetIso,
 };
+/**
+ * #130：/api/summary 快照的顶层结构——「read-model 输出 ↔ mobile-summary 输入」的内部合同。
+ * 渐进类型化：顶层键全量声明（改名/删键在编译期被抓），深层值先保持宽类型由消费方 coerce。
+ * 用 type 而非 interface：对象字面量类型带隐式索引签名，可无摩擦传给既有的
+ * `Record<string, unknown>` 工具函数。
+ */
+type SummaryPeriodBlock = {
+  date: string;
+  period: Period;
+  start_date: string | null;
+  end_date: string;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_tokens: number;
+  cache_read_tokens: number;
+  machine?: string;
+  account?: string;
+};
+
+type SummarySnapshot = {
+  schema_version: number;
+  generated_at: string;
+  timezone: string;
+  summary: SummaryPeriodBlock;
+  groups: {
+    by_machine: Record<string, unknown>[];
+    by_account: { name: string; total_tokens: number }[];
+    by_agent: { name: string; total_tokens: number }[];
+  };
+  items: Record<string, unknown>[];
+  trend: Record<string, unknown>;
+  source_status: Record<string, unknown>[];
+  version_health: Record<string, unknown>;
+  limits: LimitRow[];
+  limit_status: Record<string, unknown>[];
+  provider_slots: Record<string, unknown>[];
+  provider_usage_coverage: Record<string, unknown>;
+  account_hourly: Record<string, unknown>;
+  ai_accounts: Record<string, unknown>[];
+  metadata: Record<string, unknown>;
+};
+
 export type {
   DailyRow,
   LimitRow,
   ModelRow,
   ProviderUsageTotals,
   SourceIdentity,
+  SummaryPeriodBlock,
+  SummarySnapshot,
   TimedRow,
 };
