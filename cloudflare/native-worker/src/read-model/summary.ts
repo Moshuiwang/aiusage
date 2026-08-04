@@ -14,7 +14,8 @@ import {
   accountHourlyRowMatchesFilter, dateAxis, formatDate, hourAxis, identityMatchesFilter, int,
   itemKey, localDateFromWindowStart, metadataFromStr, nowInTimezone, periodBounds, str, toOffsetIso,
 } from "./shared";
-import type { LimitRow, ProviderUsageTotals, SummaryRequest } from "./shared";
+import type { LimitRow, ProviderUsageTotals, SummaryRequest, SummarySnapshot } from "./shared";
+import type { MobileSummary } from "../mobile-summary";
 
 /** 阶段 1：读取 D1 输入与时间/周期边界。所有 SELECT 都发生在这里或 db.ts。 */
 async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
@@ -328,7 +329,7 @@ function assembleSnapshot(
   derived: DerivedRows,
   aggregates: UsageAggregates,
   trendSection: ReturnType<typeof buildTrendSection>,
-): Record<string, unknown> {
+): SummarySnapshot {
   const { refTime, periodId, startDate, endDate, statusRows, accuracyRows, identities, limits, allLimits, aiAccounts } = inputs;
   const { accountHourly } = derived;
   const {
@@ -340,7 +341,7 @@ function assembleSnapshot(
   const sourceStatus = buildSourceStatus(
     statusRows, accuracyRows, identities, refTime, request.machine, request.account,
   );
-  const snapshot: Record<string, unknown> = {
+  const snapshot: SummarySnapshot = {
     schema_version: 1,
     generated_at: toOffsetIso(refTime),
     timezone: request.timezone,
@@ -380,12 +381,12 @@ function assembleSnapshot(
       },
     },
   };
-  if (request.machine) (snapshot.summary as Record<string, unknown>).machine = request.machine;
-  if (request.account) (snapshot.summary as Record<string, unknown>).account = request.account;
+  if (request.machine) snapshot.summary.machine = request.machine;
+  if (request.account) snapshot.summary.account = request.account;
   return snapshot;
 }
 
-export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
+export async function buildSummary(db: D1Database, request: SummaryRequest): Promise<SummarySnapshot> {
   const inputs = await loadSummaryInputs(db, request);
   const derived = await deriveUsageRows(db, request, inputs);
   const aggregates = aggregateUsage(request, inputs, derived);
@@ -393,7 +394,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   return assembleSnapshot(request, inputs, derived, aggregates, trendSection);
 }
 
-export async function buildMobile(db: D1Database, request: SummaryRequest): Promise<Record<string, unknown>> {
+export async function buildMobile(db: D1Database, request: SummaryRequest): Promise<MobileSummary> {
   return buildMobileSummary(await buildSummary(db, request));
 }
 
