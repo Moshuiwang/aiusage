@@ -7,10 +7,15 @@
  * 未来新增的表会被 sqlite_master 枚举自动纳入，不给「忘了更新守卫」留缝。
  */
 
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { acquireWorker, resetDatabase, withWorker } from "./golden/harness";
 import { fixedNow } from "./golden/paths";
 import type { Miniflare } from "miniflare";
+
+const ingestTestPath = fileURLToPath(new URL("./ingest.test.ts", import.meta.url));
+const vitestConfigPath = fileURLToPath(new URL("../vitest.config.ts", import.meta.url));
 
 /** 枚举全部用户表：排除 SQLite 自身（sqlite_*）与 D1/Miniflare 内部表（_cf_* 等下划线开头）。 */
 async function listUserTables(db: D1Database): Promise<string[]> {
@@ -43,6 +48,19 @@ async function polluteTable(db: D1Database, table: string): Promise<void> {
 }
 
 describe.sequential("shared worker fixture isolation", () => {
+  it("ingest 回归套件复用共享实例而不是每用例重建 Worker", async () => {
+    const source = await readFile(ingestTestPath, "utf8");
+    expect(source).toContain("acquireWorker");
+    expect(source).not.toContain("new Miniflare");
+    expect(source).not.toContain("afterEach");
+  });
+
+  it("文件并行有明确的双 worker 上限", async () => {
+    const source = await readFile(vitestConfigPath, "utf8");
+    expect(source).toMatch(/fileParallelism:\s*true/);
+    expect(source).toMatch(/maxWorkers:\s*2/);
+  });
+
   it("resetDatabase clears every user table the schema creates", async () => {
     await withWorker({ now: fixedNow }, async ({ db }) => {
       const tables = await listUserTables(db);

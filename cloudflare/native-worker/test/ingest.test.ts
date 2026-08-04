@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Miniflare } from "miniflare";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { applySchema, applySqlText, bundleWorker } from "./golden/harness";
+import type { Miniflare } from "miniflare";
+import { beforeEach, describe, expect, it } from "vitest";
+import { acquireWorker, applySqlText } from "./golden/harness";
 
 type ContractRecord = {
   name: string;
@@ -79,15 +79,11 @@ describe.sequential("native TS Worker write API parity", () => {
 
   beforeEach(async () => {
     fixture = JSON.parse(await readFile(fixturePath, "utf8")) as IngestFixture;
-    mf = await createMiniflare({
+    const worker = await acquireWorker({
       AIUSAGE_NOW: fixture.current_time,
       AIUSAGE_TIMEZONE: fixture.timezone,
     });
-    await applySchema(await mf.getD1Database("AIUSAGE_DB"));
-  });
-
-  afterEach(async () => {
-    await mf.dispose();
+    mf = worker.mf;
   });
 
   it("writes canonical facts and limits for all cross-platform read variants", async () => {
@@ -1336,23 +1332,6 @@ async function ingestRequestFieldContract(): Promise<{ declared: string[]; parse
     declared: Array.from((declaration as RegExpMatchArray)[1].matchAll(/^ {2}(\w+)\??:/gm)).map((match) => match[1]),
     parsed: Array.from((returned as RegExpMatchArray)[1].matchAll(/^ {4}(\w+):/gm)).map((match) => match[1]),
   };
-}
-
-async function createMiniflare(extraBindings: Record<string, string> = {}): Promise<Miniflare> {
-  const bundleScript = await bundleWorker();
-  return new Miniflare({
-    modules: true,
-    script: bundleScript,
-    scriptPath: "index.mjs",
-    compatibilityDate: "2026-06-21",
-    d1Databases: ["AIUSAGE_DB"],
-    bindings: {
-      AIUSAGE_TOKEN: token,
-      AIUSAGE_CACHE_NAMESPACE: crypto.randomUUID(),
-      AIUSAGE_DISABLE_SUMMARY_CACHE: "true",
-      ...extraBindings,
-    },
-  });
 }
 
 function maskVolatile(value: unknown, fieldName = "", parentName = ""): unknown {
