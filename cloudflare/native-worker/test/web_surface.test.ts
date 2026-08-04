@@ -288,6 +288,69 @@ describe.sequential("native TS Worker web surface", () => {
     expect(summary.metadata.backend_mode).toBe("native_d1_production");
   });
 
+  it("fails closed for reads and writes when production has no configured auth token", async () => {
+    const unconfiguredBindings = [
+      { AIUSAGE_TOKEN: "", AIUSAGE_TOKEN_SPECS: "" },
+      { AIUSAGE_TOKEN: "   ", AIUSAGE_TOKEN_SPECS: "name:   " },
+    ];
+    const requests: Array<[string, RequestInit?]> = [
+      ["/"],
+      ["/login", { method: "POST" }],
+      ["/dashboard"],
+      ["/static/dashboard.js"],
+      ["/api/health"],
+      ["/api/summary?period=today"],
+      ["/api/mobile/summary?period=today"],
+      ["/ingest", { method: "POST" }],
+      ["/ingest-limits", { method: "POST" }],
+      ["/unknown-route"],
+    ];
+
+    for (const bindings of unconfiguredBindings) {
+      mf = await acquire({ ...bindings, AIUSAGE_BACKEND_MODE: "native_d1_production" });
+      for (const [path, init] of requests) {
+        const response = await mf.dispatchFetch(`http://native.test${path}`, init);
+        expect(response.status, `${JSON.stringify(bindings)} ${path}`).toBe(503);
+        expect(await response.json()).toEqual({
+          status: "error",
+          error_type: "auth_unconfigured",
+          message: "Authentication is not configured",
+        });
+      }
+    }
+  });
+
+  it("keeps token-free local development available outside production mode", async () => {
+    mf = await acquire({
+      AIUSAGE_TOKEN: "",
+      AIUSAGE_TOKEN_SPECS: "",
+      AIUSAGE_BACKEND_MODE: "native_d1_dev",
+    });
+
+    const response = await mf.dispatchFetch("http://native.test/api/summary?period=today");
+
+    expect(response.status).toBe(200);
+  });
+
+  it("derives the default summary date from the configured timezone", async () => {
+    const timezones = ["Pacific/Kiritimati", "Etc/GMT+12"] as const;
+    const dates: string[] = [];
+
+    for (const configuredTimezone of timezones) {
+      const before = currentDateIn(configuredTimezone);
+      mf = await acquire({ AIUSAGE_TOKEN: token, AIUSAGE_TIMEZONE: configuredTimezone });
+      const response = await mf.dispatchFetch("http://native.test/api/summary?period=today", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const after = currentDateIn(configuredTimezone);
+      const payload = await response.json<Record<string, any>>();
+      dates.push(String(payload.summary.date));
+      expect([before, after]).toContain(payload.summary.date);
+    }
+
+    expect(dates[0]).not.toBe(dates[1]);
+  });
+
   it("fails closed when deployment identity is missing", async () => {
     mf = await acquire({
       AIUSAGE_TOKEN: token,
@@ -554,6 +617,17 @@ async function sessionCookieHeader(): Promise<string> {
 // 与 index.ts 的实现互为对照——服务端换算法会当场红，而不是让全部用户被静默登出。
 async function expectedSessionCookieValue(secret: string): Promise<string> {
   return createHmac("sha256", secret).update("ai-usage-dashboard-session-v1").digest("hex");
+}
+
+function currentDateIn(timezone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 async function readStatic(asset: string): Promise<string> {

@@ -204,6 +204,7 @@ HTTP 错误响应统一 shape：
 
 常见 `error_type`：
 
+- `auth_unconfigured`（生产模式未配置任何 token 时返回 503，所有路由拒绝服务）
 - `http_auth_failed`
 - `http_schema_invalid`
 - `limit_schema_invalid`
