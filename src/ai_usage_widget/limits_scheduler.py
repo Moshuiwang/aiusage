@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
+from .macos_launchd import CommandRunner, ensure_agent_loaded
+
 
 @dataclass(frozen=True)
 class LimitsSchedulerConfig:
@@ -33,6 +35,8 @@ def install_limits_scheduler(
     *,
     env: Mapping[str, str] | None = None,
     dry_run: bool = False,
+    activate: bool = False,
+    command_runner: CommandRunner | None = None,
 ) -> Dict[str, Any]:
     _validate_config(config)
     supplied_env = env or os.environ
@@ -56,6 +60,11 @@ def install_limits_scheduler(
         "runtime_limits_config": str(_runtime_limits_config(config)),
         "launchctl_bootstrap": f"launchctl bootstrap gui/$(id -u) {config.plist_path}",
         "launchctl_kickstart": f"launchctl kickstart -k gui/$(id -u)/{config.label}",
+        "activation": {
+            "requested": activate,
+            "performed": False,
+            "reason": "dry_run" if dry_run else "not_requested",
+        },
     }
     if dry_run:
         return result
@@ -70,6 +79,13 @@ def install_limits_scheduler(
     _copy_runtime_files(config)
     _write_runner(config)
     _write_plist(config)
+    if activate:
+        result["activation"] = ensure_agent_loaded(
+            config.plist_path,
+            config.label,
+            command_runner=command_runner,
+        )
+        result["activation"]["performed"] = True
     return result
 
 
