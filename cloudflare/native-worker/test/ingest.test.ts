@@ -131,6 +131,44 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(afterCounts).toEqual(beforeCounts);
   });
 
+  it("does not rewrite unchanged facts when collection metadata changes", async () => {
+    const firstPayload = buildLargeIngestPayloads()[0];
+    const secondPayload = JSON.parse(JSON.stringify(firstPayload)) as Record<string, unknown>;
+    const secondFacts = secondPayload.usage_hourly_facts as Record<string, unknown>[];
+
+    secondPayload.observed_at = "2026-06-22T11:05:00+08:00";
+    for (const fact of secondFacts) {
+      const evidence = fact.account_evidence as Record<string, unknown>;
+      const metadata = fact.metadata as Record<string, unknown>;
+      fact.account_evidence = { ...evidence, observed_at: "2026-06-22T11:00:00+08:00" };
+      fact.metadata = { ...metadata, observed_at: "2026-06-22T11:00:00+08:00" };
+    }
+
+    expect(await postIngest(firstPayload)).toBeGreaterThan(0);
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const readUsageSnapshot = async (): Promise<Record<string, unknown[]>> => ({
+      facts: (await db.prepare(
+        "SELECT fact_id, account_evidence_json, metadata_json, last_seen_at FROM usage_hourly_facts ORDER BY fact_id",
+      ).all()).results,
+      models: (await db.prepare(
+        "SELECT fact_id, model, metadata_json, last_seen_at FROM usage_hourly_models ORDER BY fact_id, model",
+      ).all()).results,
+      hourly: (await db.prepare(
+        "SELECT * FROM usage_hourly_rollups ORDER BY bucket_start, source_id, agent",
+      ).all()).results,
+      daily: (await db.prepare(
+        "SELECT * FROM usage_daily_rollups ORDER BY date, source_id, agent",
+      ).all()).results,
+    });
+    const before = await readUsageSnapshot();
+    const secondRowsWritten = await postIngest(secondPayload);
+
+    // source identity / accuracy heartbeat may still write a small amount, but the
+    // unchanged usage facts must not trigger fact or display-rollup rewrites.
+    expect(secondRowsWritten).toBeLessThan(20);
+    expect(await readUsageSnapshot()).toEqual(before);
+  });
+
   it("maintains hourly and daily display rollups when real hourly facts change", async () => {
     await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
     const db = await mf.getD1Database("AIUSAGE_DB");

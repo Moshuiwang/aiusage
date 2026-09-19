@@ -10,8 +10,16 @@ function ingestWriteStatements(
 ): D1PreparedStatement[] {
   return [
     sourceIdentityStatement(db, identity, seenAt),
-    ...hourlyFacts.flatMap((fact) => hourlyFactStatements(db, fact, seenAt)),
+    ...factWriteStatements(db, hourlyFacts, seenAt),
   ];
+}
+
+function factWriteStatements(
+  db: D1Database,
+  hourlyFacts: UsageHourlyFact[],
+  seenAt: string,
+): D1PreparedStatement[] {
+  return hourlyFacts.flatMap((fact) => hourlyFactStatements(db, fact, seenAt));
 }
 
 function limitWriteStatements(db: D1Database, windows: LimitWindow[], seenAt: string): D1PreparedStatement[] {
@@ -169,8 +177,30 @@ function factStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D
        OR usage_hourly_facts.total_cost IS NOT excluded.total_cost
        OR usage_hourly_facts.event_count IS NOT excluded.event_count
        OR usage_hourly_facts.session_count IS NOT excluded.session_count
-       OR usage_hourly_facts.account_evidence_json IS NOT excluded.account_evidence_json
-       OR usage_hourly_facts.metadata_json IS NOT excluded.metadata_json
+       OR CASE
+            WHEN json_valid(usage_hourly_facts.account_evidence_json)
+              THEN json_remove(usage_hourly_facts.account_evidence_json, '$.observed_at')
+            ELSE usage_hourly_facts.account_evidence_json
+          END IS NOT CASE
+            WHEN json_valid(excluded.account_evidence_json)
+              THEN json_remove(excluded.account_evidence_json, '$.observed_at')
+            ELSE excluded.account_evidence_json
+          END
+       OR CASE
+            WHEN json_valid(usage_hourly_facts.metadata_json)
+              THEN json_remove(
+                usage_hourly_facts.metadata_json,
+                '$.observed_at', '$.collector.coverage', '$.collector.counts'
+              )
+            ELSE usage_hourly_facts.metadata_json
+          END IS NOT CASE
+            WHEN json_valid(excluded.metadata_json)
+              THEN json_remove(
+                excluded.metadata_json,
+                '$.observed_at', '$.collector.coverage', '$.collector.counts'
+              )
+            ELSE excluded.metadata_json
+          END
   `).bind(...factParams(fact), seenAt, seenAt);
 }
 
@@ -341,6 +371,7 @@ export {
   aiAccountStatement,
   collectionReportStatements,
   factParams,
+  factWriteStatements,
   factStatement,
   hourlyFactModelStatement,
   hourlyFactStatements,
