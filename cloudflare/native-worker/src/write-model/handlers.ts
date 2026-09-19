@@ -3,7 +3,7 @@ import type { Env } from "../index";
 import { UNSUPPORTED_ERROR_TYPE, evaluateCollectorRelease, publicVersionView, unsupportedMessage } from "../version-contract";
 import { buildAccuracyPlans, accuracyWriteStatements } from "./accuracy";
 import { filterFactsByLedgerCoverage, normalizeFacts } from "./normalize";
-import { collectionReportStatements, ingestWriteStatements, limitWriteStatements } from "./statements";
+import { collectionReportStatements, factWriteStatements, limitWriteStatements, sourceIdentityStatement } from "./statements";
 import { latestSourceReportState, sourceHasNewerReport, upsertHourlyFact, upsertIfChanged } from "./upsert";
 import { rejectSensitiveLimitKeys, scanIngestSensitive, validateIngestPayload, validateLimitsPayload } from "./validate";
 import { WriteValidationError, acceptedAtFromEnv } from "./shared";
@@ -39,14 +39,15 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
 
   const accuracyPlans = await buildAccuracyPlans(env.AIUSAGE_DB, req, acceptedAt);
 
-  const writeStatements = ingestWriteStatements(env.AIUSAGE_DB, {
+  const identityStatements = [sourceIdentityStatement(env.AIUSAGE_DB, {
     source_id: req.source_id,
     host: req.host,
     machine: req.machine ?? req.host,
     os_user: req.os_user,
     platform: req.platform,
-  }, hourlyFacts, acceptedAt);
-  writeStatements.push(...accuracyWriteStatements(env.AIUSAGE_DB, accuracyPlans, hourlyFacts, acceptedAt, req.source_id));
+  }, acceptedAt)];
+  const factStatements = factWriteStatements(env.AIUSAGE_DB, hourlyFacts, acceptedAt);
+  const accuracyStatements = accuracyWriteStatements(env.AIUSAGE_DB, accuracyPlans, hourlyFacts, acceptedAt, req.source_id);
 
   const collectorVersion = versionState.collector_version as string | null;
   const report = sourceReport(req, hourlyFacts, collectorVersion);
@@ -60,12 +61,20 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
     collectorVersion,
   );
   const shouldWriteReport = !reportState.hasExisting || reportState.changed;
+  const writeStatements = [...identityStatements, ...factStatements, ...accuracyStatements];
   if (shouldWriteReport) {
     writeStatements.push(...reportStatements);
   }
 
-  rowsWritten += await runWriteBatch(env.AIUSAGE_DB, writeStatements);
-  if (hourlyFacts.length > 0 && rowsWritten > 0) {
+  const initialWrite = await runWriteBatchWithFactChanges(
+    env.AIUSAGE_DB,
+    writeStatements,
+    identityStatements.length,
+    identityStatements.length + factStatements.length,
+  );
+  rowsWritten += initialWrite.rowsWritten;
+  const factsChanged = initialWrite.factRowsWritten > 0 || accuracyPlans.some((plan) => plan.can_reconcile);
+  if (hourlyFacts.length > 0 && factsChanged) {
     await refreshDisplayRollups(env.AIUSAGE_DB, hourlyFacts, accuracyPlans);
   }
   if (!shouldWriteReport && rowsWritten > 0) {
@@ -184,6 +193,21 @@ async function runWriteBatch(db: D1Database, statements: D1PreparedStatement[]):
   if (!statements.length) return 0;
   const results = await db.batch(statements);
   return results.reduce((total, result) => total + Number(result.meta?.changes ?? 0), 0);
+}
+
+async function runWriteBatchWithFactChanges(
+  db: D1Database,
+  statements: D1PreparedStatement[],
+  factStart: number,
+  factEnd: number,
+): Promise<{ rowsWritten: number; factRowsWritten: number }> {
+  if (!statements.length) return { rowsWritten: 0, factRowsWritten: 0 };
+  const results = await db.batch(statements);
+  const changes = results.map((result) => Number(result.meta?.changes ?? 0));
+  return {
+    rowsWritten: changes.reduce((total, value) => total + value, 0),
+    factRowsWritten: changes.slice(factStart, factEnd).reduce((total, value) => total + value, 0),
+  };
 }
 
 function sourceReport(req: IngestRequest, hourlyFacts: UsageHourlyFact[], collectorVersion: string | null): AnyRecord {
