@@ -59,6 +59,8 @@ macOS 平台推荐使用系统自带的 `launchd` 配置定时任务。
     </dict>
     <key>StartInterval</key>
     <integer>1800</integer> <!-- 每30分钟执行一次 -->
+    <key>RunAtLoad</key>
+    <true/> <!-- 登录后立即运行一次，避免只写入 plist 但长期没有首条数据 -->
     <key>StandardOutPath</key>
     <string>/Users/<user>/Library/Logs/ai_usage_pusher.stdout.log</string>
     <key>StandardErrorPath</key>
@@ -69,7 +71,7 @@ macOS 平台推荐使用系统自带的 `launchd` 配置定时任务。
 
 ### 2.2 启动与管理
 ```bash
-# 注册并启动定时推送服务
+# 注册并启动定时推送服务；仅把 plist 放入目录不算安装完成
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.chunbai.aiusage.pusher.plist
 
 # 立即执行一次 (用于验证配置，等同于 dry-run 测试)
@@ -92,7 +94,7 @@ python3 -m ai_usage_widget.cli install-limits-scheduler \
   --dry-run
 ```
 
-正式安装：
+正式安装（默认会写文件、注册当前用户会话，并立即运行一次）：
 
 ```bash
 cd /Users/<user>/Documents/ai-usage-widget
@@ -100,6 +102,8 @@ PYTHONPATH=src AI_USAGE_INGEST_TOKEN=<token-from-production> \
 python3 -m ai_usage_widget.cli install-limits-scheduler \
   --url https://aiusage.chunbai.com/ingest-limits
 ```
+
+如果只需要生成文件而暂不启动，必须显式加 `--no-activate`；生产安装不要使用这个选项。
 
 默认生成：
 
@@ -110,7 +114,8 @@ python3 -m ai_usage_widget.cli install-limits-scheduler \
 - `~/Library/Logs/ai-usage-widget/limits-push.stderr.log`
 - `~/Library/Caches/ai-usage-widget/limits-push.lock`
 
-激活并立即运行一次：
+安装命令返回的 `activation.performed` 和 `activation.verified` 必须都是 `true`，
+这才算当前用户会话已经接管该任务。手工复制 plist 时，仍需执行下面两条命令：
 
 ```bash
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.chunbai.aiusage.limits-push.plist

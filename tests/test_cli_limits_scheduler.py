@@ -67,6 +67,7 @@ class TestCliLimitsScheduler(unittest.TestCase):
                     str(base / "LaunchAgents/com.chunbai.aiusage.limits-push.plist"),
                     "--log-dir",
                     str(base / "logs"),
+                    "--no-activate",
                 ])
 
             payload = json.loads(stdout.getvalue())
@@ -77,6 +78,33 @@ class TestCliLimitsScheduler(unittest.TestCase):
             self.assertTrue((base / "bin/limits-push").exists())
             self.assertTrue((base / "LaunchAgents/com.chunbai.aiusage.limits-push.plist").exists())
             self.assertNotIn("secret-token", stdout.getvalue())
+
+    @patch(
+        "ai_usage_widget.limits_scheduler.ensure_agent_loaded",
+        return_value={"success": True, "verified": True, "bootstrapped": True},
+    )
+    def test_install_activates_by_default(self, activate) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            repo = base / "repo"
+            repo.mkdir()
+            stdout = io.StringIO()
+            with patch.dict(os.environ, {"AI_USAGE_INGEST_TOKEN": "secret-token"}), redirect_stdout(stdout):
+                code = cli.main([
+                    "install-limits-scheduler",
+                    "--repo-dir", str(repo),
+                    "--limits-config", str(repo / "config/limits.local.json"),
+                    "--url", "https://aiusage.chunbai.com/ingest-limits",
+                    "--token-env-file", str(base / "state/limits-push.env"),
+                    "--runner-path", str(base / "bin/limits-push"),
+                    "--plist-path", str(base / "LaunchAgents/com.chunbai.aiusage.limits-push.plist"),
+                    "--log-dir", str(base / "logs"),
+                ])
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(code, 0)
+            self.assertTrue(payload["activation"]["performed"])
+            activate.assert_called_once()
 
 
 if __name__ == "__main__":

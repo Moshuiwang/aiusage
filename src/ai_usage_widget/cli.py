@@ -28,6 +28,7 @@ from .limits_doctor import run_limits_doctor
 from .limits_runtime import LimitsRuntime, load_fixture_providers
 from .collector_store import CollectorStore, OutboxNotDrained
 from .limits_push import deliver_limits_payload, post_limits_payload, push_limits_payload
+from .macos_launchd import LaunchdActivationError
 from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
 from .mswusage_codex import build_report as build_mswusage_codex_report, read_local_codex_jsonl_lines
 from .mswusage_claude import build_report as build_mswusage_claude_report, read_local_claude_jsonl_lines
@@ -195,6 +196,11 @@ def _build_parser() -> argparse.ArgumentParser:
     install_limits_scheduler_parser.add_argument("--interval-seconds", type=int, default=1800)
     install_limits_scheduler_parser.add_argument("--python", default="/usr/bin/python3")
     install_limits_scheduler_parser.add_argument("--dry-run", action="store_true")
+    install_limits_scheduler_parser.add_argument(
+        "--no-activate",
+        action="store_true",
+        help="只写入文件，不注册当前 macOS 用户会话中的 LaunchAgent",
+    )
 
     mswusage_codex_parser = subparsers.add_parser(
         "mswusage-codex",
@@ -473,8 +479,9 @@ def _run_install_limits_scheduler(args) -> int:
                 scheduler_config,
                 env=os.environ,
                 dry_run=args.dry_run,
+                activate=not args.dry_run and not args.no_activate,
             )
-        except (OSError, ValueError) as exc:
+        except (LaunchdActivationError, OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
 

@@ -79,6 +79,41 @@ class TestLimitsScheduler(unittest.TestCase):
             self.assertEqual(plist["StandardOutPath"], str(config.log_dir / "limits-push.stdout.log"))
             self.assertEqual(plist["StandardErrorPath"], str(config.log_dir / "limits-push.stderr.log"))
 
+    def test_install_can_activate_and_verify_the_launch_agent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            repo_dir = base / "repo"
+            repo_dir.mkdir()
+            config = LimitsSchedulerConfig(
+                repo_dir=repo_dir,
+                limits_config=repo_dir / "config/limits.local.json",
+                url="https://aiusage.chunbai.com/ingest-limits",
+                token_env_file=base / "state/limits-push.env",
+                runner_path=base / "bin/limits-push",
+                plist_path=base / "LaunchAgents/com.chunbai.aiusage.limits-push.plist",
+                log_dir=base / "logs",
+                lock_file=base / "state/limits-push.lock",
+            )
+            calls: list[list[str]] = []
+            responses = iter([1, 0, 0, 0])
+
+            def runner(argv):
+                calls.append(list(argv))
+                return next(responses)
+
+            result = install_limits_scheduler(
+                config,
+                env={"AI_USAGE_INGEST_TOKEN": "secret-token"},
+                activate=True,
+                command_runner=runner,
+            )
+
+            self.assertTrue(result["success"])
+            self.assertTrue(result["activation"]["performed"])
+            self.assertTrue(result["activation"]["verified"])
+            self.assertEqual(calls[1][0:2], ["launchctl", "bootstrap"])
+            self.assertEqual(calls[2][0:2], ["launchctl", "kickstart"])
+
 
 if __name__ == "__main__":
     unittest.main()
