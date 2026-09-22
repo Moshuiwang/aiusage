@@ -1,10 +1,146 @@
 import AIUsageMenuBarCore
+import AppKit
 import Foundation
 @testable import AIUsageMenuBarApp
+import SwiftUI
 import XCTest
 
 @MainActor
 final class MenuBarAppModelTests: XCTestCase {
+    func testHostedPopoverShowsContentOnFirstLayout() throws {
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(),
+            cachedSummary: try summary(periodID: "today", totalTokens: 349_100_000)
+        )
+        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let popover = NSPopover()
+        popover.contentViewController = hosting
+        hosting.loadViewIfNeeded()
+        hosting.view.frame.size.width = MenuBarPopoverLayout.width
+        hosting.view.layoutSubtreeIfNeeded()
+        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+
+        XCTAssertGreaterThan(popover.contentSize.height, 220, "first layout must include the period picker and summary, not just the header")
+        let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
+        XCTAssertEqual(scrollViews.count, 1, "the actual hosted popover must contain one scrollable content region")
+        XCTAssertGreaterThan(scrollViews.first?.frame.height ?? 0, 120)
+    }
+
+    func testHostedPopoverKeepsOwnerFixtureContentVisibleAfterMeasurement() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("AIUsageMenuBarCoreTests/Fixtures/navigation-models-owner.json")
+        let summary = try JSONDecoder().decode(MobileSummary.self, from: Data(contentsOf: fixtureURL))
+        XCTAssertGreaterThan(summary.sources.count, 0)
+        XCTAssertGreaterThan(summary.breakdown.byModel.count, 0)
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: summary
+        )
+        let popover = NSPopover()
+        var hosting: NSHostingController<MenuBarPopoverView>!
+        hosting = NSHostingController(rootView: MenuBarPopoverView(model: model, onContentHeightChange: {
+            hosting.view.layoutSubtreeIfNeeded()
+            popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+        }))
+        popover.contentViewController = hosting
+        hosting.loadViewIfNeeded()
+        hosting.view.frame.size.width = MenuBarPopoverLayout.width
+        hosting.view.layoutSubtreeIfNeeded()
+        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        hosting.view.layoutSubtreeIfNeeded()
+
+        let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
+        XCTAssertEqual(scrollViews.count, 1)
+        XCTAssertGreaterThan(scrollViews.first?.frame.height ?? 0, 120)
+        XCTAssertGreaterThan(popover.contentSize.height, 220)
+        XCTAssertLessThanOrEqual(popover.contentSize.height, (NSScreen.main?.visibleFrame.height ?? 800) + 1)
+    }
+
+    func testShownPopoverKeepsContentViewport() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("AIUsageMenuBarCoreTests/Fixtures/navigation-models-owner.json")
+        let summary = try JSONDecoder().decode(MobileSummary.self, from: Data(contentsOf: fixtureURL))
+        XCTAssertGreaterThan(summary.sources.count, 0)
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummary: summary
+        )
+        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let popover = NSPopover()
+        popover.contentViewController = hosting
+        hosting.loadViewIfNeeded()
+        hosting.view.frame.size.width = MenuBarPopoverLayout.width
+        hosting.view.layoutSubtreeIfNeeded()
+        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+
+        let anchorWindow = NSWindow(
+            contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
+            styleMask: .borderless, backing: .buffered, defer: false
+        )
+        let anchor = NSButton(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        anchorWindow.contentView?.addSubview(anchor)
+        anchorWindow.orderFront(nil)
+        defer { popover.close(); anchorWindow.close() }
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        XCTAssertTrue(popover.isShown)
+        XCTAssertNotNil(hosting.view.window)
+        let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
+        XCTAssertEqual(scrollViews.count, 1)
+        let scroll = try XCTUnwrap(scrollViews.first)
+        let document = try XCTUnwrap(scroll.documentView)
+        XCTAssertGreaterThan(scroll.frame.height, 120)
+        XCTAssertGreaterThan(document.frame.height, scroll.contentView.bounds.height + 100)
+        let bottom = document.frame.height - scroll.contentView.bounds.height
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: bottom))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        XCTAssertGreaterThanOrEqual(scroll.contentView.bounds.maxY, document.frame.maxY - 1)
+    }
+
+    func testHostedPopoverKeepsViewportThroughLoadAndHistorySwitch() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["week": CachedMenuSummary(
+                summary: try summary(periodID: "week", totalTokens: 700), fetchedAt: now
+            )], now: { now }, loadSummary: loader.load
+        )
+        let popover = NSPopover()
+        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        popover.contentViewController = hosting
+        hosting.loadViewIfNeeded()
+        hosting.view.frame.size.width = MenuBarPopoverLayout.width
+
+        func assertVisibleViewport(_ phase: String) {
+            hosting.view.layoutSubtreeIfNeeded()
+            popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+            let scroll = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
+            XCTAssertEqual(scroll.count, 1, phase)
+            XCTAssertGreaterThan(scroll.first?.frame.height ?? 0, 120, phase)
+            XCTAssertGreaterThan(popover.contentSize.height, 220, phase)
+        }
+
+        assertVisibleViewport("first open without cached data")
+        model.refresh()
+        try await loader.waitForRequestCount(1)
+        assertVisibleViewport("loading")
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 349_100_000))
+        await waitUntil { model.hasLoadedUsableSummary && !model.isLoading }
+        assertVisibleViewport("loaded summary")
+        model.refresh(periodID: "week")
+        XCTAssertEqual(model.summary.period.id, "week")
+        assertVisibleViewport("weekly history")
+    }
+
+    private func descendants(of view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap(descendants)
+    }
+
     func testPopoverLayoutUsesMeasuredContentHeight() {
         XCTAssertEqual(MenuBarPopoverLayout.size(contentHeight: 642).height, 642)
     }
