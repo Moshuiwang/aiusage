@@ -6,7 +6,7 @@ struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarAppModel
     var onQuit: (() -> Void)?
     var onContentHeightChange: (() -> Void)?
-    @State private var contentHeight: CGFloat = 1
+    @State private var contentHeight: CGFloat = 200
     @State private var hoveredBar: MenuTrendBar?
     @State private var hoverLocation: CGPoint?
     @State private var expandedSources: Set<String> = []
@@ -29,7 +29,7 @@ struct MenuBarPopoverView: View {
                         Color.clear.preference(key: PopoverContentHeight.self, value: geometry.size.height)
                     })
                 }
-                .frame(height: min(contentHeight, max(200, (NSScreen.main?.visibleFrame.height ?? 800) - 160)))
+                .frame(height: min(max(contentHeight, 200), max(200, (NSScreen.main?.visibleFrame.height ?? 800) - 160)))
                 .onPreferenceChange(PopoverContentHeight.self) { height in
                     guard abs(contentHeight - height) > 0.5 else { return }
                     contentHeight = height
