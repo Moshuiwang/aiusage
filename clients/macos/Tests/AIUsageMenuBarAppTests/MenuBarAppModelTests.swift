@@ -59,6 +59,7 @@ final class MenuBarAppModelTests: XCTestCase {
     }
 
     func testShownPopoverKeepsContentViewport() throws {
+        _ = NSApplication.shared
         let fixtureURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("AIUsageMenuBarCoreTests/Fixtures/navigation-models-owner.json")
@@ -80,6 +81,7 @@ final class MenuBarAppModelTests: XCTestCase {
             contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
             styleMask: .borderless, backing: .buffered, defer: false
         )
+        anchorWindow.isReleasedWhenClosed = false
         let anchor = NSButton(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
         anchorWindow.contentView?.addSubview(anchor)
         anchorWindow.orderFront(nil)
