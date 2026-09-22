@@ -26,7 +26,6 @@ def default_repo_dir() -> Path:
 class InstallPlan:
     repo_dir: Path
     package_dir: Path
-    build_binary: Path
     app_path: Path
     executable_path: Path
     source_icon_path: Path
@@ -45,7 +44,6 @@ class InstallPlan:
         bundle_id: str = DEFAULT_BUNDLE_ID,
     ) -> "InstallPlan":
         package_dir = repo_dir / "clients" / "macos"
-        build_binary = package_dir / ".build" / "release" / EXECUTABLE_NAME
         resolved_install_dir = install_dir or DEFAULT_INSTALL_DIR
         app_path = resolved_install_dir / f"{APP_NAME}.app"
         source_icon_path = package_dir / "Resources" / "AIUsageMenuBar.icns"
@@ -53,7 +51,6 @@ class InstallPlan:
         return InstallPlan(
             repo_dir=repo_dir,
             package_dir=package_dir,
-            build_binary=build_binary,
             app_path=app_path,
             executable_path=app_path / "Contents" / "MacOS" / EXECUTABLE_NAME,
             source_icon_path=source_icon_path,
@@ -125,14 +122,19 @@ def install(plan: InstallPlan, *, server_url: str | None, token: str | None, das
         return result
 
     subprocess.run(["swift", "build", "-c", "release"], cwd=plan.package_dir, check=True)
-    if not plan.build_binary.exists():
-        raise FileNotFoundError(plan.build_binary)
+    output = subprocess.run(
+        ["swift", "build", "-c", "release", "--show-bin-path"],
+        cwd=plan.package_dir, check=True, capture_output=True, text=True,
+    )
+    build_binary = Path(output.stdout.strip()) / EXECUTABLE_NAME
+    if not build_binary.is_absolute() or not build_binary.is_file():
+        raise FileNotFoundError(build_binary)
 
     if plan.app_path.exists():
         shutil.rmtree(plan.app_path)
     (plan.app_path / "Contents" / "MacOS").mkdir(parents=True, exist_ok=True)
     (plan.app_path / "Contents" / "Resources").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(plan.build_binary, plan.executable_path)
+    shutil.copy2(build_binary, plan.executable_path)
     plan.executable_path.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
     if plan.source_icon_path.exists():
         shutil.copy2(plan.source_icon_path, plan.bundle_icon_path)

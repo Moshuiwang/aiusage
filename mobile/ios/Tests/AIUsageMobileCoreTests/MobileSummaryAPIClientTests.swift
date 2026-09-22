@@ -26,6 +26,18 @@ final class MobileSummaryAPIClientTests: XCTestCase {
         XCTAssertEqual(request.cachePolicy, .reloadIgnoringLocalCacheData)
     }
 
+    func testHistoricalRequestIncludesOffsetAndCurrentRequestCanBeExplicit() async throws {
+        let fixtureURL = try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json"))
+        for offset in [-6, -2, -1, 0] {
+            let transport = StubTransport(data: try Data(contentsOf: fixtureURL), statusCode: 200)
+            let client = MobileSummaryAPIClient(config: MobileSummaryAPIConfig(
+                baseURL: URL(string: "https://example.test")!, bearerToken: nil,
+                period: "today", offset: offset), transport: transport)
+            _ = try await client.load()
+            XCTAssertEqual(transport.request?.url?.query, "period=today&offset=\(offset)")
+        }
+    }
+
     func testRejectsNonSuccessHTTPStatus() async throws {
         let transport = StubTransport(data: Data("{}".utf8), statusCode: 401)
         let client = MobileSummaryAPIClient(

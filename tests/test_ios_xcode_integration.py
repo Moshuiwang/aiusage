@@ -489,7 +489,7 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
 
         self.assertNotIn("WatchSummaryBackgroundRefresh.schedule()", init_body)
         self.assertIn(".backgroundTask(.appRefresh(WatchSummaryBackgroundRefresh.taskIdentifier))", app_content)
-        self.assertIn("scheduleWatchSummaryBackgroundRefresh()", app_content)
+        self.assertIn("WatchSummaryBackgroundRefresh.schedule()", app_content)
 
     def test_ios_refreshes_visible_summary_when_returning_to_foreground(self) -> None:
         app_path = (
@@ -506,8 +506,8 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("hasCompletedInitialLoad", app_content)
         self.assertIn(".onChange(of: scenePhase)", app_content)
         self.assertIn("phase == .active", app_content)
-        self.assertIn("await refreshLiveSummary(period: summary.period.id, refreshSource: .foregroundInitialLoad)", app_content)
-        self.assertIn("await ensureTodayCompanionSummary(visiblePeriod: summary.period.id)", app_content)
+        self.assertIn("await refreshLiveSummary(refreshSource: .foregroundInitialLoad)", app_content)
+        self.assertIn("await ensureTodayCompanionSummary()", app_content)
 
     def test_ios_runtime_diagnostics_record_refresh_source_version_and_safe_watch_reason(self) -> None:
         app_content = (
@@ -819,10 +819,11 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertIn("nativeLiquidGlassPeriodTabBehavior()", content)
         self.assertIn("tabBarMinimizeBehavior(.onScrollDown)", content)
         self.assertIn("PeriodTab.allCases", content)
-        for title in ["今天", "周", "月", "全部"]:
+        for title in ["今天", "周", "月"]:
             with self.subTest(title=title):
                 self.assertIn(f'return "{title}"', content)
         self.assertIn('case .week:  return "gauge.with.dots.needle.33percent"', content)
+        self.assertNotIn('return "全部"', content)
         self.assertNotIn("Capsule().fill(Color.blue)", content)
         self.assertNotIn(".foregroundStyle(isSelected ? .white", content)
         self.assertNotIn(".background(.regularMaterial, in: Capsule())", content)
@@ -842,9 +843,11 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         card_end = content.index("struct PeriodSourceRow", card_start)
         card_content = content[card_start:card_end]
 
-        self.assertIn("sourceUsageRows(sources: sources, byMachine: byMachine)", card_content)
-        self.assertIn("tokensBySource[contribution.sourceID", card_content)
-        self.assertNotIn("SourcesDisplayState.visibleRows(byMachine)", card_content)
+        self.assertIn("rows: SourcesDisplayState.rows(in: state.breakdown)", content)
+        self.assertIn("ForEach(Array(rows.enumerated())", card_content)
+        self.assertNotIn("tokensBySource", content)
+        self.assertNotIn("reduce(", card_content)
+        self.assertIn("PeriodSourceRow(row: row", card_content)
 
     def test_ios_source_row_keeps_user_usage_machine_and_update_time_separate(self) -> None:
         root_view = (
@@ -857,21 +860,50 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         )
         content = root_view.read_text(encoding="utf-8")
         row_start = content.index("struct PeriodSourceRow")
-        row_end = content.index("// MARK: - Model Usage Card", row_start)
+        row_end = content.index("struct AgentUsageDisclosure", row_start)
         row_content = content[row_start:row_end]
 
-        self.assertIn("private var displayUser", row_content)
-        self.assertIn("private var machineName", row_content)
-        self.assertIn("private var updateText", row_content)
-        self.assertIn("Text(displayUser)", row_content)
+        self.assertIn("Text(row.osUser ?? row.label)", row_content)
+        self.assertIn("row.machine ?? source?.machine", row_content)
+        self.assertIn("SourceUpdateDateText.format", row_content)
+        self.assertIn("@State private var isExpanded = false", row_content)
+        self.assertIn("DisclosureGroup(isExpanded: $isExpanded)", row_content)
+        self.assertIn("ForEach(agents)", row_content)
+        self.assertIn("AgentUsageDisclosure(agent: agent)", row_content)
+        self.assertIn("Agent / 模型明细缺失", row_content)
         self.assertIn("Text(TokenFormat.compact(row.tokens))", row_content)
-        self.assertIn("Text(machineName)", row_content)
-        self.assertIn("Text(updateText)", row_content)
+        self.assertIn("Text(machine)", row_content)
         self.assertGreaterEqual(row_content.count("HStack"), 2)
         self.assertIn(".truncationMode(.middle)", row_content)
         self.assertIn(".layoutPriority(1)", row_content)
         self.assertIn(".fixedSize(horizontal: true, vertical: false)", row_content)
         self.assertNotIn("parts.joined(separator:", row_content)
+
+    def test_ios_history_controls_use_guarded_requests_and_nested_details(self) -> None:
+        app = (ROOT / "mobile/ios-xcode/Sources/AIUsageMobileApp/AIUsageMobileApp.swift").read_text(encoding="utf-8")
+        view = (ROOT / "mobile/ios/Sources/AIUsageMobileCore/AIUsageMobileRootView.swift").read_text(encoding="utf-8")
+        self.assertIn("period: period, offset: selection.offset", app)
+        self.assertIn("guard history.requestID == requestID", app)
+        self.assertIn("guard loadedSummary.period.id == period else { throw MobileSummaryAPIError.invalidResponse }", app)
+        self.assertIn("guard history.accept(loadedSummary, requestID: requestID) else {", app)
+        self.assertIn("await refreshLiveSummary(refreshSource: refreshSource)", app)
+        self.assertIn("let companionEvidence = selection.isCurrentDay", app)
+        self.assertIn(".disabled(!selection.canGoEarlier)", view)
+        self.assertIn(".disabled(!selection.canGoLater)", view)
+        self.assertEqual(view.count("@State private var isExpanded = false"), 2)
+        self.assertIn("ForEach(agent.models)", view)
+        self.assertIn("Text(model.displayLabel)", view)
+        self.assertIn("Text(model.usageText)", view)
+
+    def test_ios_failed_visible_request_uses_cache_day_invalidation(self) -> None:
+        app = (ROOT / "mobile/ios-xcode/Sources/AIUsageMobileApp/AIUsageMobileApp.swift").read_text(encoding="utf-8")
+        start = app.index("private func loadLiveSummary(")
+        end = app.index("private func shareWithCompanionIfNeeded", start)
+        loader = app[start:end]
+        failure = loader[loader.index("} catch {"):]
+        self.assertIn("guard history.fail(requestID: requestID) else { return }", failure)
+        self.assertLess(failure.index("history.fail("), failure.index("loadState = .failed"))
+        self.assertNotIn("shareWithCompanionIfNeeded", failure)
 
     @staticmethod
     def _png_size(path: pathlib.Path) -> tuple[int, int]:

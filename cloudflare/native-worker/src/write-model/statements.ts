@@ -10,8 +10,48 @@ function ingestWriteStatements(
 ): D1PreparedStatement[] {
   return [
     sourceIdentityStatement(db, identity, seenAt),
+    ...hourlyFacts.map((fact) => factRevisionStatement(db, fact, seenAt)),
     ...factWriteStatements(db, hourlyFacts, seenAt),
   ];
+}
+
+// Stable-key revision time must advance even when usage values are unchanged.
+// Fact writes, revision watermarks and dirty-day markers share one transaction;
+// display projections are rebuilt in separately retryable day batches.
+const noNewerCoveragePredicate = `NOT EXISTS (
+  SELECT 1 FROM usage_reconciliation_ranges
+  WHERE source_id = ? AND agent = ? AND provenance = ?
+    AND julianday(?) >= julianday(coverage_start) AND julianday(?) < julianday(coverage_end)
+    AND julianday(observed_at) > julianday(?)
+)`;
+
+function coverageRevisionParams(fact: UsageHourlyFact, seenAt: string): unknown[] {
+  return [fact.source_id, fact.agent, fact.provenance, fact.window_start, fact.window_start, seenAt];
+}
+
+const factRevisionPredicate = `EXISTS (
+  SELECT 1 FROM usage_fact_revisions
+  WHERE source_id = ? AND agent = ? AND client = ? AND window_start = ? AND window_end = ?
+    AND ai_provider = ? AND ai_account_id = ? AND attribution_confidence = ? AND provenance = ?
+    AND julianday(observed_at) = julianday(?)
+) AND ${noNewerCoveragePredicate}`;
+
+function factRevisionParams(fact: UsageHourlyFact, seenAt: string): unknown[] {
+  return [fact.source_id, fact.agent, fact.client, fact.window_start, fact.window_end,
+    fact.ai_provider, fact.ai_account_id, fact.attribution_confidence, fact.provenance, seenAt];
+}
+
+function factRevisionStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D1PreparedStatement {
+  return db.prepare(`
+    INSERT INTO usage_fact_revisions (
+      source_id, agent, client, window_start, window_end, ai_provider, ai_account_id,
+      attribution_confidence, provenance, observed_at
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE ${noNewerCoveragePredicate}
+    ON CONFLICT(source_id, agent, client, window_start, window_end, ai_provider, ai_account_id,
+                attribution_confidence, provenance) DO UPDATE SET observed_at = excluded.observed_at
+    WHERE julianday(excluded.observed_at) > julianday(usage_fact_revisions.observed_at)
+  `).bind(...factRevisionParams(fact, seenAt), ...coverageRevisionParams(fact, seenAt));
 }
 
 function factWriteStatements(
@@ -55,9 +95,9 @@ function hourlyFactStatements(db: D1Database, fact: UsageHourlyFact, seenAt: str
     machineStatement(db, fact, seenAt),
     osIdentityStatement(db, fact, seenAt),
     aiAccountStatement(db, fact, seenAt),
-    staleFactModelStatement(db, fact),
+    staleFactModelStatement(db, fact, seenAt),
     factStatement(db, fact, seenAt),
-    staleCurrentFactModelsStatement(db, fact),
+    staleCurrentFactModelsStatement(db, fact, seenAt),
   ];
   for (const model of fact.model_breakdowns) {
     statements.push(hourlyFactModelStatement(db, fact, model, seenAt));
@@ -110,7 +150,7 @@ function aiAccountStatement(db: D1Database, fact: UsageHourlyFact, seenAt: strin
   );
 }
 
-function staleFactModelStatement(db: D1Database, fact: UsageHourlyFact): D1PreparedStatement {
+function staleFactModelStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D1PreparedStatement {
   return db.prepare(`
     DELETE FROM usage_hourly_models
     WHERE fact_id IN (
@@ -118,11 +158,12 @@ function staleFactModelStatement(db: D1Database, fact: UsageHourlyFact): D1Prepa
       FROM usage_hourly_facts
       WHERE source_id = ? AND agent = ? AND client = ? AND window_start = ? AND window_end = ?
         AND ai_provider = ? AND ai_account_id = ? AND attribution_confidence = ? AND provenance = ?
-        AND fact_id IS NOT ?
+        AND fact_id IS NOT ? AND ${factRevisionPredicate}
     )
   `).bind(
     fact.source_id, fact.agent, fact.client, fact.window_start, fact.window_end,
     fact.ai_provider, fact.ai_account_id, fact.attribution_confidence, fact.provenance, fact.fact_id,
+    ...factRevisionParams(fact, seenAt), ...coverageRevisionParams(fact, seenAt),
   );
 }
 
@@ -134,7 +175,8 @@ function factStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D
       cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count,
       session_count, attribution_confidence, provenance, account_evidence_json, metadata_json,
       first_seen_at, last_seen_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE ${factRevisionPredicate}
     ON CONFLICT(
       source_id, agent, client, window_start, window_end,
       ai_provider, ai_account_id, attribution_confidence, provenance
@@ -201,18 +243,18 @@ function factStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D
               )
             ELSE excluded.metadata_json
           END
-  `).bind(...factParams(fact), seenAt, seenAt);
+  `).bind(...factParams(fact), seenAt, seenAt, ...factRevisionParams(fact, seenAt), ...coverageRevisionParams(fact, seenAt));
 }
 
-function staleCurrentFactModelsStatement(db: D1Database, fact: UsageHourlyFact): D1PreparedStatement {
+function staleCurrentFactModelsStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D1PreparedStatement {
   const models = fact.model_breakdowns.map((model) => String(model.model ?? model.model_name ?? "unknown"));
   if (!models.length) {
-    return db.prepare("DELETE FROM usage_hourly_models WHERE fact_id = ?").bind(fact.fact_id);
+    return db.prepare(`DELETE FROM usage_hourly_models WHERE fact_id = ? AND ${factRevisionPredicate}`).bind(fact.fact_id, ...factRevisionParams(fact, seenAt), ...coverageRevisionParams(fact, seenAt));
   }
   return db.prepare(`
     DELETE FROM usage_hourly_models
-    WHERE fact_id = ? AND model NOT IN (${models.map(() => "?").join(", ")})
-  `).bind(fact.fact_id, ...models);
+    WHERE fact_id = ? AND model NOT IN (${models.map(() => "?").join(", ")}) AND ${factRevisionPredicate}
+  `).bind(fact.fact_id, ...models, ...factRevisionParams(fact, seenAt), ...coverageRevisionParams(fact, seenAt));
 }
 
 function hourlyFactModelStatement(db: D1Database, fact: UsageHourlyFact, model: AnyRecord, seenAt: string): D1PreparedStatement {
@@ -231,7 +273,9 @@ function hourlyFactModelStatement(db: D1Database, fact: UsageHourlyFact, model: 
     INSERT INTO usage_hourly_models (
       fact_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
       reasoning_output_tokens, total_tokens, total_cost, metadata_json, first_seen_at, last_seen_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+    WHERE ${factRevisionPredicate}
+      AND EXISTS (SELECT 1 FROM usage_hourly_facts WHERE fact_id = ?)
     ON CONFLICT(fact_id, model) DO UPDATE SET
       input_tokens = excluded.input_tokens,
       output_tokens = excluded.output_tokens,
@@ -254,6 +298,7 @@ function hourlyFactModelStatement(db: D1Database, fact: UsageHourlyFact, model: 
     fact.fact_id, modelName, values.input_tokens, values.output_tokens, values.cache_creation_tokens,
     values.cache_read_tokens, values.reasoning_output_tokens, values.total_tokens,
     values.total_cost, values.metadata_json, seenAt, seenAt,
+    ...factRevisionParams(fact, seenAt), ...coverageRevisionParams(fact, seenAt), fact.fact_id,
   );
 }
 
@@ -347,7 +392,7 @@ function collectionReportStatements(
         error_type = excluded.error_type,
         error_message = excluded.error_message,
         collector_version = excluded.collector_version
-      WHERE excluded.collected_at >= source_report_states.collected_at
+      WHERE julianday(excluded.collected_at) >= julianday(source_report_states.collected_at)
     `).bind(
       report.source_id, collectedAt, report.report_type, report.command, report.status,
       report.ccusage_version, report.first_period, report.last_period, report.error_type, report.error_message,
@@ -371,6 +416,7 @@ export {
   aiAccountStatement,
   collectionReportStatements,
   factParams,
+  factRevisionStatement,
   factWriteStatements,
   factStatement,
   hourlyFactModelStatement,

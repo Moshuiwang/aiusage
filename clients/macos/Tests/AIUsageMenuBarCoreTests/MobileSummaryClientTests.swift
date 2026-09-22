@@ -20,13 +20,25 @@ final class MobileSummaryClientTests: XCTestCase {
         XCTAssertEqual(summary.period.id, "week")
         XCTAssertEqual(
             transport.requests.first?.url?.absoluteString,
-            "https://aiusage.chunbai.com/api/mobile/summary?period=month"
+            "https://aiusage.chunbai.com/api/mobile/summary?period=month&offset=0"
         )
         XCTAssertEqual(
             transport.requests.first?.value(forHTTPHeaderField: "Authorization"),
             "Bearer test-token"
         )
         XCTAssertEqual(transport.requests.first?.value(forHTTPHeaderField: "Accept"), "application/json")
+    }
+
+    func testEveryHistoricalPeriodSendsItsNegativeOffset() async throws {
+        for period in ["today", "week", "month"] {
+            let transport = RecordingTransport(data: try fixtureData(), statusCode: 200)
+            let client = MobileSummaryClient(config: MobileSummaryClientConfig(
+                baseURL: try XCTUnwrap(URL(string: "https://example.test")), bearerToken: nil, period: period, offset: -2
+            ), transport: transport)
+            _ = try await client.load()
+            XCTAssertEqual(transport.requests.count, 1)
+            XCTAssertEqual(transport.requests.first?.url?.query, "period=\(period)&offset=-2")
+        }
     }
 
     func testClientRejectsUnauthorizedResponse() async throws {

@@ -250,6 +250,67 @@ class TestDiskCap(CollectorStoreTestCase):
         self.assertGreater(store.used_bytes(), 2000)
         self.assertEqual(store.dead_letter_count(), 1)
 
+    def test_dedupe_cap_rejects_replacement_without_losing_old_payload(self) -> None:
+        """#161：替换后的实际字节独立复算，死信也必须占用容量。"""
+        old = {"value": "旧" * 6}  # UTF-8 30 bytes
+        other = {"value": "x" * 28}  # 40 bytes
+        replacement = {"value": "x" * 68}  # 80 bytes
+        for other_is_dead in (False, True):
+            with self.subTest(other_is_dead=other_is_dead):
+                store = CollectorStore(
+                    self.root / f"cap-{other_is_dead}.sqlite", max_bytes=100, clock=self.clock
+                )
+                self.addCleanup(store.close)
+                old_id = store.enqueue(old, kind=KIND_LIMITS, dedupe_key="codex")
+                other_id = store.enqueue(other)
+                if other_is_dead:
+                    store.dead_letter(other_id, reason="bad_schema")
+                before_rows = list(store._conn.execute("SELECT * FROM outbox ORDER BY id"))
+                before_dead = store.dead_letters()
+                self.assertEqual(store.used_bytes(), 70)
+
+                with self.assertRaises(OutboxFull) as rejected:
+                    store.enqueue(replacement, kind=KIND_LIMITS, dedupe_key="codex")
+
+                self.assertIn("已用 70 字节", str(rejected.exception))
+                self.assertEqual(list(store._conn.execute("SELECT * FROM outbox ORDER BY id")), before_rows)
+                self.assertEqual(store.dead_letters(), before_dead)
+                self.assertEqual(store.pending_count(), 1 if other_is_dead else 2)
+                self.assertEqual(store.dead_letter_count(), int(other_is_dead))
+                self.assertEqual(store.pending()[0].entry_id, old_id)
+                self.assertEqual(store.pending()[0].payload, old)
+                self.assertEqual(store.stats()["enqueued_total"], 2)
+                # 不调用容量 helper：从最终数据库里的 UTF-8 原文独立核算。
+                rows = store._conn.execute(
+                    "SELECT payload FROM outbox UNION ALL SELECT payload FROM dead_letter"
+                ).fetchall()
+                self.assertEqual(len(rows), 2)
+                self.assertEqual(sum(len(row[0].encode("utf-8")) for row in rows), 70)
+
+    def test_smaller_dedupe_replacement_succeeds_when_store_is_at_capacity(self) -> None:
+        store = self.open_store(max_bytes=100)
+        old = {"value": "x" * 48}  # 60 bytes
+        dead = {"value": "x" * 28}  # 40 bytes
+        replacement = {"value": "新" * 6}  # 30 bytes
+        store.enqueue(old, kind=KIND_LIMITS, dedupe_key="codex")
+        store.dead_letter(store.enqueue(dead), reason="bad_schema")
+        self.assertEqual(store.used_bytes(), 100)
+
+        replacement_id = store.enqueue(replacement, kind=KIND_LIMITS, dedupe_key="codex")
+
+        self.assertEqual(store.pending_count(), 1)
+        self.assertEqual(store.pending()[0].entry_id, replacement_id)
+        self.assertEqual(store.pending()[0].payload, replacement)
+        self.assertEqual(store.dead_letter_count(), 1)
+        self.assertEqual(store.dead_letters()[0]["payload"], dead)
+        self.assertEqual(store.stats()["enqueued_total"], 3)
+        rows = store._conn.execute(
+            "SELECT payload FROM outbox UNION ALL SELECT payload FROM dead_letter"
+        ).fetchall()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sum(len(row[0].encode("utf-8")) for row in rows), 70)
+        self.assertEqual(store.used_bytes(), 70)
+
 
 class TestLimitObservationTTL(CollectorStoreTestCase):
     """limit observations 带 TTL：只补最新有效观测，过期的重新采集而不是盲目补发旧值。"""

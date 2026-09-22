@@ -318,6 +318,7 @@ class CollectorStore:
         expires_at = now + float(ttl_seconds) if ttl_seconds else None
 
         with self._transaction():
+            used_bytes = self._used_bytes_locked()
             replaced_bytes = 0
             if dedupe_key is not None:
                 row = self._conn.execute(
@@ -326,16 +327,17 @@ class CollectorStore:
                     (kind, dedupe_key),
                 ).fetchone()
                 replaced_bytes = int(row["total"])
-                self._conn.execute(
-                    "DELETE FROM outbox WHERE kind = ? AND dedupe_key = ?", (kind, dedupe_key)
-                )
-            projected = self._used_bytes_locked() + payload_bytes - replaced_bytes
+            projected = used_bytes + payload_bytes - replaced_bytes
             if projected > self.max_bytes:
                 raise OutboxFull(
                     "本地 outbox 已达磁盘上限，拒绝新增（不丢弃已缓冲的历史）："
-                    f"已用 {self._used_bytes_locked() - replaced_bytes} 字节 / 上限 {self.max_bytes} 字节，"
+                    f"已用 {used_bytes} 字节 / 上限 {self.max_bytes} 字节，"
                     f"本次需要 {payload_bytes} 字节。请先恢复网络排空积压，"
                     f"或导出后处理：{self.path}"
+                )
+            if dedupe_key is not None:
+                self._conn.execute(
+                    "DELETE FROM outbox WHERE kind = ? AND dedupe_key = ?", (kind, dedupe_key)
                 )
             entry_id = self._insert_entry(
                 kind=kind,

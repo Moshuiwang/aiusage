@@ -1,4 +1,5 @@
 import type { SummarySnapshot } from "./read-model/shared";
+import { sourceAgents, sourceBreakdown } from "./source-breakdown";
 
 type AnyRecord = Record<string, unknown>;
 const LIMIT_STALE_AFTER_MS = 120 * 60 * 1000;
@@ -16,6 +17,7 @@ export type MobileSummary = {
   trend: Record<string, unknown>;
   sources: Record<string, unknown>[];
   breakdown: {
+    by_source: Record<string, unknown>[];
     by_machine: Record<string, unknown>[];
     by_os_user: Record<string, unknown>[];
     by_agent: Record<string, unknown>[];
@@ -94,8 +96,10 @@ export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
       .filter((row) => mobileSourceIds.has(str(row.source_id)))
       .map((row) => mobileSource(row)),
     breakdown: {
-      by_machine: byMachine,
-      by_os_user: osUserRows(list<AnyRecord>(groups.by_machine), items),
+      by_source: sourceBreakdown(items, sourceStatus),
+      by_machine: byMachine.map(row => ({ ...row, agents: sourceAgents(items.filter(item => item.machine === row.id)) })),
+      by_os_user: osUserRows(list<AnyRecord>(groups.by_machine), items)
+        .map(row => ({ ...row, agents: sourceAgents(items.filter(item => item.account === row.id)) })),
       by_agent: agentRows(items),
       by_model: modelRows(items),
       by_date: dateRows(items),

@@ -22,6 +22,9 @@ class ReleaseRollbackDrillTests(unittest.TestCase):
         self.source_dir = base / "repo" / "src"
         (self.source_dir / "ai_usage_widget").mkdir(parents=True)
         (self.source_dir / "ai_usage_widget" / "__init__.py").write_text("", encoding="utf-8")
+        (self.source_dir / "ai_usage_widget" / "cli.py").write_bytes(
+            (Path(__file__).resolve().parents[1] / "src" / "ai_usage_widget" / "cli.py").read_bytes()
+        )
 
         # #144 起，缺 ingest env 文件就不许激活 timer；这些演练要的是**激活失败后**
         # 的回滚行为，所以前置条件得先摆齐，别把演练堵在门禁上。
@@ -86,6 +89,43 @@ class ReleaseRollbackDrillTests(unittest.TestCase):
         return state
 
     # --- 失败自动回滚 ------------------------------------------------------ #
+
+    def test_rejected_existing_release_preserves_links_units_and_user_config(self) -> None:
+        """已物化版本损坏时，拒绝必须发生在 current/previous 和单元切换之前。"""
+        self.assertTrue(self._install("v1", "rev1")["success"])
+        self.assertTrue(self._install("v2", "rev2", on_calendar="*:0/15")["success"])
+        rollback = deploy_release.rollback_release(
+            self.root, self.unit_dir, command_runner=self._runner
+        )
+        self.assertTrue(rollback["success"])
+        broken_entrypoint = self.root / "releases/v2/src/ai_usage_widget/cli.py"
+        broken_entrypoint.unlink()
+        self.assertTrue((self.source_dir / "ai_usage_widget/cli.py").is_file())
+        self.assertEqual(os.readlink(self.root / "current"), "releases/v1")
+        self.assertEqual(os.readlink(self.root / "previous"), "releases/v2")
+        healthy_state = self._effective_state()
+        self.assertEqual(len(healthy_state), 3)  # current + timer + service
+        previous = os.readlink(self.root / "previous")
+        config_before = self._config_fingerprint()
+        self.commands.clear()
+
+        result = self._install("v2", "rev2", on_calendar="*:0/15")
+
+        self.assertFalse(result["success"])
+        self.assertFalse(result["activated"])
+        self.assertFalse(result["rolled_back"])
+        self.assertEqual(result["error_type"], "PreflightFailed")
+        failed = [check for check in result["preflight"] if not check["ok"]]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0]["name"], "source_cli")
+        self.assertEqual(self._effective_state(), healthy_state)
+        self.assertEqual(os.readlink(self.root / "previous"), previous)
+        self.assertEqual(self._config_fingerprint(), config_before)
+        self.assertEqual(self.commands, [])
+        self.assertEqual(result["current_target"], "releases/v1")
+        self.assertEqual(result["previous_target"], "releases/v2")
+        self.assertEqual(failed[0]["path"], str(broken_entrypoint))
+        self.assertTrue((self.root / "current/src/ai_usage_widget/cli.py").is_file())
 
     def test_failed_activation_rolls_back_to_the_previous_release_and_timer(self) -> None:
         self._install("2026.08.01-1", "06fa591")

@@ -5,11 +5,17 @@ import SwiftUI
 struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarAppModel
     var onQuit: (() -> Void)?
+    var onContentHeightChange: (() -> Void)?
+    @State private var contentHeight: CGFloat = 1
     @State private var hoveredBar: MenuTrendBar?
     @State private var hoverLocation: CGPoint?
+    @State private var expandedSources: Set<String> = []
+    @State private var expandedAgents: Set<String> = []
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private let periods: [(String, String)] = [
-        ("today", "今天"), ("week", "本周"), ("month", "本月"), ("all", "全部"),
+        ("today", "日"), ("week", "周"), ("month", "月"),
     ]
 
     var body: some View {
@@ -18,12 +24,22 @@ struct MenuBarPopoverView: View {
             if !model.hasConfig {
                 setupState
             } else {
-                mainContent
+                ScrollView {
+                    mainContent.background(GeometryReader { geometry in
+                        Color.clear.preference(key: PopoverContentHeight.self, value: geometry.size.height)
+                    })
+                }
+                .frame(height: min(contentHeight, max(200, (NSScreen.main?.visibleFrame.height ?? 800) - 160)))
+                .onPreferenceChange(PopoverContentHeight.self) { height in
+                    guard abs(contentHeight - height) > 0.5 else { return }
+                    contentHeight = height
+                    DispatchQueue.main.async { onContentHeightChange?() }
+                }
             }
         }
         .frame(width: MenuBarPopoverLayout.width)
         .fixedSize(horizontal: false, vertical: true)
-        .background(MacOSGlassBackground())
+        .modifier(PopoverGlassSurface(reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased))
     }
 
     // MARK: – Header
@@ -123,8 +139,15 @@ struct MenuBarPopoverView: View {
                 model.refresh(periodID: newValue)
             }
 
+            historyNavigation
             VStack(spacing: 10) {
-                heroCard
+                if model.hasLoadedUsableSummary {
+                    heroCard
+                } else {
+                    Text(model.isLoading ? "正在读取所选日期…" : "所选日期暂无可用数据")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                }
                 if !model.state.quotaRings.isEmpty { quotaSection }
                 if !model.state.sources.isEmpty { sourcesSection }
             }
@@ -133,6 +156,29 @@ struct MenuBarPopoverView: View {
         }
         .onChange(of: model.state.trendBars) { _, _ in
             hoveredBar = nil; hoverLocation = nil
+        }
+    }
+
+    private var historyNavigation: some View {
+        HStack(spacing: 8) {
+            Button { model.movePeriod(-1) } label: { Image(systemName: "chevron.left") }
+                .disabled(!model.selection.canGoEarlier)
+                .help("上一周期")
+            VStack(spacing: 2) {
+                Text(model.state.periodLabel).font(.system(size: 12, weight: .semibold))
+                Text(model.state.dateRangeText).font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            Button { model.movePeriod(1) } label: { Image(systemName: "chevron.right") }
+                .disabled(!model.selection.canGoLater)
+                .help("下一周期")
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
+        .onChange(of: model.selection) { _, _ in
+            expandedSources.removeAll()
+            expandedAgents.removeAll()
         }
     }
 
@@ -202,24 +248,50 @@ struct MenuBarPopoverView: View {
             sectionTitle("来源").padding(.bottom, 10)
             ForEach(Array(model.state.sources.enumerated()), id: \.element.id) { index, row in
                 if index > 0 { Divider().padding(.vertical, 4) }
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(row.title)
-                            .font(.system(size: 13, weight: .medium))
-                            .lineLimit(1)
-                        if !row.subtitle.isEmpty {
-                            Text(row.subtitle)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
+                DisclosureGroup(isExpanded: expansionBinding(row.id, in: $expandedSources)) {
+                    if let agents = row.agents, !agents.isEmpty {
+                        ForEach(agents) { agent in
+                            if agent.status == "available" {
+                                DisclosureGroup(isExpanded: expansionBinding("\(row.id)/\(agent.id)", in: $expandedAgents)) {
+                                    if agent.models.isEmpty {
+                                        Text("模型明细缺失").font(.caption).foregroundStyle(.secondary)
+                                    } else {
+                                        ForEach(agent.models) { item in
+                                            HStack {
+                                                Text(item.title).lineLimit(2)
+                                                Spacer(minLength: 8)
+                                                Text(item.valueText).monospacedDigit()
+                                            }
+                                            .font(.system(size: 11))
+                                            .foregroundStyle(.secondary)
+                                            .help("\(item.title) · \(item.tokens) tokens")
+                                            .padding(.vertical, 2)
+                                        }
+                                    }
+                                } label: { agentLabel(agent) }
+                            } else {
+                                agentLabel(agent)
+                            }
                         }
+                    } else {
+                        Text("Agent / 模型明细缺失")
+                            .font(.caption).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    Spacer()
-                    Text(row.value)
-                        .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                            if !row.subtitle.isEmpty {
+                                Text(row.subtitle).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
+                            }
+                        }
+                        Spacer()
+                        Text(row.value).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.secondary)
+                    }
+                    .frame(minHeight: 34)
                 }
-                .frame(minHeight: 34)
+                .padding(.vertical, 2)
             }
         }
         .padding(12)
@@ -229,6 +301,23 @@ struct MenuBarPopoverView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         )
+    }
+
+    private func agentLabel(_ agent: MobileSourceAgent) -> some View {
+        HStack {
+            Text(agent.label)
+            Spacer()
+            Text(agent.valueText).monospacedDigit().foregroundStyle(.secondary)
+        }
+        .font(.system(size: 12))
+        .padding(.vertical, 4)
+        .help(agent.status == "available" ? "\(agent.label) · \(agent.tokens) tokens" : "\(agent.label) 数据缺失")
+    }
+
+    private func expansionBinding(_ id: String, in expanded: Binding<Set<String>>) -> Binding<Bool> {
+        Binding(get: { expanded.wrappedValue.contains(id) }, set: { value in
+            if value { expanded.wrappedValue.insert(id) } else { expanded.wrappedValue.remove(id) }
+        })
     }
 
     // MARK: – Helpers
@@ -242,7 +331,36 @@ struct MenuBarPopoverView: View {
     }
 
     private var cardBackground: some ShapeStyle {
-        Color(nsColor: .windowBackgroundColor).opacity(0.56)
+        Color(nsColor: .windowBackgroundColor).opacity(reduceTransparency || contrast == .increased ? 1 : 0.56)
+    }
+}
+
+private struct PopoverContentHeight: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+private struct PopoverGlassSurface: ViewModifier {
+    let reduceTransparency: Bool
+    let increasedContrast: Bool
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if reduceTransparency || increasedContrast {
+            content.background(Color(nsColor: .windowBackgroundColor))
+        } else {
+            // SwiftUI 7 ships the Glass API; runtime availability alone cannot
+            // make that symbol compile against an older macOS SDK.
+            #if canImport(SwiftUI, _version: 7.0)
+            if #available(macOS 26.0, *) {
+                content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                content.background(MacOSGlassBackground())
+            }
+            #else
+            content.background(MacOSGlassBackground())
+            #endif
+        }
     }
 }
 

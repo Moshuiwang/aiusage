@@ -261,6 +261,27 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('session_count', 'INTEGER', 1, None, 0),
         ('fact_count', 'INTEGER', 1, None, 0),
     ],
+    "usage_reconciliation_ranges": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('agent', 'TEXT', 1, None, 2),
+        ('provenance', 'TEXT', 1, None, 3),
+        ('coverage_start', 'TEXT', 1, None, 4),
+        ('coverage_end', 'TEXT', 1, None, 5),
+        ('observed_at', 'TEXT', 1, None, 0),
+    ],
+    "usage_rollup_dirty_days": [('date', 'TEXT', 1, None, 1)],
+    "usage_fact_revisions": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('agent', 'TEXT', 1, None, 2),
+        ('client', 'TEXT', 1, None, 3),
+        ('window_start', 'TEXT', 1, None, 4),
+        ('window_end', 'TEXT', 1, None, 5),
+        ('ai_provider', 'TEXT', 1, None, 6),
+        ('ai_account_id', 'TEXT', 1, None, 7),
+        ('attribution_confidence', 'TEXT', 1, None, 8),
+        ('provenance', 'TEXT', 1, None, 9),
+        ('observed_at', 'TEXT', 1, None, 0),
+    ],
     "usage_hourly": [
         ('source_id', 'TEXT', 1, None, 1),
         ('hour', 'TEXT', 1, None, 2),
@@ -374,6 +395,9 @@ FRESH_INSTALL_CREATED_INDEXES = {
     "usage_daily_rollups": {
         "idx_usage_daily_rollups_date": (0, 0, ('date',)),
     },
+    "usage_fact_revisions": {},
+    "usage_reconciliation_ranges": {},
+    "usage_rollup_dirty_days": {},
     "usage_hourly": {
     },
     "usage_hourly_facts": {
@@ -605,6 +629,83 @@ class TestD1SchemaMigration(unittest.TestCase):
             list(upgraded_auto_indexes.values()),
             [("pk", 1, ("source_id_claimed", "error_type", "day"))],
         )
+
+    def test_fact_revisions_upgrade_backfills_rows_without_rewinding_existing_watermarks(self) -> None:
+        migration = (MIGRATIONS_DIR / "0010_fact_revisions.sql").read_text(encoding="utf-8")
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
+            for hour, amount in (("10", 100), ("11", 200)):
+                conn.execute("""
+                    INSERT INTO usage_hourly_facts (
+                        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id,
+                        agent, client, window_start, window_end, timezone, total_tokens,
+                        attribution_confidence, provenance, first_seen_at, last_seen_at
+                    ) VALUES (?, 'upgrade-device', 'machine', 'tester', 'openai', 'account',
+                              'codex', 'codex', ?, ?, 'Asia/Shanghai', ?,
+                              'unconfirmed_local_source', 'local-ledger', ?, ?)
+                """, (f"fact-{hour}", f"2026-07-12T{hour}:00:00+08:00", f"2026-07-12T{hour}:59:59+08:00",
+                      amount, "2026-07-18T01:00:00+00:00", "2026-07-18T01:03:00+00:00"))
+            before = conn.execute("SELECT * FROM usage_hourly_facts ORDER BY fact_id").fetchall()
+            self.assertEqual(len(before), 2)
+            conn.execute("DROP TABLE usage_fact_revisions")
+            conn.executescript(migration)
+            self.assertEqual(_table_columns(conn, "usage_fact_revisions"), FRESH_INSTALL_TABLE_COLUMNS["usage_fact_revisions"])
+            self.assertEqual(conn.execute("SELECT observed_at FROM usage_fact_revisions ORDER BY window_start").fetchall(),
+                             [("2026-07-18T01:03:00+00:00",)] * 2)
+            conn.execute("UPDATE usage_fact_revisions SET observed_at = '2026-07-18T01:09:00+00:00'")
+            conn.executescript(migration)
+            self.assertEqual(conn.execute("SELECT observed_at FROM usage_fact_revisions ORDER BY window_start").fetchall(),
+                             [("2026-07-18T01:09:00+00:00",)] * 2)
+            self.assertEqual(conn.execute("SELECT * FROM usage_hourly_facts ORDER BY fact_id").fetchall(), before)
+
+    def test_projection_recovery_upgrade_matches_schema_and_tracks_only_usage_changes(self) -> None:
+        migration = (MIGRATIONS_DIR / "0011_reconciliation_and_projection_recovery.sql").read_text(encoding="utf-8")
+        trigger_names = ["usage_rollup_dirty_insert", "usage_rollup_dirty_update", "usage_rollup_dirty_delete"]
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
+            expected_triggers = conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall()
+            self.assertEqual([row[0] for row in expected_triggers], sorted(trigger_names))
+            for name in trigger_names:
+                conn.execute(f"DROP TRIGGER {name}")
+            conn.execute("DROP TABLE usage_rollup_dirty_days")
+            conn.execute("DROP TABLE usage_reconciliation_ranges")
+            conn.execute("""
+                INSERT INTO usage_hourly_facts (
+                    fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id,
+                    agent, client, window_start, window_end, timezone, total_tokens,
+                    attribution_confidence, provenance, first_seen_at, last_seen_at
+                ) VALUES ('fact', 'source', 'machine', 'tester', 'openai', 'account',
+                          'codex', 'codex', '2026-07-11T17:00:00+00:00', '2026-07-11T18:00:00+00:00',
+                          'Asia/Shanghai', 100, 'observed', 'local-ledger', '2026-07-18T01:00:00Z', '2026-07-18T01:00:00Z')
+            """)
+            conn.execute("""
+                INSERT INTO source_accuracy (source_id, agent, provenance, mode, coverage_start, coverage_end,
+                    scan_complete, read_errors, unresolved_mismatch, matching_full_scans, accuracy_status,
+                    observed_at, first_seen_at, last_seen_at)
+                VALUES ('source', 'codex', 'local-ledger', 'full-rescan', '2026-07-12T00:00:00+08:00',
+                        '2026-07-13T00:00:00+08:00', 1, 0, 0, 2, 'verified',
+                        '2026-07-18T01:04:00Z', '2026-07-18T01:04:00Z', '2026-07-18T01:04:00Z')
+            """)
+            conn.executescript(migration)
+            for table in ("usage_rollup_dirty_days", "usage_reconciliation_ranges"):
+                self.assertEqual(_table_columns(conn, table), FRESH_INSTALL_TABLE_COLUMNS[table])
+            self.assertEqual(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall(), expected_triggers)
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-12",)])
+            self.assertEqual(conn.execute("SELECT observed_at FROM usage_reconciliation_ranges").fetchall(), [("2026-07-18T01:04:00Z",)])
+            conn.execute("UPDATE usage_reconciliation_ranges SET observed_at = '2026-07-18T01:09:00Z'")
+            conn.executescript(migration)
+            self.assertEqual(conn.execute("SELECT observed_at FROM usage_reconciliation_ranges").fetchall(), [("2026-07-18T01:09:00Z",)])
+            conn.execute("DELETE FROM usage_rollup_dirty_days")
+            conn.execute("UPDATE usage_hourly_facts SET last_seen_at = '2026-07-18T01:10:00Z'")
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [])
+            conn.execute("UPDATE usage_hourly_facts SET total_tokens = 200")
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-12",)])
+            conn.execute("DELETE FROM usage_rollup_dirty_days")
+            conn.execute("UPDATE usage_hourly_facts SET window_start = '2026-07-12T17:00:00Z'")
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days ORDER BY date").fetchall(), [("2026-07-12",), ("2026-07-13",)])
+            conn.execute("DELETE FROM usage_rollup_dirty_days")
+            conn.execute("DELETE FROM usage_hourly_facts")
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-13",)])
 
     def test_backfilled_indexes_match_their_owning_migration(self) -> None:
         """Every index a later migration declares must already exist in a 0001-only

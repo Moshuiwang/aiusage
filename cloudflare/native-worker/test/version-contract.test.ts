@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
+import { applySqlText } from "./golden/harness";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { evaluateCollectorRelease } from "../src/version-contract";
 
@@ -408,15 +409,7 @@ async function createMiniflare(extraBindings: Record<string, string> = {}): Prom
 }
 
 async function applySchema(db: D1Database): Promise<void> {
-  const sqlText = await readFile(schemaPath, "utf8");
-  const sql = sqlText
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n");
-  for (const statement of sql.split(";")) {
-    const trimmed = statement.trim();
-    if (trimmed) await db.prepare(trimmed).run();
-  }
+  await applySqlText(db, await readFile(schemaPath, "utf8"));
 }
 
 // #90 缺口块 13：两种「没有版本」必须判成**不同的 reason**。

@@ -42,7 +42,7 @@ export const VERSION_STATE_SEVERITY: Record<string, number> = {
 // --- 采集端本机版本常量 ------------------------------------------------------
 
 export const COLLECTOR_VERSION = "0.3.0";
-export const COLLECTOR_PARSER_SCHEMA_VERSION = 2;
+export const COLLECTOR_PARSER_SCHEMA_VERSION = 3;
 export const DEFAULT_RELEASE_CHANNEL = "stable";
 export const RELEASE_CHANNELS = ["stable", "beta", "dev"] as const;
 export const LAST_UPGRADE_STATUSES = ["never", "succeeded", "failed", "rolled_back"] as const;

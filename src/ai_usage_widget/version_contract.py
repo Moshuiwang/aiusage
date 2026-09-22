@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional
 # --- 采集端本机版本常量 ------------------------------------------------------
 
 COLLECTOR_VERSION = "0.3.0"
-COLLECTOR_PARSER_SCHEMA_VERSION = 2
+COLLECTOR_PARSER_SCHEMA_VERSION = 3
 DEFAULT_RELEASE_CHANNEL = "stable"
 RELEASE_CHANNELS = ("stable", "beta", "dev")
 LAST_UPGRADE_STATUSES = ("never", "succeeded", "failed", "rolled_back")

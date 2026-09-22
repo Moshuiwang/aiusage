@@ -9,7 +9,7 @@
 
 - 生产入口：`https://aiusage.chunbai.com`，由 Cloudflare Worker + Cloudflare D1 承载。
 - 生产 Worker：`aiusage-api`，Route 为 `aiusage.chunbai.com/*`；workers.dev 直连已关闭，Pages 项目已删除。
-- 生产备份：R2 bucket `aiusage-backups`；Worker 配置了每日维护和每月首日备份 Cron。
+- 生产备份：R2 bucket `aiusage-backups`；Worker 配置了每日维护和月度备份 Cron（UTC 每月 1 日 18:23，即上海时间每月 2 日 02:23）。
 - 数据库类型：Cloudflare D1，SQLite-compatible serverless SQL，不是 PostgreSQL。
 - VPN2 旧 AI Usage 后端已下线，不再参与读写链路。
 - 本机上报：macOS LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒运行 Python pusher。

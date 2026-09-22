@@ -4,11 +4,13 @@ public struct MobileSummaryClientConfig: Equatable, Sendable {
     public let baseURL: URL
     public let bearerToken: String?
     public let period: String
+    public let offset: Int
 
-    public init(baseURL: URL, bearerToken: String?, period: String) {
+    public init(baseURL: URL, bearerToken: String?, period: String, offset: Int = 0) {
         self.baseURL = baseURL
         self.bearerToken = bearerToken
         self.period = period
+        self.offset = offset
     }
 }
 
@@ -74,7 +76,7 @@ public struct MobileSummaryClient {
         guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
             throw MobileSummaryClientError.invalidURL
         }
-        components.queryItems = [URLQueryItem(name: "period", value: config.period)]
+        components.queryItems = [URLQueryItem(name: "period", value: config.period), URLQueryItem(name: "offset", value: String(config.offset))]
         guard let url = components.url else {
             throw MobileSummaryClientError.invalidURL
         }

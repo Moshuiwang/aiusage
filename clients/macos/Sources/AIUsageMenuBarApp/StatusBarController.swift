@@ -40,9 +40,8 @@ final class StatusBarController: NSObject {
         self.paths = paths
         self.quitApplication = quitApplication
         let config = MenuBarRuntimeConfigLoader.load(paths: paths)
-        let cached = SummaryCache.load(from: paths.cacheURL)
         let cachedSummaries = SummaryCache.loadSummaries(paths: paths)
-        self.model = MenuBarAppModel(paths: paths, config: config, cachedSummary: cached, cachedSummaries: cachedSummaries)
+        self.model = MenuBarAppModel(paths: paths, config: config, cachedSummaries: cachedSummaries)
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         setupStatusItem()
@@ -50,6 +49,7 @@ final class StatusBarController: NSObject {
         bindStatusTitle()
         startRefreshTimer()
         model.refresh()
+        if model.selection != MenuPeriodSelection(periodID: "today") { model.refreshToday() }
     }
 
     private func setupStatusItem() {
@@ -74,6 +74,8 @@ final class StatusBarController: NSObject {
         let hostingController = NSHostingController(
             rootView: MenuBarPopoverView(model: model, onQuit: { [weak self] in
                 self?.quitFromPopover()
+            }, onContentHeightChange: { [weak self] in
+                self?.updatePopoverSize()
             })
         )
         hostingController.view.wantsLayer = true
@@ -88,7 +90,7 @@ final class StatusBarController: NSObject {
     }
 
     private func bindStatusTitle() {
-        model.$summary
+        model.$todaySummary
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateStatusItemPresentation()
@@ -117,8 +119,8 @@ final class StatusBarController: NSObject {
             return
         }
         button.imagePosition = .noImage
-        button.title = MenuBarStatusItemPresentation.title(for: model.state)
-        button.toolTip = MenuBarStatusItemPresentation.tooltip(for: model.state)
+        button.title = model.todaySummary == nil ? "—" : MenuBarStatusItemPresentation.title(for: model.statusState)
+        button.toolTip = model.todaySummary == nil ? "AI Usage · 今日用量待加载" : MenuBarStatusItemPresentation.tooltip(for: model.statusState)
     }
 
     private func startRefreshTimer() {
@@ -127,7 +129,9 @@ final class StatusBarController: NSObject {
         }
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.model.refresh()
+                guard let self else { return }
+                if self.model.selection != MenuPeriodSelection(periodID: "today") { self.model.refresh(force: true) }
+                self.model.refreshToday()
             }
         }
     }

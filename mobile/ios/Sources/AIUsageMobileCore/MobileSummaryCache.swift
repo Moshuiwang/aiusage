@@ -64,7 +64,11 @@ public enum MobileSummaryCache {
     }
 
     public static func isCompanionEligible(_ summary: MobileSummary) -> Bool {
-        summary.period.id == companionPeriodID
+        guard summary.period.id == companionPeriodID,
+              let date = summary.period.date,
+              let generatedAt = summary.generatedAt,
+              let generated = parseGeneratedAt(generatedAt) else { return false }
+        return date == shanghaiDate(generated)
     }
 
     public static func isStale(
@@ -77,7 +81,15 @@ public enum MobileSummaryCache {
         else {
             return true
         }
-        return now.timeIntervalSince(generatedDate) > maxAge
+        return summary.period.date != shanghaiDate(now) || now.timeIntervalSince(generatedDate) > maxAge
+    }
+
+    static func shanghaiDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     public static func formattedGeneratedAt(_ value: String?) -> String {

@@ -5,6 +5,7 @@ import { Miniflare } from "miniflare";
 import { beforeEach, describe, expect, it } from "vitest";
 import { acquireWorker, applySchema, bundleWorker } from "./golden/harness";
 import { apiContractGoldenPath, fixedNow, repoRoot, token } from "./golden/paths";
+import { refreshDisplayRollups } from "../src/write-model/handlers";
 
 const staticRoot = path.join(repoRoot, "cloudflare/native-worker/static");
 // 仅属于登录 Cookie 行为测试，不是 golden 合同的共享输入。
@@ -492,6 +493,9 @@ describe.sequential("native TS Worker web surface", () => {
       await applySchema(setupDb);
       await seedMinimalUsage(setupDb);
       await seedHealthRows(setupDb);
+      // Cache eligibility requires a fully materialized read projection.
+      await refreshDisplayRollups(setupDb);
+      expect(await setupDb.prepare("SELECT count(*) AS n FROM usage_rollup_dirty_days").first("n")).toBe(0);
       const cookie = await sessionCookieHeader();
       const todayUrl = "http://native.test/api/summary?date=2026-06-03&period=today";
 
@@ -612,7 +616,7 @@ describe.sequential("native TS Worker empty-database read surface", () => {
     expect(body.period).toMatchObject({ id: "today", total_tokens: 0 });
     expect(body.sources).toEqual([]);
     expect(body.breakdown).toEqual({
-      by_machine: [], by_os_user: [], by_agent: [], by_model: [], by_date: [],
+      by_source: [], by_machine: [], by_os_user: [], by_agent: [], by_model: [], by_date: [],
     });
     expect(body.limits).toMatchObject({ observed_count: 0, total_count: 0, windows: [] });
     expect(body.provider_slots.map((slot: Record<string, any>) => [slot.provider, slot.usage.status, slot.quota.status]))

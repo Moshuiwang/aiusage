@@ -194,6 +194,23 @@ CREATE TABLE IF NOT EXISTS usage_hourly_facts (
   last_seen_at TEXT NOT NULL
 );
 
+-- Revision watermarks are separate from unchanged facts to avoid rewriting usage/rollups.
+-- Retain keys after authoritative deletion so delayed older batches cannot resurrect them.
+CREATE TABLE IF NOT EXISTS usage_fact_revisions (
+  source_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  client TEXT NOT NULL,
+  window_start TEXT NOT NULL,
+  window_end TEXT NOT NULL,
+  ai_provider TEXT NOT NULL,
+  ai_account_id TEXT NOT NULL,
+  attribution_confidence TEXT NOT NULL,
+  provenance TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  PRIMARY KEY (source_id, agent, client, window_start, window_end,
+               ai_provider, ai_account_id, attribution_confidence, provenance)
+);
+
 CREATE TABLE IF NOT EXISTS usage_hourly_models (
   fact_id TEXT NOT NULL,
   model TEXT NOT NULL,
@@ -332,3 +349,48 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_hourly_facts_unique_hour
     source_id, agent, client, window_start, window_end,
     ai_provider, ai_account_id, attribution_confidence, provenance
   );
+
+-- Durable authoritative coverage also protects keys never received before the scan.
+CREATE TABLE IF NOT EXISTS usage_reconciliation_ranges (
+  source_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  provenance TEXT NOT NULL,
+  coverage_start TEXT NOT NULL,
+  coverage_end TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  PRIMARY KEY (source_id, agent, provenance, coverage_start, coverage_end)
+);
+
+-- The queue is marked by canonical fact mutations in the same transaction.
+CREATE TABLE IF NOT EXISTS usage_rollup_dirty_days (
+  date TEXT NOT NULL PRIMARY KEY
+);
+
+CREATE TRIGGER IF NOT EXISTS usage_rollup_dirty_insert
+AFTER INSERT ON usage_hourly_facts
+BEGIN
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS usage_rollup_dirty_delete
+AFTER DELETE ON usage_hourly_facts
+BEGIN
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+END;
+
+CREATE TRIGGER IF NOT EXISTS usage_rollup_dirty_update
+AFTER UPDATE ON usage_hourly_facts
+WHEN OLD.source_id IS NOT NEW.source_id OR OLD.machine_id IS NOT NEW.machine_id
+  OR OLD.os_user IS NOT NEW.os_user OR OLD.ai_provider IS NOT NEW.ai_provider
+  OR OLD.ai_account_id IS NOT NEW.ai_account_id OR OLD.agent IS NOT NEW.agent
+  OR OLD.client IS NOT NEW.client OR OLD.window_start IS NOT NEW.window_start
+  OR OLD.window_end IS NOT NEW.window_end OR OLD.attribution_confidence IS NOT NEW.attribution_confidence
+  OR OLD.provenance IS NOT NEW.provenance OR OLD.input_tokens IS NOT NEW.input_tokens
+  OR OLD.output_tokens IS NOT NEW.output_tokens OR OLD.cache_creation_tokens IS NOT NEW.cache_creation_tokens
+  OR OLD.cache_read_tokens IS NOT NEW.cache_read_tokens OR OLD.reasoning_output_tokens IS NOT NEW.reasoning_output_tokens
+  OR OLD.total_tokens IS NOT NEW.total_tokens OR OLD.event_count IS NOT NEW.event_count
+  OR OLD.session_count IS NOT NEW.session_count
+BEGIN
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+END;

@@ -10,6 +10,7 @@ export interface SummaryRequest {
   account?: string | null;
   currentTime?: string | null;
   backendMode?: string | null;
+  offset?: number;
 }
 
 type DailyRow = {
@@ -123,8 +124,25 @@ function hasTimezoneDesignator(value: unknown): boolean {
   return /(?:Z|[+-]\d{2}:?\d{2})$/.test(str(value).trim());
 }
 
-function periodBounds(date: string, period: string): [Period, string | null, string] {
+function periodBounds(date: string, period: string, offset?: number): [Period, string | null, string] {
   const periodId: Period = ["today", "week", "month", "all"].includes(period) ? period as Period : "today";
+  if (offset !== undefined) {
+    // Offset navigation selects calendar periods. Existing date-only requests
+    // continue to describe their established rolling reporting windows.
+    const anchor = new Date(`${date}T12:00:00Z`);
+    let start: Date;
+    let end: Date;
+    if (periodId === "today") {
+      start = end = addDays(anchor, offset);
+    } else if (periodId === "week") {
+      start = addDays(anchor, -((anchor.getUTCDay() + 6) % 7) + offset * 7);
+      end = offset === 0 ? anchor : addDays(start, 6);
+    } else {
+      start = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + offset, 1, 12));
+      end = offset === 0 ? anchor : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 12));
+    }
+    return [periodId, formatDate(start), formatDate(end)];
+  }
   const end = parseDateOnly(date);
   if (periodId === "today") return [periodId, date, date];
   if (periodId === "week") return [periodId, formatDate(addDays(end, -6)), date];

@@ -6,6 +6,8 @@ const BACKUP_RETENTION_MONTHS = 12;
 
 const BACKUP_TABLES = [
   { name: "usage_hourly_facts", orderBy: "fact_id" },
+  { name: "usage_fact_revisions", orderBy: "source_id, agent, client, window_start, window_end, ai_provider, ai_account_id, attribution_confidence, provenance" },
+  { name: "usage_reconciliation_ranges", orderBy: "source_id, agent, provenance, coverage_start, coverage_end" },
   { name: "usage_hourly_models", orderBy: "fact_id, model" },
   { name: "machines", orderBy: "machine_id" },
   { name: "os_identities", orderBy: "machine_id, os_user" },
@@ -17,6 +19,7 @@ const BACKUP_TABLES = [
     orderBy: "date, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance",
   },
   { name: "d1_migrations", orderBy: "id" },
+  { name: "usage_rollup_dirty_days", orderBy: "date" },
 ] as const;
 
 export async function backupCanonicalTables(env: Env, scheduledTime: Date): Promise<void> {
@@ -24,12 +27,15 @@ export async function backupCanonicalTables(env: Env, scheduledTime: Date): Prom
     throw new Error("AIUSAGE_BACKUPS R2 binding is required for the monthly backup cron");
   }
   const exportedAt = scheduledTime.toISOString();
+  const snapshotId = crypto.randomUUID();
   const month = utcMonth(scheduledTime);
 
-  for (const table of BACKUP_TABLES) {
-    const result = await env.AIUSAGE_DB.prepare(
-      `SELECT * FROM ${table.name} ORDER BY ${table.orderBy}`,
-    ).all<Record<string, unknown>>();
+  // Freeze facts, revisions and pending recovery together before any R2 write.
+  const snapshots = await env.AIUSAGE_DB.batch<Record<string, unknown>>(
+    BACKUP_TABLES.map(table => env.AIUSAGE_DB.prepare(`SELECT * FROM ${table.name} ORDER BY ${table.orderBy}`)),
+  );
+  for (const [index, table] of BACKUP_TABLES.entries()) {
+    const result = snapshots[index];
     const rows = result.results ?? [];
     await env.AIUSAGE_BACKUPS.put(
       `backup/${month}/${table.name}.json`,
@@ -37,6 +43,7 @@ export async function backupCanonicalTables(env: Env, scheduledTime: Date): Prom
         schema_version: 1,
         table: table.name,
         exported_at: exportedAt,
+        snapshot_id: snapshotId,
         row_count: rows.length,
         rows,
       }, null, 2),

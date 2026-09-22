@@ -224,46 +224,6 @@ final class MobileSummaryTests: XCTestCase {
         XCTAssertTrue(state.home.trendPoints.isEmpty)
     }
 
-    func testPeriodSelectionKeepsVisibleSummaryWhenUncachedPeriodLoads() {
-        let visible = MobileSummary.empty(periodID: "week")
-
-        let decision = MobilePeriodSelection.decision(
-            selectedPeriodID: "month",
-            visibleSummary: visible,
-            cachedSummaries: [:],
-            isLoadingSelectedPeriod: false
-        )
-
-        XCTAssertEqual(decision, .keepVisibleSummary)
-    }
-
-    func testPeriodSelectionUsesCachedSummaryImmediately() {
-        let visible = MobileSummary.empty(periodID: "week")
-        let cached = MobileSummary.empty(periodID: "month")
-
-        let decision = MobilePeriodSelection.decision(
-            selectedPeriodID: "month",
-            visibleSummary: visible,
-            cachedSummaries: ["month": cached],
-            isLoadingSelectedPeriod: false
-        )
-
-        XCTAssertEqual(decision, .showCached(cached))
-    }
-
-    func testPeriodSelectionIgnoresCurrentLoadedPeriod() {
-        let visible = MobileSummary.empty(periodID: "week")
-
-        let decision = MobilePeriodSelection.decision(
-            selectedPeriodID: "week",
-            visibleSummary: visible,
-            cachedSummaries: [:],
-            isLoadingSelectedPeriod: false
-        )
-
-        XCTAssertEqual(decision, .ignore)
-    }
-
     func testTrendPointSelectionDefaultsToLastNonZeroPoint() {
         let points = [
             trendPoint(bucket: "09:00", tokens: 100),
@@ -350,23 +310,6 @@ final class MobileSummaryTests: XCTestCase {
                 $0.claudeTokens + $0.codexTokens + $0.unknownTokens == $0.tokens
             })
         }
-    }
-
-    func testMachineBreakdownBuildsUsefulDrilldownSections() throws {
-        let summary = try loadFixture()
-        let machine = try XCTUnwrap(summary.breakdown.byMachine.first { $0.label == "linux-dev" })
-        let sections = BreakdownDrilldown.sections(
-            for: machine,
-            dimension: .machine,
-            breakdown: summary.breakdown
-        )
-
-        XCTAssertEqual(sections.map(\.title), ["系统账户", "Agent", "Model", "Date"])
-        XCTAssertEqual(sections[0].rows.map(\.label), ["wang"])
-        XCTAssertEqual(sections[0].rows.map(\.tokens), [3_000])
-        XCTAssertEqual(sections[1].rows.map(\.label), ["codex"])
-        XCTAssertEqual(sections[2].rows.map(\.label), ["gpt-5"])
-        XCTAssertEqual(sections[3].rows.map(\.label), ["2026-06-02"])
     }
 
     func testCompanionCacheRejectsNonTodaySummaryForWidgets() throws {

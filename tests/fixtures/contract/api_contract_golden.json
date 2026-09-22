@@ -2366,6 +2366,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -2408,6 +2502,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -2482,6 +2577,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -2524,9 +2713,171 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "mac-local"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -2542,7 +2893,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },
@@ -4899,6 +5251,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -4941,6 +5387,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -4951,6 +5398,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -4993,6 +5534,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -5119,6 +5661,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -5161,6 +5797,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -5171,6 +5808,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -5213,9 +5944,326 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "mac-local"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "linux-dev-bob"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -5231,7 +6279,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },
@@ -7588,6 +8637,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -7630,6 +8773,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -7640,6 +8784,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -7682,6 +8920,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -7808,6 +9047,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -7850,6 +9183,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -7860,6 +9194,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -7902,9 +9330,326 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "mac-local"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "linux-dev-bob"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -7920,7 +9665,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },
@@ -10277,6 +12023,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -10319,6 +12159,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -10329,6 +12170,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -10371,6 +12306,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -10497,6 +12433,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -10539,6 +12569,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -10549,6 +12580,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -10591,9 +12716,326 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "mac-local"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "linux-dev-bob"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -10609,7 +13051,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },
@@ -13788,6 +16231,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -13830,6 +16367,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -13904,6 +16442,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -13946,9 +16578,171 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "linux-dev-bob"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -13964,7 +16758,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },
@@ -14580,6 +17375,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -14622,6 +17511,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -14696,6 +17586,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -14738,9 +17722,171 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 1,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "linux-dev-bob"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -14756,7 +17902,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },
@@ -17788,6 +20935,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -17830,6 +21071,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -17840,6 +21082,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -17882,6 +21218,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -18008,6 +21345,100 @@
                   "items": [
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -18050,6 +21481,7 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
@@ -18060,6 +21492,100 @@
                     },
                     {
                       "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
                         "contributions": {
                           "items": [
                             {
@@ -18102,9 +21628,326 @@
                         }
                       },
                       "keys": [
+                        "agents",
                         "contributions",
                         "id",
                         "label",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    }
+                  ],
+                  "length": 2,
+                  "type": "array"
+                },
+                "by_source": {
+                  "items": [
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "claude-sonnet"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "mac-local"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
+                        "source_ids",
+                        "tokens"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "fields": {
+                        "agents": {
+                          "items": [
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "claude"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [],
+                                  "length": 0,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "missing"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "fields": {
+                                "id": {
+                                  "type": "str",
+                                  "value": "codex"
+                                },
+                                "label": {
+                                  "type": "str"
+                                },
+                                "models": {
+                                  "items": [
+                                    {
+                                      "fields": {
+                                        "id": {
+                                          "type": "str",
+                                          "value": "gpt-5"
+                                        },
+                                        "label": {
+                                          "type": "str"
+                                        },
+                                        "status": {
+                                          "type": "str",
+                                          "value": "available"
+                                        },
+                                        "tokens": {
+                                          "type": "int"
+                                        }
+                                      },
+                                      "keys": [
+                                        "id",
+                                        "label",
+                                        "status",
+                                        "tokens"
+                                      ],
+                                      "type": "object"
+                                    }
+                                  ],
+                                  "length": 1,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "type": "str",
+                                  "value": "available"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "id",
+                                "label",
+                                "models",
+                                "status",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 2,
+                          "type": "array"
+                        },
+                        "contributions": {
+                          "items": [
+                            {
+                              "fields": {
+                                "source_id": {
+                                  "type": "str"
+                                },
+                                "tokens": {
+                                  "type": "int"
+                                }
+                              },
+                              "keys": [
+                                "source_id",
+                                "tokens"
+                              ],
+                              "type": "object"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "str",
+                          "value": "linux-dev-bob"
+                        },
+                        "label": {
+                          "type": "str"
+                        },
+                        "machine": {
+                          "type": "str"
+                        },
+                        "os_user": {
+                          "type": "str"
+                        },
+                        "source_ids": {
+                          "items": [
+                            {
+                              "type": "str"
+                            }
+                          ],
+                          "length": 1,
+                          "type": "array"
+                        },
+                        "tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "agents",
+                        "contributions",
+                        "id",
+                        "label",
+                        "machine",
+                        "os_user",
                         "source_ids",
                         "tokens"
                       ],
@@ -18120,7 +21963,8 @@
                 "by_date",
                 "by_machine",
                 "by_model",
-                "by_os_user"
+                "by_os_user",
+                "by_source"
               ],
               "type": "object"
             },

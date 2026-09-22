@@ -3,6 +3,7 @@ import Foundation
 public struct MenuBarState: Equatable, Sendable {
     public let statusTitle: String
     public let periodLabel: String
+    public let dateRangeText: String
     public let heroTotalText: String
     public let tokenBreakdownText: String
     public let healthText: String
@@ -102,6 +103,12 @@ public struct MenuDisplayRow: Equatable, Sendable, Identifiable {
     public let subtitle: String
     public let value: String
     public let status: String
+    public let agents: [MobileSourceAgent]?
+
+    public init(id: String, title: String, subtitle: String, value: String, status: String, agents: [MobileSourceAgent]? = nil) {
+        self.id = id; self.title = title; self.subtitle = subtitle
+        self.value = value; self.status = status; self.agents = agents
+    }
 }
 
 public struct MenuDisplaySection: Equatable, Sendable, Identifiable {
@@ -111,7 +118,7 @@ public struct MenuDisplaySection: Equatable, Sendable, Identifiable {
 }
 
 public enum MenuBarViewModel {
-    public static func build(from summary: MobileSummary, selectedPeriodID: String, now: Date = Date()) -> MenuBarState {
+    public static func build(from summary: MobileSummary, selectedPeriodID: String, selectedOffset: Int = 0, now: Date = Date()) -> MenuBarState {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
@@ -132,7 +139,8 @@ public enum MenuBarViewModel {
 
         return MenuBarState(
             statusTitle: tokenText,
-            periodLabel: periodLabel(selectedPeriodID),
+            periodLabel: selectedOffset == 0 ? periodLabel(selectedPeriodID) : (selectedPeriodID == "today" ? "历史日期" : selectedPeriodID == "week" ? "历史周" : "历史月"),
+            dateRangeText: dateRangeText(summary.period),
             heroTotalText: tokenText,
             tokenBreakdownText: [
                 "输入 \(TokenFormat.compact(summary.period.inputTokens))",
@@ -147,7 +155,7 @@ public enum MenuBarViewModel {
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
             trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
             trendMidText: maxTokens > 0 && midVal > 0 ? ceilingText(midVal) : "",
-            sources: sourceRows(summary.sources, byMachine: summary.breakdown.byMachine, generatedAt: summary.generatedAt),
+            sources: sourceRows(summary.sources, breakdown: summary.breakdown, generatedAt: summary.generatedAt),
             limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(
@@ -157,6 +165,12 @@ public enum MenuBarViewModel {
             ),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage)
         )
+    }
+
+    private static func dateRangeText(_ period: MobilePeriod) -> String {
+        if period.id == "today" { return period.date ?? "日期待加载" }
+        guard let start = period.startDate, let end = period.endDate else { return "日期待加载" }
+        return start == end ? start : "\(start) ～ \(end)"
     }
 
     private static func periodLabel(_ periodID: String) -> String {
@@ -307,42 +321,22 @@ public enum MenuBarViewModel {
         return bucket
     }
 
-    private static func sourceRows(_ sources: [MobileSource], byMachine: [MobileBreakdownRow], generatedAt: String?) -> [MenuDisplayRow] {
-        let sourceTokens = sourceTokensBySourceID(from: byMachine)
-        return sources
-            .compactMap { source -> (MenuDisplayRow, Int)? in
-                let tokens = sourceTokens[source.sourceID] ?? 0
-                if tokens == 0 { return nil }
-                let title = source.osUser ?? source.machine ?? source.sourceID
-                let timeStr = compactDateTime(source.lastObservedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
-                let machineStr = source.machine ?? ""
-                let platformStr = source.platform ?? ""
-                let subtitleParts = [machineStr, platformStr, timeStr].filter { !$0.isEmpty }
-                let row = MenuDisplayRow(
-                    id: source.sourceID,
-                    title: title.isEmpty ? source.sourceID : title,
-                    subtitle: subtitleParts.joined(separator: " · "),
-                    value: tokens > 0 ? TokenFormat.compact(tokens) : "正常",
-                    status: source.status
-                )
-                return (row, tokens)
-            }
-            .sorted { $0.1 > $1.1 }
-            .map { $0.0 }
-    }
-
-    private static func sourceTokensBySourceID(from rows: [MobileBreakdownRow]) -> [String: Int] {
-        var tokensBySourceID: [String: Int] = [:]
-        for row in rows where row.tokens > 0 {
-            if let contributions = row.contributions, !contributions.isEmpty {
-                for contribution in contributions where contribution.tokens > 0 {
-                    tokensBySourceID[contribution.sourceID, default: 0] += contribution.tokens
-                }
-            } else if let sourceIDs = row.sourceIDs, sourceIDs.count == 1, let sourceID = sourceIDs.first {
-                tokensBySourceID[sourceID, default: 0] += row.tokens
+    private static func sourceRows(_ sources: [MobileSource], breakdown: MobileBreakdown, generatedAt: String?) -> [MenuDisplayRow] {
+        if let rows = breakdown.bySource {
+            let metadata = Dictionary(sources.map { ($0.sourceID, $0) }, uniquingKeysWith: { first, _ in first })
+            return rows.map { row in
+                let source = metadata[row.id]
+                let time = compactDateTime(source?.lastObservedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
+                let subtitle = [row.machine ?? source?.machine ?? "", source?.platform ?? "", time].filter { !$0.isEmpty }.joined(separator: " · ")
+                return MenuDisplayRow(id: row.id, title: row.label, subtitle: subtitle,
+                    value: TokenFormat.compact(row.tokens), status: source?.status ?? "unknown", agents: row.agents)
             }
         }
-        return tokensBySourceID
+        let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
+        return rows.map { row in
+            MenuDisplayRow(id: row.id, title: row.label, subtitle: "来源明细缺失",
+                value: TokenFormat.compact(row.tokens), status: "missing", agents: nil)
+        }
     }
 
     private static func sourceQuality(_ sourceType: String?) -> Int {

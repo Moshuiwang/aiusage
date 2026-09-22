@@ -67,7 +67,8 @@ async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<
 async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, endDate: string, timezone: string): Promise<Record<string, unknown>[]> {
   const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
   const rollupTable = startDate === endDate ? "usage_hourly_rollups" : "usage_daily_rollups";
-  const rollupRows = await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive);
+  const pending = await hasPendingRollups(db, startDate, endDate);
+  const rollupRows = pending ? [] : await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive);
   if (rollupRows.length > 0) {
     const inPeriod = rollupRows.filter((row) =>
       accountHourlyRowInPeriod(row, startDate, endDate, timezone)
@@ -76,10 +77,26 @@ async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, 
       ? preferHistoricalDailyFallbackRows(inPeriod)
       : preferLegacyHourlyBackfillRows(inPeriod);
   }
-  return fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive)
-    .then((rows) => preferLegacyHourlyBackfillRows(
-      rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone))
-    ));
+  const facts = preferLegacyHourlyBackfillRows((await fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive))
+    .filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
+  if (rollupTable === "usage_daily_rollups") {
+    // Archived daily totals are themselves the retained historical source and
+    // may have no hourly facts. Keep their existing precedence during recovery.
+    const archived = (await fetchAccountRowsFromTable(db, "usage_daily_rollups", startInclusive, endExclusive))
+      .filter(row => row.provenance === "historical_ccusage_fallback_v1"
+        && accountHourlyRowInPeriod(row, startDate, endDate, timezone));
+    const archiveKeys = new Set(archived.map(row => itemKey(str(row.source_id), localDateFromWindowStart(row.window_start) ?? "", str(row.agent))));
+    const uncoveredFacts = facts.filter(row => !archiveKeys.has(itemKey(str(row.source_id), localDateFromWindowStart(row.window_start) ?? "", str(row.agent))));
+    return preferHistoricalDailyFallbackRows([...uncoveredFacts, ...archived]);
+  }
+  return facts;
+}
+
+export async function hasPendingRollups(db: D1Database, startDate: string | null = null, endDate: string | null = null): Promise<boolean> {
+  const row = await db.prepare(
+    "SELECT date FROM usage_rollup_dirty_days WHERE (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?) LIMIT 1",
+  ).bind(startDate, startDate, endDate, endDate).first();
+  return row !== null;
 }
 
 function preferHistoricalDailyFallbackRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
@@ -150,8 +167,8 @@ async function fetchAccountRowsFromTable(
   endExclusive: string,
 ): Promise<Record<string, unknown>[]> {
   const periodWhere = startInclusive === null
-    ? "f.window_start < ?"
-    : "f.window_start >= ? AND f.window_start < ?";
+    ? "julianday(f.window_start) < julianday(?)"
+    : "julianday(f.window_start) >= julianday(?) AND julianday(f.window_start) < julianday(?)";
   const params = startInclusive === null ? [endExclusive] : [startInclusive, endExclusive];
   const source = table === "usage_hourly_facts"
     ? "usage_hourly_facts f"
@@ -204,8 +221,8 @@ async function fetchHourlyModelRows(
 ): Promise<ModelRow[]> {
   const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
   const periodWhere = startInclusive === null
-    ? "f.window_start < ?"
-    : "f.window_start >= ? AND f.window_start < ?";
+    ? "julianday(f.window_start) < julianday(?)"
+    : "julianday(f.window_start) >= julianday(?) AND julianday(f.window_start) < julianday(?)";
   const params = startInclusive === null ? [endExclusive] : [startInclusive, endExclusive];
   const rows = await all<Record<string, unknown>>(
     db,

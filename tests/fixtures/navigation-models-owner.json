@@ -1,0 +1,879 @@
+{
+  "schema_version": 1,
+  "client": "ios",
+  "generated_at": "2026-09-22T12:00:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "period": {
+    "id": "today",
+    "date": "2026-09-22",
+    "start_date": "2026-09-22",
+    "end_date": "2026-09-22",
+    "total_tokens": 1000,
+    "input_tokens": 910,
+    "output_tokens": 60,
+    "cache_tokens": 30,
+    "cache_ratio": 3,
+    "machine": null,
+    "account": null
+  },
+  "trend": {
+    "period": "today",
+    "granularity": "hour",
+    "start_date": "2026-09-22",
+    "end_date": "2026-09-22",
+    "points": [
+      {
+        "bucket": "2026-09-22T00:00:00+08:00",
+        "label": "00:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T01:00:00+08:00",
+        "label": "01:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T02:00:00+08:00",
+        "label": "02:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T03:00:00+08:00",
+        "label": "03:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T04:00:00+08:00",
+        "label": "04:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T05:00:00+08:00",
+        "label": "05:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T06:00:00+08:00",
+        "label": "06:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T07:00:00+08:00",
+        "label": "07:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T08:00:00+08:00",
+        "label": "08:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T09:00:00+08:00",
+        "label": "09:00",
+        "tokens": 1000,
+        "input_tokens": 910,
+        "output_tokens": 60,
+        "cache_tokens": 30,
+        "cache_ratio": 3,
+        "claude_tokens": 300,
+        "codex_tokens": 700,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T10:00:00+08:00",
+        "label": "10:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T11:00:00+08:00",
+        "label": "11:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T12:00:00+08:00",
+        "label": "12:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T13:00:00+08:00",
+        "label": "13:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T14:00:00+08:00",
+        "label": "14:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T15:00:00+08:00",
+        "label": "15:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T16:00:00+08:00",
+        "label": "16:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T17:00:00+08:00",
+        "label": "17:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T18:00:00+08:00",
+        "label": "18:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T19:00:00+08:00",
+        "label": "19:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T20:00:00+08:00",
+        "label": "20:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T21:00:00+08:00",
+        "label": "21:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T22:00:00+08:00",
+        "label": "22:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-09-22T23:00:00+08:00",
+        "label": "23:00",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "unknown_tokens": 0
+      }
+    ]
+  },
+  "sources": [
+    {
+      "source_id": "model-linux",
+      "machine": "linux",
+      "os_user": "alice",
+      "platform": "linux",
+      "display_name": "linux · alice",
+      "status": "ok",
+      "last_observed_at": "2026-09-22T12:00:00+08:00",
+      "last_pushed_at": "2026-09-22T12:00:00+08:00",
+      "error_message": null,
+      "accuracy": {
+        "status": "unverified",
+        "collector_version": "0.2.0",
+        "matching_full_scans": 1,
+        "verified_at": null,
+        "agents": [
+          {
+            "agent": "codex",
+            "status": "unverified",
+            "collector_version": "0.2.0",
+            "parser_schema_version": 3,
+            "mode": "full-rescan",
+            "lookback_hours": null,
+            "coverage": {
+              "start": "2026-09-22T09:00:00+08:00",
+              "end": "2026-09-22T10:00:00+08:00"
+            },
+            "matching_full_scans": 1,
+            "scan_complete": true,
+            "read_errors": 0,
+            "unresolved_mismatch": 0,
+            "verified_at": null,
+            "observed_at": "2026-09-22T12:00:00+08:00"
+          }
+        ]
+      }
+    },
+    {
+      "source_id": "model-mac",
+      "machine": "mac",
+      "os_user": "alice",
+      "platform": "darwin",
+      "display_name": "mac · alice",
+      "status": "ok",
+      "last_observed_at": "2026-09-22T12:00:00+08:00",
+      "last_pushed_at": "2026-09-22T12:00:00+08:00",
+      "error_message": null,
+      "accuracy": {
+        "status": "unverified",
+        "collector_version": null,
+        "matching_full_scans": 1,
+        "verified_at": null,
+        "agents": [
+          {
+            "agent": "claude",
+            "status": "unverified",
+            "collector_version": "0.2.0",
+            "parser_schema_version": 2,
+            "mode": "full-rescan",
+            "lookback_hours": null,
+            "coverage": {
+              "start": "2026-09-22T09:00:00+08:00",
+              "end": "2026-09-22T10:00:00+08:00"
+            },
+            "matching_full_scans": 1,
+            "scan_complete": true,
+            "read_errors": 0,
+            "unresolved_mismatch": 0,
+            "verified_at": null,
+            "observed_at": "2026-09-22T12:00:00+08:00"
+          },
+          {
+            "agent": "codex",
+            "status": "unverified",
+            "collector_version": "0.2.0",
+            "parser_schema_version": 3,
+            "mode": "full-rescan",
+            "lookback_hours": null,
+            "coverage": {
+              "start": "2026-09-22T09:00:00+08:00",
+              "end": "2026-09-22T10:00:00+08:00"
+            },
+            "matching_full_scans": 1,
+            "scan_complete": true,
+            "read_errors": 0,
+            "unresolved_mismatch": 0,
+            "verified_at": null,
+            "observed_at": "2026-09-22T12:00:00+08:00"
+          }
+        ]
+      }
+    }
+  ],
+  "breakdown": {
+    "by_source": [
+      {
+        "id": "model-mac",
+        "label": "alice / mac",
+        "machine": "mac",
+        "os_user": "alice",
+        "tokens": 650,
+        "source_ids": [
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-mac",
+            "tokens": 650
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 300,
+            "status": "available",
+            "models": [
+              {
+                "id": "claude-opus",
+                "label": "claude-opus",
+                "tokens": 300,
+                "status": "available"
+              }
+            ]
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 350,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-6-luna",
+                "label": "gpt-6-luna",
+                "tokens": 200,
+                "status": "available"
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 100,
+                "status": "available"
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 50,
+                "status": "missing"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "model-linux",
+        "label": "alice / linux",
+        "machine": "linux",
+        "os_user": "alice",
+        "tokens": 350,
+        "source_ids": [
+          "model-linux"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 350
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 0,
+            "status": "missing",
+            "models": []
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 350,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-6-luna",
+                "label": "gpt-6-luna",
+                "tokens": 200,
+                "status": "available"
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 100,
+                "status": "available"
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 50,
+                "status": "missing"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "by_machine": [
+      {
+        "id": "mac",
+        "label": "mac",
+        "tokens": 650,
+        "source_ids": [
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-mac",
+            "tokens": 650
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 300,
+            "status": "available",
+            "models": [
+              {
+                "id": "claude-opus",
+                "label": "claude-opus",
+                "tokens": 300,
+                "status": "available"
+              }
+            ]
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 350,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-6-luna",
+                "label": "gpt-6-luna",
+                "tokens": 200,
+                "status": "available"
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 100,
+                "status": "available"
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 50,
+                "status": "missing"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "linux",
+        "label": "linux",
+        "tokens": 350,
+        "source_ids": [
+          "model-linux"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 350
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 0,
+            "status": "missing",
+            "models": []
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 350,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-6-luna",
+                "label": "gpt-6-luna",
+                "tokens": 200,
+                "status": "available"
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 100,
+                "status": "available"
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 50,
+                "status": "missing"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "by_os_user": [
+      {
+        "id": "alice",
+        "label": "alice",
+        "tokens": 1000,
+        "source_ids": [
+          "model-linux",
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 350
+          },
+          {
+            "source_id": "model-mac",
+            "tokens": 650
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 300,
+            "status": "available",
+            "models": [
+              {
+                "id": "claude-opus",
+                "label": "claude-opus",
+                "tokens": 300,
+                "status": "available"
+              }
+            ]
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 700,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-6-luna",
+                "label": "gpt-6-luna",
+                "tokens": 400,
+                "status": "available"
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 200,
+                "status": "available"
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 100,
+                "status": "missing"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "by_agent": [
+      {
+        "id": "codex",
+        "label": "codex",
+        "tokens": 700,
+        "source_ids": [
+          "model-linux",
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 350
+          },
+          {
+            "source_id": "model-mac",
+            "tokens": 350
+          }
+        ]
+      },
+      {
+        "id": "claude",
+        "label": "claude",
+        "tokens": 300,
+        "source_ids": [
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-mac",
+            "tokens": 300
+          }
+        ]
+      }
+    ],
+    "by_model": [
+      {
+        "id": "gpt-6-luna",
+        "label": "gpt-6-luna",
+        "tokens": 400,
+        "source_ids": [
+          "model-linux",
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 200
+          },
+          {
+            "source_id": "model-mac",
+            "tokens": 200
+          }
+        ]
+      },
+      {
+        "id": "claude-opus",
+        "label": "claude-opus",
+        "tokens": 300,
+        "source_ids": [
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-mac",
+            "tokens": 300
+          }
+        ]
+      },
+      {
+        "id": "gpt-6-sol",
+        "label": "gpt-6-sol",
+        "tokens": 200,
+        "source_ids": [
+          "model-linux",
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 100
+          },
+          {
+            "source_id": "model-mac",
+            "tokens": 100
+          }
+        ]
+      },
+      {
+        "id": "unknown",
+        "label": "unknown",
+        "tokens": 100,
+        "source_ids": [
+          "model-linux",
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 50
+          },
+          {
+            "source_id": "model-mac",
+            "tokens": 50
+          }
+        ]
+      }
+    ],
+    "by_date": [
+      {
+        "id": "2026-09-22",
+        "label": "2026-09-22",
+        "tokens": 1000,
+        "source_ids": [
+          "model-linux",
+          "model-mac"
+        ],
+        "contributions": [
+          {
+            "source_id": "model-linux",
+            "tokens": 350
+          },
+          {
+            "source_id": "model-mac",
+            "tokens": 650
+          }
+        ]
+      }
+    ]
+  },
+  "limits": {
+    "observed_count": 0,
+    "total_count": 0,
+    "windows": [],
+    "providers": []
+  },
+  "provider_slots": [
+    {
+      "provider": "claude",
+      "usage": {
+        "status": "available",
+        "total_tokens": 300,
+        "input_tokens": 300,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
+    },
+    {
+      "provider": "codex",
+      "usage": {
+        "status": "available",
+        "total_tokens": 700,
+        "input_tokens": 610,
+        "output_tokens": 60,
+        "cache_tokens": 30
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
+    }
+  ],
+  "provider_usage_coverage": {
+    "status": "complete",
+    "total_tokens": 1000,
+    "attributed_tokens": 1000,
+    "other_provider_tokens": 0,
+    "unattributed_tokens": 0
+  },
+  "metadata": {
+    "backend_mode": "native_d1_unknown",
+    "canonical_store": "cloudflare_d1",
+    "read_model_generated_at": "2026-09-22T12:00:00+08:00",
+    "freshness_status": "unknown",
+    "limits_observed_at": null
+  }
+}

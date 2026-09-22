@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -10,6 +11,16 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ai_usage_widget import cli
+
+
+def _prepare_source(repo: Path) -> None:
+    shutil.copytree(
+        Path(__file__).resolve().parents[1] / "src" / "ai_usage_widget",
+        repo / "src" / "ai_usage_widget",
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
+    (repo / "config").mkdir()
+    (repo / "config/limits.local.json").write_text('{"providers": []}', encoding="utf-8")
 
 
 class TestCliLimitsScheduler(unittest.TestCase):
@@ -49,6 +60,7 @@ class TestCliLimitsScheduler(unittest.TestCase):
             base = Path(tmpdir)
             repo = base / "repo"
             repo.mkdir()
+            _prepare_source(repo)
             stdout = io.StringIO()
             with patch.dict(os.environ, {"AI_USAGE_INGEST_TOKEN": "secret-token"}), redirect_stdout(stdout):
                 code = cli.main([
@@ -88,6 +100,7 @@ class TestCliLimitsScheduler(unittest.TestCase):
             base = Path(tmpdir)
             repo = base / "repo"
             repo.mkdir()
+            _prepare_source(repo)
             stdout = io.StringIO()
             with patch.dict(os.environ, {"AI_USAGE_INGEST_TOKEN": "secret-token"}), redirect_stdout(stdout):
                 code = cli.main([

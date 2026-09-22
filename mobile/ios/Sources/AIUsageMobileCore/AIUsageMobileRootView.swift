@@ -15,12 +15,16 @@ public struct AIUsageMobileRootView: View {
     private let onRefreshAsync: (String) async -> Void
     private let onSettingsTapped: () -> Void
     private let refreshingPeriodID: String?
+    private let selectedOffset: Int
+    private let onOffsetSelected: (Int) -> Void
     @State private var selectedPeriod: PeriodTab
 
     public init(
         summary: MobileSummary,
         initialTabID: String = "today",
         refreshingPeriodID: String? = nil,
+        selectedOffset: Int = 0,
+        onOffsetSelected: @escaping (Int) -> Void = { _ in },
         onPeriodSelected: @escaping (String) -> Void = { _ in },
         onRefresh: @escaping (String) -> Void = { _ in },
         onRefreshAsync: @escaping (String) async -> Void = { _ in },
@@ -32,6 +36,8 @@ public struct AIUsageMobileRootView: View {
         self.onRefresh = onRefresh
         self.onRefreshAsync = onRefreshAsync
         self.onSettingsTapped = onSettingsTapped
+        self.selectedOffset = selectedOffset
+        self.onOffsetSelected = onOffsetSelected
         self.refreshingPeriodID = refreshingPeriodID
         let pid = (initialTabID == "home" || initialTabID.isEmpty) ? summary.period.id : initialTabID
         self._selectedPeriod = State(initialValue: PeriodTab(id: pid.isEmpty ? "today" : pid))
@@ -44,6 +50,8 @@ public struct AIUsageMobileRootView: View {
                 state: state,
                 selectedPeriod: period,
                 refreshingPeriodID: refreshingPeriodID,
+                selection: MobileHistorySelection(period: period.id, offset: selectedOffset),
+                onOffsetSelected: onOffsetSelected,
                 onRefreshAsync: { await onRefreshAsync(period.periodID) },
                 onSettingsTapped: onSettingsTapped
             )
@@ -75,9 +83,8 @@ enum PeriodTab: String, Hashable {
     case today = "today"
     case week  = "week"
     case month = "month"
-    case all   = "all"
 
-    static let allCases: [PeriodTab] = [.today, .week, .month, .all]
+    static let allCases: [PeriodTab] = [.today, .week, .month]
 
     init(id: String) { self = PeriodTab(rawValue: id) ?? .today }
 
@@ -89,7 +96,6 @@ enum PeriodTab: String, Hashable {
         case .today: return "今天"
         case .week:  return "周"
         case .month: return "月"
-        case .all:   return "全部"
         }
     }
 
@@ -98,7 +104,6 @@ enum PeriodTab: String, Hashable {
         case .today: return "sun.max"
         case .week:  return "gauge.with.dots.needle.33percent"
         case .month: return "calendar.circle"
-        case .all:   return "list.bullet"
         }
     }
 }
@@ -156,6 +161,8 @@ struct PeriodScrollView: View {
     let state: MobileViewState
     let selectedPeriod: PeriodTab
     let refreshingPeriodID: String?
+    let selection: MobileHistorySelection
+    let onOffsetSelected: (Int) -> Void
     let onRefreshAsync: () async -> Void
     let onSettingsTapped: () -> Void
 
@@ -173,7 +180,16 @@ struct PeriodScrollView: View {
                     onRefresh: { Task { await onRefreshAsync() } }
                 )
 
-                PeriodHeroCard(state: state.home)
+                PeriodNavigationView(selection: selection, period: summary.period, onOffsetSelected: onOffsetSelected)
+                if summary.generatedAt == nil {
+                    Text(isLoadingThisPeriod ? "正在读取这个周期…" : "这个周期尚未加载")
+                        .font(.callout).foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 210)
+                } else {
+                    PeriodHeroCard(state: state.home)
+                    if summary.period.totalTokens == 0 {
+                        Text("这个周期暂无用量").font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
 
                 if !summary.limits.windows.isEmpty {
                     QuotaRingsCard(limits: summary.limits)
@@ -181,14 +197,13 @@ struct PeriodScrollView: View {
 
                 PeriodSourcesCard(
                     sources: state.sources,
-                    byMachine: state.breakdown.byMachine,
+                    rows: SourcesDisplayState.rows(in: state.breakdown),
                     generatedAt: summary.generatedAt,
                     timezone: summary.timezone
                 )
+                .id(selection.cacheKey)
 
-                if !state.breakdown.byModel.isEmpty {
-                    ModelUsageCard(rows: state.breakdown.byModel)
-                }
+
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 12)
@@ -202,6 +217,36 @@ struct PeriodScrollView: View {
                     .allowsHitTesting(false)
             }
         }
+    }
+}
+
+struct PeriodNavigationView: View {
+    let selection: MobileHistorySelection
+    let period: MobilePeriod
+    let onOffsetSelected: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button { onOffsetSelected(selection.earlier.offset) } label: {
+                Image(systemName: "chevron.left").frame(width: 44, height: 44)
+            }
+            .disabled(!selection.canGoEarlier)
+            .accessibilityLabel("更早一个周期")
+            VStack(spacing: 3) {
+                Text(MobilePeriodTitle.title(period, selection: selection))
+                    .font(.system(size: 15, weight: .semibold))
+                if selection.period != "today", let start = period.startDate, let end = period.endDate {
+                    Text("\(start) — \(end)").font(.caption2).foregroundStyle(.secondary)
+                }
+            }.frame(maxWidth: .infinity)
+            Button { onOffsetSelected(selection.later.offset) } label: {
+                Image(systemName: "chevron.right").frame(width: 44, height: 44)
+            }
+            .disabled(!selection.canGoLater)
+            .accessibilityLabel("更新一个周期")
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .contain)
     }
 }
 
@@ -698,86 +743,31 @@ private func providerInnerColor(_ provider: String) -> Color {
 
 struct PeriodSourcesCard: View {
     let sources: [MobileSource]
-    let byMachine: [MobileBreakdownRow]
+    let rows: [MobileBreakdownRow]
     let generatedAt: String?
     let timezone: String?
-    private var visibleRows: [MobileBreakdownRow] {
-        sourceUsageRows(sources: sources, byMachine: byMachine)
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("来源")
                 .font(.system(size: 11, weight: .semibold))
-                .textCase(.uppercase)
-                .tracking(0.4)
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-
-            if visibleRows.isEmpty {
-                Text("暂无来源数据")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 4)
+            if rows.isEmpty {
+                Text("暂无来源数据").font(.footnote).foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(visibleRows.enumerated()), id: \.element.id) { index, row in
-                        if index > 0 {
-                            Divider().padding(.leading, 17)
-                        }
-                        PeriodSourceRow(
-                            row: row,
-                            source: matchingSource(for: row),
-                            generatedAt: generatedAt,
-                            timezone: timezone
-                        )
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        if index > 0 { Divider() }
+                        PeriodSourceRow(row: row,
+                            source: sources.first { row.sourceIDs?.count == 1 && row.sourceIDs?.first == $0.sourceID },
+                            generatedAt: generatedAt, timezone: timezone)
                     }
                 }
-                .padding(.horizontal, 4)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardSurface()
-    }
-
-    private func matchingSource(for row: MobileBreakdownRow) -> MobileSource? {
-        sources.first { row.sourceIDs?.contains($0.sourceID) == true }
-            ?? sources.first { ($0.machine ?? $0.displayName ?? $0.sourceID) == row.label }
-    }
-
-    private func sourceUsageRows(sources: [MobileSource], byMachine: [MobileBreakdownRow]) -> [MobileBreakdownRow] {
-        var tokensBySource: [String: Int] = [:]
-        for machine in byMachine {
-            if let contributions = machine.contributions, !contributions.isEmpty {
-                for contribution in contributions {
-                    tokensBySource[contribution.sourceID, default: 0] += contribution.tokens
-                }
-            } else if let sourceIDs = machine.sourceIDs, sourceIDs.count == 1, let sourceID = sourceIDs.first {
-                tokensBySource[sourceID, default: 0] += machine.tokens
-            }
-        }
-
-        let sourceByID = Dictionary(uniqueKeysWithValues: sources.map { ($0.sourceID, $0) })
-        return tokensBySource
-            .filter { $0.value > 0 }
-            .map { sourceID, tokens in
-                let source = sourceByID[sourceID]
-                let label = source?.displayName ?? source?.osUser ?? source?.machine ?? sourceID
-                return MobileBreakdownRow(
-                    id: sourceID,
-                    label: label,
-                    tokens: tokens,
-                    sourceIDs: [sourceID],
-                    contributions: [MobileBreakdownContribution(sourceID: sourceID, tokens: tokens)]
-                )
-            }
-            .sorted {
-                if $0.tokens == $1.tokens {
-                    return $0.label.localizedStandardCompare($1.label) == .orderedAscending
-                }
-                return $0.tokens > $1.tokens
-            }
     }
 }
 
@@ -786,141 +776,70 @@ struct PeriodSourceRow: View {
     let source: MobileSource?
     let generatedAt: String?
     let timezone: String?
-    private var isOnline: Bool { source?.status == "ok" }
-
-    private var displayUser: String {
-        source?.osUser ?? source?.displayName ?? row.label
-    }
-
-    private var machineName: String {
-        source?.machine ?? source?.displayName ?? row.label
-    }
-
-    private var updateText: String {
-        SourceUpdateDateText.format(
-            source?.lastPushedAt ?? source?.lastObservedAt,
-            now: parsedGeneratedAt() ?? Date(),
-            timezone: timezone
-        )
-    }
+    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(isOnline ? Color.green : Color.orange)
-                    .frame(width: 7, height: 7)
-                Text(displayUser)
-                    .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer(minLength: 8)
-                Text(TokenFormat.compact(row.tokens))
-                    .font(.system(size: 13, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary.opacity(0.72))
-                    .layoutPriority(1)
-                    .fixedSize(horizontal: true, vertical: false)
+        DisclosureGroup(isExpanded: $isExpanded) {
+            if let agents = row.agents, !agents.isEmpty {
+                ForEach(agents) { agent in
+                    AgentUsageDisclosure(agent: agent)
+                }
+            } else {
+                Text("Agent / 模型明细缺失")
+                    .font(.footnote).foregroundStyle(.secondary).padding(.vertical, 8)
             }
-            HStack(spacing: 10) {
-                Text(machineName)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding(.leading, 17)
-                Spacer(minLength: 8)
-                Text(updateText)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                    .fixedSize(horizontal: true, vertical: false)
+        } label: {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 10) {
+                    Circle().fill(source?.status == "ok" ? Color.green : Color.orange).frame(width: 7, height: 7)
+                    Text(row.osUser ?? row.label).font(.system(size: 14, weight: .semibold))
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Text(TokenFormat.compact(row.tokens)).font(.system(size: 13, weight: .bold)).monospacedDigit()
+                        .layoutPriority(1).fixedSize(horizontal: true, vertical: false)
+                }
+                HStack {
+                    if let machine = row.machine ?? source?.machine {
+                        Text(machine).lineLimit(1).truncationMode(.middle)
+                    }
+                    Spacer(minLength: 8)
+                    Text(SourceUpdateDateText.format(source?.lastPushedAt ?? source?.lastObservedAt, timezone: timezone))
+                }
+                .font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 17)
             }
         }
+        .tint(.secondary)
         .padding(.vertical, 8)
     }
-
-    private func parsedGeneratedAt() -> Date? {
-        guard let generatedAt else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: generatedAt) { return date }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: generatedAt)
-    }
 }
 
-// MARK: - Model Usage Card
-
-struct ModelUsageCard: View {
-    let rows: [MobileBreakdownRow]
-    private var total: Int { rows.reduce(0) { $0 + $1.tokens } }
+struct AgentUsageDisclosure: View {
+    let agent: MobileAgentUsage
+    @State private var isExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("模型用量")
-                .font(.system(size: 11, weight: .semibold))
-                .textCase(.uppercase)
-                .tracking(0.4)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
-
-            VStack(spacing: 0) {
-                ForEach(Array(rows.prefix(5).enumerated()), id: \.element.id) { index, row in
-                    if index > 0 { Divider().padding(.leading, 40) }
-                    ModelUsageRow(row: row, total: total)
+        DisclosureGroup(isExpanded: $isExpanded) {
+            if agent.models.isEmpty {
+                Text("模型明细缺失").font(.footnote).foregroundStyle(.secondary)
+            } else {
+                ForEach(agent.models) { model in
+                    HStack {
+                        Text(model.displayLabel)
+                        Spacer()
+                        Text(model.usageText).monospacedDigit()
+                    }
+                    .font(.footnote).foregroundStyle(.secondary).padding(.vertical, 4)
                 }
             }
-            .padding(.horizontal, 4)
+        } label: {
+            HStack {
+                Text(agent.label)
+                Spacer()
+                Text(agent.usageText).monospacedDigit()
+            }
+            .font(.system(size: 13, weight: .medium))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .cardSurface()
-    }
-}
-
-struct ModelUsageRow: View {
-    let row: MobileBreakdownRow
-    let total: Int
-
-    private var pct: Int {
-        total > 0 ? Int((Double(row.tokens) / Double(total) * 100).rounded()) : 0
-    }
-    private var isAnthropic: Bool { row.label.lowercased().contains("claude") }
-    private var iconBg: Color {
-        isAnthropic ? BrandColor.claudeOrange.opacity(0.14) : Color.blue.opacity(0.12)
-    }
-
-    var body: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(iconBg)
-                    .frame(width: 30, height: 30)
-                BrandIcon(kind: BrandIcon.kind(for: row.label), size: 16)
-            }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.label)
-                    .font(.system(size: 13, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(isAnthropic ? "Anthropic" : "OpenAI")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(TokenFormat.compact(row.tokens))
-                    .font(.system(size: 13, weight: .semibold))
-                    .monospacedDigit()
-                Text("\(pct)%")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            }
-        }
-        .padding(.vertical, 9)
+        .padding(.leading, 17).padding(.vertical, 6)
     }
 }
 
@@ -1109,33 +1028,6 @@ func statusLabel(_ status: String) -> String {
     case "observed": return "可信"
     case "missing":  return "缺失"
     default:         return status
-    }
-}
-
-// MARK: - Breakdown Dimension (used by MobileViewModel)
-
-enum BreakdownDimension: CaseIterable {
-    static let allCases: [BreakdownDimension] = [.date, .machine, .account, .model, .agent]
-    case machine, account, agent, model, date
-
-    var label: String {
-        switch self {
-        case .machine: return "Machine"
-        case .account: return "OS User"
-        case .agent:   return "Agent"
-        case .model:   return "Model"
-        case .date:    return "Date"
-        }
-    }
-
-    var title: String {
-        switch self {
-        case .machine: return "按机器"
-        case .account: return "按系统账户"
-        case .agent:   return "按 Agent"
-        case .model:   return "按模型"
-        case .date:    return "按日期"
-        }
     }
 }
 

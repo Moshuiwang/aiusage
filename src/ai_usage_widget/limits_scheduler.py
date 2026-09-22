@@ -69,6 +69,7 @@ def install_limits_scheduler(
     if dry_run:
         return result
 
+    _validate_source_paths(config)
     config.token_env_file.parent.mkdir(parents=True, exist_ok=True)
     config.runner_path.parent.mkdir(parents=True, exist_ok=True)
     config.plist_path.parent.mkdir(parents=True, exist_ok=True)
@@ -96,6 +97,18 @@ def _validate_config(config: LimitsSchedulerConfig) -> None:
         raise ValueError("url must be http(s)")
     if not config.label.strip():
         raise ValueError("label is required")
+
+
+def _validate_source_paths(config: LimitsSchedulerConfig) -> None:
+    """源代码和配置缺失时，先拒绝安装，保留现有运行文件（#144）。"""
+    package = config.repo_dir / "src" / "ai_usage_widget"
+    for name, path in (
+        ("source_init", package / "__init__.py"),
+        ("source_cli", package / "cli.py"),
+        ("limits_config", config.limits_config),
+    ):
+        if not path.is_file():
+            raise ValueError(f"installation preflight failed: {name} must be a file: {path}")
 
 
 def _write_token_env(path: Path, token_env_name: str, token_value: str) -> None:
@@ -163,18 +176,16 @@ def _copy_runtime_files(config: LimitsSchedulerConfig) -> None:
     source_package = config.repo_dir / "src" / "ai_usage_widget"
     runtime_package = runtime_src_dir / "ai_usage_widget"
     runtime_src_dir.mkdir(parents=True, exist_ok=True)
-    if source_package.exists():
-        if runtime_package.exists():
-            shutil.rmtree(runtime_package)
-        shutil.copytree(
-            source_package,
-            runtime_package,
-            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
-        )
+    if runtime_package.exists():
+        shutil.rmtree(runtime_package)
+    shutil.copytree(
+        source_package,
+        runtime_package,
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
+    )
     runtime_limits_config.parent.mkdir(parents=True, exist_ok=True)
-    if config.limits_config.exists():
-        shutil.copy2(config.limits_config, runtime_limits_config)
-        runtime_limits_config.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    shutil.copy2(config.limits_config, runtime_limits_config)
+    runtime_limits_config.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
 def _runtime_src_dir(config: LimitsSchedulerConfig) -> Path:

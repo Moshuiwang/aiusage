@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import Any
 
 from .timezones import get_timezone
+from .usage_models import add_model_usage, finalize_model_usage, model_name
 
 
 PROVENANCE = "mswusage_claude_assistant_usage"
 COLLECTOR_VERSION = "0.2.0"
-PARSER_SCHEMA_VERSION = 1
+PARSER_SCHEMA_VERSION = 2
 TOKEN_FIELDS = (
     "input_tokens",
     "output_tokens",
@@ -151,6 +152,7 @@ def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = No
         event_key = _message_event_key(row, message, usage)
         event = {
             **normalized,
+            "model": model_name(message.get("model")),
             "event_key": event_key,
             "event_at": _format_datetime(event_at),
             "_event_at_sort": event_at.timestamp(),
@@ -259,13 +261,16 @@ def _new_bucket(base: dict) -> dict:
 
 
 def _add_usage(bucket: dict, event: dict) -> None:
+    add_model_usage(bucket, event, TOKEN_FIELDS)
     for field in TOKEN_FIELDS:
         bucket[field] += int(event.get(field) or 0)
     bucket["event_count"] += 1
 
 
 def _finalize_bucket(bucket: dict) -> dict:
-    return dict(bucket)
+    row = dict(bucket)
+    finalize_model_usage(row)
+    return row
 
 
 def _parse_timestamp(value: object, tz) -> datetime | None:

@@ -1,6 +1,9 @@
 import importlib.util
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
+from types import SimpleNamespace
 from pathlib import Path
 
 
@@ -67,6 +70,31 @@ class InstallMenuBarAppTests(unittest.TestCase):
             installer.default_repo_dir(),
             Path(__file__).resolve().parents[3],
         )
+
+    def test_install_uses_swift_reported_binary_instead_of_stale_legacy_path(self):
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory(prefix="mac-display-installer-") as directory:
+            root = Path(directory)
+            plan = installer.InstallPlan.default(repo_dir=root, home=root, install_dir=root / "Apps", runtime_dir=root / "runtime")
+            legacy = plan.package_dir / ".build" / "release" / installer.EXECUTABLE_NAME
+            actual_dir = plan.package_dir / ".build" / "out" / "Products" / "Release"
+            legacy.parent.mkdir(parents=True)
+            actual_dir.mkdir(parents=True)
+            legacy.write_bytes(b"old version")
+            (actual_dir / installer.EXECUTABLE_NAME).write_bytes(b"current built version")
+            commands = []
+
+            def run(command, **kwargs):
+                commands.append(command)
+                return SimpleNamespace(stdout=str(actual_dir) + "\n", returncode=0)
+
+            with patch.object(installer.subprocess, "run", side_effect=run):
+                installer.install(plan, server_url=None, token=None, dashboard_url=None, dry_run=False)
+            self.assertEqual(plan.executable_path.read_bytes(), b"current built version")
+            self.assertEqual(len(commands), 3)
+            self.assertEqual(commands[0], ["swift", "build", "-c", "release"])
+            self.assertEqual(commands[1], ["swift", "build", "-c", "release", "--show-bin-path"])
+            self.assertEqual(commands[2][0], "codesign")
 
     def test_sign_app_bundle_binds_the_stable_bundle_identity(self):
         installer = load_installer_module()

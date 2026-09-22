@@ -16,7 +16,6 @@ from pathlib import Path
 PRODUCTION_BASE_URL = "https://aiusage.chunbai.com"
 SUMMARY_SMOKE_PATH = "/api/mobile/summary?period=all"
 DEFAULT_DEVICE_ID = "00008140-0002792C1AFB001C"
-DEFAULT_DEVICECTL_ID = "EEA2E255-8C7E-50FB-A951-A9DE9B7E26C6"
 APP_BUNDLE_ID = "com.wangzhipeng.aiusage.mobile"
 
 
@@ -25,7 +24,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Build, verify, install, and launch the iOS app with live production config."
     )
     parser.add_argument("--device-id", default=DEFAULT_DEVICE_ID, help="xcodebuild destination device id")
-    parser.add_argument("--devicectl-id", default=DEFAULT_DEVICECTL_ID, help="devicectl device id")
+    parser.add_argument("--devicectl-id", default=None, help="devicectl id; defaults to --device-id")
     parser.add_argument("--token-env", default="AI_USAGE_INGEST_TOKEN", help="environment variable containing token")
     parser.add_argument("--token-file", default=None, help="0600 file containing token; never printed")
     parser.add_argument("--preflight-only", action="store_true", help="verify token and production API without building")
@@ -46,11 +45,16 @@ def main(argv: list[str] | None = None) -> int:
     try:
         xcconfig = write_temp_xcconfig(token)
         secret_paths.append(xcconfig)
-        app_path = build_app(project=project, device_id=args.device_id, xcconfig=xcconfig)
-        verify_built_app_config(app_path)
-        install_app(app_path=app_path, devicectl_id=args.devicectl_id)
-        if not args.skip_launch:
-            launch_app(devicectl_id=args.devicectl_id)
+        with tempfile.TemporaryDirectory(prefix="ai-usage-mobile-build-") as derived_directory:
+            app_path = build_app(
+                project=project, device_id=args.device_id, xcconfig=xcconfig,
+                derived_data=Path(derived_directory),
+            )
+            verify_built_app_config(app_path)
+            device = args.devicectl_id or args.device_id
+            install_app(app_path=app_path, devicectl_id=device)
+            if not args.skip_launch:
+                launch_app(devicectl_id=device)
     finally:
         cleanup_secret_files(secret_paths)
 
@@ -118,7 +122,8 @@ def write_temp_xcconfig(token: str) -> Path:
     return path
 
 
-def build_app(project: Path, device_id: str, xcconfig: Path) -> Path:
+def build_app(project: Path, device_id: str, xcconfig: Path, derived_data: Path | None = None) -> Path:
+    derived_data = derived_data or Path(tempfile.mkdtemp(prefix="ai-usage-mobile-build-"))
     command = [
         "xcodebuild",
         "-project",
@@ -131,25 +136,17 @@ def build_app(project: Path, device_id: str, xcconfig: Path) -> Path:
         "Debug",
         "-xcconfig",
         str(xcconfig),
+        "-derivedDataPath",
+        str(derived_data),
         "clean",
         "build",
     ]
     run(command)
-    app_path = latest_built_app()
+    app_path = derived_data / "Build" / "Products" / "Debug-iphoneos" / "AIUsageMobileApp.app"
+    if not app_path.is_dir():
+        raise RuntimeError("built app not found in this build's derived data")
     print(f"真机包构建完成：{app_path}")
     return app_path
-
-
-def latest_built_app() -> Path:
-    derived_data = Path.home() / "Library" / "Developer" / "Xcode" / "DerivedData"
-    candidates = sorted(
-        derived_data.glob("AIUsageMobile-*/Build/Products/Debug-iphoneos/AIUsageMobileApp.app"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    if not candidates:
-        raise RuntimeError("built app not found")
-    return candidates[0]
 
 
 def verify_built_app_config(app_path: Path) -> None:
@@ -159,7 +156,7 @@ def verify_built_app_config(app_path: Path) -> None:
     token = info.get("AIUsageAPIToken")
     token_length = len(token or "")
     if base_url != PRODUCTION_BASE_URL:
-        raise RuntimeError(f"refusing to install: AIUsageAPIBaseURL is {base_url!r}")
+        raise RuntimeError("refusing to install: AIUsageAPIBaseURL is not the production endpoint")
     if token_length <= 0:
         raise RuntimeError("refusing to install: AIUsageAPIToken is empty")
     print(f"App 包配置验证通过：baseURL={base_url} token_length={token_length}")
@@ -178,8 +175,17 @@ def launch_app(devicectl_id: str) -> None:
 def run(command: list[str]) -> None:
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if result.returncode != 0:
-        sys.stdout.write(result.stdout)
-        raise RuntimeError(f"command failed: {command[0]}")
+        # Xcode can echo build settings containing the embedded API token.
+        # Keep only allowlisted metadata; raw output is neither printed nor persisted.
+        tool = Path(command[0]).name
+        safe_tool = tool if tool in {"xcodebuild", "xcrun"} else "external_command"
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", prefix="ai-usage-mobile-error-", suffix=".json", delete=False
+        ) as log:
+            os.fchmod(log.fileno(), 0o600)
+            json.dump({"tool": safe_tool, "exit_code": result.returncode, "raw_output_omitted": True}, log)
+            log_path = log.name
+        raise RuntimeError(f"{safe_tool} failed (exit {result.returncode}); safe diagnostic: {log_path}")
 
 
 def cleanup_secret_files(paths: list[Path]) -> None:

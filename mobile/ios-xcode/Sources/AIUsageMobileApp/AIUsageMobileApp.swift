@@ -77,27 +77,27 @@ struct LiveSummaryContainerView: View {
     let initialTabID: String
     private let usesDeterministicFixture: Bool
     @Environment(\.scenePhase) private var scenePhase
-    // Widget runtime config sharing requires explicit App Group + Keychain access group design and is intentionally deferred.
     private let tokenStore = KeychainTokenStore()
-    @State private var summary: MobileSummary
+    @State private var history: MobileHistoryState
     @State private var loadState: LoadState
-    @State private var latestRequestID = UUID()
-    @State private var cachedSummaries: [String: MobileSummary] = [:]
     @State private var isShowingSettings = false
     @State private var hasCompletedInitialLoad = false
+    private var summary: MobileSummary { history.summary }
 
     init(initialTabID: String) {
-        self.initialTabID = initialTabID
-        let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
+        let initialPeriod = ["today", "week", "month"].contains(initialTabID)
+            ? initialTabID : MobileSummaryRuntimeConfig.initialPeriod()
+        self.initialTabID = initialPeriod
         #if DEBUG
         let fixtureEnabled = ProcessInfo.processInfo.environment["AI_USAGE_DETERMINISTIC_FIXTURE"] == "1"
         #else
         let fixtureEnabled = false
         #endif
         self.usesDeterministicFixture = fixtureEnabled
-        self._summary = State(initialValue: fixtureEnabled
-            ? MobileSummary.deterministicTrendFixture(periodID: initialPeriod)
-            : .empty(periodID: initialPeriod))
+        self._history = State(initialValue: MobileHistoryState(
+            selection: MobileHistorySelection(period: initialPeriod),
+            summary: fixtureEnabled ? MobileSummary.deterministicTrendFixture(periodID: initialPeriod) : nil
+        ))
         self._loadState = State(initialValue: fixtureEnabled ? .live : .loading(period: initialPeriod))
     }
 
@@ -106,152 +106,97 @@ struct LiveSummaryContainerView: View {
             summary: summary,
             initialTabID: initialTabID,
             refreshingPeriodID: loadState.refreshingPeriodID,
+            selectedOffset: history.selection.offset,
+            onOffsetSelected: { offset in
+                select(MobileHistorySelection(period: history.selection.period, offset: offset))
+            },
             onPeriodSelected: { period in
-                if usesDeterministicFixture {
-                    summary = MobileSummary.deterministicTrendFixture(periodID: period)
-                } else {
-                    Task { await loadLiveSummary(period: period, refreshSource: .foregroundInitialLoad) }
-                }
+                select(MobileHistorySelection(period: period))
             },
-            onRefresh: { period in
-                Task { await refreshLiveSummary(period: period, refreshSource: .pullToRefresh) }
-            },
-            onRefreshAsync: { period in
+            onRefreshAsync: { _ in
                 guard !usesDeterministicFixture else { return }
-                await refreshLiveSummary(period: period, refreshSource: .pullToRefresh)
-                // Pull-to-refresh failures are silent — don't leave the error banner on screen
-                if case .failed = loadState { loadState = .live }
+                await refreshLiveSummary(refreshSource: .pullToRefresh)
             },
-            onSettingsTapped: {
-                isShowingSettings = true
-            }
+            onSettingsTapped: { isShowingSettings = true }
         )
-            .overlay(alignment: .top) {
-                if let message = loadState.message {
-                    ProductionConnectionStatusView(message: message)
-                        .padding(.top, 8)
-                        .padding(.horizontal, 14)
-                }
+        .overlay(alignment: .top) {
+            if let message = loadState.message {
+                ProductionConnectionStatusView(message: message)
+                    .padding(.top, 8).padding(.horizontal, 14)
             }
-            .sheet(isPresented: $isShowingSettings) {
-                MobileServerSettingsView(
-                    tokenStore: tokenStore,
-                    period: summary.period.id
-                ) {
-                    Task { await refreshLiveSummary(period: summary.period.id, refreshSource: .settingsTriggeredRefresh) }
-                }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            MobileServerSettingsView(tokenStore: tokenStore, period: history.selection.period) {
+                Task { await refreshLiveSummary(refreshSource: .settingsTriggeredRefresh) }
             }
-            .task {
-                guard !usesDeterministicFixture else {
-                    hasCompletedInitialLoad = true
-                    return
-                }
-                scheduleWatchSummaryBackgroundRefresh()
-                let initialPeriod = MobileSummaryRuntimeConfig.initialPeriod()
-                await loadLiveSummary(period: initialPeriod, refreshSource: .foregroundInitialLoad)
-                await ensureTodayCompanionSummary(visiblePeriod: initialPeriod)
+        }
+        .task {
+            guard !usesDeterministicFixture else {
                 hasCompletedInitialLoad = true
+                return
             }
-            .onChange(of: scenePhase) { _, phase in
-                guard !usesDeterministicFixture, phase == .active, hasCompletedInitialLoad else {
-                    return
-                }
-                Task {
-                    await refreshLiveSummary(period: summary.period.id, refreshSource: .foregroundInitialLoad)
-                    await ensureTodayCompanionSummary(visiblePeriod: summary.period.id)
-                }
+            WatchSummaryBackgroundRefresh.schedule()
+            await refreshLiveSummary(refreshSource: .foregroundInitialLoad)
+            await ensureTodayCompanionSummary()
+            hasCompletedInitialLoad = true
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard !usesDeterministicFixture, phase == .active, hasCompletedInitialLoad else { return }
+            Task {
+                await refreshLiveSummary(refreshSource: .foregroundInitialLoad)
+                await ensureTodayCompanionSummary()
             }
+        }
     }
 
-    private func loadLiveSummary(period: String, refreshSource: MobileRefreshSource) async {
-        switch MobilePeriodSelection.decision(
-            selectedPeriodID: period,
-            visibleSummary: summary,
-            cachedSummaries: cachedSummaries,
-            isLoadingSelectedPeriod: loadState.refreshingPeriodID == period
-        ) {
-        case .ignore:
+    private func select(_ selection: MobileHistorySelection) {
+        let requestID = history.begin(selection)
+        if usesDeterministicFixture {
+            history.accept(MobileSummary.deterministicTrendFixture(periodID: selection.period), requestID: requestID)
             return
-        case .showCached(let cachedSummary):
-            withAnimation(.snappy(duration: 0.18)) {
-                summary = cachedSummary
-            }
-        case .keepVisibleSummary:
-            break
         }
+        loadState = .loading(period: selection.period)
+        Task { await loadLiveSummary(selection: selection, requestID: requestID, refreshSource: .foregroundInitialLoad) }
+    }
 
-        let requestID = UUID()
-        latestRequestID = requestID
-        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
+    private func refreshLiveSummary(refreshSource: MobileRefreshSource) async {
+        let selection = history.selection
+        let requestID = history.begin(selection)
+        loadState = .loading(period: selection.period)
+        await loadLiveSummary(selection: selection, requestID: requestID, refreshSource: refreshSource)
+    }
+
+    private func loadLiveSummary(selection: MobileHistorySelection, requestID: UUID, refreshSource: MobileRefreshSource) async {
+        let period = selection.period
+        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(
+            period: period, offset: selection.offset, tokenStore: tokenStore
+        ) else {
+            guard history.requestID == requestID else { return }
             MobileRuntimeDiagnostics.configurationRequired(period: period, refreshSource: refreshSource)
             loadState = .configurationRequired
             return
         }
-        withAnimation(.easeInOut(duration: 0.16)) {
-            loadState = .loading(period: period)
-        }
         do {
             let loadedSummary = try await MobileSummaryAPIClient(config: config).load()
-            guard latestRequestID == requestID else {
+            guard history.requestID == requestID else { return }
+            guard loadedSummary.period.id == period else { throw MobileSummaryAPIError.invalidResponse }
+            guard history.accept(loadedSummary, requestID: requestID) else {
+                // The service's relative dates changed while this request was in flight.
+                await refreshLiveSummary(refreshSource: refreshSource)
                 return
             }
-            let companionEvidence = shareWithCompanionIfNeeded(loadedSummary)
+            let companionEvidence = selection.isCurrentDay
+                ? shareWithCompanionIfNeeded(loadedSummary)
+                : CompanionShareEvidence(cacheWriteResult: nil, watchPushResult: nil)
             MobileRuntimeDiagnostics.success(
-                config: config,
-                summary: loadedSummary,
-                refreshSource: refreshSource,
+                config: config, summary: loadedSummary, refreshSource: refreshSource,
                 cacheWriteResult: companionEvidence.cacheWriteResult,
                 watchPushStatus: companionEvidence.watchPushResult?.status.rawValue,
                 watchPushReason: companionEvidence.watchPushResult?.reason.rawValue
             )
-            cachedSummaries[loadedSummary.period.id] = loadedSummary
-            withAnimation(.snappy(duration: 0.45)) {
-                summary = loadedSummary
-                loadState = .live
-            }
+            withAnimation(.snappy(duration: 0.25)) { loadState = .live }
         } catch {
-            guard latestRequestID == requestID else {
-                return
-            }
-            MobileRuntimeDiagnostics.failure(period: period, config: config, error: error, refreshSource: refreshSource)
-            loadState = .failed
-        }
-    }
-
-    private func refreshLiveSummary(period: String, refreshSource: MobileRefreshSource) async {
-        let requestID = UUID()
-        latestRequestID = requestID
-        guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(period: period, tokenStore: tokenStore) else {
-            MobileRuntimeDiagnostics.configurationRequired(period: period, refreshSource: refreshSource)
-            loadState = .configurationRequired
-            return
-        }
-        withAnimation(.easeInOut(duration: 0.16)) {
-            loadState = .loading(period: period)
-        }
-        do {
-            let loadedSummary = try await MobileSummaryAPIClient(config: config).load()
-            guard latestRequestID == requestID else {
-                return
-            }
-            let companionEvidence = shareWithCompanionIfNeeded(loadedSummary)
-            MobileRuntimeDiagnostics.success(
-                config: config,
-                summary: loadedSummary,
-                refreshSource: refreshSource,
-                cacheWriteResult: companionEvidence.cacheWriteResult,
-                watchPushStatus: companionEvidence.watchPushResult?.status.rawValue,
-                watchPushReason: companionEvidence.watchPushResult?.reason.rawValue
-            )
-            cachedSummaries[loadedSummary.period.id] = loadedSummary
-            withAnimation(.snappy(duration: 0.45)) {
-                summary = loadedSummary
-                loadState = .live
-            }
-        } catch {
-            guard latestRequestID == requestID else {
-                return
-            }
+            guard history.fail(requestID: requestID) else { return }
             MobileRuntimeDiagnostics.failure(period: period, config: config, error: error, refreshSource: refreshSource)
             loadState = .failed
         }
@@ -263,48 +208,29 @@ struct LiveSummaryContainerView: View {
         }
         let cacheWriteResult = MobileSummaryCache.writeToAppGroup(loadedSummary)
         let watchPushResult = WatchSummaryBridge.shared.push(loadedSummary)
-        scheduleWatchSummaryBackgroundRefresh()
+        WatchSummaryBackgroundRefresh.schedule()
         return CompanionShareEvidence(cacheWriteResult: cacheWriteResult, watchPushResult: watchPushResult)
     }
 
-    private func scheduleWatchSummaryBackgroundRefresh() {
-        WatchSummaryBackgroundRefresh.schedule()
-    }
-
-    private func ensureTodayCompanionSummary(visiblePeriod: String) async {
-        guard visiblePeriod != MobileSummaryCache.companionPeriodID else {
-            return
-        }
+    private func ensureTodayCompanionSummary() async {
+        guard !history.selection.isCurrentDay else { return }
         guard let config = MobileSummaryRuntimeConfig.makeAPIConfig(
-            period: MobileSummaryCache.companionPeriodID,
-            tokenStore: tokenStore
-        ) else {
-            MobileRuntimeDiagnostics.configurationRequired(
-                period: MobileSummaryCache.companionPeriodID,
-                refreshSource: .companionTodayEnsure
-            )
-            return
-        }
+            period: MobileSummaryCache.companionPeriodID, offset: 0, tokenStore: tokenStore
+        ) else { return }
         do {
             let loadedSummary = try await MobileSummaryAPIClient(config: config).load()
             let companionEvidence = shareWithCompanionIfNeeded(loadedSummary)
             MobileRuntimeDiagnostics.success(
-                config: config,
-                summary: loadedSummary,
-                refreshSource: .companionTodayEnsure,
+                config: config, summary: loadedSummary, refreshSource: .companionTodayEnsure,
                 cacheWriteResult: companionEvidence.cacheWriteResult,
                 watchPushStatus: companionEvidence.watchPushResult?.status.rawValue,
                 watchPushReason: companionEvidence.watchPushResult?.reason.rawValue
             )
-            cachedSummaries[loadedSummary.period.id] = loadedSummary
         } catch {
             MobileRuntimeDiagnostics.failure(
-                period: MobileSummaryCache.companionPeriodID,
-                config: config,
-                error: error,
-                refreshSource: .companionTodayEnsure
+                period: MobileSummaryCache.companionPeriodID, config: config,
+                error: error, refreshSource: .companionTodayEnsure
             )
-            return
         }
     }
 }

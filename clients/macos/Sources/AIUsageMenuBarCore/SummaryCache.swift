@@ -32,21 +32,17 @@ public enum SummaryCache {
         try data.write(to: url, options: Data.WritingOptions.atomic)
     }
 
-    public static func loadSummaries(paths: RuntimePaths, periods: [String] = ["today", "week", "month", "all"]) -> [String: CachedMenuSummary] {
+    public static func loadSummaries(paths: RuntimePaths, periods: [String] = MenuPeriodSelection.periodIDs) -> [String: CachedMenuSummary] {
         var summaries: [String: CachedMenuSummary] = [:]
         for period in periods {
             if let cached = loadCachedSummary(from: paths.cacheURL(forPeriod: period)) {
                 summaries[period] = cached
             }
         }
-        if let legacy = loadCachedSummary(from: paths.cacheURL), summaries[legacy.summary.period.id] == nil {
-            summaries[legacy.summary.period.id] = legacy
-        }
         return summaries
     }
 
-    public static func save(_ summary: MobileSummary, paths: RuntimePaths) throws {
-        try save(summary, to: paths.cacheURL(forPeriod: summary.period.id))
-        try save(summary, to: paths.cacheURL)
+    public static func save(_ summary: MobileSummary, paths: RuntimePaths, offset: Int = 0) throws {
+        try save(summary, to: paths.cacheURL(forPeriod: summary.period.id, offset: offset))
     }
 }

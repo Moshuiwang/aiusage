@@ -74,6 +74,10 @@ public struct QuotaWindowDisplayState: Equatable, Sendable {
 }
 
 public enum SourcesDisplayState {
+    public static func rows(in breakdown: MobileBreakdown) -> [MobileBreakdownRow] {
+        visibleRows(breakdown.bySource ?? breakdown.byMachine)
+    }
+
     public static func visibleRows(_ rows: [MobileBreakdownRow]) -> [MobileBreakdownRow] {
         rows.filter { $0.tokens > 0 }
     }
@@ -182,29 +186,6 @@ public struct MobileViewState: Equatable, Sendable {
     public let limits: MobileLimits
 }
 
-public enum MobilePeriodSelectionDecision: Equatable, Sendable {
-    case ignore
-    case showCached(MobileSummary)
-    case keepVisibleSummary
-}
-
-public enum MobilePeriodSelection {
-    public static func decision(
-        selectedPeriodID: String,
-        visibleSummary: MobileSummary,
-        cachedSummaries: [String: MobileSummary],
-        isLoadingSelectedPeriod: Bool
-    ) -> MobilePeriodSelectionDecision {
-        if selectedPeriodID == visibleSummary.period.id && !isLoadingSelectedPeriod {
-            return .ignore
-        }
-        if let cached = cachedSummaries[selectedPeriodID] {
-            return .showCached(cached)
-        }
-        return .keepVisibleSummary
-    }
-}
-
 public enum MobileViewModel {
     public static func build(from summary: MobileSummary) -> MobileViewState {
         let visibleMachineRows = SourcesDisplayState.visibleRows(summary.breakdown.byMachine)
@@ -215,7 +196,8 @@ public enum MobileViewModel {
             byOSUser: summary.breakdown.byOSUser,
             byAgent: summary.breakdown.byAgent,
             byModel: summary.breakdown.byModel,
-            byDate: summary.breakdown.byDate
+            byDate: summary.breakdown.byDate,
+            bySource: summary.breakdown.bySource
         )
         let failedSources = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }
         let okSources = visibleSources.filter { $0.status == "ok" }
@@ -388,110 +370,5 @@ public enum TrendChartPresentation {
             codex: "Codex \(TokenFormat.full(point.codexTokens))",
             unknown: "未知 \(TokenFormat.full(point.unknownTokens))"
         )
-    }
-}
-
-struct BreakdownDrilldownSection: Equatable, Sendable, Identifiable {
-    var id: String { title }
-    let title: String
-    let rows: [MobileBreakdownRow]
-}
-
-enum BreakdownDrilldown {
-    static func sections(
-        for row: MobileBreakdownRow,
-        dimension: BreakdownDimension,
-        breakdown: MobileBreakdown
-    ) -> [BreakdownDrilldownSection] {
-        let sourceIDs = Set(row.sourceIDs ?? [])
-        let candidates: [(String, [MobileBreakdownRow])] = {
-            switch dimension {
-            case .machine:
-                return [
-                    ("系统账户", breakdown.byOSUser),
-                    ("Agent", breakdown.byAgent),
-                    ("Model", breakdown.byModel),
-                    ("Date", breakdown.byDate)
-                ]
-            case .account:
-                return [
-                    ("Machine", breakdown.byMachine),
-                    ("Agent", breakdown.byAgent),
-                    ("Model", breakdown.byModel),
-                    ("Date", breakdown.byDate)
-                ]
-            case .agent:
-                return [
-                    ("Machine", breakdown.byMachine),
-                    ("系统账户", breakdown.byOSUser),
-                    ("Model", breakdown.byModel),
-                    ("Date", breakdown.byDate)
-                ]
-            case .model:
-                return [
-                    ("Machine", breakdown.byMachine),
-                    ("系统账户", breakdown.byOSUser),
-                    ("Agent", breakdown.byAgent),
-                    ("Date", breakdown.byDate)
-                ]
-            case .date:
-                return [
-                    ("Machine", breakdown.byMachine),
-                    ("系统账户", breakdown.byOSUser),
-                    ("Agent", breakdown.byAgent),
-                    ("Model", breakdown.byModel)
-                ]
-            }
-        }()
-
-        return candidates.compactMap { title, rows in
-            let filtered = scopedRows(rows: rows, sourceIDs: sourceIDs, excluding: row)
-            guard !filtered.isEmpty else {
-                return nil
-            }
-            return BreakdownDrilldownSection(title: title, rows: filtered)
-        }
-    }
-
-    private static func scopedRows(
-        rows: [MobileBreakdownRow],
-        sourceIDs: Set<String>,
-        excluding selectedRow: MobileBreakdownRow
-    ) -> [MobileBreakdownRow] {
-        let scoped = rows.compactMap { row -> MobileBreakdownRow? in
-            guard row.id != selectedRow.id else {
-                return nil
-            }
-            guard !sourceIDs.isEmpty else {
-                return row
-            }
-
-            if let contributions = row.contributions, !contributions.isEmpty {
-                let matches = contributions.filter { sourceIDs.contains($0.sourceID) }
-                let tokens = matches.reduce(0) { $0 + $1.tokens }
-                guard tokens > 0 else {
-                    return nil
-                }
-                return MobileBreakdownRow(
-                    id: row.id,
-                    label: row.label,
-                    tokens: tokens,
-                    sourceIDs: matches.map(\.sourceID).sorted(),
-                    contributions: matches
-                )
-            }
-
-            let rowSourceIDs = Set(row.sourceIDs ?? [])
-            guard !rowSourceIDs.isDisjoint(with: sourceIDs) else {
-                return nil
-            }
-            return row
-        }
-        return scoped.sorted {
-            if $0.tokens == $1.tokens {
-                return $0.label.localizedStandardCompare($1.label) == .orderedAscending
-            }
-            return $0.tokens > $1.tokens
-        }
     }
 }

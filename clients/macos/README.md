@@ -46,6 +46,10 @@ python3 clients/macos/scripts/install_menu_bar_app.py \
 ```
 
 这条路径避开 `~/Documents`，所以菜单栏 App 运行时不会因为访问项目目录反复弹出“文稿”权限确认。
-周期缓存保存在该目录下的 `summaries/`，旧版 `last-summary.json` 仍保留为兼容缓存。
+周期缓存保存在该目录下的 `summaries/`，以周期和偏移量分别存放（如 `today-offset0.json`、`month-offset-1.json`）。旧版滚动周期缓存不再加载，跨北京时间午夜也会重新请求，避免把上一天的相对日期当成今天。
+
+Popover 提供日、周、月三个入口。日可回看最近 7 天；周从周一开始，月按自然月，不能进入未来。日期以服务端返回为准。来源默认折叠，展开后显示 Claude / Codex，再展开可看模型；缺失数据明确标记。菜单栏数字始终显示今日用量。
+
+macOS 26 及以上使用系统 Liquid Glass。更早系统保留系统材质背景；开启“降低透明度”或提高对比度时使用实色背景。
 
 Token 默认从 `AI_USAGE_INGEST_TOKEN` 读取，只写到用户本机的 `config.json`，不会写入仓库。

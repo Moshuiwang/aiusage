@@ -1,4 +1,5 @@
 import { buildMobile, buildSummary } from "./read-model";
+import { hasPendingRollups } from "./read-model/db";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
 import { STATIC_ASSETS } from "./static-assets";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
@@ -95,9 +96,13 @@ export default {
       if (!(await isAuthenticated(request, env))) {
         return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, 401);
       }
-      const cacheKey = request.method === "GET" && env.AIUSAGE_DISABLE_SUMMARY_CACHE !== "true"
+      let cacheKey = request.method === "GET" && env.AIUSAGE_DISABLE_SUMMARY_CACHE !== "true"
         ? await summaryCacheKey(request, env)
         : null;
+      if (cacheKey && await hasPendingRollups(env.AIUSAGE_DB)) {
+        try { await caches.default.delete(cacheKey); } catch (_exc) { /* Cache is optional. */ }
+        cacheKey = null;
+      }
       if (cacheKey) {
         try {
           const cached = await caches.default.match(cacheKey);
@@ -106,10 +111,19 @@ export default {
           // Cache availability must not affect a user's ability to read current data.
         }
       }
-      const date = url.searchParams.get("date") ?? currentDate(env);
+      const rawOffset = url.searchParams.get("offset");
+      const offset = rawOffset === null ? undefined : Number(rawOffset);
+      const period = url.searchParams.get("period") ?? "today";
+      if (rawOffset !== null && (!/^-?\d+$/.test(rawOffset) || !Number.isSafeInteger(offset)
+        || offset! > 0 || offset! < -12000 || !["today", "week", "month"].includes(period)
+        || (period === "today" && offset! < -6))) {
+        return json({ status: "error", error_type: "invalid_history_offset", message: "Invalid history offset" }, 400);
+      }
+      const date = offset === undefined ? (url.searchParams.get("date") ?? currentDate(env)) : currentDate(env);
       const requestParams = {
         date,
-        period: url.searchParams.get("period") ?? "today",
+        period,
+        offset,
         timezone: env.AIUSAGE_TIMEZONE ?? "Asia/Shanghai",
         machine: url.searchParams.get("machine"),
         account: url.searchParams.get("account"),
@@ -286,7 +300,7 @@ function currentDate(env: Env): string {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date());
+  }).formatToParts(referenceTime(env));
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }

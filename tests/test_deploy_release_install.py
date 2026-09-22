@@ -5,6 +5,7 @@ import json
 import os
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from ai_usage_widget import deploy_release, deploy_units
@@ -124,6 +125,34 @@ class ReleaseInstallIdempotencyTests(unittest.TestCase):
         self.assertEqual(self._timer_files(), ["ai-usage-pusher-linux-biai-wangzp.timer"])
         self.assertTrue((self.unit_dir / "ai-usage-pusher-linux-biai-wangzp.service").exists())
 
+    def test_missing_source_entrypoint_never_switches_or_activates_release(self) -> None:
+        self._install()
+        before = self._state()
+        commands_before = list(self.commands)
+        for name in ("cli.py", "__init__.py"):
+            with self.subTest(name=name):
+                entrypoint = self.source_dir / "ai_usage_widget" / name
+                original = entrypoint.read_bytes()
+                entrypoint.unlink()
+                try:
+                    with self.assertRaisesRegex(ValueError, "source entrypoint"):
+                        self._install(version="2026.08.02-1", revision="new-revision")
+                    self.assertEqual(self._state(), before)
+                    self.assertEqual(self.commands, commands_before)
+                finally:
+                    entrypoint.write_bytes(original)
+
+    def test_install_refuses_a_unit_that_points_outside_the_managed_current_link(self) -> None:
+        plan = self._plan()
+        plan = replace(plan, unit_spec=replace(plan.unit_spec, release_dir=str(self.root / "stale")))
+        before = self._state()
+
+        with self.assertRaisesRegex(ValueError, "release_dir.*current"):
+            deploy_release.install_release(plan, command_runner=self._runner)
+
+        self.assertEqual(self._state(), before)
+        self.assertEqual(self.commands, [])
+
     def test_running_install_twice_leaves_identical_state(self) -> None:
         self._install()
         after_first = self._state()
@@ -220,6 +249,12 @@ class ActivationPreflightTests(unittest.TestCase):
         self.base = Path(self._tmp.name)
         self.release = self.base / "current"
         (self.release / "src").mkdir(parents=True)
+        package = self.release / "src" / "ai_usage_widget"
+        package.mkdir()
+        for name in ("__init__.py", "cli.py"):
+            (package / name).write_bytes(
+                (Path(__file__).resolve().parents[1] / "src" / "ai_usage_widget" / name).read_bytes()
+            )
         self.env_file = self.base / "secrets" / "ingest.env"
         self.env_file.parent.mkdir(parents=True)
         self.env_file.write_text("# managed by ops\n", encoding="utf-8")
@@ -244,10 +279,10 @@ class ActivationPreflightTests(unittest.TestCase):
     def test_all_paths_present_passes_with_every_declared_path_checked(self) -> None:
         checks = deploy_release.preflight_unit_paths(self._spec())
 
-        # 结构下限：不只看「没有失败项」，还要看确实逐条查了单元里声明的四个路径。
+        # 结构下限：四个路径和两个源码入口都必须检查，空 src 目录不能冒充可运行程序。
         self.assertEqual(
             sorted(check["name"] for check in checks),
-            ["device_config", "env_file", "pythonpath", "working_directory"],
+            ["device_config", "env_file", "pythonpath", "source_cli", "source_init", "working_directory"],
         )
         self.assertEqual(self._failed_names(checks), [])
         self.assertEqual(
@@ -262,6 +297,16 @@ class ActivationPreflightTests(unittest.TestCase):
 
         self.assertIn("working_directory", self._failed_names(checks))
         self.assertIn("pythonpath", self._failed_names(checks))
+
+    def test_runtime_without_python_entrypoint_is_rejected(self) -> None:
+        (self.release / "src" / "ai_usage_widget" / "cli.py").unlink()
+        checks = deploy_release.preflight_unit_paths(self._spec())
+        self.assertEqual(self._failed_names(checks), ["source_cli"])
+
+    def test_runtime_without_package_init_is_rejected(self) -> None:
+        (self.release / "src" / "ai_usage_widget" / "__init__.py").unlink()
+        checks = deploy_release.preflight_unit_paths(self._spec())
+        self.assertEqual(self._failed_names(checks), ["source_init"])
 
     def test_missing_env_file_is_reported(self) -> None:
         self.env_file.unlink()
@@ -299,6 +344,9 @@ class InstallPreflightGateTests(unittest.TestCase):
         self.source_dir = base / "repo" / "src"
         (self.source_dir / "ai_usage_widget").mkdir(parents=True)
         (self.source_dir / "ai_usage_widget" / "__init__.py").write_text("", encoding="utf-8")
+        (self.source_dir / "ai_usage_widget" / "cli.py").write_bytes(
+            (Path(__file__).resolve().parents[1] / "src" / "ai_usage_widget" / "cli.py").read_bytes()
+        )
         self.commands: list[list[str]] = []
 
     def _runner(self, argv):

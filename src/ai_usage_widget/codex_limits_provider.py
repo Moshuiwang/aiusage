@@ -32,7 +32,7 @@ def parse_codex_wham_usage(payload: Dict[str, Any]) -> List[LimitWindow]:
     windows_payload = payload.get("rate_limit") if isinstance(payload.get("rate_limit"), dict) else payload
     return _parse_optional_windows(
         windows_payload,
-        (("primary_window", "session"), ("secondary_window", "week")),
+        ("primary_window", "secondary_window"),
         observed_at=observed_at,
         source_type="runtime_api",
     )
@@ -44,10 +44,15 @@ def parse_codex_rpc_rate_limits(payload: Dict[str, Any], *, observed_at: str | N
 
     payload = _unwrap_rpc_result(payload)
     observed_at = observed_at or _string_field(payload, "observed_at")
-    rate_limits = _object_field(payload, "rate_limits", "rateLimits")
+    if payload.get("rateLimitsByLimitId") is not None:
+        # 显式分桶时只认 Codex 主额度，不能冒用 Spark 或旧汇总桶。
+        buckets = _object_field(payload, "rateLimitsByLimitId")
+        rate_limits = _object_field(buckets, "codex")
+    else:
+        rate_limits = _object_field(payload, "rate_limits", "rateLimits")
     return _parse_optional_windows(
         rate_limits,
-        (("primary", "session"), ("secondary", "week")),
+        ("primary", "secondary"),
         observed_at=observed_at,
         source_type="cli_rpc",
     )
@@ -221,7 +226,6 @@ def load_codex_access_token(auth_file: str) -> str:
 def _parse_window(
     *,
     window_payload: Dict[str, Any],
-    window: str,
     observed_at: str,
     source_type: str,
 ) -> LimitWindow:
@@ -235,7 +239,7 @@ def _parse_window(
     return parse_limit_window(
         {
             "provider": "codex",
-            "window": window,
+            "window": {300: "session", 1440: "day", 10080: "week"}.get(duration, f"{duration}m"),
             "used_percent": used_percent,
             "remaining_percent": remaining_percent,
             "reset_at": reset_at,
@@ -250,13 +254,13 @@ def _parse_window(
 
 def _parse_optional_windows(
     payload: Dict[str, Any],
-    fields: tuple[tuple[str, str], ...],
+    fields: tuple[str, ...],
     *,
     observed_at: str,
     source_type: str,
 ) -> List[LimitWindow]:
     windows: List[LimitWindow] = []
-    for field, window in fields:
+    for field in fields:
         if field not in payload or payload.get(field) is None:
             continue
         value = payload.get(field)
@@ -265,7 +269,6 @@ def _parse_optional_windows(
         windows.append(
             _parse_window(
                 window_payload=value,
-                window=window,
                 observed_at=observed_at,
                 source_type=source_type,
             )
