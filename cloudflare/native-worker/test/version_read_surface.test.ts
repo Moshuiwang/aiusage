@@ -18,6 +18,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
+import { applySqlText } from "./golden/harness";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -470,14 +471,7 @@ async function bundleWorker(): Promise<string> {
 }
 
 async function applySchema(db: D1Database): Promise<void> {
-  const sql = (await readFile(schemaPath, "utf8"))
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("--"))
-    .join("\n");
-  for (const statement of sql.split(";")) {
-    const trimmed = statement.trim();
-    if (trimmed) await db.prepare(trimmed).run();
-  }
+  await applySqlText(db, await readFile(schemaPath, "utf8"));
 }
 
 /**

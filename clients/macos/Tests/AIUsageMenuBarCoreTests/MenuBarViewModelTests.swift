@@ -13,13 +13,14 @@ final class MenuBarViewModelTests: XCTestCase {
 
         XCTAssertEqual(state.statusTitle, "5.0K")
         XCTAssertEqual(state.periodLabel, "本周")
+        XCTAssertEqual(state.dateRangeText, "2026-05-27 ～ 2026-06-02")
         XCTAssertEqual(state.heroTotalText, "5.0K")
         XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · Cache 800")
         XCTAssertEqual(state.healthText, "2/2 正常")
         XCTAssertEqual(state.primaryLimitText, "暂无可信额度")
         XCTAssertTrue(state.lastUpdatedText.hasSuffix("前"), "Expected relative time, got: \(state.lastUpdatedText)")
-        XCTAssertEqual(state.sources.map(\.title), ["wang", "wang"])
-        XCTAssertEqual(state.sources.first?.subtitle, "linux-dev · linux · 10:40 更新")
+        XCTAssertEqual(state.sources.map(\.title), ["linux-dev", "macbook-pro"])
+        XCTAssertEqual(state.sources.first?.subtitle, "来源明细缺失")
         XCTAssertTrue(state.limitRows.isEmpty)
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
         XCTAssertTrue(state.quotaRings.allSatisfy { ring in
@@ -34,7 +35,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.trendBars.last?.ratio, 1.0)
     }
 
-    func testSourceRowsUsePerSourceContributionForSharedMachine() throws {
+    func testLegacySharedMachineKeepsServerAggregateWithoutSplittingContributions() throws {
         let summary = try loadFixture()
         let sharedSources = [
             MobileSource(
@@ -108,8 +109,11 @@ final class MenuBarViewModelTests: XCTestCase {
             now: try date("2026-06-02T11:00:00+08:00")
         )
 
-        XCTAssertEqual(state.sources.map(\.title), ["wang", "wangDS"])
-        XCTAssertEqual(state.sources.map(\.value), ["500.0K", "300.0K"])
+        XCTAssertEqual(state.sources.count, 1)
+        XCTAssertEqual(state.sources.map(\.title), ["ip-10-50-128-30.eu-west-1.compute.internal"])
+        XCTAssertEqual(state.sources.map(\.value), ["800.0K"])
+        XCTAssertNil(state.sources.first?.agents)
+        XCTAssertEqual(state.sources.first?.subtitle, "来源明细缺失")
     }
 
     func testTrendAxisUsesSparseFullRangeLabelsLikeMobileApp() throws {
@@ -618,9 +622,8 @@ final class MenuBarViewModelTests: XCTestCase {
         )
         XCTAssertFalse(root.path.contains("/Documents/"))
         XCTAssertEqual(paths.configURL.lastPathComponent, "config.json")
-        XCTAssertEqual(paths.cacheURL.lastPathComponent, "last-summary.json")
         XCTAssertEqual(paths.periodCacheDirectoryURL.lastPathComponent, "summaries")
-        XCTAssertEqual(paths.cacheURL(forPeriod: "today").lastPathComponent, "today.json")
+        XCTAssertEqual(paths.cacheURL(forPeriod: "today").lastPathComponent, "today-offset0.json")
         XCTAssertEqual(paths.logURL.lastPathComponent, "menu-bar.log")
     }
 

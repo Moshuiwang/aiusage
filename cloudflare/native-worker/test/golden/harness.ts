@@ -192,10 +192,16 @@ export async function applySqlText(db: D1Database, sqlText: string): Promise<voi
     .split("\n")
     .filter((line) => !line.trimStart().startsWith("--"))
     .join("\n");
-  for (const statement of sql.split(";")) {
-    const trimmed = statement.trim();
-    if (trimmed) await db.prepare(trimmed).run();
+  let statement = "";
+  for (const part of sql.split(";")) {
+    if (!part.trim() && !statement) continue;
+    statement += `${part};`;
+    // A schema trigger contains inner statements; its terminating END closes the unit.
+    if (/^\s*CREATE\s+TRIGGER\b/i.test(statement) && !/\bEND\s*;\s*$/i.test(statement)) continue;
+    await db.prepare(statement.trim()).run();
+    statement = "";
   }
+  if (statement.trim()) throw new Error("Unterminated schema trigger");
 }
 
 /**
@@ -205,6 +211,8 @@ export async function applySqlText(db: D1Database, sqlText: string): Promise<voi
  */
 export async function resetDatabase(db: D1Database): Promise<void> {
   const tables = [
+    "usage_reconciliation_ranges",
+    "usage_fact_revisions",
     "usage_hourly_models",
     "usage_hourly_facts",
     "source_accuracy",
@@ -222,6 +230,8 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     "source_report_states",
     "source_reports",
     "collection_runs",
+    // Clear after facts: canonical deletion triggers enqueue their days.
+    "usage_rollup_dirty_days",
   ];
   for (const table of tables) {
     await db.prepare(`DELETE FROM ${table}`).run();

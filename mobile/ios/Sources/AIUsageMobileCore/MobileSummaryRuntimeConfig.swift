@@ -28,7 +28,8 @@ public enum MobileSummaryRuntimeConfig {
         environment: [String: String] = ProcessInfo.processInfo.environment,
         defaults: UserDefaults = .standard
     ) -> String {
-        environment["AI_USAGE_PERIOD"] ?? defaults.string(forKey: "AIUsagePeriod") ?? "week"
+        let period = environment["AI_USAGE_PERIOD"] ?? defaults.string(forKey: "AIUsagePeriod") ?? "today"
+        return ["today", "week", "month"].contains(period) ? period : "today"
     }
 
     public static func settingsForm(
@@ -52,6 +53,7 @@ public enum MobileSummaryRuntimeConfig {
 
     public static func makeAPIConfig(
         period: String,
+        offset: Int? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         defaults: UserDefaults = .standard,
         bundle: Bundle = .main,
@@ -78,7 +80,8 @@ public enum MobileSummaryRuntimeConfig {
         return MobileSummaryAPIConfig(
             baseURL: baseURL,
             bearerToken: token,
-            period: period
+            period: period,
+            offset: offset
         )
     }
 

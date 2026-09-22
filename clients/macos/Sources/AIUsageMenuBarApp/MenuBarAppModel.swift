@@ -9,6 +9,8 @@ typealias MenuBarNowProvider = @MainActor () -> Date
 final class MenuBarAppModel: ObservableObject {
     @Published private(set) var summary: MobileSummary
     @Published var selectedPeriodID: String
+    @Published private(set) var selectedOffset = 0
+    @Published private(set) var todaySummary: MobileSummary?
     @Published private(set) var isLoading = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var config: MenuBarRuntimeConfig?
@@ -19,7 +21,8 @@ final class MenuBarAppModel: ObservableObject {
     private let now: MenuBarNowProvider
     private let cacheFreshnessInterval: TimeInterval
     private var refreshSequence = 0
-    private var hasLoadedUsableSummary: Bool
+    @Published private(set) var hasLoadedUsableSummary: Bool
+    private var todayRefreshSequence = 0
     private var cachedSummaries: [String: CachedMenuSummary]
 
     init(
@@ -42,19 +45,20 @@ final class MenuBarAppModel: ObservableObject {
         self.loadRuntimeConfig = loadRuntimeConfig
         self.now = now
         self.cacheFreshnessInterval = max(cacheFreshnessInterval, 0)
-        var periodSummaries = cachedSummaries
+        var periodSummaries = cachedSummaries.filter { Self.isSameCacheDay($0.value, now: now()) }
         if let cachedSummary, periodSummaries[cachedSummary.period.id] == nil {
             periodSummaries[cachedSummary.period.id] = CachedMenuSummary(summary: cachedSummary, fetchedAt: Date.distantPast)
         }
         self.cachedSummaries = periodSummaries
-        let initialPeriodID = config?.defaultPeriod ?? cachedSummary?.period.id ?? "today"
+        let initialPeriodID = MenuPeriodSelection(periodID: config?.defaultPeriod ?? "today").periodID
         self.selectedPeriodID = initialPeriodID
-        self.summary = periodSummaries[initialPeriodID]?.summary ?? cachedSummary ?? MobileSummary.empty(periodID: initialPeriodID)
-        self.hasLoadedUsableSummary = periodSummaries[initialPeriodID] != nil || cachedSummary != nil
+        self.summary = periodSummaries[initialPeriodID]?.summary ?? MobileSummary.empty(periodID: initialPeriodID)
+        self.todaySummary = periodSummaries["today"]?.summary
+        self.hasLoadedUsableSummary = periodSummaries[initialPeriodID] != nil
     }
 
     var state: MenuBarState {
-        MenuBarViewModel.build(from: summary, selectedPeriodID: selectedPeriodID)
+        MenuBarViewModel.build(from: summary, selectedPeriodID: selectedPeriodID, selectedOffset: selectedOffset)
     }
 
     var hasConfig: Bool {
@@ -68,12 +72,30 @@ final class MenuBarAppModel: ObservableObject {
         return URL(string: value)
     }
 
-    func refresh(periodID: String? = nil, force: Bool = false) {
-        if let periodID {
-            selectedPeriodID = periodID
-        }
-        let selected = selectedPeriodID
-        if let cached = cachedSummaries[selected] {
+    var selection: MenuPeriodSelection { MenuPeriodSelection(periodID: selectedPeriodID, offset: selectedOffset) }
+    var statusState: MenuBarState { MenuBarViewModel.build(from: todaySummary ?? .empty(), selectedPeriodID: "today") }
+
+    func movePeriod(_ delta: Int) {
+        let next = selection.moving(delta)
+        guard next != selection else { return }
+        refresh(offset: next.offset)
+    }
+
+    func refresh(periodID: String? = nil, offset: Int? = nil, force: Bool = false) {
+        let selected = MenuPeriodSelection(
+            periodID: periodID ?? selectedPeriodID,
+            offset: offset ?? (periodID == nil ? selectedOffset : 0)
+        )
+        selectedPeriodID = selected.periodID
+        selectedOffset = selected.offset
+        // Invalidate before every cache fast path as well as network requests.
+        refreshSequence += 1
+        let sequence = refreshSequence
+        if selected == MenuPeriodSelection(periodID: "today") { todayRefreshSequence += 1 }
+        let cached = cachedSummaries[selected.cacheKey] ?? SummaryCache.loadCachedSummary(
+            from: paths.cacheURL(forPeriod: selected.periodID, offset: selected.offset)
+        )
+        if let cached, Self.isSameCacheDay(cached, now: now()) {
             summary = cached.summary
             hasLoadedUsableSummary = true
             if !force && isFresh(cached) {
@@ -81,57 +103,124 @@ final class MenuBarAppModel: ObservableObject {
                 errorMessage = nil
                 return
             }
+        } else {
+            summary = .empty(periodID: selected.periodID)
+            hasLoadedUsableSummary = false
+            if selected == MenuPeriodSelection(periodID: "today") { todaySummary = nil }
         }
         let runtimeConfig = loadRuntimeConfig(paths) ?? config
         config = runtimeConfig
         guard let runtimeConfig, let baseURL = URL(string: runtimeConfig.serverURL) else {
+            isLoading = false
             errorMessage = "需要配置服务地址"
             return
         }
-
-        refreshSequence += 1
-        let sequence = refreshSequence
         isLoading = true
         errorMessage = nil
-        let paths = paths
-        let token = runtimeConfig.token
         let loader = loadSummary
+        let requestedAt = now()
+        let requestTimezone = summary.timezone ?? todaySummary?.timezone
         Task {
             do {
-                let loaded = try await loader(
-                    MobileSummaryClientConfig(
-                        baseURL: baseURL,
-                        bearerToken: token,
-                        period: selected
-                    )
-                )
-                guard sequence == self.refreshSequence, selected == self.selectedPeriodID else {
+                let loaded = try await loader(MobileSummaryClientConfig(
+                    baseURL: baseURL, bearerToken: runtimeConfig.token,
+                    period: selected.periodID, offset: selected.offset
+                ))
+                guard sequence == self.refreshSequence, selected == self.selection else { return }
+                guard loaded.period.id == selected.periodID else { throw MobileSummaryClientError.invalidResponse }
+                guard Self.sameServiceDay(requestedAt, self.now(), timezone: loaded.timezone) else {
+                    self.refresh(force: true)
                     return
                 }
                 let displayed = Self.summaryKeepingLastSuccessfulQuota(
-                    loaded,
-                    fallback: self.cachedSummaries[loaded.period.id]?.summary
+                    loaded, fallback: self.cachedSummaries[selected.cacheKey]?.summary
                 )
                 self.summary = displayed
                 self.hasLoadedUsableSummary = true
                 self.errorMessage = nil
-                self.cachedSummaries[displayed.period.id] = CachedMenuSummary(summary: displayed, fetchedAt: self.now())
-                try? SummaryCache.save(displayed, paths: paths)
+                self.store(displayed, for: selected)
             } catch {
-                guard sequence == self.refreshSequence else {
-                    return
+                guard sequence == self.refreshSequence, selected == self.selection else { return }
+                if !Self.sameServiceDay(requestedAt, self.now(), timezone: requestTimezone) {
+                    self.expireRelativeCachesAfterMidnight()
                 }
                 let prefix = self.hasLoadedUsableSummary ? "刷新失败，正在显示缓存" : "读取失败"
                 self.errorMessage = "\(prefix)：\(Self.shortError(error))"
             }
-            if sequence == self.refreshSequence {
-                self.isLoading = false
+            if sequence == self.refreshSequence { self.isLoading = false }
+        }
+    }
+
+    // The menu bar continues to show today's value while the popover browses history.
+    func refreshToday() {
+        if selection == MenuPeriodSelection(periodID: "today") {
+            refresh(force: true)
+            return
+        }
+        guard let runtimeConfig = loadRuntimeConfig(paths) ?? config,
+              let baseURL = URL(string: runtimeConfig.serverURL) else { return }
+        if let cached = cachedSummaries["today"], !Self.isSameCacheDay(cached, now: now()) { todaySummary = nil }
+        todayRefreshSequence += 1
+        let sequence = todayRefreshSequence
+        let loader = loadSummary
+        let requestedAt = now()
+        let requestTimezone = summary.timezone ?? todaySummary?.timezone
+        Task {
+            do {
+                let loaded = try await loader(MobileSummaryClientConfig(
+                    baseURL: baseURL, bearerToken: runtimeConfig.token, period: "today", offset: 0
+                ))
+                guard sequence == self.todayRefreshSequence else { return }
+                guard loaded.period.id == "today" else { throw MobileSummaryClientError.invalidResponse }
+                guard Self.sameServiceDay(requestedAt, self.now(), timezone: loaded.timezone) else {
+                    self.refreshToday()
+                    return
+                }
+                self.store(loaded, for: MenuPeriodSelection(periodID: "today"))
+            } catch {
+                guard sequence == self.todayRefreshSequence else { return }
+                if !Self.sameServiceDay(requestedAt, self.now(), timezone: requestTimezone) {
+                    self.expireRelativeCachesAfterMidnight()
+                }
             }
         }
     }
 
+    private func expireRelativeCachesAfterMidnight() {
+        let currentTime = now()
+        cachedSummaries = cachedSummaries.filter {
+            Self.sameServiceDay($0.value.fetchedAt, currentTime, timezone: $0.value.summary.timezone)
+        }
+        todaySummary = cachedSummaries["today"]?.summary
+        if let current = cachedSummaries[selection.cacheKey] {
+            summary = current.summary
+            hasLoadedUsableSummary = true
+        } else {
+            summary = .empty(periodID: selectedPeriodID)
+            hasLoadedUsableSummary = false
+        }
+    }
+
+    private func store(_ summary: MobileSummary, for selected: MenuPeriodSelection) {
+        cachedSummaries[selected.cacheKey] = CachedMenuSummary(summary: summary, fetchedAt: now())
+        if selected == MenuPeriodSelection(periodID: "today") { todaySummary = summary }
+        try? SummaryCache.save(summary, paths: paths, offset: selected.offset)
+    }
+
+    private static func isSameCacheDay(_ cached: CachedMenuSummary, now: Date) -> Bool {
+        // Relative offsets change meaning at midnight in the service's timezone.
+        cached.fetchedAt == .distantPast || sameServiceDay(cached.fetchedAt, now, timezone: cached.summary.timezone)
+    }
+
+    private static func sameServiceDay(_ first: Date, _ second: Date, timezone: String?) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: timezone ?? "Asia/Shanghai") ?? TimeZone(secondsFromGMT: 8 * 3600)!
+        return calendar.isDate(first, inSameDayAs: second)
+    }
+
     private func isFresh(_ cached: CachedMenuSummary) -> Bool {
-        now().timeIntervalSince(cached.fetchedAt) < cacheFreshnessInterval
+        let age = now().timeIntervalSince(cached.fetchedAt)
+        return age >= 0 && age < cacheFreshnessInterval && Self.isSameCacheDay(cached, now: now())
     }
 
     private static func summaryKeepingLastSuccessfulQuota(

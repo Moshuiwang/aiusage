@@ -4,6 +4,7 @@ import json
 import unittest
 from pathlib import Path
 
+from ai_usage_widget.limits import LimitContractError
 from ai_usage_widget.codex_limits_provider import (
     CodexLimitsProvider,
     CodexProviderError,
@@ -41,6 +42,90 @@ class RecordingRpcReader:
 
 
 class TestCodexLimitsProvider(unittest.TestCase):
+    def test_wham_names_each_window_by_its_duration_not_its_position(self) -> None:
+        for field in ("primary_window", "secondary_window"):
+            for minutes, expected in ((300, "session"), (10080, "week"), (1440, "day"), (120, "120m")):
+                with self.subTest(field=field, minutes=minutes):
+                    windows = parse_codex_wham_usage({
+                        "observed_at": "2026-06-03T09:30:00+08:00",
+                        "rate_limit": {
+                            "primary_window": None,
+                            "secondary_window": None,
+                            field: {
+                                "used_percent": 17,
+                                "reset_at": "2026-06-08T00:00:00+08:00",
+                                "limit_window_seconds": minutes * 60,
+                            },
+                        },
+                    })
+                    self.assertEqual(len(windows), 1)
+                    self.assertEqual(windows[0].window, expected)
+                    self.assertEqual(windows[0].window_duration_minutes, minutes)
+                    self.assertEqual(windows[0].used_percent, 17)
+                    self.assertTrue(windows[0].is_official)
+
+    def test_rpc_names_each_window_by_its_duration_not_its_position(self) -> None:
+        for field in ("primary", "secondary"):
+            for minutes, expected in ((300, "session"), (10080, "week"), (1440, "day"), (120, "120m")):
+                with self.subTest(field=field, minutes=minutes):
+                    windows = parse_codex_rpc_rate_limits({
+                        "result": {
+                            "rateLimits": {
+                                "primary": None,
+                                "secondary": None,
+                                field: {
+                                    "usedPercent": 23,
+                                    "resetsAt": "2026-06-08T00:00:00+08:00",
+                                    "windowDurationMins": minutes,
+                                },
+                            },
+                        },
+                    }, observed_at="2026-06-03T09:30:00+08:00")
+                    self.assertEqual(len(windows), 1)
+                    self.assertEqual(windows[0].window, expected)
+                    self.assertEqual(windows[0].window_duration_minutes, minutes)
+                    self.assertEqual(windows[0].used_percent, 23)
+                    self.assertTrue(windows[0].is_official)
+
+    def test_rpc_selects_codex_main_bucket_over_legacy_or_other_models(self) -> None:
+        legacy = json.loads((FIXTURES / "codex_rpc_rate_limits.json").read_text(encoding="utf-8"))
+        main = {
+            "primary": {
+                "usedPercent": 7,
+                "resetsAt": "2026-06-08T00:00:00+08:00",
+                "windowDurationMins": 10080,
+            },
+            "secondary": None,
+        }
+        for include_legacy in (False, True):
+            with self.subTest(include_legacy=include_legacy):
+                payload = {
+                    "observed_at": legacy["observed_at"],
+                    "rateLimitsByLimitId": {"codex-spark": legacy["rate_limits"], "codex": main},
+                }
+                if include_legacy:
+                    payload["rateLimits"] = legacy["rate_limits"]
+                windows = parse_codex_rpc_rate_limits(payload)
+                self.assertEqual(len(windows), 1)
+                self.assertEqual(windows[0].window, "week")
+                self.assertEqual(windows[0].window_duration_minutes, 10080)
+                self.assertEqual(windows[0].used_percent, 7)
+                self.assertEqual(windows[0].remaining_percent, 93)
+
+    def test_rpc_missing_or_invalid_main_bucket_never_uses_other_model_or_legacy(self) -> None:
+        legacy = json.loads((FIXTURES / "codex_rpc_rate_limits.json").read_text(encoding="utf-8"))
+        for buckets in ({}, {"codex-spark": legacy["rate_limits"]}, {"codex": None}, {"codex": {}}):
+            with self.subTest(buckets=buckets):
+                with self.assertRaises(LimitContractError):
+                    parse_codex_rpc_rate_limits({**legacy, "rateLimitsByLimitId": buckets})
+
+    def test_rpc_null_bucket_map_retains_legacy_window_response(self) -> None:
+        legacy = json.loads((FIXTURES / "codex_rpc_rate_limits.json").read_text(encoding="utf-8"))
+        windows = parse_codex_rpc_rate_limits({**legacy, "rateLimitsByLimitId": None})
+        self.assertEqual(len(windows), 2)
+        self.assertEqual([window.window for window in windows], ["session", "week"])
+        self.assertEqual([window.used_percent for window in windows], [63, 44])
+
     def test_wham_fixture_maps_primary_and_secondary_windows(self) -> None:
         payload = json.loads((FIXTURES / "codex_wham_usage.json").read_text(encoding="utf-8"))
 

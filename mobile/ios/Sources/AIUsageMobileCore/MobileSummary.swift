@@ -375,6 +375,7 @@ public struct MobileSource: Codable, Equatable, Sendable, Identifiable {
 }
 
 public struct MobileBreakdown: Codable, Equatable, Sendable {
+    public let bySource: [MobileBreakdownRow]?
     public let byMachine: [MobileBreakdownRow]
     public let byOSUser: [MobileBreakdownRow]
     public let byAgent: [MobileBreakdownRow]
@@ -382,6 +383,7 @@ public struct MobileBreakdown: Codable, Equatable, Sendable {
     public let byDate: [MobileBreakdownRow]
 
     enum CodingKeys: String, CodingKey {
+        case bySource = "by_source"
         case byMachine = "by_machine"
         case byOSUser = "by_os_user"
         case byAgent = "by_agent"
@@ -394,8 +396,10 @@ public struct MobileBreakdown: Codable, Equatable, Sendable {
         byOSUser: [MobileBreakdownRow],
         byAgent: [MobileBreakdownRow],
         byModel: [MobileBreakdownRow],
-        byDate: [MobileBreakdownRow]
+        byDate: [MobileBreakdownRow],
+        bySource: [MobileBreakdownRow]? = nil
     ) {
+        self.bySource = bySource
         self.byMachine = byMachine
         self.byOSUser = byOSUser
         self.byAgent = byAgent
@@ -410,6 +414,9 @@ public struct MobileBreakdownRow: Codable, Equatable, Sendable, Identifiable {
     public let tokens: Int
     public let sourceIDs: [String]?
     public let contributions: [MobileBreakdownContribution]?
+    public let machine: String?
+    public let osUser: String?
+    public let agents: [MobileAgentUsage]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -417,6 +424,9 @@ public struct MobileBreakdownRow: Codable, Equatable, Sendable, Identifiable {
         case tokens
         case sourceIDs = "source_ids"
         case contributions
+        case machine
+        case osUser = "os_user"
+        case agents
     }
 
     public init(
@@ -424,14 +434,40 @@ public struct MobileBreakdownRow: Codable, Equatable, Sendable, Identifiable {
         label: String,
         tokens: Int,
         sourceIDs: [String]?,
-        contributions: [MobileBreakdownContribution]?
+        contributions: [MobileBreakdownContribution]?,
+        machine: String? = nil,
+        osUser: String? = nil,
+        agents: [MobileAgentUsage]? = nil
     ) {
+        self.machine = machine
+        self.osUser = osUser
+        self.agents = agents
         self.id = id
         self.label = label
         self.tokens = tokens
         self.sourceIDs = sourceIDs
         self.contributions = contributions
     }
+}
+
+public struct MobileAgentUsage: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let label: String
+    public let tokens: Int
+    public let status: String
+    public let models: [MobileModelUsage]
+
+    public var usageText: String { status == "available" ? TokenFormat.compact(tokens) : "数据缺失" }
+}
+
+public struct MobileModelUsage: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let label: String
+    public let tokens: Int
+    public let status: String
+
+    public var displayLabel: String { status == "missing" ? "模型未知" : label }
+    public var usageText: String { TokenFormat.compact(tokens) }
 }
 
 public struct MobileBreakdownContribution: Codable, Equatable, Sendable {

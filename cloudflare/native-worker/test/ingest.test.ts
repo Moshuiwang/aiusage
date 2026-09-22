@@ -148,10 +148,10 @@ describe.sequential("native TS Worker write API parity", () => {
     const db = await mf.getD1Database("AIUSAGE_DB");
     const readUsageSnapshot = async (): Promise<Record<string, unknown[]>> => ({
       facts: (await db.prepare(
-        "SELECT fact_id, account_evidence_json, metadata_json, last_seen_at FROM usage_hourly_facts ORDER BY fact_id",
+        "SELECT * FROM usage_hourly_facts ORDER BY fact_id",
       ).all()).results,
       models: (await db.prepare(
-        "SELECT fact_id, model, metadata_json, last_seen_at FROM usage_hourly_models ORDER BY fact_id, model",
+        "SELECT * FROM usage_hourly_models ORDER BY fact_id, model",
       ).all()).results,
       hourly: (await db.prepare(
         "SELECT * FROM usage_hourly_rollups ORDER BY bucket_start, source_id, agent",
@@ -160,13 +160,33 @@ describe.sequential("native TS Worker write API parity", () => {
         "SELECT * FROM usage_daily_rollups ORDER BY date, source_id, agent",
       ).all()).results,
     });
+    const readRevisions = async () => (await db.prepare(
+      "SELECT * FROM usage_fact_revisions ORDER BY source_id, agent, client, window_start, window_end, ai_provider, ai_account_id, attribution_confidence, provenance",
+    ).all<Record<string, unknown>>()).results;
     const before = await readUsageSnapshot();
+    const beforeRevisions = await readRevisions();
+    expect(beforeRevisions).toHaveLength(secondFacts.length);
+    expect(secondFacts.length).toBeGreaterThan(0);
     const secondRowsWritten = await postIngest(secondPayload);
 
-    // source identity / accuracy heartbeat may still write a small amount, but the
-    // unchanged usage facts must not trigger fact or display-rollup rewrites.
-    expect(secondRowsWritten).toBeLessThan(20);
+    const afterRevisions = await readRevisions();
+    expect(afterRevisions).toHaveLength(beforeRevisions.length);
+    let advancedRevisions = 0;
+    for (const [index, revision] of afterRevisions.entries()) {
+      const { observed_at: beforeTime, ...beforeKey } = beforeRevisions[index];
+      const { observed_at: afterTime, ...afterKey } = revision;
+      expect(afterKey).toEqual(beforeKey);
+      expect(afterTime).toBe(secondPayload.observed_at);
+      expect(Date.parse(String(afterTime))).toBeGreaterThan(Date.parse(String(beforeTime)));
+      if (afterTime !== beforeTime) advancedRevisions += 1;
+    }
+    expect(advancedRevisions).toBe(secondFacts.length);
+    // Revision time advances once per fact even for unchanged values. Account for
+    // that separately while retaining the original business-write budget.
+    expect(secondRowsWritten - advancedRevisions).toBeLessThan(20);
     expect(await readUsageSnapshot()).toEqual(before);
+    expect(await postIngest(secondPayload)).toBe(0);
+    expect(await readRevisions()).toEqual(afterRevisions);
   });
 
   it("maintains hourly and daily display rollups when real hourly facts change", async () => {
@@ -773,7 +793,7 @@ describe.sequential("native TS Worker write API parity", () => {
       state: "current",
       collector_version: fixtureCollectorVersion,
       release_channel: "stable",
-      parser_schema_version: 2,
+      parser_schema_version: 3,
       compatible: true,
     });
 

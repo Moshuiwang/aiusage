@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
+import path from "node:path";
 import { Miniflare } from "miniflare";
 import { beforeEach, describe, expect, it } from "vitest";
 import { acquireWorker, applySqlFile } from "./golden/harness";
-import { fixedNow, seedSqlPath, staleCollectedAt, token } from "./golden/paths";
+import { fixedNow, repoRoot, seedSqlPath, staleCollectedAt, token } from "./golden/paths";
 
 type ContractRecord = {
   name: string;
@@ -183,19 +185,20 @@ describe.sequential("native TS Worker read-only API parity", () => {
       ]);
     }
 
-    await db.prepare(`
-      INSERT INTO usage_hourly_rollups (
-        bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider,
-        ai_account_id, agent, client, attribution_confidence, provenance,
-        input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
-      ) VALUES (
-        '2026-05-29T09:00:00+08:00', '2026-05-29T10:00:00+08:00',
-        'mac-local', 'macbook-pro', 'alice', 'claude', 'claude-main', 'claude',
-        'legacy_hourly_archive', 'legacy_identity_mapped',
-        'legacy_hourly_archive_backfill_v1', 1500, 600, 400, 0, 0, 2500, 0, 0, 1
-      )
-    `).run();
+    const operations = await new Promise<[string, unknown[]][]>((resolve, reject) => {
+      const child = execFile("python3", [path.join(repoRoot, "cloudflare/native-worker/test/ingest-reliability-bridge.py"), "legacy-hourly"],
+        { cwd: repoRoot }, (error, stdout, stderr) => error ? reject(new Error(stderr || String(error))) : resolve(JSON.parse(stdout)));
+      child.stdin!.end(JSON.stringify([{
+        hour: "2026-05-29T09:00:00+08:00", source_id: "mac-local", agent: "claude",
+        input_tokens: 1500, output_tokens: 600, cache_creation_tokens: 400, cache_read_tokens: 0,
+        total_tokens: 2500, total_cost: null, first_seen_at: fixedNow, last_seen_at: fixedNow,
+        identity: { machine_id: "macbook-pro", os_user: "alice", ai_provider: "claude", ai_account_id: "claude-main" },
+      }]));
+    });
+    expect(operations).toHaveLength(2);
+    await db.batch(operations.map(([sql, params]) => db.prepare(sql).bind(...params)));
+    expect(await db.prepare("SELECT count(*) AS count, sum(total_tokens) AS tokens FROM usage_hourly_facts WHERE provenance = 'legacy_hourly_archive_backfill_v1' AND source_id = 'mac-local'").first())
+      .toEqual({ count: 1, tokens: 2500 });
     const historicalToday = await buildSummary(db, {
       date: "2026-05-29", period: "today", timezone: "Asia/Shanghai", currentTime: fixedNow,
     });
@@ -224,8 +227,8 @@ describe.sequential("native TS Worker read-only API parity", () => {
     });
 
     const hourlyQuery = queries.find((sql) => sql.includes("FROM usage_hourly_facts"));
-    expect(hourlyQuery).toContain("f.window_start >= ?");
-    expect(hourlyQuery).toContain("f.window_start < ?");
+    expect(hourlyQuery).toContain("julianday(f.window_start) >= julianday(?)");
+    expect(hourlyQuery).toContain("julianday(f.window_start) < julianday(?)");
     const usageQueries = queries.join("\n");
     for (const archivedTable of ["usage_daily", "usage_daily_models", "usage_hourly", "usage_blocks"]) {
       expect(usageQueries).not.toMatch(new RegExp(`(?:FROM|JOIN)\\s+${archivedTable}\\b`));

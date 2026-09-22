@@ -854,6 +854,8 @@ def _usage_hourly_facts_from_mswusage(
         }
         if isinstance(report.get("collector"), dict):
             fact["metadata"] = {"collector": report["collector"]}
+        if isinstance(row.get("model_breakdowns"), list):
+            fact["model_breakdowns"] = row["model_breakdowns"]
         facts.append(fact)
     return facts
 

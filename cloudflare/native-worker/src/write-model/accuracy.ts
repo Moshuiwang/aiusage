@@ -24,7 +24,19 @@ async function buildAccuracyPlans(db: D1Database, req: IngestRequest, acceptedAt
     const scanComplete = collector.scan_complete === true;
     const computedFactsDigest = await factsDigestForRun(req, agent, provenance, coverageStart, coverageEnd);
     const factsDigestMatches = !!claimedFactsDigest && claimedFactsDigest === computedFactsDigest;
-    const completeFullScan = mode === "full-rescan" && scanComplete && readErrors === 0 && unresolvedMismatch === 0 && !!version && parserSchema > 0 && !!digest && factsDigestMatches;
+    const newerRevision = coverageStart && coverageEnd ? await db.prepare(`
+      SELECT 1 FROM usage_fact_revisions
+      WHERE source_id = ? AND agent = ? AND provenance = ?
+        AND window_start >= ? AND window_start < ? AND julianday(observed_at) > julianday(?)
+      LIMIT 1
+    `).bind(sourceId, agent, provenance, coverageStart, coverageEnd, acceptedAt).first() : null;
+    const newerCoverage = coverageStart && coverageEnd ? await db.prepare(`
+      SELECT 1 FROM usage_reconciliation_ranges
+      WHERE source_id = ? AND agent = ? AND provenance = ?
+        AND julianday(coverage_start) < julianday(?) AND julianday(coverage_end) > julianday(?)
+        AND julianday(observed_at) > julianday(?) LIMIT 1
+    `).bind(sourceId, agent, provenance, coverageEnd, coverageStart, acceptedAt).first() : null;
+    const completeFullScan = !newerRevision && !newerCoverage && mode === "full-rescan" && scanComplete && readErrors === 0 && unresolvedMismatch === 0 && !!version && parserSchema > 0 && !!digest && factsDigestMatches;
     const previous = await db.prepare(`
       SELECT provenance, collector_version, parser_schema_version, mode, coverage_start, coverage_end,
              report_digest, facts_digest, scan_complete, read_errors, unresolved_mismatch,
@@ -106,6 +118,17 @@ async function factsDigestForRun(
   return Array.from(new Uint8Array(digest)).map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+const noNewerFactRevision = `NOT EXISTS (
+  SELECT 1 FROM usage_fact_revisions AS revision
+  WHERE revision.source_id = usage_hourly_facts.source_id
+    AND revision.agent = usage_hourly_facts.agent AND revision.client = usage_hourly_facts.client
+    AND revision.window_start = usage_hourly_facts.window_start AND revision.window_end = usage_hourly_facts.window_end
+    AND revision.ai_provider = usage_hourly_facts.ai_provider AND revision.ai_account_id = usage_hourly_facts.ai_account_id
+    AND revision.attribution_confidence = usage_hourly_facts.attribution_confidence
+    AND revision.provenance = usage_hourly_facts.provenance
+    AND julianday(revision.observed_at) > julianday(?)
+)`;
+
 function accuracyWriteStatements(
   db: D1Database,
   plans: AccuracyPlan[],
@@ -120,15 +143,16 @@ function accuracyWriteStatements(
       UPDATE source_accuracy
       SET accuracy_status = 'unknown', mode = 'legacy', matching_full_scans = 0,
           scan_complete = 0, observed_at = ?, last_seen_at = ?
-      WHERE source_id = ?
-    `).bind(acceptedAt, acceptedAt, sourceId));
+      WHERE source_id = ? AND julianday(observed_at) <= julianday(?)
+    `).bind(acceptedAt, acceptedAt, sourceId, acceptedAt));
   } else {
     statements.push(db.prepare(`
       UPDATE source_accuracy
       SET accuracy_status = 'unknown', mode = 'legacy', matching_full_scans = 0,
           scan_complete = 0, observed_at = ?, last_seen_at = ?
       WHERE source_id = ? AND agent NOT IN (${reportedAgents.map(() => "?").join(", ")})
-    `).bind(acceptedAt, acceptedAt, sourceId, ...reportedAgents));
+        AND julianday(observed_at) <= julianday(?)
+    `).bind(acceptedAt, acceptedAt, sourceId, ...reportedAgents, acceptedAt));
   }
   for (const plan of plans) {
     const collector = plan.collector;
@@ -159,6 +183,7 @@ function accuracyWriteStatements(
         metadata_json = excluded.metadata_json,
         observed_at = excluded.observed_at,
         last_seen_at = excluded.last_seen_at
+      WHERE julianday(excluded.observed_at) >= julianday(source_accuracy.observed_at)
     `).bind(
       plan.source_id, plan.agent, plan.provenance, String(collector.version ?? ""),
       intField(collector, "parser_schema_version"), String(collector.mode ?? "unknown"),
@@ -169,24 +194,39 @@ function accuracyWriteStatements(
       stableStringify(collector), acceptedAt, acceptedAt, acceptedAt,
     ));
     if (!plan.can_reconcile) continue;
+    statements.push(db.prepare(`
+      INSERT INTO usage_reconciliation_ranges (
+        source_id, agent, provenance, coverage_start, coverage_end, observed_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(source_id, agent, provenance, coverage_start, coverage_end) DO UPDATE SET observed_at = excluded.observed_at
+      WHERE julianday(excluded.observed_at) > julianday(usage_reconciliation_ranges.observed_at)
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end, acceptedAt));
+    // Advance covered keys, including deletion tombstones, before removing canonical facts.
+    // A delayed old payload cannot recreate a fact that a later full scan removed.
+    statements.push(db.prepare(`
+      UPDATE usage_fact_revisions SET observed_at = ?
+      WHERE source_id = ? AND agent = ? AND provenance = ?
+        AND window_start >= ? AND window_start < ? AND julianday(observed_at) < julianday(?)
+    `).bind(acceptedAt, plan.source_id, plan.agent, plan.provenance,
+      plan.coverage_start, plan.coverage_end, acceptedAt));
     const matchingFacts = facts.filter((fact) => fact.source_id === plan.source_id && fact.agent === plan.agent && fact.provenance === plan.provenance &&
       fact.window_start >= String(plan.coverage_start) && fact.window_start < String(plan.coverage_end));
     for (const fact of matchingFacts) {
-      statements.push(db.prepare("UPDATE usage_hourly_facts SET last_seen_at = ? WHERE fact_id = ?").bind(acceptedAt, fact.fact_id));
+      statements.push(db.prepare(`UPDATE usage_hourly_facts SET last_seen_at = ? WHERE fact_id = ? AND ${noNewerFactRevision}`).bind(acceptedAt, fact.fact_id, acceptedAt));
     }
     statements.push(db.prepare(`
       DELETE FROM usage_hourly_models
       WHERE fact_id IN (
         SELECT fact_id FROM usage_hourly_facts
         WHERE source_id = ? AND agent = ? AND provenance = ?
-          AND window_start >= ? AND window_start < ? AND last_seen_at IS NOT ?
+          AND window_start >= ? AND window_start < ? AND last_seen_at IS NOT ? AND ${noNewerFactRevision}
       )
-    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end, acceptedAt));
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end, acceptedAt, acceptedAt));
     statements.push(db.prepare(`
       DELETE FROM usage_hourly_facts
       WHERE source_id = ? AND agent = ? AND provenance = ?
-        AND window_start >= ? AND window_start < ? AND last_seen_at IS NOT ?
-    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end, acceptedAt));
+        AND window_start >= ? AND window_start < ? AND last_seen_at IS NOT ? AND ${noNewerFactRevision}
+    `).bind(plan.source_id, plan.agent, plan.provenance, plan.coverage_start, plan.coverage_end, acceptedAt, acceptedAt));
   }
   return statements;
 }

@@ -20,7 +20,7 @@ import type { MobileSummary } from "../mobile-summary";
 /** 阶段 1：读取 D1 输入与时间/周期边界。所有 SELECT 都发生在这里或 db.ts。 */
 async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
   const refTime = nowInTimezone(request.timezone, request.currentTime);
-  const [periodId, startDate, endDate] = periodBounds(request.date, request.period);
+  const [periodId, startDate, endDate] = periodBounds(request.date, request.period, request.offset);
   const hourAxisValues = periodId === "today" ? hourAxis(endDate) : [];
   const identities = await fetchSourceIdentities(db);
   const statusRows = await all<Record<string, string | null>>(
@@ -346,7 +346,7 @@ function assembleSnapshot(
     generated_at: toOffsetIso(refTime),
     timezone: request.timezone,
     summary: {
-      date: request.date,
+      date: endDate,
       period: periodId,
       start_date: startDate,
       end_date: endDate,

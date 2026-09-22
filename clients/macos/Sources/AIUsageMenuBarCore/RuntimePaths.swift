@@ -11,10 +11,6 @@ public struct RuntimePaths: Equatable, Sendable {
         root.appendingPathComponent("config.json", isDirectory: false)
     }
 
-    public var cacheURL: URL {
-        root.appendingPathComponent("last-summary.json", isDirectory: false)
-    }
-
     public var periodCacheDirectoryURL: URL {
         root.appendingPathComponent("summaries", isDirectory: true)
     }
@@ -23,8 +19,8 @@ public struct RuntimePaths: Equatable, Sendable {
         root.appendingPathComponent("menu-bar.log", isDirectory: false)
     }
 
-    public func cacheURL(forPeriod periodID: String) -> URL {
-        periodCacheDirectoryURL.appendingPathComponent("\(safePeriodID(periodID)).json", isDirectory: false)
+    public func cacheURL(forPeriod periodID: String, offset: Int = 0) -> URL {
+        periodCacheDirectoryURL.appendingPathComponent("\(safePeriodID(periodID))-offset\(offset).json", isDirectory: false)
     }
 
     public static func defaultRoot(homeDirectory: URL? = nil) -> URL {

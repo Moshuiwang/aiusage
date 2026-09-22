@@ -19,7 +19,7 @@ import json
 import os
 import shutil
 import stat
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
@@ -94,6 +94,8 @@ def preflight_unit_paths(spec: CollectorUnitSpec) -> List[Dict[str, Any]]:
         _path_check("pythonpath", spec.python_path, want_dir=True),
         _path_check("env_file", spec.env_file, want_dir=False),
         _path_check("device_config", spec.config_path, want_dir=False),
+        _path_check("source_init", str(Path(spec.python_path) / "ai_usage_widget" / "__init__.py"), want_dir=False),
+        _path_check("source_cli", str(Path(spec.python_path) / "ai_usage_widget" / "cli.py"), want_dir=False),
     ]
 
 
@@ -155,14 +157,11 @@ def install_release(
     unit_dir.mkdir(parents=True, exist_ok=True)
 
     changed = _materialize_release(plan)
-    changed |= _write_unit_files(unit_dir, spec)
     config_created = _create_device_config_if_absent(plan)
     changed |= config_created
     changed |= _ensure_runtime_dirs(spec)
 
     previous_target = _symlink_target(root / PREVIOUS_LINK)
-    changed |= _activate_release(root, plan.release_dir)
-    previous_target = _symlink_target(root / PREVIOUS_LINK) or previous_target
 
     commands = plan.commands()
     result = {
@@ -182,13 +181,14 @@ def install_release(
         "rolled_back": False,
     }
 
-    preflight = preflight_unit_paths(spec)
+    # 检查即将切入的最终产物：已存在的 release 可能损坏，完整输入源码不代表它可运行。
+    # 此时 current 仍指向健康旧版，不能检查 current 后再把它切到未经核验的候选目录。
+    candidate_spec = replace(spec, release_dir=str(plan.release_dir))
+    preflight = preflight_unit_paths(candidate_spec)
     result["preflight"] = preflight
     unusable = [check for check in preflight if not check["ok"]]
     if unusable:
-        # 停在 systemctl 之前：宁可留一个「文件已就位但没激活」的可重跑状态，
-        # 也不要 enable 一个注定失败的 timer——后者的失败只写进 journal，没人看。
-        # 不回滚：文件本身没问题，补齐缺失路径后重跑 install 即幂等完成激活。
+        # 旧版 current/previous 和单元文件仍原样生效；失败候选保留以便定位，不需要回滚。
         result["success"] = False
         result["activated"] = False
         result["error_type"] = "PreflightFailed"
@@ -197,6 +197,11 @@ def install_release(
         )
         return result
 
+    changed |= _write_unit_files(unit_dir, spec)
+    changed |= _activate_release(root, plan.release_dir)
+    result["changed"] = changed
+    result["current_target"] = _symlink_target(root / CURRENT_LINK)
+    result["previous_target"] = _symlink_target(root / PREVIOUS_LINK) or previous_target
     try:
         _run_commands(commands, runner)
     except (ReleaseError, OSError) as exc:
@@ -321,8 +326,14 @@ def _validate(plan: ReleasePlan) -> None:
         raise ValueError("release revision is required")
     if not plan.unit_spec.source_id:
         raise ValueError("unit_spec.source_id is required")
+    if Path(plan.unit_spec.release_dir).absolute() != (Path(plan.root) / CURRENT_LINK).absolute():
+        raise ValueError("unit_spec.release_dir must point to the managed root/current link")
     if not Path(plan.source_dir).is_dir():
         raise ValueError(f"source dir not found: {plan.source_dir}")
+    for name in ("__init__.py", "cli.py"):
+        entrypoint = Path(plan.source_dir) / "ai_usage_widget" / name
+        if not entrypoint.is_file():
+            raise ValueError(f"source entrypoint not found: {entrypoint}")
     if plan.timer_scope not in TIMER_SCOPES:
         raise ValueError(f"timer_scope must be one of {TIMER_SCOPES}")
 

@@ -73,7 +73,7 @@
           "status": "succeeded",
           "to_version": "0.3.0"
         },
-        "parser_schema_version": 2,
+        "parser_schema_version": 3,
         "release_channel": "stable"
       },
       "host": "macbook-pro.local",
@@ -376,7 +376,7 @@
         "last_upgrade": {
           "status": "never"
         },
-        "parser_schema_version": 2,
+        "parser_schema_version": 3,
         "release_channel": "beta"
       },
       "error_message": "[Errno 2] No such file or directory: 'ccusage'",
@@ -408,7 +408,7 @@
         "last_upgrade": {
           "status": "never"
         },
-        "parser_schema_version": 2,
+        "parser_schema_version": 3,
         "release_channel": "stable"
       },
       "host": "desktop-partial.internal",

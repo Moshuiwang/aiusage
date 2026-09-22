@@ -8,11 +8,12 @@ from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 
 from .timezones import get_timezone
+from .usage_models import add_model_usage, finalize_model_usage, model_name
 
 
 PROVENANCE = "mswusage_codex_token_count"
 COLLECTOR_VERSION = "0.2.0"
-PARSER_SCHEMA_VERSION = 2
+PARSER_SCHEMA_VERSION = 3
 FORBIDDEN_SESSION_MARKERS = ("/", "\\", "~", ".codex", ".claude", ".jsonl", "/Users/", "/home/")
 SAFE_SESSION_RE = re.compile(r"^[A-Za-z0-9:_-]{1,128}$")
 TOKEN_FIELDS = (
@@ -164,6 +165,7 @@ def _codex_roots(root: Path | None, *, include_archived: bool) -> list[Path]:
 
 def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = None) -> tuple[list[dict], dict, dict]:
     current_session_id: str | None = None
+    current_model = "unknown"
     file_scope = 0
     candidates: list[dict] = []
     events: list[dict] = []
@@ -192,15 +194,20 @@ def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = No
         if row.get("type") == "mswusage_file_boundary":
             file_scope += 1
             current_session_id = None
+            current_model = "unknown"
             continue
 
         if row.get("type") == "session_meta":
+            current_model = "unknown"
             candidate = row.get("payload", {}).get("id") if isinstance(row.get("payload"), dict) else None
             if _is_safe_session_id(candidate):
                 current_session_id = candidate
             continue
 
         payload = row.get("payload")
+        if row.get("type") == "turn_context":
+            current_model = model_name(payload.get("model")) if isinstance(payload, dict) else "unknown"
+            continue
         if not isinstance(payload, dict) or payload.get("type") != "token_count":
             continue
         info = payload.get("info")
@@ -220,6 +227,7 @@ def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = No
             cumulative = None
         scope = f"session:{current_session_id}" if current_session_id else f"file:{file_scope}"
         candidates.append({
+            "model": model_name(info.get("model", payload.get("model", current_model))),
             "scope": scope,
             "session_id": current_session_id,
             "timestamp": row.get("timestamp"),
@@ -282,6 +290,7 @@ def _parse_events(jsonl_lines: Iterable[str], tz, *, since: datetime | None = No
             continue
         event = {
             **normalized,
+            "model": candidate["model"],
             "session_id": candidate["session_id"],
             "event_at": _format_datetime(event_at),
             "hour": _format_datetime(event_at.replace(minute=0, second=0, microsecond=0)),
@@ -373,6 +382,7 @@ def _new_bucket(base: dict) -> dict:
 
 
 def _add_usage(bucket: dict, event: dict, *, session_id: str) -> None:
+    add_model_usage(bucket, event, TOKEN_FIELDS)
     for field in TOKEN_FIELDS:
         bucket[field] += event[field]
     bucket["event_count"] += 1
@@ -381,6 +391,7 @@ def _add_usage(bucket: dict, event: dict, *, session_id: str) -> None:
 
 def _finalize_bucket(bucket: dict, *, include_session_count: bool = True) -> dict:
     row = dict(bucket)
+    finalize_model_usage(row)
     session_ids = row.pop("_session_ids")
     if include_session_count:
         row["session_count"] = len(session_ids)

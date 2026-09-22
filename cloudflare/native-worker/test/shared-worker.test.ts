@@ -43,7 +43,12 @@ async function polluteTable(db: D1Database, table: string): Promise<void> {
   }
   const columns = required.map((col) => col.name).join(", ");
   const placeholders = required.map(() => "?").join(", ");
-  const values = required.map((col) => (isNumeric(col.type) ? 1 : "x"));
+  const values = required.map((col) => {
+    if (isNumeric(col.type)) return 1;
+    if (col.name === "date") return "2000-01-02";
+    if (["window_start", "window_end", "bucket_start", "bucket_end"].includes(col.name)) return "2000-01-01T01:00:00+08:00";
+    return "x";
+  });
   await db.prepare(`INSERT INTO ${table} (${columns}) VALUES (${placeholders})`).bind(...values).run();
 }
 

@@ -37,7 +37,7 @@ final class MenuBarAppModelTests: XCTestCase {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: testConfig(defaultPeriod: "today"),
             cachedSummaries: [
                 "week": CachedMenuSummary(
@@ -61,10 +61,10 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
-    func testAllFourPeriodsKeepIndependentFreshCaches() async throws {
+    func testThreeVisiblePeriodsKeepIndependentFreshCaches() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
-        let periods = ["today": 100, "week": 200, "month": 300, "all": 400]
+        let periods = ["today": 100, "week": 200, "month": 300]
         let cached = try Dictionary(uniqueKeysWithValues: periods.map { period, total in
             (
                 period,
@@ -75,7 +75,7 @@ final class MenuBarAppModelTests: XCTestCase {
             )
         })
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: testConfig(defaultPeriod: "today"),
             cachedSummaries: cached,
             cacheFreshnessInterval: 300,
@@ -83,7 +83,7 @@ final class MenuBarAppModelTests: XCTestCase {
             loadSummary: loader.load
         )
 
-        for period in ["today", "week", "month", "all"] {
+        for period in ["today", "week", "month"] {
             model.refresh(periodID: period)
             await yieldToMainActor()
             XCTAssertEqual(model.selectedPeriodID, period)
@@ -100,7 +100,7 @@ final class MenuBarAppModelTests: XCTestCase {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: testConfig(defaultPeriod: "today"),
             cachedSummaries: [
                 "week": CachedMenuSummary(
@@ -130,7 +130,7 @@ final class MenuBarAppModelTests: XCTestCase {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: testConfig(defaultPeriod: "today"),
             cachedSummaries: [
                 "month": CachedMenuSummary(
@@ -213,7 +213,7 @@ final class MenuBarAppModelTests: XCTestCase {
             ]
         )
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: testConfig(defaultPeriod: "today"),
             cachedSummaries: [
                 "today": CachedMenuSummary(summary: cached, fetchedAt: now.addingTimeInterval(-600))
@@ -244,7 +244,7 @@ final class MenuBarAppModelTests: XCTestCase {
         )
         var didQuit = false
         let controller = StatusBarController(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             quitApplication: {
                 didQuit = true
             }
@@ -264,7 +264,7 @@ final class MenuBarAppModelTests: XCTestCase {
             defaultPeriod: "all"
         )
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: config,
             cachedSummary: MobileSummary.empty(periodID: "all"),
             loadSummary: loader.load
@@ -277,7 +277,7 @@ final class MenuBarAppModelTests: XCTestCase {
         await loader.complete(period: "today", summary: MobileSummary.empty(periodID: "today"))
         try await loader.waitForCompleted("today")
         await yieldToMainActor()
-        XCTAssertEqual(model.summary.period.id, "all")
+        XCTAssertEqual(model.summary.period.id, "week")
         XCTAssertTrue(model.isLoading)
 
         await loader.complete(period: "week", summary: MobileSummary.empty(periodID: "week"))
@@ -295,7 +295,7 @@ final class MenuBarAppModelTests: XCTestCase {
             defaultPeriod: "all"
         )
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: config,
             cachedSummary: MobileSummary.empty(periodID: "all"),
             loadSummary: loader.load
@@ -327,7 +327,7 @@ final class MenuBarAppModelTests: XCTestCase {
         )
         let cached = MobileSummary.empty(periodID: "today")
         let model = MenuBarAppModel(
-            paths: RuntimePaths(root: URL(fileURLWithPath: "/tmp/ai-usage-menu-test")),
+            paths: try temporaryRuntimePaths(),
             config: config,
             cachedSummary: cached,
             loadSummary: loader.load
@@ -379,6 +379,256 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestConfig.baseURL.absoluteString, "https://aiusage.chunbai.com")
         XCTAssertEqual(requestConfig.bearerToken, "new-token")
         XCTAssertEqual(model.dashboardURL?.absoluteString, "https://aiusage.chunbai.com/dashboard")
+    }
+
+    func testSwitchingToFreshCacheInvalidatesAnOlderFailure() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = Date()
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["week": CachedMenuSummary(summary: try summary(periodID: "week", totalTokens: 700), fetchedAt: now)],
+            now: { now }, loadSummary: loader.load
+        )
+        model.refresh(periodID: "today", force: true)
+        try await loader.waitForRequestCount(1)
+        model.refresh(periodID: "week")
+        await loader.fail(period: "today")
+        try await loader.waitForCompleted("today")
+        await yieldToMainActor()
+        XCTAssertEqual(model.summary.period.totalTokens, 700)
+        XCTAssertNil(model.errorMessage, "A request for another selection must not show an error here")
+        XCTAssertFalse(model.isLoading)
+    }
+
+    func testUncachedSelectionNeverShowsAnotherPeriodsNumbers() async throws {
+        let loader = ControlledSummaryLoader()
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummary: try summary(periodID: "today", totalTokens: 123), loadSummary: loader.load
+        )
+        model.refresh(periodID: "month")
+        try await loader.waitForRequestCount(1)
+        XCTAssertEqual(model.summary.period.id, "month")
+        XCTAssertEqual(model.summary.period.totalTokens, 0)
+        await loader.fail(period: "month")
+        try await loader.waitForCompleted("month")
+        await yieldToMainActor()
+        XCTAssertTrue(model.errorMessage?.hasPrefix("读取失败") == true)
+    }
+
+    func testHistoryKeepsSeparateCacheAndTodaysMenuBarValue() async throws {
+        let loader = ControlledSummaryLoader()
+        let paths = try temporaryRuntimePaths()
+        let model = MenuBarAppModel(paths: paths, config: testConfig(), loadSummary: loader.load)
+        model.refresh()
+        try await loader.waitForRequestCount(1)
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 100))
+        await waitUntil { !model.isLoading }
+        model.movePeriod(-1)
+        try await loader.waitForRequestCount(1)
+        let request = try await loader.config(for: "today:-1")
+        XCTAssertEqual(request.offset, -1)
+        XCTAssertEqual(model.selectedOffset, -1)
+        XCTAssertFalse(model.hasLoadedUsableSummary)
+        await loader.complete(period: "today:-1", summary: try summary(periodID: "today", totalTokens: 900))
+        await waitUntil { !model.isLoading }
+        XCTAssertEqual(model.summary.period.totalTokens, 900)
+        XCTAssertEqual(model.statusState.statusTitle, "100")
+        XCTAssertEqual(SummaryCache.load(from: paths.cacheURL(forPeriod: "today", offset: 0))?.period.totalTokens, 100)
+        XCTAssertEqual(SummaryCache.load(from: paths.cacheURL(forPeriod: "today", offset: -1))?.period.totalTokens, 900)
+        model.movePeriod(1)
+        XCTAssertEqual(model.summary.period.totalTokens, 100)
+        XCTAssertEqual(model.selectedOffset, 0)
+        XCTAssertFalse(model.isLoading)
+        let count = await loader.requestCount()
+        XCTAssertEqual(count, 2)
+    }
+
+    func testStaleSamePeriodHistoryResponseCannotReplaceNewerSelection() async throws {
+        let loader = ControlledSummaryLoader()
+        let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(), loadSummary: loader.load)
+        model.refresh(periodID: "month", offset: -1)
+        model.movePeriod(-1)
+        try await loader.waitForRequestCount(2)
+        await loader.complete(period: "month:-2", summary: try summary(periodID: "month", totalTokens: 200))
+        await waitUntil { !model.isLoading }
+        await loader.complete(period: "month:-1", summary: try summary(periodID: "month", totalTokens: 900))
+        try await loader.waitForCompleted("month:-1")
+        await yieldToMainActor()
+        XCTAssertEqual(model.selectedOffset, -2)
+        XCTAssertEqual(model.summary.period.totalTokens, 200)
+        model.refresh(periodID: "week")
+        XCTAssertEqual(model.selectedOffset, 0)
+        try await loader.waitForRequestCount(1)
+        await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 100))
+        await waitUntil { !model.isLoading }
+    }
+
+    func testYesterdayRelativeCacheExpiresAtServiceMidnight() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-26T00:01:00+08:00")
+        let cachedAt = try date("2026-06-25T23:59:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["today:-1": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 999), fetchedAt: cachedAt)],
+            now: { now }, loadSummary: loader.load
+        )
+        model.movePeriod(-1)
+        try await loader.waitForRequestCount(1)
+        XCTAssertFalse(model.hasLoadedUsableSummary)
+        XCTAssertEqual(model.summary.period.totalTokens, 0)
+        await loader.complete(period: "today:-1", summary: try summary(periodID: "today", totalTokens: 100))
+        await waitUntil { !model.isLoading }
+        XCTAssertEqual(model.summary.period.totalTokens, 100)
+    }
+
+    func testStartupDoesNotPresentPreviousDaysCacheAsToday() throws {
+        let now = try date("2026-06-26T00:01:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["today": CachedMenuSummary(
+                summary: try summary(periodID: "today", totalTokens: 999),
+                fetchedAt: try date("2026-06-25T23:59:00+08:00"))],
+            now: { now }
+        )
+        XCTAssertNil(model.todaySummary)
+        XCTAssertFalse(model.hasLoadedUsableSummary)
+    }
+
+    func testFreshCacheFastPathInvalidatesSameSelectionRequest() async throws {
+        for shouldFail in [false, true] {
+            let loader = ControlledSummaryLoader()
+            let now = Date()
+            let model = MenuBarAppModel(
+                paths: try temporaryRuntimePaths(), config: testConfig(),
+                cachedSummaries: ["today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 100), fetchedAt: now)],
+                now: { now }, loadSummary: loader.load
+            )
+            model.refresh(force: true)
+            try await loader.waitForRequestCount(1)
+            model.refresh()
+            XCTAssertFalse(model.isLoading)
+            if shouldFail { await loader.fail(period: "today") }
+            else { await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 999)) }
+            try await loader.waitForCompleted("today")
+            await yieldToMainActor()
+            XCTAssertEqual(model.summary.period.totalTokens, 100)
+            XCTAssertEqual(model.todaySummary?.period.totalTokens, 100)
+            XCTAssertNil(model.errorMessage)
+        }
+    }
+
+    func testRequestCrossingMidnightReloadsBeforeShowingYesterdayAsToday() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T23:59:59+08:00")
+        let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(), now: { clock }, loadSummary: loader.load)
+        model.refresh()
+        try await loader.waitForRequestCount(1)
+        clock = try date("2026-06-26T00:00:01+08:00")
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 999))
+        try await loader.waitForTotalRequestCount(2)
+        XCTAssertNil(model.todaySummary)
+        XCTAssertFalse(model.hasLoadedUsableSummary)
+        XCTAssertTrue(model.isLoading)
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 100))
+        await waitUntil { !model.isLoading }
+        XCTAssertEqual(model.todaySummary?.period.totalTokens, 100)
+    }
+
+    func testBackgroundTodayReadCrossingMidnightReloadsAndKeepsHistorySelected() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T23:59:59+08:00")
+        let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(defaultPeriod: "month"), now: { clock }, loadSummary: loader.load)
+        model.refreshToday()
+        try await loader.waitForRequestCount(1)
+        clock = try date("2026-06-26T00:00:01+08:00")
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 999))
+        try await loader.waitForTotalRequestCount(2)
+        XCTAssertNil(model.todaySummary)
+        XCTAssertEqual(model.selectedPeriodID, "month")
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 100))
+        await waitUntil { model.todaySummary?.period.totalTokens == 100 }
+        XCTAssertEqual(model.selectedPeriodID, "month")
+    }
+
+    func testFailedRefreshCrossingMidnightClearsExpiredSelectionAndTodayValue() async throws {
+        for selected in [MenuPeriodSelection(periodID: "today"), MenuPeriodSelection(periodID: "today", offset: -1), MenuPeriodSelection(periodID: "week"), MenuPeriodSelection(periodID: "month", offset: -1)] {
+            let loader = ControlledSummaryLoader()
+            var clock = try date("2026-06-25T23:59:59+08:00")
+            var cached = ["today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 999), fetchedAt: clock)]
+            cached[selected.cacheKey] = CachedMenuSummary(summary: try summary(periodID: selected.periodID, totalTokens: 900), fetchedAt: clock)
+            let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummaries: cached, now: { clock }, loadSummary: loader.load)
+            model.refresh(periodID: selected.periodID, offset: selected.offset, force: true)
+            try await loader.waitForRequestCount(1)
+            XCTAssertTrue(model.hasLoadedUsableSummary)
+            clock = clock.addingTimeInterval(2)
+            await loader.fail(period: selected.cacheKey)
+            await waitUntil { !model.isLoading }
+            XCTAssertEqual(model.selection, selected)
+            XCTAssertNil(model.summary.period.date)
+            XCTAssertEqual(model.summary.period.totalTokens, 0)
+            XCTAssertFalse(model.hasLoadedUsableSummary)
+            XCTAssertNil(model.todaySummary)
+            XCTAssertTrue(model.errorMessage?.hasPrefix("读取失败") == true)
+        }
+    }
+
+    func testFailedBackgroundTodayRefreshCrossingMidnightClearsOldValues() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T23:59:59+08:00")
+        let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(defaultPeriod: "month"), cachedSummaries: [
+            "today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 999), fetchedAt: clock),
+            "month": CachedMenuSummary(summary: try summary(periodID: "month", totalTokens: 900), fetchedAt: clock)
+        ], now: { clock }, loadSummary: loader.load)
+        model.refreshToday()
+        try await loader.waitForRequestCount(1)
+        clock = clock.addingTimeInterval(2)
+        await loader.fail(period: "today")
+        try await loader.waitForCompleted("today")
+        await yieldToMainActor()
+        XCTAssertEqual(model.selectedPeriodID, "month")
+        XCTAssertEqual(model.selectedOffset, 0)
+        XCTAssertNil(model.todaySummary)
+        XCTAssertFalse(model.hasLoadedUsableSummary)
+        XCTAssertNil(model.summary.period.date)
+    }
+
+    func testLateBackgroundFailureDoesNotClearNewDayHistoryResult() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T23:59:59+08:00")
+        let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(defaultPeriod: "month"), cachedSummaries: [
+            "today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 999), fetchedAt: clock)
+        ], now: { clock }, loadSummary: loader.load)
+        model.refreshToday()
+        try await loader.waitForRequestCount(1)
+        clock = clock.addingTimeInterval(2)
+        model.refresh(periodID: "week", offset: -1, force: true)
+        try await loader.waitForRequestCount(2)
+        await loader.complete(period: "week:-1", summary: try summary(periodID: "week", totalTokens: 700))
+        await waitUntil { !model.isLoading }
+        await loader.fail(period: "today")
+        try await loader.waitForCompleted("today")
+        await yieldToMainActor()
+        XCTAssertEqual(model.selection, MenuPeriodSelection(periodID: "week", offset: -1))
+        XCTAssertNil(model.todaySummary)
+        XCTAssertTrue(model.hasLoadedUsableSummary)
+        XCTAssertEqual(model.summary.period.totalTokens, 700)
+    }
+
+    func testInvalidBackgroundPeriodCrossingMidnightClearsToday() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T23:59:59+08:00")
+        let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(defaultPeriod: "month"), cachedSummaries: [
+            "today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 999), fetchedAt: clock)
+        ], now: { clock }, loadSummary: loader.load)
+        model.refreshToday()
+        try await loader.waitForRequestCount(1)
+        clock = clock.addingTimeInterval(2)
+        await loader.complete(period: "today", summary: try summary(periodID: "week", totalTokens: 900))
+        try await loader.waitForCompleted("today")
+        await yieldToMainActor()
+        XCTAssertNil(model.todaySummary)
+        XCTAssertEqual(model.selectedPeriodID, "month")
     }
 
     private func waitUntil(
@@ -497,14 +747,17 @@ private actor ControlledSummaryLoader {
     private var continuations: [String: CheckedContinuation<MobileSummary, Error>] = [:]
     private var configs: [String: MobileSummaryClientConfig] = [:]
     private var completedPeriods: Set<String> = []
+    private var totalRequests = 0
 
     func load(config: MobileSummaryClientConfig) async throws -> MobileSummary {
+        totalRequests += 1
+        let key = config.offset == 0 ? config.period : "\(config.period):\(config.offset)"
         defer {
-            completedPeriods.insert(config.period)
+            completedPeriods.insert(key)
         }
-        configs[config.period] = config
+        configs[key] = config
         return try await withCheckedThrowingContinuation { continuation in
-            continuations[config.period] = continuation
+            continuations[key] = continuation
         }
     }
 
@@ -524,6 +777,14 @@ private actor ControlledSummaryLoader {
             try await Task.sleep(nanoseconds: 10_000_000)
         }
         XCTFail("Timed out waiting for \(count) requests")
+    }
+
+    func waitForTotalRequestCount(_ count: Int) async throws {
+        for _ in 0..<50 {
+            if totalRequests >= count { return }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTFail("Timed out waiting for \(count) total requests")
     }
 
     func waitForCompleted(_ period: String) async throws {

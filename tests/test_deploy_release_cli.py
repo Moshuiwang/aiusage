@@ -26,6 +26,9 @@ class CollectorInstallCliTests(unittest.TestCase):
         self.source_dir = base / "repo" / "src"
         (self.source_dir / "ai_usage_widget").mkdir(parents=True)
         (self.source_dir / "ai_usage_widget" / "__init__.py").write_text("", encoding="utf-8")
+        (self.source_dir / "ai_usage_widget" / "cli.py").write_bytes(
+            (Path(__file__).resolve().parents[1] / "src" / "ai_usage_widget" / "cli.py").read_bytes()
+        )
 
         self.seed_config = base / "device.seed.json"
         self.seed_config.write_text(
@@ -178,6 +181,9 @@ class CredentialFilePermissionTests(unittest.TestCase):
         self.source_dir = base / "repo" / "src"
         (self.source_dir / "ai_usage_widget").mkdir(parents=True)
         (self.source_dir / "ai_usage_widget" / "__init__.py").write_text("", encoding="utf-8")
+        (self.source_dir / "ai_usage_widget" / "cli.py").write_bytes(
+            (Path(__file__).resolve().parents[1] / "src" / "ai_usage_widget" / "cli.py").read_bytes()
+        )
 
     def _install(self):
         from ai_usage_widget import deploy_units
