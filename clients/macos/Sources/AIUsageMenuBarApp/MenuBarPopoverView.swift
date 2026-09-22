@@ -348,10 +348,18 @@ private struct PopoverGlassSurface: ViewModifier {
     func body(content: Content) -> some View {
         if reduceTransparency || increasedContrast {
             content.background(Color(nsColor: .windowBackgroundColor))
-        } else if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         } else {
+            // SwiftUI 7 ships the Glass API; runtime availability alone cannot
+            // make that symbol compile against an older macOS SDK.
+            #if canImport(SwiftUI, _version: 7.0)
+            if #available(macOS 26.0, *) {
+                content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            } else {
+                content.background(MacOSGlassBackground())
+            }
+            #else
             content.background(MacOSGlassBackground())
+            #endif
         }
     }
 }
