@@ -58,6 +58,24 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertLessThanOrEqual(popover.contentSize.height, (NSScreen.main?.visibleFrame.height ?? 800) + 1)
     }
 
+    func testHostedPopoverInitialHeightProvidesFullViewportForLoadedSummary() throws {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("AIUsageMenuBarCoreTests/Fixtures/navigation-models-owner.json")
+        let summary = try JSONDecoder().decode(MobileSummary.self, from: Data(contentsOf: fixtureURL))
+        let fixedDate = try date("2026-09-22T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: summary, now: { fixedDate }
+        )
+        XCTAssertTrue(model.hasLoadedUsableSummary)
+        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        hosting.loadViewIfNeeded()
+        hosting.view.frame.size.width = MenuBarPopoverLayout.width
+        hosting.view.layoutSubtreeIfNeeded()
+        let fittingHeight = hosting.view.fittingSize.height
+        XCTAssertGreaterThanOrEqual(fittingHeight, 500, "Loaded summary popover must start with an ample viewport, not collapsed to 200")
+    }
+
     func testShownPopoverKeepsContentViewport() throws {
         _ = NSApplication.shared
         let fixtureURL = URL(fileURLWithPath: #filePath)
@@ -96,7 +114,7 @@ final class MenuBarAppModelTests: XCTestCase {
         let scroll = try XCTUnwrap(scrollViews.first)
         let document = try XCTUnwrap(scroll.documentView)
         XCTAssertGreaterThan(scroll.frame.height, 120)
-        XCTAssertGreaterThan(document.frame.height, scroll.contentView.bounds.height + 100)
+        XCTAssertGreaterThan(document.frame.height, scroll.contentView.bounds.height + 50)
         let bottom = document.frame.height - scroll.contentView.bounds.height
         scroll.contentView.scroll(to: NSPoint(x: 0, y: bottom))
         scroll.reflectScrolledClipView(scroll.contentView)
@@ -144,7 +162,9 @@ final class MenuBarAppModelTests: XCTestCase {
     }
 
     func testPopoverLayoutUsesMeasuredContentHeight() {
+        XCTAssertEqual(MenuBarPopoverLayout.width, 380)
         XCTAssertEqual(MenuBarPopoverLayout.size(contentHeight: 642).height, 642)
+        XCTAssertEqual(MenuBarPopoverLayout.maxContentHeight(screenHeight: 922), 874)
     }
 
     func testStatusItemPresentationKeepsMenuBarEntryNumeric() throws {

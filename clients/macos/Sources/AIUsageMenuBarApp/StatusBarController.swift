@@ -4,10 +4,19 @@ import Combine
 import SwiftUI
 
 enum MenuBarPopoverLayout {
-    static let width: CGFloat = 320
+    static let width: CGFloat = 380
+    static let bottomMargin: CGFloat = 48
+    static let minContentHeight: CGFloat = 200
 
-    static func size(contentHeight: CGFloat) -> NSSize {
-        NSSize(width: width, height: max(contentHeight, 1))
+    static func maxContentHeight(screenHeight: CGFloat?) -> CGFloat {
+        let baseHeight = screenHeight ?? 800
+        return max(320, baseHeight - bottomMargin)
+    }
+
+    static func size(contentHeight: CGFloat, screenHeight: CGFloat? = nil) -> NSSize {
+        let maxHeight = maxContentHeight(screenHeight: screenHeight)
+        let clampedHeight = min(max(contentHeight, 1), maxHeight)
+        return NSSize(width: width, height: clampedHeight)
     }
 }
 
@@ -144,7 +153,8 @@ final class StatusBarController: NSObject {
         hostingController.view.frame.size.width = MenuBarPopoverLayout.width
         hostingController.view.layoutSubtreeIfNeeded()
         let fittingHeight = hostingController.view.fittingSize.height
-        let size = MenuBarPopoverLayout.size(contentHeight: fittingHeight)
+        let screenHeight = hostingController.view.window?.screen?.visibleFrame.height ?? NSScreen.main?.visibleFrame.height
+        let size = MenuBarPopoverLayout.size(contentHeight: fittingHeight, screenHeight: screenHeight)
         hostingController.view.setFrameSize(size)
         popover.contentSize = size
     }
