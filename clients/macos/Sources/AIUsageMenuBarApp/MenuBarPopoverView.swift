@@ -6,7 +6,7 @@ struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarAppModel
     var onQuit: (() -> Void)?
     var onContentHeightChange: (() -> Void)?
-    @State private var contentHeight: CGFloat = 200
+    @State private var contentHeight: CGFloat
     @State private var hoveredBar: MenuTrendBar?
     @State private var hoverLocation: CGPoint?
     @State private var expandedSources: Set<String> = []
@@ -17,6 +17,18 @@ struct MenuBarPopoverView: View {
     private let periods: [(String, String)] = [
         ("today", "日"), ("week", "周"), ("month", "月"),
     ]
+
+    init(model: MenuBarAppModel, onQuit: (() -> Void)? = nil, onContentHeightChange: (() -> Void)? = nil) {
+        self.model = model
+        self.onQuit = onQuit
+        self.onContentHeightChange = onContentHeightChange
+        let initialEstimate: CGFloat = model.hasLoadedUsableSummary ? 560 : 200
+        _contentHeight = State(initialValue: initialEstimate)
+    }
+
+    private var maxContentHeight: CGFloat {
+        MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,8 +41,9 @@ struct MenuBarPopoverView: View {
                         Color.clear.preference(key: PopoverContentHeight.self, value: geometry.size.height)
                     })
                 }
-                .frame(height: min(max(contentHeight, 200), max(200, (NSScreen.main?.visibleFrame.height ?? 800) - 160)))
+                .frame(height: min(max(contentHeight, 200), maxContentHeight))
                 .onPreferenceChange(PopoverContentHeight.self) { height in
+                    guard height > 10 else { return }
                     guard abs(contentHeight - height) > 0.5 else { return }
                     contentHeight = height
                     DispatchQueue.main.async { onContentHeightChange?() }
@@ -134,13 +147,14 @@ struct MenuBarPopoverView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
             .onChange(of: model.selectedPeriodID) { _, newValue in
                 model.refresh(periodID: newValue)
             }
 
             historyNavigation
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 if model.hasLoadedUsableSummary {
                     heroCard
                 } else {
@@ -175,7 +189,7 @@ struct MenuBarPopoverView: View {
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 20)
-        .padding(.bottom, 12)
+        .padding(.bottom, 8)
         .onChange(of: model.selection) { _, _ in
             expandedSources.removeAll()
             expandedAgents.removeAll()
@@ -618,7 +632,7 @@ struct QuotaRingItem: View {
                     .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.primary)
             }
-            .frame(width: 110, height: 110)
+            .frame(width: 92, height: 92)
 
             VStack(spacing: 3) {
                 Text(data.usageText)
@@ -628,17 +642,20 @@ struct QuotaRingItem: View {
                         color: Color(red: data.outerRed, green: data.outerGreen, blue: data.outerBlue))
                 ringRow(key: data.innerLabel, pct: data.innerPctText, time: data.innerTimeText,
                         color: Color(red: data.innerRed, green: data.innerGreen, blue: data.innerBlue))
-                Text(data.availabilityText)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(data.availabilityText == "官方额度" ? Color.secondary : Color.orange)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(data.updatedText)
-                    .font(.system(size: 9))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(data.availabilityText)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(data.availabilityText == "官方额度" ? Color.secondary : Color.orange)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Spacer(minLength: 2)
+                    Text(data.updatedText)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 6)
         }
     }
 
