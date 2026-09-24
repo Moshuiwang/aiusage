@@ -3521,6 +3521,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -3543,6 +3546,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -7059,6 +7063,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -7081,6 +7088,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -10597,6 +10605,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -10619,6 +10630,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -14135,6 +14147,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -14157,6 +14172,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -18007,6 +18023,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -18029,6 +18048,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -19227,6 +19247,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -19249,6 +19272,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -23688,6 +23712,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -23710,6 +23737,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",

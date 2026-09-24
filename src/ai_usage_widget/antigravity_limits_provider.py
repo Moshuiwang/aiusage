@@ -19,7 +19,10 @@ def parse_antigravity_user_status(payload: Dict[str, Any]) -> List[LimitWindow]:
         raise LimitContractError("antigravity_user_status_schema_invalid", "Antigravity user status payload must be an object")
 
     observed_at = _string_field(payload, "observed_at")
-    status_payload = _object_field(payload, "user_status", "userStatus", "status")
+    if _has_any(payload, "response", "groups"):
+        status_payload = payload
+    else:
+        status_payload = _object_field(payload, "user_status", "userStatus", "status")
     return _parse_windows(
         _limits_container(status_payload),
         observed_at=observed_at,
@@ -111,10 +114,60 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
         if name in payload:
             return payload[name]
 
+    # 1. RetrieveUserQuotaSummary structure: response.groups or groups
+    res_obj = payload.get("response") if isinstance(payload.get("response"), dict) else payload
+    groups = res_obj.get("groups") if isinstance(res_obj, dict) else None
+    if isinstance(groups, list) and groups:
+        gemini_group = next(
+            (g for g in groups if isinstance(g, dict) and "gemini" in str(g.get("displayName", "")).lower()),
+            None
+        )
+        target_group = gemini_group if gemini_group is not None else groups[0]
+        if isinstance(target_group, dict) and isinstance(target_group.get("buckets"), list):
+            res_windows: Dict[str, Any] = {}
+            for b in target_group["buckets"]:
+                if not isinstance(b, dict):
+                    continue
+                win_id = str(b.get("window") or b.get("bucketId") or "").lower()
+                rem_frac = b.get("remainingFraction", b.get("remaining_fraction"))
+                rem_pct = b.get("remainingPercent", b.get("remaining_percent"))
+                if rem_frac is None and rem_pct is not None:
+                    rem_frac = float(rem_pct) / 100.0
+                reset_time = b.get("resetTime") or b.get("reset_time") or b.get("resetAt") or b.get("resetsAt")
+                if "week" in win_id:
+                    res_windows["week"] = {
+                        "remainingFraction": rem_frac,
+                        "resetAt": reset_time,
+                        "windowDurationMins": 10080,
+                    }
+                elif "5h" in win_id or "session" in win_id or "hour" in win_id:
+                    res_windows["session"] = {
+                        "remainingFraction": rem_frac,
+                        "resetAt": reset_time,
+                        "windowDurationMins": 300,
+                    }
+            if res_windows:
+                ordered_windows = {}
+                for k in ("session", "day", "week", "month"):
+                    if k in res_windows:
+                        ordered_windows[k] = res_windows[k]
+                for k, v in res_windows.items():
+                    if k not in ordered_windows:
+                        ordered_windows[k] = v
+                return ordered_windows
+
+    # 2. Fallback to GetUserStatus cascadeModelConfigData
     for name in ("cascadeModelConfigData", "cascade_model_config_data"):
         if name in payload and isinstance(payload[name], dict):
             configs = payload[name].get("clientModelConfigs") or payload[name].get("client_model_configs") or []
-            for item in configs:
+            gemini_config = next(
+                (c for c in configs if isinstance(c, dict) and "gemini" in str(c.get("label", "")).lower()),
+                None
+            )
+            target_configs = [gemini_config] if gemini_config else configs
+            for item in target_configs:
+                if not isinstance(item, dict):
+                    continue
                 quota = item.get("quotaInfo") or item.get("quota_info")
                 if isinstance(quota, dict) and ("remainingFraction" in quota or "remainingPercent" in quota or "remaining_fraction" in quota):
                     rem_frac = quota.get("remainingFraction", quota.get("remaining_fraction"))
@@ -262,7 +315,7 @@ def live_language_server_status_reader(timeout: float = 2.0) -> Dict[str, Any]:
     ports = []
     try:
         lsof_out = subprocess.check_output(
-            ["lsof", "-nP", "-p", str(target_pid), "-iTCP", "-sTCP:LISTEN"],
+            ["lsof", "-a", "-nP", "-p", str(target_pid), "-iTCP", "-sTCP:LISTEN"],
             text=True,
             stderr=subprocess.DEVNULL,
         )
@@ -287,27 +340,32 @@ def live_language_server_status_reader(timeout: float = 2.0) -> Dict[str, Any]:
     ctx.verify_mode = ssl.CERT_NONE
 
     last_error = None
+    endpoints = [
+        "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
+        "/exa.language_server_pb.LanguageServerService/GetUserStatus",
+    ]
     for port in ports:
         for scheme in ("https", "http"):
-            url = f"{scheme}://127.0.0.1:{port}/exa.language_server_pb.LanguageServerService/GetUserStatus"
-            req = urllib.request.Request(
-                url,
-                data=b"{}",
-                headers={
-                    "Content-Type": "application/json",
-                    "x-codeium-csrf-token": csrf_token,
-                },
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, context=ctx if scheme == "https" else None, timeout=timeout) as resp:
-                    if resp.status == 200:
-                        payload = json.loads(resp.read().decode("utf-8"))
-                        observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
-                        payload["observed_at"] = observed_at
-                        return payload
-            except Exception as exc:
-                last_error = exc
-                continue
+            for endpoint in endpoints:
+                url = f"{scheme}://127.0.0.1:{port}{endpoint}"
+                req = urllib.request.Request(
+                    url,
+                    data=b"{}",
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-codeium-csrf-token": csrf_token,
+                    },
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, context=ctx if scheme == "https" else None, timeout=timeout) as resp:
+                        if resp.status == 200:
+                            payload = json.loads(resp.read().decode("utf-8"))
+                            observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
+                            payload["observed_at"] = observed_at
+                            return payload
+                except Exception as exc:
+                    last_error = exc
+                    continue
 
     raise AntigravityProviderError("provider_unavailable", f"unable to connect to Antigravity language_server RPC: {last_error}")
