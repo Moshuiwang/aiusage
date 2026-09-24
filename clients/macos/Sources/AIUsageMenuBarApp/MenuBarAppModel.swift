@@ -58,7 +58,12 @@ final class MenuBarAppModel: ObservableObject {
     }
 
     var state: MenuBarState {
-        MenuBarViewModel.build(from: summary, selectedPeriodID: selectedPeriodID, selectedOffset: selectedOffset)
+        MenuBarViewModel.build(
+            from: summary,
+            selectedPeriodID: selectedPeriodID,
+            selectedOffset: selectedOffset,
+            machineAliases: config?.machineAliases
+        )
     }
 
     var hasConfig: Bool {
@@ -73,7 +78,13 @@ final class MenuBarAppModel: ObservableObject {
     }
 
     var selection: MenuPeriodSelection { MenuPeriodSelection(periodID: selectedPeriodID, offset: selectedOffset) }
-    var statusState: MenuBarState { MenuBarViewModel.build(from: todaySummary ?? .empty(), selectedPeriodID: "today") }
+    var statusState: MenuBarState {
+        MenuBarViewModel.build(
+            from: todaySummary ?? .empty(),
+            selectedPeriodID: "today",
+            machineAliases: config?.machineAliases
+        )
+    }
 
     func movePeriod(_ delta: Int) {
         let next = selection.moving(delta)
@@ -181,6 +192,30 @@ final class MenuBarAppModel: ObservableObject {
                 guard sequence == self.todayRefreshSequence else { return }
                 if !Self.sameServiceDay(requestedAt, self.now(), timezone: requestTimezone) {
                     self.expireRelativeCachesAfterMidnight()
+                }
+            }
+        }
+    }
+
+    /// 后台预取常用历史周期（本周、本月），确保呈现时 100% 瞬时读取本地库
+    func prefetchCommonPeriods() {
+        guard let runtimeConfig = loadRuntimeConfig(paths) ?? config,
+              let baseURL = URL(string: runtimeConfig.serverURL) else { return }
+        let periods = ["week", "month"]
+        let loader = loadSummary
+        for period in periods {
+            if let cached = cachedSummaries[period], isFresh(cached) {
+                continue
+            }
+            Task {
+                do {
+                    let loaded = try await loader(MobileSummaryClientConfig(
+                        baseURL: baseURL, bearerToken: runtimeConfig.token, period: period, offset: 0
+                    ))
+                    guard loaded.period.id == period else { return }
+                    self.store(loaded, for: MenuPeriodSelection(periodID: period))
+                } catch {
+                    // 后台静默预取失败不打扰用户
                 }
             }
         }

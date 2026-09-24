@@ -32,6 +32,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -44,6 +45,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -56,6 +58,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -68,6 +71,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -80,6 +84,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -92,6 +97,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -104,6 +110,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -116,6 +123,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -128,6 +136,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -140,6 +149,7 @@
         "cache_ratio": 3,
         "claude_tokens": 300,
         "codex_tokens": 700,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -152,6 +162,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -164,6 +175,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -176,6 +188,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -188,6 +201,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -200,6 +214,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -212,6 +227,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -224,6 +240,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -236,6 +253,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -248,6 +266,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -260,6 +279,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -272,6 +292,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -284,6 +305,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -296,6 +318,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       },
       {
@@ -308,6 +331,7 @@
         "cache_ratio": 0,
         "claude_tokens": 0,
         "codex_tokens": 0,
+        "gemini_tokens": 0,
         "unknown_tokens": 0
       }
     ]
@@ -851,6 +875,24 @@
         "input_tokens": 610,
         "output_tokens": 60,
         "cache_tokens": 30
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
+    },
+    {
+      "provider": "antigravity",
+      "usage": {
+        "status": "missing",
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0
       },
       "quota": {
         "status": "missing",

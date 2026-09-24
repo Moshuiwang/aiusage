@@ -37,8 +37,8 @@ export type MobileSummary = {
 
 // Issue #61：固定的 provider 槽位。DTO 只裁剪 snapshot 的事实，不重算口径；
 // 额度缺失时只保留「最近一次验证时间」，不带任何百分比或 reset 时间。
-// 与 src/ai_usage_widget/mobile_summary.py 的 SLOT_PROVIDERS 保持逐字一致。
-const slotProviders = ["claude", "codex"];
+// 与 src/ai_usage_widget/verify_cloud.py 的 SLOT_PROVIDERS 保持逐字一致。
+const slotProviders = ["claude", "codex", "antigravity"];
 
 export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
   // 类型守结构（顶层键漂移在编译期抓），coercion 守运行时（部分快照照旧宽容，
@@ -211,11 +211,16 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
   const sourcePoints = list<AnyRecord>(trend.points);
   const claudeValues = sourcePoints.map(() => 0);
   const codexValues = sourcePoints.map(() => 0);
+  const geminiValues = sourcePoints.map(() => 0);
   for (const agentRow of list<AnyRecord>(trend.by_agent)) {
     const agent = str(agentRow.agent).toLowerCase();
     const target = agent.includes("claude")
       ? claudeValues
-      : (agent.includes("codex") || agent.includes("openai") || agent.includes("gpt")) ? codexValues : null;
+      : (agent.includes("codex") || agent.includes("openai") || agent.includes("gpt"))
+        ? codexValues
+        : (agent.includes("gemini") || agent.includes("google") || agent.includes("antigravity"))
+          ? geminiValues
+          : null;
     if (!target) continue;
     list<unknown>(agentRow.values).slice(0, sourcePoints.length).forEach((value, index) => {
       target[index] += Math.max(int(value), 0);
@@ -225,10 +230,11 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
     const bucket = row.hour || row.date;
     const totalTokens = int(row.total_tokens);
     const cacheTokens = int(row.cache_tokens);
-    const [claudeTokens, codexTokens] = fitKnownAgentTokens(
+    const [claudeTokens, codexTokens, geminiTokens] = fitKnownAgentTokens(
       totalTokens,
       claudeValues[index],
       codexValues[index],
+      geminiValues[index],
     );
     return {
       bucket,
@@ -240,7 +246,8 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
       cache_ratio: ratio(cacheTokens, totalTokens),
       claude_tokens: claudeTokens,
       codex_tokens: codexTokens,
-      unknown_tokens: Math.max(totalTokens - claudeTokens - codexTokens, 0),
+      gemini_tokens: geminiTokens,
+      unknown_tokens: Math.max(totalTokens - claudeTokens - codexTokens - geminiTokens, 0),
     };
   });
   return {
@@ -252,15 +259,18 @@ function mobileTrend(trend: AnyRecord): AnyRecord {
   };
 }
 
-function fitKnownAgentTokens(total: number, claude: number, codex: number): [number, number] {
+function fitKnownAgentTokens(total: number, claude: number, codex: number, gemini: number = 0): [number, number, number] {
   total = Math.max(int(total), 0);
   claude = Math.max(int(claude), 0);
   codex = Math.max(int(codex), 0);
-  const known = claude + codex;
-  if (known <= total) return [claude, codex];
-  if (known === 0) return [0, 0];
+  gemini = Math.max(int(gemini), 0);
+  const known = claude + codex + gemini;
+  if (known <= total) return [claude, codex, gemini];
+  if (known === 0) return [0, 0, 0];
   const fittedClaude = Math.floor(total * claude / known);
-  return [fittedClaude, total - fittedClaude];
+  const fittedCodex = Math.floor(total * codex / known);
+  const fittedGemini = total - fittedClaude - fittedCodex;
+  return [fittedClaude, fittedCodex, fittedGemini];
 }
 
 function mobileSource(row: AnyRecord): AnyRecord {

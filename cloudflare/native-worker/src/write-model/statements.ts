@@ -340,6 +340,17 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
     window.reset_at, window.window_duration_minutes, window.source_type, window.confidence,
     window.status, window.observed_at, seenAt, seenAt,
   ));
+  statements.push(db.prepare(`
+    INSERT INTO limit_window_history (
+      source_id, provider, window, used_percent, remaining_percent, reset_at,
+      window_duration_minutes, source_type, confidence, status, observed_at, recorded_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(source_id, provider, window, observed_at) DO NOTHING
+  `).bind(
+    window.source_id, window.provider, window.window, window.used_percent, window.remaining_percent,
+    window.reset_at, window.window_duration_minutes, window.source_type, window.confidence,
+    window.status, window.observed_at, seenAt,
+  ));
   return statements;
 }
 

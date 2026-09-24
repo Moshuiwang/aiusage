@@ -1526,9 +1526,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -3165,9 +3241,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -3369,6 +3521,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -3391,6 +3546,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -4259,9 +4415,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -6551,9 +6783,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -6755,6 +7063,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -6777,6 +7088,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -7645,9 +7957,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -9937,9 +10325,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -10141,6 +10605,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -10163,6 +10630,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -11031,9 +11499,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -13323,9 +13867,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -13527,6 +14147,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -13549,6 +14172,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -14332,9 +14956,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -15582,9 +16282,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -17030,9 +17806,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -17171,6 +18023,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -17193,6 +18048,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -18174,9 +19030,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -18315,6 +19247,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -18337,6 +19272,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",
@@ -19943,9 +20879,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -22420,9 +23432,85 @@
                     "usage"
                   ],
                   "type": "object"
+                },
+                {
+                  "fields": {
+                    "provider": {
+                      "type": "str",
+                      "value": "antigravity"
+                    },
+                    "quota": {
+                      "fields": {
+                        "last_verified_at": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "str"
+                        },
+                        "source_id": {
+                          "type": "null"
+                        },
+                        "source_type": {
+                          "type": "null"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "windows": {
+                          "items": [],
+                          "length": 0,
+                          "type": "array"
+                        }
+                      },
+                      "keys": [
+                        "last_verified_at",
+                        "reason",
+                        "source_id",
+                        "source_type",
+                        "status",
+                        "windows"
+                      ],
+                      "type": "object"
+                    },
+                    "usage": {
+                      "fields": {
+                        "cache_tokens": {
+                          "type": "int"
+                        },
+                        "input_tokens": {
+                          "type": "int"
+                        },
+                        "output_tokens": {
+                          "type": "int"
+                        },
+                        "status": {
+                          "type": "str",
+                          "value": "missing"
+                        },
+                        "total_tokens": {
+                          "type": "int"
+                        }
+                      },
+                      "keys": [
+                        "cache_tokens",
+                        "input_tokens",
+                        "output_tokens",
+                        "status",
+                        "total_tokens"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "keys": [
+                    "provider",
+                    "quota",
+                    "usage"
+                  ],
+                  "type": "object"
                 }
               ],
-              "length": 2,
+              "length": 3,
               "type": "array"
             },
             "provider_usage_coverage": {
@@ -22624,6 +23712,9 @@
                         "codex_tokens": {
                           "type": "int"
                         },
+                        "gemini_tokens": {
+                          "type": "int"
+                        },
                         "input_tokens": {
                           "type": "int"
                         },
@@ -22646,6 +23737,7 @@
                         "cache_tokens",
                         "claude_tokens",
                         "codex_tokens",
+                        "gemini_tokens",
                         "input_tokens",
                         "label",
                         "output_tokens",

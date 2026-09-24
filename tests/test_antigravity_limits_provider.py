@@ -95,13 +95,110 @@ class TestAntigravityLimitsProvider(unittest.TestCase):
                     "user_status": {
                         "limits": {
                             "session": {
-                                "remainingFraction": 0.72,
-                                "windowDurationMins": 300,
                             }
                         }
                     },
                 }
             )
+
+    def test_cascade_model_config_data_real_world_payload(self) -> None:
+        payload = {
+            "observed_at": "2026-09-24T08:20:00+08:00",
+            "userStatus": {
+                "userTier": {"id": "g1-pro-tier", "name": "Google AI Pro"},
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        {
+                            "label": "Gemini 3.8 Flash (High)",
+                            "modelId": "gemini-3.8-flash-high",
+                            "quotaInfo": {
+                                "remainingFraction": 0.66,
+                                "resetTime": "2026-09-24T04:40:21Z",
+                            },
+                        },
+                        {
+                            "label": "Claude Opus 4.6 (Thinking)",
+                            "modelId": "claude-opus-4-6-thinking",
+                            "quotaInfo": {
+                                "remainingFraction": 1.0,
+                                "resetTime": "2026-09-24T05:21:30Z",
+                            },
+                        },
+                    ]
+                },
+            },
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertGreaterEqual(len(windows), 1)
+        w0 = windows[0]
+        self.assertEqual(w0.provider, "antigravity")
+        self.assertEqual(w0.window, "session")
+        self.assertAlmostEqual(w0.remaining_percent, 66.0)
+        self.assertAlmostEqual(w0.used_percent, 34.0)
+        self.assertEqual(w0.reset_at, "2026-09-24T04:40:21Z")
+        self.assertEqual(w0.confidence, "observed")
+        self.assertEqual(w0.status, "ok")
+
+    def test_quota_summary_fixture_maps_both_session_and_week_windows(self) -> None:
+        payload = json.loads((FIXTURES / "antigravity_quota_summary.json").read_text(encoding="utf-8"))
+
+        windows = parse_antigravity_user_status(payload)
+
+        self.assertEqual(len(windows), 2)
+        session_w = windows[0]
+        self.assertEqual(session_w.provider, "antigravity")
+        self.assertEqual(session_w.window, "session")
+        self.assertAlmostEqual(session_w.remaining_percent, 7.71614)
+        self.assertAlmostEqual(session_w.used_percent, 92.28386)
+        self.assertEqual(session_w.reset_at, "2026-09-24T04:40:21Z")
+        self.assertEqual(session_w.window_duration_minutes, 300)
+        self.assertEqual(session_w.source_type, "language_server")
+        self.assertEqual(session_w.confidence, "observed")
+        self.assertEqual(session_w.status, "ok")
+        self.assertTrue(session_w.is_official)
+
+        week_w = windows[1]
+        self.assertEqual(week_w.provider, "antigravity")
+        self.assertEqual(week_w.window, "week")
+        self.assertAlmostEqual(week_w.remaining_percent, 78.984827)
+        self.assertAlmostEqual(week_w.used_percent, 21.015173)
+        self.assertEqual(week_w.reset_at, "2026-09-30T06:33:58Z")
+        self.assertEqual(week_w.window_duration_minutes, 10080)
+        self.assertEqual(week_w.source_type, "language_server")
+        self.assertEqual(week_w.confidence, "observed")
+        self.assertEqual(week_w.status, "ok")
+        self.assertTrue(week_w.is_official)
+
+    def test_quota_summary_handles_direct_groups_and_percent_fields(self) -> None:
+        payload = {
+            "observed_at": "2026-09-24T10:00:00+08:00",
+            "groups": [
+                {
+                    "displayName": "Gemini Models",
+                    "buckets": [
+                        {
+                            "window": "5h",
+                            "remainingPercent": 16.0,
+                            "resetTime": "2026-09-24T12:00:00Z",
+                        },
+                        {
+                            "window": "weekly",
+                            "remainingPercent": 80.0,
+                            "resetTime": "2026-09-30T12:00:00Z",
+                        },
+                    ],
+                }
+            ],
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertEqual(len(windows), 2)
+        self.assertEqual([w.window for w in windows], ["session", "week"])
+        self.assertEqual(windows[0].remaining_percent, 16.0)
+        self.assertEqual(windows[0].used_percent, 84.0)
+        self.assertEqual(windows[0].reset_at, "2026-09-24T12:00:00Z")
+        self.assertEqual(windows[1].remaining_percent, 80.0)
+        self.assertEqual(windows[1].used_percent, 20.0)
+        self.assertEqual(windows[1].reset_at, "2026-09-30T12:00:00Z")
 
 
 if __name__ == "__main__":

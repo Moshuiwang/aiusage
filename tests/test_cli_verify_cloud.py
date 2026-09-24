@@ -121,7 +121,7 @@ class TestVerifyCloudSummary(unittest.TestCase):
         self.assertEqual(report["totals"]["total_tokens"], 900000)
         self.assertEqual(
             [row["provider"] for row in report["provider_slots"]],
-            ["claude", "codex"],
+            ["claude", "codex", "antigravity"],
         )
         self.assertEqual(report["coverage"]["status"], "complete")
 
@@ -203,11 +203,11 @@ class TestVerifyCloudLimits(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertEqual(report["degraded_count"], 0)
-        self.assertEqual(report["trusted_count"], 2)
+        self.assertEqual(report["trusted_count"], 3)
         self.assertEqual(report["issues"], [])
         self.assertEqual(
             sorted(row["trust"] for row in report["windows"]),
-            ["trusted_official", "trusted_official"],
+            ["trusted_official", "trusted_official", "trusted_official"],
         )
 
     def test_provider_without_usable_quota_is_named(self) -> None:
@@ -400,7 +400,7 @@ class TestVerifyCloudParity(unittest.TestCase):
             "provider_usage_coverage.total_tokens",
             "provider_usage_coverage.unattributed_tokens",
         ]
-        for provider in ("claude", "codex"):
+        for provider in ("claude", "codex", "antigravity"):
             for leaf in (
                 "quota.last_verified_at",
                 "quota.reason",

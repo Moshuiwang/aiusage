@@ -19,7 +19,10 @@ def parse_antigravity_user_status(payload: Dict[str, Any]) -> List[LimitWindow]:
         raise LimitContractError("antigravity_user_status_schema_invalid", "Antigravity user status payload must be an object")
 
     observed_at = _string_field(payload, "observed_at")
-    status_payload = _object_field(payload, "user_status", "userStatus", "status")
+    if _has_any(payload, "response", "groups"):
+        status_payload = payload
+    else:
+        status_payload = _object_field(payload, "user_status", "userStatus", "status")
     return _parse_windows(
         _limits_container(status_payload),
         observed_at=observed_at,
@@ -49,7 +52,7 @@ class AntigravityLimitsProvider:
         user_status_reader: Callable[[], Dict[str, Any]] | None = None,
         command_model_configs_reader: Callable[[], Dict[str, Any]] | None = None,
     ) -> None:
-        self.user_status_reader = user_status_reader or _unsupported_user_status_reader
+        self.user_status_reader = user_status_reader or live_language_server_status_reader
         self.command_model_configs_reader = command_model_configs_reader or _unsupported_command_model_configs_reader
 
     def collect(self) -> List[LimitWindow]:
@@ -110,6 +113,81 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
     for name in ("limits", "windows", "quota_windows", "quotaWindows"):
         if name in payload:
             return payload[name]
+
+    # 1. RetrieveUserQuotaSummary structure: response.groups or groups
+    res_obj = payload.get("response") if isinstance(payload.get("response"), dict) else payload
+    groups = res_obj.get("groups") if isinstance(res_obj, dict) else None
+    if isinstance(groups, list) and groups:
+        gemini_group = next(
+            (g for g in groups if isinstance(g, dict) and "gemini" in str(g.get("displayName", "")).lower()),
+            None
+        )
+        target_group = gemini_group if gemini_group is not None else groups[0]
+        if isinstance(target_group, dict) and isinstance(target_group.get("buckets"), list):
+            res_windows: Dict[str, Any] = {}
+            for b in target_group["buckets"]:
+                if not isinstance(b, dict):
+                    continue
+                win_id = str(b.get("window") or b.get("bucketId") or "").lower()
+                rem_frac = b.get("remainingFraction", b.get("remaining_fraction"))
+                rem_pct = b.get("remainingPercent", b.get("remaining_percent"))
+                if rem_frac is None and rem_pct is not None:
+                    rem_frac = float(rem_pct) / 100.0
+                reset_time = b.get("resetTime") or b.get("reset_time") or b.get("resetAt") or b.get("resetsAt")
+                if "week" in win_id:
+                    res_windows["week"] = {
+                        "remainingFraction": rem_frac,
+                        "resetAt": reset_time,
+                        "windowDurationMins": 10080,
+                    }
+                elif "5h" in win_id or "session" in win_id or "hour" in win_id:
+                    res_windows["session"] = {
+                        "remainingFraction": rem_frac,
+                        "resetAt": reset_time,
+                        "windowDurationMins": 300,
+                    }
+            if res_windows:
+                ordered_windows = {}
+                for k in ("session", "day", "week", "month"):
+                    if k in res_windows:
+                        ordered_windows[k] = res_windows[k]
+                for k, v in res_windows.items():
+                    if k not in ordered_windows:
+                        ordered_windows[k] = v
+                return ordered_windows
+
+    # 2. Fallback to GetUserStatus cascadeModelConfigData
+    for name in ("cascadeModelConfigData", "cascade_model_config_data"):
+        if name in payload and isinstance(payload[name], dict):
+            configs = payload[name].get("clientModelConfigs") or payload[name].get("client_model_configs") or []
+            gemini_config = next(
+                (c for c in configs if isinstance(c, dict) and "gemini" in str(c.get("label", "")).lower()),
+                None
+            )
+            target_configs = [gemini_config] if gemini_config else configs
+            for item in target_configs:
+                if not isinstance(item, dict):
+                    continue
+                quota = item.get("quotaInfo") or item.get("quota_info")
+                if isinstance(quota, dict) and ("remainingFraction" in quota or "remainingPercent" in quota or "remaining_fraction" in quota):
+                    rem_frac = quota.get("remainingFraction", quota.get("remaining_fraction"))
+                    rem_pct = quota.get("remainingPercent", quota.get("remaining_percent"))
+                    if rem_frac is None and rem_pct is not None:
+                        rem_frac = float(rem_pct) / 100.0
+                    reset_time = (
+                        quota.get("resetTime")
+                        or quota.get("reset_time")
+                        or quota.get("resetAt")
+                        or quota.get("resetsAt")
+                    )
+                    return {
+                        "session": {
+                            "remainingFraction": rem_frac,
+                            "resetAt": reset_time,
+                            "windowDurationMins": quota.get("windowDurationMins", quota.get("window_duration_minutes", 300)),
+                        }
+                    }
+
     raise LimitContractError("limit_schema_invalid", "Antigravity payload must include limits or windows")
 
 
@@ -202,3 +280,92 @@ def _unsupported_user_status_reader() -> Dict[str, Any]:
 
 def _unsupported_command_model_configs_reader() -> Dict[str, Any]:
     raise AntigravityProviderError("unsupported", "Antigravity GetCommandModelConfigs reader is not configured")
+
+
+def live_language_server_status_reader(timeout: float = 2.0) -> Dict[str, Any]:
+    import json
+    import ssl
+    import subprocess
+    import urllib.request
+    from datetime import datetime, timezone as dt_timezone
+
+    try:
+        ps_out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.DEVNULL)
+    except Exception as exc:
+        raise AntigravityProviderError("provider_unavailable", f"failed to check processes: {exc}")
+
+    csrf_token = None
+    target_pid = None
+    for line in ps_out.splitlines():
+        if "language_server" in line and "--csrf_token" in line:
+            parts = line.split()
+            for i, p in enumerate(parts):
+                if p == "--csrf_token" and i + 1 < len(parts):
+                    csrf_token = parts[i + 1]
+                elif p.startswith("--csrf_token="):
+                    csrf_token = p.split("=", 1)[1]
+            if len(parts) >= 2 and parts[1].isdigit():
+                target_pid = int(parts[1])
+            break
+
+    if not csrf_token or not target_pid:
+        raise AntigravityProviderError("provider_unavailable", "Antigravity language server process is not running")
+
+    # Find listening ports for PID
+    ports = []
+    try:
+        lsof_out = subprocess.check_output(
+            ["lsof", "-a", "-nP", "-p", str(target_pid), "-iTCP", "-sTCP:LISTEN"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+        for line in lsof_out.splitlines():
+            # Format: ... TCP 127.0.0.1:58435 (LISTEN) or TCP *:58435 (LISTEN)
+            parts = line.split()
+            for part in parts:
+                if ":" in part and "(" not in part:
+                    port_str = part.rsplit(":", 1)[-1]
+                    if port_str.isdigit():
+                        p = int(port_str)
+                        if p not in ports:
+                            ports.append(p)
+    except Exception:
+        pass
+
+    if not ports:
+        raise AntigravityProviderError("provider_unavailable", f"no listening ports found for language_server PID {target_pid}")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    last_error = None
+    endpoints = [
+        "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
+        "/exa.language_server_pb.LanguageServerService/GetUserStatus",
+    ]
+    for port in ports:
+        for scheme in ("https", "http"):
+            for endpoint in endpoints:
+                url = f"{scheme}://127.0.0.1:{port}{endpoint}"
+                req = urllib.request.Request(
+                    url,
+                    data=b"{}",
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-codeium-csrf-token": csrf_token,
+                    },
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, context=ctx if scheme == "https" else None, timeout=timeout) as resp:
+                        if resp.status == 200:
+                            payload = json.loads(resp.read().decode("utf-8"))
+                            observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
+                            payload["observed_at"] = observed_at
+                            return payload
+                except Exception as exc:
+                    last_error = exc
+                    continue
+
+    raise AntigravityProviderError("provider_unavailable", f"unable to connect to Antigravity language_server RPC: {last_error}")

@@ -6,6 +6,7 @@ public struct MenuBarRuntimeConfig: Codable, Equatable, Sendable {
     public let dashboardURL: String?
     public let refreshIntervalSeconds: TimeInterval
     public let defaultPeriod: String
+    public let machineAliases: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case serverURL = "server_url"
@@ -13,20 +14,23 @@ public struct MenuBarRuntimeConfig: Codable, Equatable, Sendable {
         case dashboardURL = "dashboard_url"
         case refreshIntervalSeconds = "refresh_interval_seconds"
         case defaultPeriod = "default_period"
+        case machineAliases = "machine_aliases"
     }
 
     public init(
         serverURL: String,
         token: String?,
         dashboardURL: String?,
-        refreshIntervalSeconds: TimeInterval = 600,
-        defaultPeriod: String = "today"
+        refreshIntervalSeconds: TimeInterval = 300,
+        defaultPeriod: String = "today",
+        machineAliases: [String: String]? = nil
     ) {
         self.serverURL = serverURL
         self.token = token
         self.dashboardURL = dashboardURL
         self.refreshIntervalSeconds = max(refreshIntervalSeconds, 300)
         self.defaultPeriod = defaultPeriod
+        self.machineAliases = machineAliases
     }
 }
 
@@ -48,8 +52,9 @@ public enum MenuBarRuntimeConfigLoader {
             serverURL: serverURL,
             token: envToken ?? fileConfig?.token,
             dashboardURL: environment["AI_USAGE_DASHBOARD_URL"] ?? fileConfig?.dashboardURL ?? serverURL,
-            refreshIntervalSeconds: Double(environment["AI_USAGE_REFRESH_SECONDS"] ?? "") ?? fileConfig?.refreshIntervalSeconds ?? 600,
-            defaultPeriod: environment["AI_USAGE_PERIOD"] ?? fileConfig?.defaultPeriod ?? "today"
+            refreshIntervalSeconds: Double(environment["AI_USAGE_REFRESH_SECONDS"] ?? "") ?? fileConfig?.refreshIntervalSeconds ?? 300,
+            defaultPeriod: environment["AI_USAGE_PERIOD"] ?? fileConfig?.defaultPeriod ?? "today",
+            machineAliases: fileConfig?.machineAliases
         )
     }
 

@@ -78,6 +78,41 @@
       },
       "host": "macbook-pro.local",
       "machine": "macbook-pro",
+      "mswusage_antigravity_hourly_report": {
+        "collector": {
+          "coverage": {
+            "end": "2026-06-05T00:00:00+08:00",
+            "start": "2026-06-04T00:00:00+08:00"
+          },
+          "lookback_hours": 48,
+          "mode": "incremental"
+        },
+        "daily": [
+          {
+            "agent": "antigravity",
+            "date": "2026-06-04",
+            "total_tokens": 12000
+          }
+        ],
+        "generated_at": "2026-06-05T09:00:10+08:00",
+        "hourly": [
+          {
+            "agent": "antigravity",
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 10000,
+            "hour": "2026-06-04T09:00:00+08:00",
+            "input_tokens": 1500,
+            "output_tokens": 500,
+            "reasoning_output_tokens": 100,
+            "total_tokens": 12000
+          }
+        ],
+        "provenance": "mswusage_antigravity_token_count",
+        "schema_version": 1,
+        "sessions": [],
+        "source": "mswusage_antigravity",
+        "timezone": "Asia/Shanghai"
+      },
       "mswusage_codex_hourly_report": {
         "collector": {
           "coverage": {
@@ -328,6 +363,48 @@
           },
           "window_end": "2026-06-04T10:00:00+08:00",
           "window_start": "2026-06-04T09:00:00+08:00"
+        },
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:10+08:00",
+            "source": "local_usage_ledger",
+            "window": "collection_time"
+          },
+          "agent": "antigravity",
+          "ai_account": {
+            "account_id": "unconfirmed_local_source:fixture-macbook-pro:antigravity",
+            "display_name": null,
+            "label": "\u672c\u673a\u6765\u6e90 / \u672a\u786e\u8ba4\u8d26\u53f7",
+            "provider": "antigravity",
+            "subscription": null
+          },
+          "attribution_confidence": "unconfirmed_local_source",
+          "client": "antigravity",
+          "event_count": 0,
+          "fact_id": "antigravity:antigravity:fixture-macbook-pro:2026-06-04T09:00:00+08:00:2026-06-04T10:00:00+08:00:unconfirmed_local_source:antigravity:unconfirmed_local_source:fixture-macbook-pro:antigravity:mswusage_antigravity_token_count",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_antigravity_token_count",
+          "sensitive_payload": false,
+          "session_count": 0,
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 10000,
+            "input_tokens": 1500,
+            "output_tokens": 500,
+            "reasoning_output_tokens": 100,
+            "total_tokens": 12000
+          },
+          "window_end": "2026-06-04T10:00:00+08:00",
+          "window_start": "2026-06-04T09:00:00+08:00"
         }
       ],
       "usage_ledger_runs": [
@@ -356,6 +433,19 @@
           },
           "facts_digest": "5d3444e95c979d26868d49f56c9912c64e9aaf617dd963ff0c21b35295af2afc",
           "provenance": "mswusage_claude_assistant_usage"
+        },
+        {
+          "agent": "antigravity",
+          "collector": {
+            "coverage": {
+              "end": "2026-06-05T00:00:00+08:00",
+              "start": "2026-06-04T00:00:00+08:00"
+            },
+            "lookback_hours": 48,
+            "mode": "incremental"
+          },
+          "facts_digest": "d77b09f4c6ceca7505626464e820f8fb406c280ccbb2476901dac9d3fd92f6c9",
+          "provenance": "mswusage_antigravity_token_count"
         }
       ]
     },
@@ -413,6 +503,41 @@
       },
       "host": "desktop-partial.internal",
       "machine": "desktop-partial",
+      "mswusage_antigravity_hourly_report": {
+        "collector": {
+          "coverage": {
+            "end": "2026-06-05T00:00:00+08:00",
+            "start": "2026-06-04T00:00:00+08:00"
+          },
+          "lookback_hours": 48,
+          "mode": "incremental"
+        },
+        "daily": [
+          {
+            "agent": "antigravity",
+            "date": "2026-06-04",
+            "total_tokens": 12000
+          }
+        ],
+        "generated_at": "2026-06-05T09:00:10+08:00",
+        "hourly": [
+          {
+            "agent": "antigravity",
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 10000,
+            "hour": "2026-06-04T09:00:00+08:00",
+            "input_tokens": 1500,
+            "output_tokens": 500,
+            "reasoning_output_tokens": 100,
+            "total_tokens": 12000
+          }
+        ],
+        "provenance": "mswusage_antigravity_token_count",
+        "schema_version": 1,
+        "sessions": [],
+        "source": "mswusage_antigravity",
+        "timezone": "Asia/Shanghai"
+      },
       "mswusage_codex_hourly_report": {
         "collector": {
           "coverage": {
@@ -617,6 +742,48 @@
           },
           "window_end": "2026-06-04T10:00:00+08:00",
           "window_start": "2026-06-04T09:00:00+08:00"
+        },
+        {
+          "account_evidence": {
+            "observed_at": "2026-06-05T09:00:10+08:00",
+            "source": "local_usage_ledger",
+            "window": "collection_time"
+          },
+          "agent": "antigravity",
+          "ai_account": {
+            "account_id": "unconfirmed_local_source:fixture-desktop-partial:antigravity",
+            "display_name": null,
+            "label": "\u672c\u673a\u6765\u6e90 / \u672a\u786e\u8ba4\u8d26\u53f7",
+            "provider": "antigravity",
+            "subscription": null
+          },
+          "attribution_confidence": "unconfirmed_local_source",
+          "client": "antigravity",
+          "event_count": 0,
+          "fact_id": "antigravity:antigravity:fixture-desktop-partial:2026-06-04T09:00:00+08:00:2026-06-04T10:00:00+08:00:unconfirmed_local_source:antigravity:unconfirmed_local_source:fixture-desktop-partial:antigravity:mswusage_antigravity_token_count",
+          "metadata": {
+            "collector": {
+              "coverage": {
+                "end": "2026-06-05T00:00:00+08:00",
+                "start": "2026-06-04T00:00:00+08:00"
+              },
+              "lookback_hours": 48,
+              "mode": "incremental"
+            }
+          },
+          "provenance": "mswusage_antigravity_token_count",
+          "sensitive_payload": false,
+          "session_count": 0,
+          "usage": {
+            "cache_creation_tokens": 0,
+            "cache_read_tokens": 10000,
+            "input_tokens": 1500,
+            "output_tokens": 500,
+            "reasoning_output_tokens": 100,
+            "total_tokens": 12000
+          },
+          "window_end": "2026-06-04T10:00:00+08:00",
+          "window_start": "2026-06-04T09:00:00+08:00"
         }
       ],
       "usage_ledger_runs": [
@@ -645,6 +812,19 @@
           },
           "facts_digest": "986f13e7d28be4da35eecbb1ae64c14cfe198226383331f32f6177d3920f3003",
           "provenance": "mswusage_claude_assistant_usage"
+        },
+        {
+          "agent": "antigravity",
+          "collector": {
+            "coverage": {
+              "end": "2026-06-05T00:00:00+08:00",
+              "start": "2026-06-04T00:00:00+08:00"
+            },
+            "lookback_hours": 48,
+            "mode": "incremental"
+          },
+          "facts_digest": "ba6887293735d73509f86c79d37def423b3c6e16e8fecd2d2e79cc8651a117ec",
+          "provenance": "mswusage_antigravity_token_count"
         }
       ]
     },

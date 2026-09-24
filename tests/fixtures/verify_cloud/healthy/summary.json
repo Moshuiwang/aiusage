@@ -74,6 +74,13 @@
       "source_id": "mac-air-wang",
       "source_type": "wham_usage_api",
       "status": "ok"
+    },
+    {
+      "observed_at": "2026-06-03T11:58:00+08:00",
+      "provider": "antigravity",
+      "source_id": "mac-air-wang",
+      "source_type": "language_server_status",
+      "status": "ok"
     }
   ],
   "limits": [
@@ -104,6 +111,20 @@
       "used_percent": 18.0,
       "window": "session",
       "window_duration_minutes": 300
+    },
+    {
+      "confidence": "observed",
+      "observed_at": "2026-06-03T11:58:00+08:00",
+      "official": true,
+      "provider": "antigravity",
+      "remaining_percent": 90.0,
+      "reset_at": "2026-06-04T00:00:00+08:00",
+      "source_id": "mac-air-wang",
+      "source_type": "language_server_status",
+      "status": "ok",
+      "used_percent": 10.0,
+      "window": "session",
+      "window_duration_minutes": 1440
     }
   ],
   "metadata": {
@@ -181,6 +202,39 @@
         "output_tokens": 30000,
         "status": "available",
         "total_tokens": 300000
+      }
+    },
+    {
+      "provider": "antigravity",
+      "quota": {
+        "last_verified_at": "2026-06-03T11:58:00+08:00",
+        "reason": null,
+        "source_id": "mac-air-wang",
+        "source_type": "language_server_status",
+        "status": "available",
+        "windows": [
+          {
+            "confidence": "observed",
+            "observed_at": "2026-06-03T11:58:00+08:00",
+            "official": true,
+            "provider": "antigravity",
+            "remaining_percent": 90.0,
+            "reset_at": "2026-06-04T00:00:00+08:00",
+            "source_id": "mac-air-wang",
+            "source_type": "language_server_status",
+            "status": "ok",
+            "used_percent": 10.0,
+            "window": "session",
+            "window_duration_minutes": 1440
+          }
+        ]
+      },
+      "usage": {
+        "cache_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "status": "available",
+        "total_tokens": 0
       }
     }
   ],

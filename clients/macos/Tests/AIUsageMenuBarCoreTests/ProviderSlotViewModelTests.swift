@@ -11,7 +11,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
     func testDecodesOwnerProviderSlotsAndCoverage() throws {
         let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
 
-        XCTAssertEqual(record.providerSlots.map(\.provider), ["claude", "codex"])
+        XCTAssertEqual(record.providerSlots.map(\.provider), ["claude", "codex", "antigravity"])
         let claude = try XCTUnwrap(record.providerSlots.first { $0.provider == "claude" })
         XCTAssertEqual(claude.usage.status, "available")
         XCTAssertEqual(claude.usage.totalTokens, 3_100)
@@ -35,7 +35,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
             now: try date("2026-06-02T11:00:00+08:00")
         )
 
-        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         XCTAssertTrue(state.quotaRings.allSatisfy { ring in
             ring.outerPctText == "--" && ring.innerPctText == "--" &&
                 ring.outerTimeText == "--" && ring.innerTimeText == "--"
@@ -52,7 +52,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
             now: try date("2026-06-03T11:10:00+08:00")
         )
 
-        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
         XCTAssertEqual(codex.usageText, "用量不可用")
         XCTAssertEqual(codex.outerPctText, "--")
@@ -89,7 +89,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
         XCTAssertEqual(claude.usageText, "用量 3.1K · 9.7%")
         XCTAssertEqual(claude.innerPctText, "78%")
         XCTAssertNotEqual(claude.innerTimeText, "--")
-        XCTAssertEqual(claude.availabilityText, "官方额度")
+        XCTAssertEqual(claude.availabilityText, "")
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
         XCTAssertEqual(codex.usageText, "用量 1.6K · 6.2%")
@@ -319,7 +319,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
                 selectedPeriodID: "today",
                 now: try date("2026-06-03T12:00:00+08:00")
             )
-            XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"], record.name)
+            XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"], record.name)
 
             for slot in record.providerSlots {
                 let ring = try XCTUnwrap(state.quotaRings.first { $0.id == slot.provider }, record.name)

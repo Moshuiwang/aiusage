@@ -297,6 +297,40 @@ MSWUSAGE_CLAUDE_STDOUT = json.dumps(
     sort_keys=True,
 )
 
+MSWUSAGE_ANTIGRAVITY_STDOUT = json.dumps(
+    {
+        "schema_version": 1,
+        "source": "mswusage_antigravity",
+        "timezone": "Asia/Shanghai",
+        "generated_at": "2026-06-05T09:00:10+08:00",
+        "provenance": "mswusage_antigravity_token_count",
+        "collector": {
+            "mode": "incremental",
+            "lookback_hours": 48,
+            "coverage": {
+                "start": "2026-06-04T00:00:00+08:00",
+                "end": "2026-06-05T00:00:00+08:00",
+            },
+        },
+        "daily": [{"date": "2026-06-04", "agent": "antigravity", "total_tokens": 12000}],
+        "hourly": [
+            {
+                "hour": "2026-06-04T09:00:00+08:00",
+                "agent": "antigravity",
+                "input_tokens": 1500,
+                "output_tokens": 500,
+                "cache_creation_tokens": 0,
+                "cache_read_tokens": 10000,
+                "reasoning_output_tokens": 100,
+                "total_tokens": 12000,
+            }
+        ],
+        "sessions": [],
+    },
+    ensure_ascii=False,
+    sort_keys=True,
+)
+
 
 # --- 场景定义 ----------------------------------------------------------------
 
@@ -420,9 +454,10 @@ OK_COMMAND_RESULTS = (
     CommandResult(stdout=CCUSAGE_SESSION_STDOUT, exit_code=0),
     CommandResult(stdout=MSWUSAGE_CODEX_STDOUT, exit_code=0),
     CommandResult(stdout=MSWUSAGE_CLAUDE_STDOUT, exit_code=0),
+    CommandResult(stdout=MSWUSAGE_ANTIGRAVITY_STDOUT, exit_code=0),
 )
 
-# ccusage 缺失 -> 不采 session；两个 ledger 也失败 -> 走 _push_source_status。
+# ccusage 缺失 -> 不采 session；三个 ledger 也失败 -> 走 _push_source_status。
 ERROR_COMMAND_RESULTS = (
     CommandResult(
         exit_code=None,
@@ -442,9 +477,15 @@ ERROR_COMMAND_RESULTS = (
         error_type="command_failed",
         error_message="command exited with code 1",
     ),
+    CommandResult(
+        stderr="ledger scan failed",
+        exit_code=1,
+        error_type="command_failed",
+        error_message="command exited with code 1",
+    ),
 )
 
-# ccusage 缺失 -> 不采 session/blocks；但两个 ledger 都成功 -> 照常上报账本用量，
+# ccusage 缺失 -> 不采 session/blocks；但三个 ledger 都成功 -> 照常上报账本用量，
 # 不走 _push_source_status。这条路径的 payload 是 `collection_status: "ok"`，
 # **没有** error_type / error_message —— #78 摘掉 ccusage_daily_status 之后，
 # ccusage 本身的失败原因在这条路径上不再有任何承载字段（代价已由测试钉死）。
@@ -457,6 +498,7 @@ PARTIAL_COMMAND_RESULTS = (
     ),
     CommandResult(stdout=MSWUSAGE_CODEX_STDOUT, exit_code=0),
     CommandResult(stdout=MSWUSAGE_CLAUDE_STDOUT, exit_code=0),
+    CommandResult(stdout=MSWUSAGE_ANTIGRAVITY_STDOUT, exit_code=0),
 )
 
 SCENARIO_SETUP = {
@@ -600,6 +642,7 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         self.assertEqual(executor.calls[1][:2], ["ccusage", "session"])
         self.assertIn("mswusage-codex", executor.calls[2])
         self.assertIn("mswusage-claude", executor.calls[3])
+        self.assertIn("mswusage-antigravity", executor.calls[4])
         for call in executor.calls:
             self.assertNotIn(
                 "blocks",
@@ -625,7 +668,7 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
             self.assertNotIn("ccusage", call)
 
     def test_partial_scenario_skips_ccusage_followups_but_still_reads_the_ledgers(self) -> None:
-        """ccusage 挂了就不再要 session / blocks，但两个账本仍然必须采。
+        """ccusage 挂了就不再要 session / blocks，但三个账本仍然必须采。
 
         少跑账本 = 丢真实用量，多跑 ccusage = 把一次失败放大成三次，两边都要红。
         """
@@ -636,6 +679,7 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
             self.assertNotIn("ccusage", call)
         self.assertIn("mswusage-codex", executor.calls[1])
         self.assertIn("mswusage-claude", executor.calls[2])
+        self.assertIn("mswusage-antigravity", executor.calls[3])
 
     # --- request 块必须来自真实请求，不许手写 --------------------------------
 
@@ -748,15 +792,16 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         self.assertEqual(
             windows,
             [
+                ("antigravity", "2026-06-04T09:00:00+08:00"),
                 ("claude", "2026-06-04T09:00:00+08:00"),
                 ("codex", "2026-06-04T09:00:00+08:00"),
                 ("codex", "2026-06-04T10:00:00+08:00"),
             ],
         )
 
-        # 账本运行记录必须两个 agent 都有，且带可比对的摘要。
+        # 账本运行记录必须三个 agent 都有，且带可比对的摘要。
         runs = {run["agent"]: run for run in payload["usage_ledger_runs"]}
-        self.assertEqual(sorted(runs), ["claude", "codex"])
+        self.assertEqual(sorted(runs), ["antigravity", "claude", "codex"])
         for agent, run in runs.items():
             self.assertIsInstance(run["facts_digest"], str)
             self.assertEqual(len(run["facts_digest"]), 64, f"{agent} facts_digest 必须是 sha256")
@@ -766,6 +811,7 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         confidences = {fact["agent"]: fact["attribution_confidence"] for fact in payload["usage_hourly_facts"]}
         self.assertEqual(confidences["codex"], "account_confirmed")
         self.assertEqual(confidences["claude"], "unconfirmed_local_source")
+        self.assertEqual(confidences["antigravity"], "unconfirmed_local_source")
 
         # 版本块必须把自升级 agent 写入的信息一起报上去。
         release = payload["collector_release"]
@@ -811,7 +857,7 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         self.assertTrue(payload["usage_hourly_facts"])
         self.assertEqual(
             sorted(run["agent"] for run in payload["usage_ledger_runs"]),
-            ["claude", "codex"],
+            ["antigravity", "claude", "codex"],
         )
 
         # **摘除的代价，据实钉死**：这条路径的 payload 里没有任何字段承载「ccusage 为什么

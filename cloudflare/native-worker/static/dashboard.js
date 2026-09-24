@@ -10,6 +10,9 @@
     claude: { outer: "#DA7756", inner: "#EAA882", label: "Claude" },
     codex: { outer: "#0a84ff", inner: "#5ac8fa", label: "OpenAI" },
     openai: { outer: "#0a84ff", inner: "#5ac8fa", label: "OpenAI" },
+    gemini: { outer: "#34c759", inner: "#86efac", label: "Gemini" },
+    deepseek: { outer: "#5ac8fa", inner: "#93dcfc", label: "DeepSeek" },
+    unknown: { outer: "#8e8e93", inner: "#aeaeb2", label: "Unknown" },
   };
   const HOST_COLORS = ["#34c759", "#0a84ff", "#DA7756", "#5ac8fa", "#EAA882"];
 
@@ -100,8 +103,33 @@
     const hosts = normalizeGroups(snapshot.groups && snapshot.groups.by_machine, total, "host");
     const agents = normalizeGroups(snapshot.groups && snapshot.groups.by_agent, total, "agent");
     const trend = normalizeTrend(snapshot.trend, period);
-    return { period: { ...period, axis: trend.axis }, total, input, output, cache, cachePct, hosts, agents, trend };
+    const agentTrend = buildAgentTrend(snapshot.trend, trend.points);
+    return { period: { ...period, axis: trend.axis }, total, input, output, cache, cachePct, hosts, agents, trend, agentTrend };
   }
+
+  /** 从 trend.by_agent 构建按 agent 分组的每柱 token 数据。 */
+  function buildAgentTrend(rawTrend, points) {
+    const bucketCount = points.length;
+    const byAgent = (rawTrend && rawTrend.by_agent) || [];
+    if (!byAgent.length) return { agents: [], agentOrder: [] };
+    const agents = {};
+    const agentOrder = [];
+    byAgent.forEach((entry) => {
+      const key = agentKey(entry.agent || entry.name || "unknown");
+      const label = displayAgent(entry.agent || entry.name || "unknown");
+      const color = colorForAgent(entry.agent || entry.name || "unknown");
+      const values = entry.values || [];
+      if (!agents[key]) {
+        agents[key] = { key, label, color, values: new Array(bucketCount).fill(0) };
+        agentOrder.push(key);
+      }
+      for (let i = 0; i < bucketCount; i++) {
+        agents[key].values[i] += Number(values[i] || 0);
+      }
+    });
+    return { agents, agentOrder };
+  }
+
 
   function normalizeGroups(groups, total, type) {
     return (groups || [])
@@ -240,7 +268,7 @@
     el.emptyState.hidden = hasUsage;
     el.dashboardContent.hidden = false;
 
-    renderBarTrend(data.trend.points, data.period.axis);
+    renderBarTrend(data.trend.points, data.period.axis, data.agentTrend);
     renderLimits(latestSnapshot.limits || []);
     renderSourceCards(data.hosts, latestSnapshot.source_status || []);
     renderBreakdown(el.byAgentList, data.agents, data.total);
@@ -276,7 +304,7 @@
     countRaf = requestAnimationFrame(tick);
   }
 
-  function renderBarTrend(points, axis) {
+  function renderBarTrend(points, axis, agentTrend) {
     const width = 720;
     const height = 134;
     const plotTop = 10;
@@ -289,16 +317,10 @@
     const barGap = 4;
     const barWidth = Math.max(4, (width - barGap * Math.max(0, values.length - 1)) / Math.max(1, values.length));
 
+    const hasAgentData = agentTrend && agentTrend.agentOrder && agentTrend.agentOrder.length > 0;
+
     el.streamChart.replaceChildren();
     el.streamChart.setAttribute("viewBox", `0 0 ${width} ${height}`);
-    const defs = svg("defs");
-    const gradient = svg("linearGradient", { id: "barGradient", x1: "0", y1: "0", x2: "0", y2: "1" });
-    gradient.append(
-      svg("stop", { offset: "0%", "stop-color": "#4a9eff" }),
-      svg("stop", { offset: "100%", "stop-color": "#007aff" })
-    );
-    defs.appendChild(gradient);
-    el.streamChart.appendChild(defs);
 
     const refY = plotTop;
     el.streamChart.append(
@@ -306,25 +328,82 @@
       svg("text", { x: width, y: refY - 3, "text-anchor": "end", fill: "currentColor", "font-size": 10, "font-weight": 600, opacity: 0.45 }, formatAxisTick(max))
     );
 
-    values.forEach((value, index) => {
-      const barHeight = Math.max(3, (value / max) * plotHeight);
-      const x = index * (barWidth + barGap);
-      const y = plotTop + plotHeight - barHeight;
-      const rect = svg("rect", {
-        x,
-        y,
-        width: Math.max(2, barWidth),
-        height: barHeight,
-        rx: 3,
-        fill: "url(#barGradient)",
-        opacity: 0.86,
+    if (hasAgentData) {
+      // 堆叠柱形图：按 agent 分色，从底部向上堆叠
+      const order = agentTrend.agentOrder;
+      values.forEach((totalValue, index) => {
+        const x = index * (barWidth + barGap);
+        let yOffset = 0; // 从底部累计
+        // 逆序绘制：先画最底层的 agent，再依次往上
+        for (let a = order.length - 1; a >= 0; a--) {
+          const agentInfo = agentTrend.agents[order[a]];
+          if (!agentInfo) continue;
+          const segValue = agentInfo.values[index] || 0;
+          if (segValue <= 0) continue;
+          const segHeight = Math.max(1, (segValue / max) * plotHeight);
+          const y = plotTop + plotHeight - yOffset - segHeight;
+          const isBottom = yOffset === 0;
+          const isTop = (yOffset + segValue) >= totalValue - 0.5;
+          const rx = (isBottom && isTop) ? 3 : isTop ? 3 : isBottom ? 1 : 0;
+          const rect = svg("rect", {
+            x,
+            y,
+            width: Math.max(2, barWidth),
+            height: segHeight,
+            rx,
+            fill: agentInfo.color,
+            opacity: 0.86,
+          });
+          rect.addEventListener("mousemove", (event) => showStreamTooltip(index, event, points, agentTrend));
+          rect.addEventListener("mouseleave", () => { el.streamTooltip.hidden = true; });
+          el.streamChart.appendChild(rect);
+          yOffset += segHeight;
+        }
+        // 如有零高度柱，画一个最小柱占位
+        if (yOffset === 0 && totalValue > 0) {
+          const barHeight = Math.max(3, (totalValue / max) * plotHeight);
+          const rect = svg("rect", {
+            x,
+            y: plotTop + plotHeight - barHeight,
+            width: Math.max(2, barWidth),
+            height: barHeight,
+            rx: 3,
+            fill: "#8e8e93",
+            opacity: 0.86,
+          });
+          rect.addEventListener("mousemove", (event) => showStreamTooltip(index, event, points, agentTrend));
+          rect.addEventListener("mouseleave", () => { el.streamTooltip.hidden = true; });
+          el.streamChart.appendChild(rect);
+        }
       });
-      rect.addEventListener("mousemove", (event) => showStreamTooltip(index, event, points));
-      rect.addEventListener("mouseleave", () => {
-        el.streamTooltip.hidden = true;
+    } else {
+      // 无 agent 分组时回退为单色柱
+      const defs = svg("defs");
+      const gradient = svg("linearGradient", { id: "barGradient", x1: "0", y1: "0", x2: "0", y2: "1" });
+      gradient.append(
+        svg("stop", { offset: "0%", "stop-color": "#4a9eff" }),
+        svg("stop", { offset: "100%", "stop-color": "#007aff" })
+      );
+      defs.appendChild(gradient);
+      el.streamChart.appendChild(defs);
+
+      values.forEach((value, index) => {
+        const barHeight = Math.max(3, (value / max) * plotHeight);
+        const x = index * (barWidth + barGap);
+        const y = plotTop + plotHeight - barHeight;
+        const rect = svg("rect", {
+          x, y,
+          width: Math.max(2, barWidth),
+          height: barHeight,
+          rx: 3,
+          fill: "url(#barGradient)",
+          opacity: 0.86,
+        });
+        rect.addEventListener("mousemove", (event) => showStreamTooltip(index, event, points, null));
+        rect.addEventListener("mouseleave", () => { el.streamTooltip.hidden = true; });
+        el.streamChart.appendChild(rect);
       });
-      el.streamChart.appendChild(rect);
-    });
+    }
 
     el.axisRow.replaceChildren();
     (axis || []).forEach((label) => {
@@ -332,15 +411,64 @@
       node.textContent = label;
       el.axisRow.appendChild(node);
     });
+
+    // 渲染图例
+    renderChartLegend(hasAgentData ? agentTrend : null);
   }
 
-  function showStreamTooltip(index, event, points) {
+  /** 在柱形图下方渲染 agent 图例 */
+  function renderChartLegend(agentTrend) {
+    let legendRow = document.getElementById("chartLegend");
+    if (!legendRow) {
+      legendRow = document.createElement("div");
+      legendRow.id = "chartLegend";
+      legendRow.className = "chart-legend";
+      // 插入到 axisRow 之后
+      el.axisRow.parentNode.insertBefore(legendRow, el.axisRow.nextSibling);
+    }
+    legendRow.replaceChildren();
+
+    if (!agentTrend || !agentTrend.agentOrder || !agentTrend.agentOrder.length) return;
+
+    // 去重：agentOrder 可能有重复 key（如 codex 和 openai 合并为同一 key）
+    const seen = new Set();
+    agentTrend.agentOrder.forEach((key) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      const info = agentTrend.agents[key];
+      if (!info) return;
+      const item = document.createElement("span");
+      item.className = "chart-legend-item";
+      const dot = document.createElement("span");
+      dot.className = "chart-legend-dot";
+      dot.style.background = info.color;
+      const label = document.createElement("span");
+      label.textContent = info.label;
+      item.append(dot, label);
+      legendRow.appendChild(item);
+    });
+  }
+
+  function showStreamTooltip(index, event, points, agentTrend) {
     const point = points[index] || {};
+    let agentLines = "";
+    if (agentTrend && agentTrend.agentOrder) {
+      const seen = new Set();
+      agentTrend.agentOrder.forEach((key) => {
+        if (seen.has(key)) return;
+        seen.add(key);
+        const info = agentTrend.agents[key];
+        if (!info) return;
+        const val = info.values[index] || 0;
+        if (val <= 0) return;
+        agentLines += `<div><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${escapeHtml(info.color)};margin-right:4px;vertical-align:middle"></span>${escapeHtml(info.label)} <b>${fmt(val)}</b></div>`;
+      });
+    }
     el.streamTooltip.innerHTML = `
       <strong>${escapeHtml(point.label || "当前点")}</strong>
       <div>Total <b>${fmt(point.tokens || 0)}</b></div>
-      <div>Input <b>${fmt(point.inputTokens || 0)}</b></div>
-      <div>Output <b>${fmt(point.outputTokens || 0)}</b></div>
+      ${agentLines}
+      <div style="margin-top:2px;border-top:0.5px solid var(--border);padding-top:2px">Input <b>${fmt(point.inputTokens || 0)}</b> · Output <b>${fmt(point.outputTokens || 0)}</b></div>
       <div>Cache <b>${fmt(point.cacheTokens || 0)}</b></div>
     `;
     el.streamTooltip.hidden = false;

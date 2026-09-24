@@ -86,8 +86,8 @@ const localEstimateSourceTypes = new Set([
 
 // Issue #61：客户端固定展示的 provider 槽位。用量与额度分别是两个独立字段，
 // 任一缺失都不影响另一个；缺失的额度只暴露「最近一次验证时间」，绝不暴露历史百分比或过期 reset。
-// 与 src/ai_usage_widget/snapshot_builder.py 的 SLOT_PROVIDERS 保持逐字一致。
-const slotProviders = ["claude", "codex"] as const;
+// 与 src/ai_usage_widget/verify_cloud.py 的 SLOT_PROVIDERS 保持逐字一致。
+const slotProviders = ["claude", "codex", "antigravity"] as const;
 
 // pusher 真实会写出来的「跨 agent 聚合」与「来源不明」两个 agent 名，不代表任何 provider。
 const aggregateAgentNames = new Set(["", "all", "unknown"]);

@@ -48,6 +48,7 @@
   `unsupported` 必须降级展示。
 - 展示层只读：客户端不执行采集、不直接读私表重算口径、不在平台侧重新聚合。
 - daily token baseline 优先，limits/quota 只是可插拔 source；本机和远程采集显式对齐时区。
+- 线上承载于 Cloudflare Free 免费计划：设计与优化必须严守资源预算；客户端零短轮询、零无缓冲重复读，上报必 batch 批量写入；发布新版本后必须用 `scripts/check_cf_usage.py` 回源巡检用量水位（证据等级 7）。
 - 不直接修改生产账户文件。
 
 ## 多机边界

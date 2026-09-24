@@ -67,6 +67,24 @@
           "status": "available",
           "total_tokens": 1600
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -106,6 +124,24 @@
       },
       {
         "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
         "quota": {
           "last_verified_at": null,
           "reason": "no_data",
@@ -190,6 +226,24 @@
           "status": "available",
           "total_tokens": 1600
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -243,6 +297,24 @@
           "output_tokens": 500,
           "status": "available",
           "total_tokens": 1600
+        }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
         }
       }
     ],
@@ -313,6 +385,24 @@
           "status": "available",
           "total_tokens": 1600
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -352,6 +442,24 @@
       },
       {
         "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
         "quota": {
           "last_verified_at": null,
           "reason": "no_data",
@@ -421,6 +529,24 @@
           "status": "missing",
           "total_tokens": 0
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -475,6 +601,24 @@
           "status": "missing",
           "total_tokens": 0
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -514,6 +658,24 @@
       },
       {
         "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
         "quota": {
           "last_verified_at": null,
           "reason": "no_data",
@@ -598,6 +760,24 @@
           "status": "missing",
           "total_tokens": 0
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -637,6 +817,24 @@
       },
       {
         "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
         "quota": {
           "last_verified_at": null,
           "reason": "no_data",
@@ -706,6 +904,24 @@
           "status": "missing",
           "total_tokens": 0
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -745,6 +961,24 @@
       },
       {
         "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
         "quota": {
           "last_verified_at": null,
           "reason": "no_data",
@@ -829,6 +1063,24 @@
           "status": "missing",
           "total_tokens": 0
         }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
       }
     ],
     "provider_usage_coverage": {
@@ -883,6 +1135,24 @@
       },
       {
         "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
         "quota": {
           "last_verified_at": null,
           "reason": "no_data",
