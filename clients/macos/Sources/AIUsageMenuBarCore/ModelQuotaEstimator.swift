@@ -15,11 +15,14 @@ public enum ModelQuotaEstimator: Sendable {
     /// Codex 通用周额度池（GPT-5.6 等价基准）：1% 周额度约 2,200 万 GPT-5.6 等价 Tokens
     public static let codexWeeklyGPT56EquivalentPerPercent: Double = 22_000_000.0
 
+    /// Gemini / Antigravity 通用周额度池（Flash 等价基准）：1% 周额度约 1,000 万 Flash 等价 Tokens
+    public static let geminiWeeklyFlashEquivalentPerPercent: Double = 10_000_000.0
+
     /// 估算模型 Token 对应的周额度百分比文本
     /// - Parameters:
-    ///   - modelID: 模型 ID（如 "claude-opus-5", "gpt-5.6-sol"）
+    ///   - modelID: 模型 ID（如 "claude-opus-5", "gpt-5.6-sol", "gemini-3.8-flash"）
     ///   - label: 模型展示标签
-    ///   - agentID: 归属 Agent（如 "claude", "codex", "openai"）
+    ///   - agentID: 归属 Agent（如 "claude", "codex", "antigravity"）
     ///   - tokens: 实际消耗 Token 总量
     /// - Returns: 格式化的周额度百分比文本，例如 "约占周额度 2.4%"
     public static func estimateWeeklyQuotaPercentText(
@@ -33,8 +36,8 @@ public enum ModelQuotaEstimator: Sendable {
         let normalizedKey = "\(modelID) \(label)".lowercased()
         let agent = agentID.lowercased()
 
-        // 1. Claude 系列
-        if agent.contains("claude") || normalizedKey.contains("claude") || normalizedKey.contains("sonnet") || normalizedKey.contains("opus") || normalizedKey.contains("fable") || normalizedKey.contains("haiku") {
+        // 1. Claude 系列（非 Antigravity 渠道）
+        if (agent.contains("claude") || normalizedKey.contains("claude") || normalizedKey.contains("sonnet") || normalizedKey.contains("opus") || normalizedKey.contains("fable") || normalizedKey.contains("haiku")) && !agent.contains("antigravity") && !agent.contains("gemini") {
             let isFable = normalizedKey.contains("fable")
             let weight: Double
             if normalizedKey.contains("opus") {
@@ -68,6 +71,22 @@ public enum ModelQuotaEstimator: Sendable {
             }
 
             let percent = (Double(tokens) * weight) / codexWeeklyGPT56EquivalentPerPercent
+            return formatPercent(percent)
+        }
+
+        // 3. Gemini / Antigravity 系列
+        if agent.contains("antigravity") || agent.contains("gemini") || normalizedKey.contains("gemini") {
+            let weight: Double
+            if normalizedKey.contains("pro") {
+                weight = 4.0
+            } else if normalizedKey.contains("claude") || normalizedKey.contains("opus") {
+                weight = 5.0
+            } else {
+                // gemini-3.8-flash, gemini-3.7-flash, gemini-3-flash, gemini-2.5-flash 等 Flash 系列基准
+                weight = 1.0
+            }
+
+            let percent = (Double(tokens) * weight) / geminiWeeklyFlashEquivalentPerPercent
             return formatPercent(percent)
         }
 

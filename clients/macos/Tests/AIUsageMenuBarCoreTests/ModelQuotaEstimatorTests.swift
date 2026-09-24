@@ -70,4 +70,33 @@ final class ModelQuotaEstimatorTests: XCTestCase {
         )
         XCTAssertEqual(tinyText, "约占周额度 < 0.1%")
     }
+
+    func testGeminiFlashAndProEstimations() {
+        // 10M tokens of Gemini 3.8 Flash (1x weight) should be approx 1.0%
+        let flashText = ModelQuotaEstimator.estimateWeeklyQuotaPercentText(
+            modelID: "gemini-3.8-flash",
+            label: "gemini-3.8-flash",
+            agentID: "antigravity",
+            tokens: 10_000_000
+        )
+        XCTAssertEqual(flashText, "约占周额度 1.0%")
+
+        // 2.5M tokens of Gemini Pro (4x weight) should be approx 1.0%
+        let proText = ModelQuotaEstimator.estimateWeeklyQuotaPercentText(
+            modelID: "gemini-pro-default",
+            label: "gemini-pro-default",
+            agentID: "antigravity",
+            tokens: 2_500_000
+        )
+        XCTAssertEqual(proText, "约占周额度 1.0%")
+
+        // 50M tokens of Gemini 3.8 Flash should be approx 5.0%
+        let largeFlashText = ModelQuotaEstimator.estimateWeeklyQuotaPercentText(
+            modelID: "gemini-3.8-flash",
+            label: "Gemini 3.8 Flash",
+            agentID: "antigravity",
+            tokens: 50_000_000
+        )
+        XCTAssertEqual(largeFlashText, "约占周额度 5.0%")
+    }
 }
