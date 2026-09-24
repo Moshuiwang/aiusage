@@ -289,6 +289,7 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
     public let cacheRatio: Int
     public let claudeTokens: Int
     public let codexTokens: Int
+    public let geminiTokens: Int
     public let unknownTokens: Int
 
     enum CodingKeys: String, CodingKey {
@@ -301,6 +302,7 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
         case cacheRatio = "cache_ratio"
         case claudeTokens = "claude_tokens"
         case codexTokens = "codex_tokens"
+        case geminiTokens = "gemini_tokens"
         case unknownTokens = "unknown_tokens"
     }
 
@@ -314,6 +316,7 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
         cacheRatio: Int,
         claudeTokens: Int = 0,
         codexTokens: Int = 0,
+        geminiTokens: Int = 0,
         unknownTokens: Int? = nil
     ) {
         self.bucket = bucket
@@ -325,7 +328,8 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
         self.cacheRatio = cacheRatio
         self.claudeTokens = max(claudeTokens, 0)
         self.codexTokens = max(codexTokens, 0)
-        self.unknownTokens = max(unknownTokens ?? (tokens - claudeTokens - codexTokens), 0)
+        self.geminiTokens = max(geminiTokens, 0)
+        self.unknownTokens = max(unknownTokens ?? (tokens - claudeTokens - codexTokens - geminiTokens), 0)
     }
 
     public init(from decoder: Decoder) throws {
@@ -343,6 +347,7 @@ public struct MobileTrendPoint: Codable, Equatable, Sendable, Identifiable {
             cacheRatio: try values.decode(Int.self, forKey: .cacheRatio),
             claudeTokens: try values.decodeIfPresent(Int.self, forKey: .claudeTokens) ?? 0,
             codexTokens: try values.decodeIfPresent(Int.self, forKey: .codexTokens) ?? 0,
+            geminiTokens: try values.decodeIfPresent(Int.self, forKey: .geminiTokens) ?? 0,
             unknownTokens: try values.decodeIfPresent(Int.self, forKey: .unknownTokens)
         )
     }

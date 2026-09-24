@@ -250,6 +250,56 @@ final class MenuBarViewModelTests: XCTestCase {
             MenuTrendProvider.unknown.color,
             MenuTrendColor(red: 0.5, green: 0.5, blue: 0.52, opacity: 0.55)
         )
+        XCTAssertEqual(
+            MenuTrendProvider.gemini.color,
+            MenuTrendColor(red: 0.204, green: 0.780, blue: 0.349, opacity: 1)
+        )
+        XCTAssertEqual(MenuTrendProvider.gemini.displayName, "Gemini")
+    }
+
+    func testTrendWithGeminiTokensProducesGeminiSegment() throws {
+        let summary = try loadFixture()
+        let trend = MobileTrend(
+            period: "today",
+            granularity: "hour",
+            startDate: "2026-06-02",
+            endDate: "2026-06-02",
+            points: [
+                MobileTrendPoint(
+                    bucket: "2026-06-02T10:00:00+08:00",
+                    label: "10:00",
+                    tokens: 750,
+                    inputTokens: 200,
+                    outputTokens: 100,
+                    cacheTokens: 450,
+                    cacheRatio: 60,
+                    claudeTokens: 300,
+                    codexTokens: 200,
+                    geminiTokens: 150,
+                    unknownTokens: 100
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion,
+                client: summary.client,
+                generatedAt: summary.generatedAt,
+                timezone: summary.timezone,
+                period: summary.period,
+                trend: trend,
+                sources: summary.sources,
+                breakdown: summary.breakdown,
+                limits: summary.limits
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+
+        let bar = try XCTUnwrap(state.trendBars.first)
+        XCTAssertEqual(bar.segments.map(\.provider), [.unknown, .claude, .codex, .gemini])
+        XCTAssertEqual(bar.segments.map(\.tokens), [100, 300, 200, 150])
+        XCTAssertEqual(bar.segments.reduce(0) { $0 + $1.tokens }, bar.totalTokens)
     }
 
     func testTrendWithoutProviderBreakdownDisplaysAllTokensAsUnknown() throws {

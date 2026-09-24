@@ -354,6 +354,7 @@ public struct TrendTooltipLines: Equatable, Sendable {
     public let total: String
     public let claude: String
     public let codex: String
+    public let gemini: String
     public let unknown: String
 }
 
@@ -368,6 +369,7 @@ public enum TrendChartPresentation {
             total: "\(TokenFormat.compact(point.tokens)) · \(TokenFormat.full(point.tokens))",
             claude: "Claude \(TokenFormat.full(point.claudeTokens))",
             codex: "Codex \(TokenFormat.full(point.codexTokens))",
+            gemini: "Gemini \(TokenFormat.full(point.geminiTokens))",
             unknown: "未知 \(TokenFormat.full(point.unknownTokens))"
         )
     }

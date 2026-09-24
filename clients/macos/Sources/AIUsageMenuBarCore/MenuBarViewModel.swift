@@ -75,12 +75,14 @@ public struct MenuTrendColor: Equatable, Sendable {
 public enum MenuTrendProvider: String, CaseIterable, Equatable, Sendable {
     case claude
     case codex
+    case gemini
     case unknown
 
     public var displayName: String {
         switch self {
         case .claude: return "Claude"
         case .codex: return "Codex"
+        case .gemini: return "Gemini"
         case .unknown: return "未知"
         }
     }
@@ -91,6 +93,8 @@ public enum MenuTrendProvider: String, CaseIterable, Equatable, Sendable {
             return MenuTrendColor(red: 0.855, green: 0.467, blue: 0.337, opacity: 1)
         case .codex:
             return MenuTrendColor(red: 0.039, green: 0.518, blue: 1, opacity: 1)
+        case .gemini:
+            return MenuTrendColor(red: 0.204, green: 0.780, blue: 0.349, opacity: 1)
         case .unknown:
             return MenuTrendColor(red: 0.5, green: 0.5, blue: 0.52, opacity: 0.55)
         }
@@ -311,25 +315,31 @@ public enum MenuBarViewModel {
 
         let rawClaude = max(point.claudeTokens, 0)
         let rawCodex = max(point.codexTokens, 0)
-        let rawKnown = rawClaude + rawCodex
+        let rawGemini = max(point.geminiTokens, 0)
+        let rawKnown = rawClaude + rawCodex + rawGemini
         let claude: Int
         let codex: Int
+        let gemini: Int
         if rawKnown <= total {
             claude = rawClaude
             codex = rawCodex
+            gemini = rawGemini
         } else if rawKnown == 0 {
             claude = 0
             codex = 0
+            gemini = 0
         } else {
             claude = total * rawClaude / rawKnown
-            codex = total - claude
+            codex = total * rawCodex / rawKnown
+            gemini = total - claude - codex
         }
-        let unknown = total - claude - codex
+        let unknown = total - claude - codex - gemini
 
         return [
             (MenuTrendProvider.unknown, unknown),
             (.claude, claude),
             (.codex, codex),
+            (.gemini, gemini),
         ].compactMap { provider, tokens in
             guard tokens > 0 else { return nil }
             return MenuTrendSegment(
