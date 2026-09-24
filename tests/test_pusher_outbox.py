@@ -95,6 +95,10 @@ class ScriptedCollector:
             return CommandResult(
                 exit_code=1, error_type="command_failed", error_message="本场景不采 claude"
             )
+        if "mswusage-antigravity" in argv:
+            return CommandResult(
+                exit_code=1, error_type="command_failed", error_message="本场景不采 antigravity"
+            )
         raise AssertionError(f"脚本没有预置这条采集命令：{argv}")
 
     def _ccusage_daily(self) -> dict:

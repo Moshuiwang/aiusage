@@ -37,8 +37,8 @@ export type MobileSummary = {
 
 // Issue #61：固定的 provider 槽位。DTO 只裁剪 snapshot 的事实，不重算口径；
 // 额度缺失时只保留「最近一次验证时间」，不带任何百分比或 reset 时间。
-// 与 src/ai_usage_widget/mobile_summary.py 的 SLOT_PROVIDERS 保持逐字一致。
-const slotProviders = ["claude", "codex"];
+// 与 src/ai_usage_widget/verify_cloud.py 的 SLOT_PROVIDERS 保持逐字一致。
+const slotProviders = ["claude", "codex", "antigravity"];
 
 export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
   // 类型守结构（顶层键漂移在编译期抓），coercion 守运行时（部分快照照旧宽容，

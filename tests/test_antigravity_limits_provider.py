@@ -95,13 +95,49 @@ class TestAntigravityLimitsProvider(unittest.TestCase):
                     "user_status": {
                         "limits": {
                             "session": {
-                                "remainingFraction": 0.72,
-                                "windowDurationMins": 300,
                             }
                         }
                     },
                 }
             )
+
+    def test_cascade_model_config_data_real_world_payload(self) -> None:
+        payload = {
+            "observed_at": "2026-09-24T08:20:00+08:00",
+            "userStatus": {
+                "userTier": {"id": "g1-pro-tier", "name": "Google AI Pro"},
+                "cascadeModelConfigData": {
+                    "clientModelConfigs": [
+                        {
+                            "label": "Gemini 3.8 Flash (High)",
+                            "modelId": "gemini-3.8-flash-high",
+                            "quotaInfo": {
+                                "remainingFraction": 0.66,
+                                "resetTime": "2026-09-24T04:40:21Z",
+                            },
+                        },
+                        {
+                            "label": "Claude Opus 4.6 (Thinking)",
+                            "modelId": "claude-opus-4-6-thinking",
+                            "quotaInfo": {
+                                "remainingFraction": 1.0,
+                                "resetTime": "2026-09-24T05:21:30Z",
+                            },
+                        },
+                    ]
+                },
+            },
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertGreaterEqual(len(windows), 1)
+        w0 = windows[0]
+        self.assertEqual(w0.provider, "antigravity")
+        self.assertEqual(w0.window, "session")
+        self.assertAlmostEqual(w0.remaining_percent, 66.0)
+        self.assertAlmostEqual(w0.used_percent, 34.0)
+        self.assertEqual(w0.reset_at, "2026-09-24T04:40:21Z")
+        self.assertEqual(w0.confidence, "observed")
+        self.assertEqual(w0.status, "ok")
 
 
 if __name__ == "__main__":

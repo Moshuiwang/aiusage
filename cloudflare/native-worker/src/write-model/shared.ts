@@ -25,6 +25,8 @@ type IngestRequest = {
   // 老版本采集端仍会发这两个字段，一律当未知顶层字段忽略：不声明、不校验、不解析、不落库。
   mswusage_codex_hourly_report?: AnyRecord;
   codex_hourly_status?: AnyRecord;
+  mswusage_antigravity_hourly_report?: AnyRecord;
+  antigravity_hourly_status?: AnyRecord;
   usage_hourly_facts?: AnyRecord[];
   usage_ledger_runs?: AnyRecord[];
   collector_release: AnyRecord | null;

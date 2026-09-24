@@ -145,6 +145,24 @@
         "status": "available",
         "total_tokens": 300000
       }
+    },
+    {
+      "provider": "antigravity",
+      "quota": {
+        "last_verified_at": null,
+        "reason": "no_data",
+        "source_id": null,
+        "source_type": null,
+        "status": "missing",
+        "windows": []
+      },
+      "usage": {
+        "cache_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "status": "missing",
+        "total_tokens": 0
+      }
     }
   ],
   "provider_usage_coverage": {

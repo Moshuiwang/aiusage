@@ -97,17 +97,61 @@ public enum MenuTrendProvider: String, CaseIterable, Equatable, Sendable {
     }
 }
 
+public struct MenuFlatModelRow: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let modelID: String
+    public let label: String
+    public let agentID: String
+    public let tokens: Int
+    public let status: String
+    public let quotaWeeklyPercentText: String?
+
+    public init(
+        id: String,
+        modelID: String,
+        label: String,
+        agentID: String,
+        tokens: Int,
+        status: String,
+        quotaWeeklyPercentText: String? = nil
+    ) {
+        self.id = id
+        self.modelID = modelID
+        self.label = label
+        self.agentID = agentID
+        self.tokens = tokens
+        self.status = status
+        self.quotaWeeklyPercentText = quotaWeeklyPercentText
+    }
+
+    public var title: String { status == "missing" ? "模型未知" : label }
+    public var valueText: String { TokenFormat.compact(tokens) }
+}
+
 public struct MenuDisplayRow: Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String
     public let subtitle: String
     public let value: String
     public let status: String
+    public let platform: String?
     public let agents: [MobileSourceAgent]?
+    public let flatModels: [MenuFlatModelRow]?
 
-    public init(id: String, title: String, subtitle: String, value: String, status: String, agents: [MobileSourceAgent]? = nil) {
+    public init(
+        id: String,
+        title: String,
+        subtitle: String,
+        value: String,
+        status: String,
+        platform: String? = nil,
+        agents: [MobileSourceAgent]? = nil,
+        flatModels: [MenuFlatModelRow]? = nil
+    ) {
         self.id = id; self.title = title; self.subtitle = subtitle
-        self.value = value; self.status = status; self.agents = agents
+        self.value = value; self.status = status; self.platform = platform
+        self.agents = agents
+        self.flatModels = flatModels
     }
 }
 
@@ -118,7 +162,13 @@ public struct MenuDisplaySection: Equatable, Sendable, Identifiable {
 }
 
 public enum MenuBarViewModel {
-    public static func build(from summary: MobileSummary, selectedPeriodID: String, selectedOffset: Int = 0, now: Date = Date()) -> MenuBarState {
+    public static func build(
+        from summary: MobileSummary,
+        selectedPeriodID: String,
+        selectedOffset: Int = 0,
+        now: Date = Date(),
+        machineAliases: [String: String]? = nil
+    ) -> MenuBarState {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
@@ -155,7 +205,7 @@ public enum MenuBarViewModel {
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
             trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
             trendMidText: maxTokens > 0 && midVal > 0 ? ceilingText(midVal) : "",
-            sources: sourceRows(summary.sources, breakdown: summary.breakdown, generatedAt: summary.generatedAt),
+            sources: sourceRows(summary.sources, breakdown: summary.breakdown, generatedAt: summary.generatedAt, machineAliases: machineAliases),
             limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(
@@ -321,21 +371,113 @@ public enum MenuBarViewModel {
         return bucket
     }
 
-    private static func sourceRows(_ sources: [MobileSource], breakdown: MobileBreakdown, generatedAt: String?) -> [MenuDisplayRow] {
+    public static func formatMachineName(_ raw: String, aliases: [String: String]? = nil) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "未知设备" }
+
+        if let alias = aliases?[trimmed], !alias.isEmpty {
+            return alias
+        }
+
+        var cleaned = trimmed
+        if cleaned.hasSuffix(".local") {
+            cleaned = String(cleaned.dropLast(6))
+        }
+        if let alias = aliases?[cleaned], !alias.isEmpty {
+            return alias
+        }
+
+        return cleaned
+    }
+
+    public static func formatSourceTitle(label: String, machine: String?, aliases: [String: String]? = nil) -> String {
+        if let rawMachine = machine, !rawMachine.isEmpty {
+            let prettyMachine = formatMachineName(rawMachine, aliases: aliases)
+            if prettyMachine != rawMachine && label.contains(rawMachine) {
+                return label.replacingOccurrences(of: rawMachine, with: prettyMachine)
+            }
+        }
+        if let alias = aliases?[label], !alias.isEmpty {
+            return alias
+        }
+        if label.contains(" / ") {
+            let parts = label.components(separatedBy: " / ")
+            if parts.count == 2 {
+                let user = parts[0]
+                let mac = formatMachineName(parts[1], aliases: aliases)
+                return "\(user) / \(mac)"
+            }
+        }
+        if let alias = aliases?[label], !alias.isEmpty {
+            return alias
+        }
+        return label
+    }
+
+    private static func sourceRows(
+        _ sources: [MobileSource],
+        breakdown: MobileBreakdown,
+        generatedAt: String?,
+        machineAliases: [String: String]? = nil
+    ) -> [MenuDisplayRow] {
         if let rows = breakdown.bySource {
             let metadata = Dictionary(sources.map { ($0.sourceID, $0) }, uniquingKeysWith: { first, _ in first })
             return rows.map { row in
                 let source = metadata[row.id]
-                let time = compactDateTime(source?.lastObservedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
-                let subtitle = [row.machine ?? source?.machine ?? "", source?.platform ?? "", time].filter { !$0.isEmpty }.joined(separator: " · ")
-                return MenuDisplayRow(id: row.id, title: row.label, subtitle: subtitle,
-                    value: TokenFormat.compact(row.tokens), status: source?.status ?? "unknown", agents: row.agents)
+                let time = compactDateTime(source?.lastObservedAt ?? source?.lastPushedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
+                let rawMachine = row.machine ?? source?.machine ?? ""
+                let prettyMachine = formatMachineName(rawMachine, aliases: machineAliases)
+                let subtitle = [prettyMachine, source?.platform ?? "", time].filter { !$0.isEmpty }.joined(separator: " · ")
+                let title = formatSourceTitle(label: row.label, machine: row.machine ?? source?.machine, aliases: machineAliases)
+
+                var flatModels: [MenuFlatModelRow] = []
+                if let agents = row.agents {
+                    for agent in agents {
+                        for model in agent.models {
+                            let quotaWeekly = ModelQuotaEstimator.estimateWeeklyQuotaPercentText(
+                                modelID: model.id,
+                                label: model.label,
+                                agentID: agent.id,
+                                tokens: model.tokens
+                            )
+                            flatModels.append(MenuFlatModelRow(
+                                id: "\(row.id)/\(agent.id)/\(model.id)",
+                                modelID: model.id,
+                                label: model.label,
+                                agentID: agent.id,
+                                tokens: model.tokens,
+                                status: model.status,
+                                quotaWeeklyPercentText: quotaWeekly
+                            ))
+                        }
+                    }
+                }
+                flatModels.sort { $0.tokens > $1.tokens }
+
+                return MenuDisplayRow(
+                    id: row.id,
+                    title: title,
+                    subtitle: subtitle,
+                    value: TokenFormat.compact(row.tokens),
+                    status: source?.status ?? "unknown",
+                    platform: source?.platform,
+                    agents: row.agents,
+                    flatModels: flatModels
+                )
             }
         }
         let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
         return rows.map { row in
-            MenuDisplayRow(id: row.id, title: row.label, subtitle: "来源明细缺失",
-                value: TokenFormat.compact(row.tokens), status: "missing", agents: nil)
+            let title = formatSourceTitle(label: row.label, machine: nil, aliases: machineAliases)
+            return MenuDisplayRow(
+                id: row.id,
+                title: title,
+                subtitle: "来源明细缺失",
+                value: TokenFormat.compact(row.tokens),
+                status: "missing",
+                agents: nil,
+                flatModels: nil
+            )
         }
     }
 
@@ -351,7 +493,7 @@ public enum MenuBarViewModel {
     }
 
     private static func fixedProviderSlots(_ slots: [MobileProviderSlot]) -> [MobileProviderSlot] {
-        let fixedProviders = ["claude", "codex"]
+        let fixedProviders = ["claude", "codex", "antigravity"]
         var slotsByProvider: [String: MobileProviderSlot] = [:]
 
         for slot in slots {
@@ -465,7 +607,7 @@ public enum MenuBarViewModel {
         generatedAt: String?,
         now: Date
     ) -> [QuotaRingData] {
-        let providerOrder = ["claude", "codex"]
+        let providerOrder = ["claude", "codex", "antigravity"]
         return slots.sorted {
             let lhs = providerOrder.firstIndex(of: canonicalProvider($0.provider)) ?? providerOrder.count
             let rhs = providerOrder.firstIndex(of: canonicalProvider($1.provider)) ?? providerOrder.count
@@ -491,6 +633,9 @@ public enum MenuBarViewModel {
             case "codex":
                 name = "Codex"
                 oR = 0.039; oG = 0.518; oB = 1.0; iR = 0.353; iG = 0.784; iB = 0.980
+            case "antigravity":
+                name = "Gemini"
+                oR = 0.259; oG = 0.522; oB = 0.957; iR = 0.400; iG = 0.650; iB = 1.0
             default:
                 name = provider.prefix(1).uppercased() + provider.dropFirst()
                 oR = 0.200; oG = 0.600; oB = 0.800; iR = 0.400; iG = 0.750; iB = 0.900
@@ -545,7 +690,7 @@ public enum MenuBarViewModel {
         hasVisibleWindow: Bool
     ) -> String {
         if hasVisibleWindow, quota.status == "available" {
-            return "官方额度"
+            return ""
         }
         let label: String? = quota.reason.flatMap { reason in
             guard !reason.isEmpty else { return nil }
@@ -569,6 +714,7 @@ public enum MenuBarViewModel {
         switch provider.lowercased() {
         case "anthropic", "claude": return "claude"
         case "openai", "codex", "gpt": return "codex"
+        case "google", "gemini", "antigravity": return "antigravity"
         default: return provider.lowercased()
         }
     }
@@ -586,6 +732,7 @@ public enum MenuBarViewModel {
             let account = String(sourceID[range.upperBound...])
             return account.isEmpty ? "BIAI" : "BIAI · \(account)"
         }
+        if provider == "antigravity" { return "Antigravity 官方" }
         return provider == "codex" ? "Codex 官方" : "Claude 官方"
     }
 

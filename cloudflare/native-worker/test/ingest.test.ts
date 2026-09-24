@@ -354,6 +354,38 @@ describe.sequential("native TS Worker write API parity", () => {
     ]);
   });
 
+  it("records every limit window observation in limit_window_history", async () => {
+    const base = fixture.limits_payloads[0] as Record<string, any>;
+    const window = { ...base.windows[0], source_id: "linux-biai-wang", provider: "claude", window: "week" };
+    for (const [observedAt, usedPercent] of [
+      ["2026-07-18T09:00:00+08:00", 15],
+      ["2026-07-18T10:00:00+08:00", 20],
+      ["2026-07-18T11:00:00+08:00", 25],
+    ] as const) {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...base,
+          observed_at: observedAt,
+          windows: [{ ...window, observed_at: observedAt, used_percent: usedPercent, remaining_percent: 100 - usedPercent }],
+        }),
+      });
+      expect(response.status).toBe(200);
+    }
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    const historyRows = await db.prepare(`
+      SELECT observed_at, used_percent FROM limit_window_history
+      WHERE source_id = ? AND provider = ? AND window = ?
+      ORDER BY observed_at ASC
+    `).bind("linux-biai-wang", "claude", "week").all<{ observed_at: string; used_percent: number }>();
+    expect(historyRows.results).toEqual([
+      { observed_at: "2026-07-18T09:00:00+08:00", used_percent: 15 },
+      { observed_at: "2026-07-18T10:00:00+08:00", used_percent: 20 },
+      { observed_at: "2026-07-18T11:00:00+08:00", used_percent: 25 },
+    ]);
+  });
+
   it("recovers source health through HTTP ingest when report tables start empty", async () => {
     await applyAllPayloads(fixture.ingest_payloads, fixture.limits_payloads);
     const expectedRecords = await readRecords(fixture.date);
@@ -807,6 +839,15 @@ describe.sequential("native TS Worker write API parity", () => {
     `).bind("fixture-macbook-pro").all<Record<string, unknown>>();
     expect(storedFacts.results).toEqual([
       {
+        agent: "antigravity", client: "antigravity",
+        window_start: "2026-06-04T09:00:00+08:00", window_end: "2026-06-04T10:00:00+08:00",
+        timezone: "Asia/Shanghai", machine_id: "macbook-pro", os_user: "wangzhipeng",
+        ai_provider: "antigravity", ai_account_id: "unconfirmed_local_source:fixture-macbook-pro:antigravity",
+        input_tokens: 1500, output_tokens: 500, cache_creation_tokens: 0, cache_read_tokens: 10000,
+        reasoning_output_tokens: 100, total_tokens: 12000, event_count: 0, session_count: 0,
+        attribution_confidence: "unconfirmed_local_source", provenance: "mswusage_antigravity_token_count",
+      },
+      {
         agent: "claude", client: "claude",
         window_start: "2026-06-04T09:00:00+08:00", window_end: "2026-06-04T10:00:00+08:00",
         timezone: "Asia/Shanghai", machine_id: "macbook-pro", os_user: "wangzhipeng",
@@ -876,6 +917,12 @@ describe.sequential("native TS Worker write API parity", () => {
       FROM source_accuracy WHERE source_id = ? ORDER BY agent
     `).bind("fixture-macbook-pro").all<Record<string, unknown>>();
     expect(accuracy.results).toEqual([
+      {
+        agent: "antigravity", provenance: "mswusage_antigravity_token_count", mode: "incremental",
+        coverage_start: "2026-06-04T00:00:00+08:00", coverage_end: "2026-06-05T00:00:00+08:00",
+        facts_digest: "d77b09f4c6ceca7505626464e820f8fb406c280ccbb2476901dac9d3fd92f6c9",
+        accuracy_status: "unverified",
+      },
       {
         agent: "claude", provenance: "mswusage_claude_assistant_usage", mode: "incremental",
         coverage_start: "2026-06-04T00:00:00+08:00", coverage_end: "2026-06-05T00:00:00+08:00",
@@ -960,7 +1007,7 @@ describe.sequential("native TS Worker write API parity", () => {
       status: "accepted",
       source_id: "fixture-desktop-partial",
       accepted_at: collectorObservedAt,
-      facts_accepted: 3,
+      facts_accepted: 4,
     });
 
     const db = await mf.getD1Database("AIUSAGE_DB");
@@ -969,6 +1016,7 @@ describe.sequential("native TS Worker write API parity", () => {
       SELECT agent, window_start, total_tokens FROM usage_hourly_facts WHERE source_id = ? ORDER BY agent, window_start
     `).bind("fixture-desktop-partial").all<Record<string, unknown>>();
     expect(facts.results).toEqual([
+      { agent: "antigravity", window_start: "2026-06-04T09:00:00+08:00", total_tokens: 12000 },
       { agent: "claude", window_start: "2026-06-04T09:00:00+08:00", total_tokens: 5390 },
       { agent: "codex", window_start: "2026-06-04T09:00:00+08:00", total_tokens: 1680 },
       { agent: "codex", window_start: "2026-06-04T10:00:00+08:00", total_tokens: 880 },

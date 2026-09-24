@@ -358,8 +358,8 @@
     ]
   },
   "limits": {
-    "observed_count": 2,
-    "total_count": 2,
+    "observed_count": 3,
+    "total_count": 3,
     "windows": [
       {
         "source_id": "linux-dev-wang",
@@ -388,6 +388,20 @@
         "confidence": "observed",
         "status": "ok",
         "official": true
+      },
+      {
+        "source_id": "mac-air-wang",
+        "provider": "antigravity",
+        "window": "session",
+        "used_percent": 10,
+        "remaining_percent": 90,
+        "reset_at": "2026-06-04T00:00:00+08:00",
+        "window_duration_minutes": 1440,
+        "observed_at": "2026-06-03T11:58:00+08:00",
+        "source_type": "language_server_status",
+        "confidence": "observed",
+        "status": "ok",
+        "official": true
       }
     ],
     "providers": [
@@ -403,6 +417,13 @@
         "source_id": "mac-air-wang",
         "observed_at": "2026-06-03T11:55:00+08:00",
         "source_type": "wham_usage_api",
+        "status": "ok"
+      },
+      {
+        "provider": "antigravity",
+        "source_id": "mac-air-wang",
+        "observed_at": "2026-06-03T11:58:00+08:00",
+        "source_type": "language_server_status",
         "status": "ok"
       }
     ]
@@ -470,6 +491,39 @@
             "used_percent": 18,
             "window": "session",
             "window_duration_minutes": 300
+          }
+        ]
+      }
+    },
+    {
+      "provider": "antigravity",
+      "usage": {
+        "status": "available",
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "available",
+        "reason": null,
+        "last_verified_at": "2026-06-03T11:58:00+08:00",
+        "source_id": "mac-air-wang",
+        "source_type": "language_server_status",
+        "windows": [
+          {
+            "confidence": "observed",
+            "observed_at": "2026-06-03T11:58:00+08:00",
+            "official": true,
+            "provider": "antigravity",
+            "remaining_percent": 90,
+            "reset_at": "2026-06-04T00:00:00+08:00",
+            "source_id": "mac-air-wang",
+            "source_type": "language_server_status",
+            "status": "ok",
+            "used_percent": 10,
+            "window": "session",
+            "window_duration_minutes": 1440
           }
         ]
       }

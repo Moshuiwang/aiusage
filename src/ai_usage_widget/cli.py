@@ -32,6 +32,8 @@ from .macos_launchd import LaunchdActivationError
 from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
 from .mswusage_codex import build_report as build_mswusage_codex_report, read_local_codex_jsonl_lines
 from .mswusage_claude import build_report as build_mswusage_claude_report, read_local_claude_jsonl_lines
+from .mswusage_antigravity import build_report as build_mswusage_antigravity_report, read_local_antigravity_events
+from .antigravity_limits_provider import AntigravityLimitsProvider
 from .pusher import DevicePusher
 from .verify_cloud import register_parser as register_verify_cloud_parser, run as run_verify_cloud
 
@@ -223,6 +225,16 @@ def _build_parser() -> argparse.ArgumentParser:
     mswusage_claude_parser.add_argument("--lookback-hours", type=float, default=48.0)
     mswusage_claude_parser.add_argument("--coverage-start", default=None)
 
+    mswusage_antigravity_parser = subparsers.add_parser(
+        "mswusage-antigravity",
+        help="Build a local Antigravity hourly usage report from SQLite conversations",
+    )
+    mswusage_antigravity_parser.add_argument("--json", action="store_true", help="Print the report as JSON")
+    mswusage_antigravity_parser.add_argument("--timezone", default="Asia/Shanghai")
+    mswusage_antigravity_parser.add_argument("--mode", choices=["incremental", "full-rescan"], default="full-rescan")
+    mswusage_antigravity_parser.add_argument("--lookback-hours", type=float, default=48.0)
+    mswusage_antigravity_parser.add_argument("--coverage-start", default=None)
+
     register_verify_cloud_parser(subparsers)
 
     return parser
@@ -246,6 +258,7 @@ def main(argv: list[str] | None = None) -> int:
         "install-limits-scheduler": _run_install_limits_scheduler,
         "mswusage-codex": _run_mswusage_codex,
         "mswusage-claude": _run_mswusage_claude,
+        "mswusage-antigravity": _run_mswusage_antigravity,
     }.get(args.command)
     if handler is None:
         parser.error(f"unsupported command: {args.command}")
@@ -536,6 +549,30 @@ def _run_mswusage_claude(args) -> int:
         print(json.dumps(report, ensure_ascii=False, sort_keys=True))
         return 0
 
+
+def _run_mswusage_antigravity(args) -> int:
+    try:
+        now = datetime.now(dt_timezone.utc).astimezone()
+        since = _usage_ledger_since(args.mode, args.lookback_hours, now)
+        read_diagnostics: dict[str, int] = {}
+        events = read_local_antigravity_events(modified_since=since, diagnostics=read_diagnostics)
+        report = build_mswusage_antigravity_report(
+            events,
+            timezone=args.timezone,
+            now=now,
+            since=since,
+            mode=args.mode,
+            lookback_hours=args.lookback_hours,
+            read_diagnostics=read_diagnostics,
+            coverage_start=_optional_datetime(args.coverage_start),
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
     providers = {}
     for provider_config in configs:
@@ -591,6 +628,12 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
                 providers[runtime_key] = _tag_provider(claude_oauth_provider, provider_name="claude", source_id=runtime_key)
             elif claude_cli_provider:
                 providers[runtime_key] = _tag_provider(claude_cli_provider, provider_name="claude", source_id=runtime_key)
+        elif provider_config.provider == "antigravity":
+            providers[runtime_key] = _tag_provider(
+                AntigravityLimitsProvider(),
+                provider_name="antigravity",
+                source_id=runtime_key,
+            )
     return providers
 
 

@@ -600,9 +600,9 @@ describe.sequential("native TS Worker empty-database read surface", () => {
     const counts = body.version_health.counts as Record<string, number>;
     expect(Object.keys(counts).length).toBeGreaterThanOrEqual(5);
     expect(Object.values(counts).every((value) => value === 0)).toBe(true);
-    // 固定 provider 槽位空库时也必须在：两个槽位、用量与额度都如实标 missing。
+    // 固定 provider 槽位空库时也必须在：三个槽位、用量与额度都如实标 missing。
     expect(body.provider_slots.map((slot: Record<string, any>) => [slot.provider, slot.usage.status, slot.quota.status]))
-      .toEqual([["claude", "missing", "missing"], ["codex", "missing", "missing"]]);
+      .toEqual([["claude", "missing", "missing"], ["codex", "missing", "missing"], ["antigravity", "missing", "missing"]]);
   });
 
   it("空库时 /api/mobile/summary 返回合法空 DTO 而不是 500", async () => {
@@ -620,7 +620,7 @@ describe.sequential("native TS Worker empty-database read surface", () => {
     });
     expect(body.limits).toMatchObject({ observed_count: 0, total_count: 0, windows: [] });
     expect(body.provider_slots.map((slot: Record<string, any>) => [slot.provider, slot.usage.status, slot.quota.status]))
-      .toEqual([["claude", "missing", "missing"], ["codex", "missing", "missing"]]);
+      .toEqual([["claude", "missing", "missing"], ["codex", "missing", "missing"], ["antigravity", "missing", "missing"]]);
   });
 });
 

@@ -40,7 +40,7 @@ function validateIngestPayload(payload: unknown): IngestRequest {
       }
     });
   }
-  for (const key of ["ccusage_daily_report", "ccusage_session_report", "mswusage_codex_hourly_report", "codex_hourly_status"]) {
+  for (const key of ["ccusage_daily_report", "ccusage_session_report", "mswusage_codex_hourly_report", "codex_hourly_status", "mswusage_antigravity_hourly_report", "antigravity_hourly_status"]) {
     if (payload[key] !== undefined && !isRecord(payload[key])) {
       throw new WriteValidationError(400, "http_schema_invalid", `${key} must be an object`);
     }
@@ -71,6 +71,8 @@ function validateIngestPayload(payload: unknown): IngestRequest {
     ccusage_session_report: isRecord(payload.ccusage_session_report) ? payload.ccusage_session_report : undefined,
     mswusage_codex_hourly_report: isRecord(payload.mswusage_codex_hourly_report) ? payload.mswusage_codex_hourly_report : undefined,
     codex_hourly_status: isRecord(payload.codex_hourly_status) ? payload.codex_hourly_status : undefined,
+    mswusage_antigravity_hourly_report: isRecord(payload.mswusage_antigravity_hourly_report) ? payload.mswusage_antigravity_hourly_report : undefined,
+    antigravity_hourly_status: isRecord(payload.antigravity_hourly_status) ? payload.antigravity_hourly_status : undefined,
     usage_hourly_facts: Array.isArray(usageHourlyFacts) ? usageHourlyFacts.filter(isRecord) : undefined,
     usage_ledger_runs: Array.isArray(usageLedgerRuns) ? usageLedgerRuns.filter(isRecord) : undefined,
     collector_release: collectorRelease,

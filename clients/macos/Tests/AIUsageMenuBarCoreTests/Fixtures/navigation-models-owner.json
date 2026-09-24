@@ -860,6 +860,24 @@
         "source_type": null,
         "windows": []
       }
+    },
+    {
+      "provider": "antigravity",
+      "usage": {
+        "status": "missing",
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
     }
   ],
   "provider_usage_coverage": {

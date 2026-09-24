@@ -7,12 +7,12 @@ function slotProviderKey(value: unknown): string {
   const provider = str(value).trim().toLowerCase();
   if (provider === "claude" || provider === "anthropic") return "claude";
   if (provider === "codex" || provider === "openai") return "codex";
+  if (provider === "antigravity" || provider === "gemini") return "antigravity";
   return provider;
 }
 
 // agent 名字只是**兜底**归属，权威字段是 usage_hourly_facts.ai_provider。
 // `all` / `unknown` 表示「跨 agent / 来源不明」，不能被硬塞进任何一个 provider 槽位。
-// 与 src/ai_usage_widget/snapshot_builder.py 的 _usage_provider_key 保持一致。
 function usageProviderKey(agent: unknown): string {
   const name = str(agent).trim().toLowerCase();
   if (aggregateAgentNames.has(name)) return "";
@@ -20,6 +20,7 @@ function usageProviderKey(agent: unknown): string {
   if ((slotProviders as readonly string[]).includes(key)) return key;
   if (name.includes("claude")) return "claude";
   if (name.includes("codex") || name.includes("openai") || name.includes("gpt")) return "codex";
+  if (name.includes("antigravity") || name.includes("gemini")) return "antigravity";
   return name;
 }
 

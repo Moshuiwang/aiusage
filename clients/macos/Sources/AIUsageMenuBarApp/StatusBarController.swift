@@ -59,6 +59,7 @@ final class StatusBarController: NSObject {
         startRefreshTimer()
         model.refresh()
         if model.selection != MenuPeriodSelection(periodID: "today") { model.refreshToday() }
+        model.prefetchCommonPeriods()
     }
 
     private func setupStatusItem() {
@@ -141,6 +142,7 @@ final class StatusBarController: NSObject {
                 guard let self else { return }
                 if self.model.selection != MenuPeriodSelection(periodID: "today") { self.model.refresh(force: true) }
                 self.model.refreshToday()
+                self.model.prefetchCommonPeriods()
             }
         }
     }

@@ -9,8 +9,6 @@ struct MenuBarPopoverView: View {
     @State private var contentHeight: CGFloat
     @State private var hoveredBar: MenuTrendBar?
     @State private var hoverLocation: CGPoint?
-    @State private var expandedSources: Set<String> = []
-    @State private var expandedAgents: Set<String> = []
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
@@ -141,17 +139,13 @@ struct MenuBarPopoverView: View {
                     .padding(.top, 8)
             }
 
-            Picker(selection: $model.selectedPeriodID) {
-                ForEach(periods, id: \.0) { id, label in Text(label).tag(id) }
-            } label: { EmptyView() }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-            .onChange(of: model.selectedPeriodID) { _, newValue in
-                model.refresh(periodID: newValue)
-            }
+            LiquidGlassPeriodPicker(selection: $model.selectedPeriodID, periods: periods)
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+                .onChange(of: model.selectedPeriodID) { _, newValue in
+                    model.refresh(periodID: newValue)
+                }
 
             historyNavigation
             VStack(spacing: 8) {
@@ -190,10 +184,6 @@ struct MenuBarPopoverView: View {
         .buttonStyle(.borderless)
         .padding(.horizontal, 20)
         .padding(.bottom, 8)
-        .onChange(of: model.selection) { _, _ in
-            expandedSources.removeAll()
-            expandedAgents.removeAll()
-        }
     }
 
     // MARK: – Hero card
@@ -261,51 +251,81 @@ struct MenuBarPopoverView: View {
         VStack(alignment: .leading, spacing: 0) {
             sectionTitle("来源").padding(.bottom, 10)
             ForEach(Array(model.state.sources.enumerated()), id: \.element.id) { index, row in
-                if index > 0 { Divider().padding(.vertical, 4) }
-                DisclosureGroup(isExpanded: expansionBinding(row.id, in: $expandedSources)) {
-                    if let agents = row.agents, !agents.isEmpty {
-                        ForEach(agents) { agent in
-                            if agent.status == "available" {
-                                DisclosureGroup(isExpanded: expansionBinding("\(row.id)/\(agent.id)", in: $expandedAgents)) {
-                                    if agent.models.isEmpty {
-                                        Text("模型明细缺失").font(.caption).foregroundStyle(.secondary)
-                                    } else {
-                                        ForEach(agent.models) { item in
-                                            HStack {
-                                                Text(item.title).lineLimit(2)
-                                                Spacer(minLength: 8)
-                                                Text(item.valueText).monospacedDigit()
-                                            }
-                                            .font(.system(size: 11))
-                                            .foregroundStyle(.secondary)
-                                            .help("\(item.title) · \(item.tokens) tokens")
-                                            .padding(.vertical, 2)
-                                        }
-                                    }
-                                } label: { agentLabel(agent) }
-                            } else {
-                                agentLabel(agent)
+                if index > 0 {
+                    Divider().padding(.vertical, 8)
+                }
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(alignment: .center, spacing: 9) {
+                        ServerIcon(platform: row.platform, title: row.title, size: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(row.title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .lineLimit(1)
+                            if !row.subtitle.isEmpty {
+                                Text(row.subtitle)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                         }
+                        Spacer(minLength: 8)
+                        Text(row.value)
+                            .font(.system(size: 12.5, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if let models = row.flatModels, !models.isEmpty {
+                        VStack(spacing: 3) {
+                            ForEach(models) { item in
+                                HStack(spacing: 8) {
+                                    BrandIcon(kind: BrandIcon.kind(for: item.label, agent: item.agentID), size: 14)
+                                    Text(item.title)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                    Spacer(minLength: 8)
+                                    Text(item.valueText)
+                                        .monospacedDigit()
+                                        .fontWeight(.medium)
+                                    if let quotaWeekly = item.quotaWeeklyPercentText {
+                                        Text(quotaWeekly)
+                                            .font(.system(size: 10))
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(.secondary)
+                                .help("\(item.title) · \(item.tokens) tokens")
+                                .padding(.vertical, 2.5)
+                            }
+                        }
+                        .padding(.leading, 33)
+                        .padding(.top, 2)
+                    } else if let agents = row.agents, !agents.isEmpty {
+                        VStack(spacing: 3) {
+                            ForEach(agents) { agent in
+                                ForEach(agent.models) { item in
+                                    HStack(spacing: 8) {
+                                        BrandIcon(kind: BrandIcon.kind(for: item.label, agent: agent.id), size: 14)
+                                        Text(item.title).lineLimit(1).truncationMode(.tail)
+                                        Spacer(minLength: 8)
+                                        Text(item.valueText).monospacedDigit()
+                                    }
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.vertical, 2.5)
+                                }
+                            }
+                        }
+                        .padding(.leading, 33)
+                        .padding(.top, 2)
                     } else {
-                        Text("Agent / 模型明细缺失")
+                        Text("模型明细缺失")
                             .font(.caption).foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.leading, 33)
+                            .padding(.vertical, 2)
                     }
-                } label: {
-                    HStack(spacing: 10) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.title).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                            if !row.subtitle.isEmpty {
-                                Text(row.subtitle).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
-                            }
-                        }
-                        Spacer()
-                        Text(row.value).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.secondary)
-                    }
-                    .frame(minHeight: 34)
                 }
-                .padding(.vertical, 2)
             }
         }
         .padding(12)
@@ -315,23 +335,6 @@ struct MenuBarPopoverView: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
         )
-    }
-
-    private func agentLabel(_ agent: MobileSourceAgent) -> some View {
-        HStack {
-            Text(agent.label)
-            Spacer()
-            Text(agent.valueText).monospacedDigit().foregroundStyle(.secondary)
-        }
-        .font(.system(size: 12))
-        .padding(.vertical, 4)
-        .help(agent.status == "available" ? "\(agent.label) · \(agent.tokens) tokens" : "\(agent.label) 数据缺失")
-    }
-
-    private func expansionBinding(_ id: String, in expanded: Binding<Set<String>>) -> Binding<Bool> {
-        Binding(get: { expanded.wrappedValue.contains(id) }, set: { value in
-            if value { expanded.wrappedValue.insert(id) } else { expanded.wrappedValue.remove(id) }
-        })
     }
 
     // MARK: – Helpers
@@ -643,11 +646,13 @@ struct QuotaRingItem: View {
                 ringRow(key: data.innerLabel, pct: data.innerPctText, time: data.innerTimeText,
                         color: Color(red: data.innerRed, green: data.innerGreen, blue: data.innerBlue))
                 HStack(spacing: 4) {
-                    Text(data.availabilityText)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(data.availabilityText == "官方额度" ? Color.secondary : Color.orange)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
+                    if !data.availabilityText.isEmpty {
+                        Text(data.availabilityText)
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.orange)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
                     Spacer(minLength: 2)
                     Text(data.updatedText)
                         .font(.system(size: 9))
@@ -675,5 +680,245 @@ struct QuotaRingItem: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+    }
+}
+
+// MARK: – LiquidGlassPeriodPicker
+
+struct LiquidGlassPeriodPicker: View {
+    @Binding var selection: String
+    let periods: [(String, String)]
+    @Namespace private var animationNamespace
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(periods, id: \.0) { id, label in
+                let isSelected = selection == id
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                        selection = id
+                    }
+                } label: {
+                    Text(label)
+                        .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .background {
+                    if isSelected {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.88))
+                            .shadow(color: Color.black.opacity(0.10), radius: 2, x: 0, y: 1)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                            )
+                            .matchedGeometryEffect(id: "ActivePeriodPill", in: animationNamespace)
+                    }
+                }
+            }
+        }
+        .padding(3)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .controlColor).opacity(0.42))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
+        )
+    }
+}
+
+// MARK: – Server & Machine Icons
+
+struct ServerIcon: View {
+    let platform: String?
+    let title: String
+    let size: CGFloat
+
+    init(platform: String?, title: String, size: CGFloat = 24) {
+        self.platform = platform
+        self.title = title
+        self.size = size
+    }
+
+    private var iconConfig: (name: String, tint: Color, background: Color) {
+        let p = (platform ?? "").lowercased()
+        let t = title.lowercased()
+
+        if p == "darwin" || t.contains("mac") {
+            return ("apple.logo", Color.primary.opacity(0.85), Color.primary.opacity(0.08))
+        } else if t.contains("aws") || t.contains("cloud") || t.contains("ec2") {
+            return ("cloud.fill", Color(red: 255 / 255, green: 153 / 255, blue: 0 / 255), Color.orange.opacity(0.12))
+        } else if p == "linux" || t.contains("server") || t.contains("linux") || t.contains("gpu") || t.contains("tz") {
+            return ("server.rack", Color(red: 70 / 255, green: 130 / 255, blue: 240 / 255), Color.blue.opacity(0.10))
+        } else if p.contains("win") || t.contains("win") {
+            return ("pc", Color.cyan, Color.cyan.opacity(0.10))
+        } else {
+            return ("server.rack", Color.secondary, Color.primary.opacity(0.06))
+        }
+    }
+
+    var body: some View {
+        let config = iconConfig
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(config.background)
+            Image(systemName: config.name)
+                .font(.system(size: size * 0.54, weight: .medium))
+                .foregroundStyle(config.tint)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
+// MARK: – BrandIcon & Model Logos
+
+enum BrandKind: Equatable {
+    case claudeCode
+    case codex
+    case gemini
+    case deepseek
+    case generic
+}
+
+struct BrandIcon: View {
+    let kind: BrandKind
+    let size: CGFloat
+
+    static func kind(for raw: String, agent: String = "") -> BrandKind {
+        let modelLower = raw.lowercased()
+        if modelLower.contains("deepseek") { return .deepseek }
+        if modelLower.contains("claude") { return .claudeCode }
+        if modelLower.contains("codex") || modelLower.contains("openai") || modelLower.contains("gpt") || modelLower.contains("o1") || modelLower.contains("o3") { return .codex }
+        if modelLower.contains("gemini") || modelLower.contains("google") || modelLower.contains("antigravity") { return .gemini }
+
+        let agentLower = agent.lowercased()
+        if agentLower.contains("claude") { return .claudeCode }
+        if agentLower.contains("codex") { return .codex }
+        if agentLower.contains("antigravity") || agentLower.contains("gemini") { return .gemini }
+        return .generic
+    }
+
+    var body: some View {
+        Group {
+            switch kind {
+            case .claudeCode:
+                ClaudeCodeLogo()
+                    .fill(Color(red: 218 / 255, green: 119 / 255, blue: 86 / 255))
+                    .frame(width: size, height: size)
+            case .codex:
+                CodexLogo()
+                    .fill(Color(red: 10 / 255, green: 132 / 255, blue: 1.0))
+                    .frame(width: size, height: size)
+            case .deepseek:
+                Image(systemName: "bolt.horizontal.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.cyan)
+                    .frame(width: size, height: size)
+            case .gemini:
+                Image(systemName: "sparkles")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(Color.blue)
+                    .frame(width: size, height: size)
+            case .generic:
+                Image(systemName: "cube.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundStyle(.secondary)
+                    .frame(width: size, height: size)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
+struct ClaudeCodeLogo: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        func x(_ v: CGFloat) -> CGFloat { rect.minX + v / 24 * rect.width }
+        func y(_ v: CGFloat) -> CGFloat { rect.minY + v / 24 * rect.height }
+        p.move(to: CGPoint(x: x(20.998), y: y(10.949))); p.addLine(to: CGPoint(x: x(24), y: y(10.949)))
+        p.addLine(to: CGPoint(x: x(24), y: y(14.051))); p.addLine(to: CGPoint(x: x(21), y: y(14.051)))
+        p.addLine(to: CGPoint(x: x(21), y: y(17.079))); p.addLine(to: CGPoint(x: x(19.513), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(19.513), y: y(20))); p.addLine(to: CGPoint(x: x(18), y: y(20)))
+        p.addLine(to: CGPoint(x: x(18), y: y(17.079))); p.addLine(to: CGPoint(x: x(16.513), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(16.513), y: y(20))); p.addLine(to: CGPoint(x: x(15), y: y(20)))
+        p.addLine(to: CGPoint(x: x(15), y: y(17.079))); p.addLine(to: CGPoint(x: x(9), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(9), y: y(20))); p.addLine(to: CGPoint(x: x(7.488), y: y(20)))
+        p.addLine(to: CGPoint(x: x(7.488), y: y(17.079))); p.addLine(to: CGPoint(x: x(6), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(6), y: y(20))); p.addLine(to: CGPoint(x: x(4.487), y: y(20)))
+        p.addLine(to: CGPoint(x: x(4.487), y: y(17.079))); p.addLine(to: CGPoint(x: x(3), y: y(17.079)))
+        p.addLine(to: CGPoint(x: x(3), y: y(14.05))); p.addLine(to: CGPoint(x: x(0), y: y(14.05)))
+        p.addLine(to: CGPoint(x: x(0), y: y(10.95))); p.addLine(to: CGPoint(x: x(3), y: y(10.95)))
+        p.addLine(to: CGPoint(x: x(3), y: y(5))); p.addLine(to: CGPoint(x: x(20.998), y: y(5)))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: x(6), y: y(10.949))); p.addLine(to: CGPoint(x: x(7.488), y: y(10.949)))
+        p.addLine(to: CGPoint(x: x(7.488), y: y(8.102))); p.addLine(to: CGPoint(x: x(6), y: y(8.102)))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: x(16.51), y: y(10.949))); p.addLine(to: CGPoint(x: x(18), y: y(10.949)))
+        p.addLine(to: CGPoint(x: x(18), y: y(8.102))); p.addLine(to: CGPoint(x: x(16.51), y: y(8.102)))
+        p.closeSubpath()
+        return p
+    }
+}
+
+struct CodexLogo: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        func x(_ v: CGFloat) -> CGFloat { rect.minX + v / 24 * rect.width }
+        func y(_ v: CGFloat) -> CGFloat { rect.minY + v / 24 * rect.height }
+        p.move(to: CGPoint(x: x(9.064), y: y(3.344)))
+        p.addCurve(to: CGPoint(x: x(11.349), y: y(3.032)), control1: CGPoint(x: x(9.754), y: y(3.02)), control2: CGPoint(x: x(10.516), y: y(2.916)))
+        p.addCurve(to: CGPoint(x: x(14.022), y: y(4.307)), control1: CGPoint(x: x(12.349), y: y(3.147)), control2: CGPoint(x: x(13.24), y: y(3.572)))
+        p.addCurve(to: CGPoint(x: x(14.102), y: y(4.328)), control1: CGPoint(x: x(14.032), y: y(4.317)), control2: CGPoint(x: x(14.076), y: y(4.333)))
+        p.addCurve(to: CGPoint(x: x(17.148), y: y(4.603)), control1: CGPoint(x: x(15.06), y: y(3.995)), control2: CGPoint(x: x(16.075), y: y(4.087)))
+        p.addLine(to: CGPoint(x: x(17.311), y: y(4.682)))
+        p.addCurve(to: CGPoint(x: x(19.499), y: y(7.081)), control1: CGPoint(x: x(18.321), y: y(5.177)), control2: CGPoint(x: x(19.05), y: y(5.977)))
+        p.addCurve(to: CGPoint(x: x(19.68), y: y(9.899)), control1: CGPoint(x: x(19.84), y: y(7.914)), control2: CGPoint(x: x(19.9), y: y(8.854)))
+        p.addCurve(to: CGPoint(x: x(19.71), y: y(10.014)), control1: CGPoint(x: x(19.672), y: y(9.94)), control2: CGPoint(x: x(19.683), y: y(9.984)))
+        p.addCurve(to: CGPoint(x: x(20.893), y: y(12.184)), control1: CGPoint(x: x(20.304), y: y(10.621)), control2: CGPoint(x: x(20.698), y: y(11.344)))
+        p.addCurve(to: CGPoint(x: x(20.006), y: y(16.038)), control1: CGPoint(x: x(21.182), y: y(13.609)), control2: CGPoint(x: x(20.886), y: y(14.894)))
+        p.addLine(to: CGPoint(x: x(19.87), y: y(16.204)))
+        p.addCurve(to: CGPoint(x: x(17.669), y: y(17.592)), control1: CGPoint(x: x(19.296), y: y(16.865)), control2: CGPoint(x: x(18.562), y: y(17.328)))
+        p.addCurve(to: CGPoint(x: x(17.588), y: y(17.668)), control1: CGPoint(x: x(17.629), y: y(17.604)), control2: CGPoint(x: x(17.6), y: y(17.631)))
+        p.addCurve(to: CGPoint(x: x(16.848), y: y(19.158)), control1: CGPoint(x: x(17.397), y: y(18.219)), control2: CGPoint(x: x(17.205), y: y(18.687)))
+        p.addCurve(to: CGPoint(x: x(13.137), y: y(20.996)), control1: CGPoint(x: x(15.948), y: y(20.345)), control2: CGPoint(x: x(14.626), y: y(21.004)))
+        p.addCurve(to: CGPoint(x: x(9.98), y: y(19.694)), control1: CGPoint(x: x(11.95), y: y(20.99)), control2: CGPoint(x: x(10.898), y: y(20.556)))
+        p.addCurve(to: CGPoint(x: x(9.875), y: y(19.67)), control1: CGPoint(x: x(9.954), y: y(19.67)), control2: CGPoint(x: x(9.914), y: y(19.661)))
+        p.addCurve(to: CGPoint(x: x(8.671), y: y(19.808)), control1: CGPoint(x: x(9.487), y: y(19.795)), control2: CGPoint(x: x(9.095), y: y(19.813)))
+        p.addCurve(to: CGPoint(x: x(6.726), y: y(19.342)), control1: CGPoint(x: x(7.975), y: y(19.8)), control2: CGPoint(x: x(7.327), y: y(19.645)))
+        p.addCurve(to: CGPoint(x: x(4.702), y: y(17.39)), control1: CGPoint(x: x(5.983), y: y(18.965)), control2: CGPoint(x: x(5.307), y: y(18.314)))
+        p.addCurve(to: CGPoint(x: x(4.318), y: y(14.131)), control1: CGPoint(x: x(4.342), y: y(16.553)), control2: CGPoint(x: x(4.214), y: y(15.467)))
+        p.addCurve(to: CGPoint(x: x(4.297), y: y(14.027)), control1: CGPoint(x: x(4.327), y: y(14.09)), control2: CGPoint(x: x(4.318), y: y(14.049)))
+        p.addCurve(to: CGPoint(x: x(3.263), y: y(12.376)), control1: CGPoint(x: x(3.842), y: y(13.579)), control2: CGPoint(x: x(3.497), y: y(13.029)))
+        p.addCurve(to: CGPoint(x: x(3.153), y: y(9.584)), control1: CGPoint(x: x(3.126), y: y(11.994)), control2: CGPoint(x: x(3.063), y: y(10.647)))
+        p.addCurve(to: CGPoint(x: x(5.086), y: y(6.966)), control1: CGPoint(x: x(3.49), y: y(8.472)), control2: CGPoint(x: x(4.135), y: y(7.599)))
+        p.addCurve(to: CGPoint(x: x(6.333), y: y(6.409)), control1: CGPoint(x: x(5.298), y: y(6.825)), control2: CGPoint(x: x(5.963), y: y(6.516)))
+        p.addCurve(to: CGPoint(x: x(6.398), y: y(6.343)), control1: CGPoint(x: x(6.363), y: y(6.4)), control2: CGPoint(x: x(6.389), y: y(6.374)))
+        p.addCurve(to: CGPoint(x: x(7.227), y: y(4.728)), control1: CGPoint(x: x(6.575), y: y(5.738)), control2: CGPoint(x: x(6.851), y: y(5.199)))
+        p.addCurve(to: CGPoint(x: x(9.064), y: y(3.344)), control1: CGPoint(x: x(7.704), y: y(4.13)), control2: CGPoint(x: x(8.316), y: y(3.668)))
+        p.closeSubpath()
+        p.move(to: CGPoint(x: x(12.546), y: y(13.909)))
+        p.addCurve(to: CGPoint(x: x(12.546), y: y(15.181)), control1: CGPoint(x: x(12.193), y: y(13.909)), control2: CGPoint(x: x(11.91), y: y(14.193)))
+        p.addLine(to: CGPoint(x: x(16.182), y: y(15.181)))
+        p.addCurve(to: CGPoint(x: x(16.182), y: y(13.909)), control1: CGPoint(x: x(17.03), y: y(15.181)), control2: CGPoint(x: x(17.03), y: y(13.909)))
+        p.addLine(to: CGPoint(x: x(12.546), y: y(13.909))); p.closeSubpath()
+        p.move(to: CGPoint(x: x(8.462), y: y(9.23)))
+        p.addCurve(to: CGPoint(x: x(7.356), y: y(9.861)), control1: CGPoint(x: x(8.112), y: y(8.612)), control2: CGPoint(x: x(7.007), y: y(9.241)))
+        p.addLine(to: CGPoint(x: x(8.628), y: y(12.085))); p.addLine(to: CGPoint(x: x(7.362), y: y(14.221)))
+        p.addCurve(to: CGPoint(x: x(8.457), y: y(14.87)), control1: CGPoint(x: x(7.006), y: y(14.822)), control2: CGPoint(x: x(8.105), y: y(15.474)))
+        p.addLine(to: CGPoint(x: x(9.911), y: y(12.415)))
+        p.addCurve(to: CGPoint(x: x(9.916), y: y(11.775)), control1: CGPoint(x: x(10.025), y: y(12.222)), control2: CGPoint(x: x(10.027), y: y(11.968)))
+        p.addLine(to: CGPoint(x: x(8.462), y: y(9.23))); p.closeSubpath()
+        return p
     }
 }

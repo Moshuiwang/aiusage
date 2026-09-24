@@ -50,6 +50,7 @@ class _MswusageCollection:
     codex_report: dict[str, Any] | None
     codex_status: dict[str, Any] | None
     claude_report: dict[str, Any] | None
+    antigravity_report: dict[str, Any] | None = None
 
 
 class IngestHTTPClient:
@@ -93,6 +94,18 @@ def _is_mswusage_claude_report(value: Any) -> bool:
         and value.get("schema_version") == 1
         and value.get("source") == "mswusage_claude"
         and value.get("provenance") == "mswusage_claude_assistant_usage"
+        and isinstance(value.get("hourly"), list)
+        and isinstance(value.get("daily"), list)
+        and isinstance(value.get("sessions"), list)
+    )
+
+
+def _is_mswusage_antigravity_report(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and value.get("schema_version") == 1
+        and value.get("source") == "mswusage_antigravity"
+        and value.get("provenance") == "mswusage_antigravity_token_count"
         and isinstance(value.get("hourly"), list)
         and isinstance(value.get("daily"), list)
         and isinstance(value.get("sessions"), list)
@@ -265,6 +278,7 @@ class DevicePusher:
         ledger_collection_available = (
             mswusage.codex_report is not None
             or mswusage.claude_report is not None
+            or mswusage.antigravity_report is not None
         )
         if ccusage.failure is not None and not ledger_collection_available:
             status, error_type, error_message = ccusage.failure
@@ -409,10 +423,36 @@ class DevicePusher:
             except json.JSONDecodeError:
                 mswusage_claude_report = None
 
+        mswusage_antigravity_report = None
+        antigravity_argv = [
+            sys.executable,
+            "-m",
+            "ai_usage_widget.cli",
+            "mswusage-antigravity",
+            "--json",
+            "--timezone",
+            self.config.timezone,
+            "--mode",
+            self.ledger_mode,
+        ]
+        if self.ledger_mode == "incremental":
+            antigravity_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
+        elif self.ledger_coverage_start:
+            antigravity_argv.extend(["--coverage-start", self.ledger_coverage_start])
+        antigravity_res = self.executor(antigravity_argv, float(self.config.timeout_seconds))
+        if antigravity_res.ok and antigravity_res.stdout:
+            try:
+                report = json.loads(antigravity_res.stdout)
+                if _is_mswusage_antigravity_report(report):
+                    mswusage_antigravity_report = report
+            except json.JSONDecodeError:
+                mswusage_antigravity_report = None
+
         return _MswusageCollection(
             codex_report=mswusage_codex_hourly_report,
             codex_status=codex_hourly_status,
             claude_report=mswusage_claude_report,
+            antigravity_report=mswusage_antigravity_report,
         )
 
     def _build_payload(
@@ -468,6 +508,21 @@ class DevicePusher:
             if hourly_facts:
                 payload.setdefault("usage_hourly_facts", []).extend(hourly_facts)
             ledger_run = _usage_ledger_run(mswusage.claude_report, hourly_facts, agent="claude")
+            if ledger_run is not None:
+                payload.setdefault("usage_ledger_runs", []).append(ledger_run)
+        if mswusage.antigravity_report is not None:
+            payload["mswusage_antigravity_hourly_report"] = mswusage.antigravity_report
+            hourly_facts = _usage_hourly_facts_from_mswusage(
+                self.config,
+                mswusage.antigravity_report,
+                provider_key="antigravity",
+                default_provider="antigravity",
+                default_agent="antigravity",
+                default_client="antigravity",
+            )
+            if hourly_facts:
+                payload.setdefault("usage_hourly_facts", []).extend(hourly_facts)
+            ledger_run = _usage_ledger_run(mswusage.antigravity_report, hourly_facts, agent="antigravity")
             if ledger_run is not None:
                 payload.setdefault("usage_ledger_runs", []).append(ledger_run)
         return payload

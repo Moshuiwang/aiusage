@@ -111,6 +111,20 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('collector_version', 'TEXT', 0, None, 0),
         ('status', 'TEXT', 1, None, 0),
     ],
+    "limit_window_history": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('provider', 'TEXT', 1, None, 2),
+        ('window', 'TEXT', 1, None, 3),
+        ('used_percent', 'REAL', 1, None, 0),
+        ('remaining_percent', 'REAL', 1, None, 0),
+        ('reset_at', 'TEXT', 1, None, 0),
+        ('window_duration_minutes', 'INTEGER', 1, None, 0),
+        ('source_type', 'TEXT', 1, None, 0),
+        ('confidence', 'TEXT', 1, None, 0),
+        ('status', 'TEXT', 1, None, 0),
+        ('observed_at', 'TEXT', 1, None, 4),
+        ('recorded_at', 'TEXT', 1, None, 0),
+    ],
     "limit_windows": [
         ('source_id', 'TEXT', 1, None, 1),
         ('provider', 'TEXT', 1, None, 2),
@@ -368,6 +382,9 @@ FRESH_INSTALL_CREATED_INDEXES = {
     },
     "collection_runs": {
         "idx_collection_runs_collected_at": (0, 0, ('collected_at',)),
+    },
+    "limit_window_history": {
+        "idx_limit_window_history_lookup": (0, 0, ('source_id', 'provider', 'window', 'observed_at')),
     },
     "limit_windows": {
     },

@@ -144,6 +144,14 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
             env=env,
         )
 
+    if provider == "antigravity":
+        return LimitsProviderConfig(
+            provider=provider,
+            enabled=enabled,
+            source_id=source_id,
+            env=env,
+        )
+
     raise ConfigError(f"unsupported limits provider: {provider}")
 
 

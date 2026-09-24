@@ -60,7 +60,7 @@ FIXTURE_FILENAMES = {
 }
 
 #: 固定 provider 槽位，顺序恒定。口径 owner 是 Worker 读模型（read-model.ts），这里只核对顺序没变。
-SLOT_PROVIDERS = ("claude", "codex")
+SLOT_PROVIDERS = ("claude", "codex", "antigravity")
 
 DEFAULT_TOKEN_ENV = "AI_USAGE_READ_TOKEN"
 

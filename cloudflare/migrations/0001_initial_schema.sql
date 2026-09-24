@@ -394,3 +394,23 @@ BEGIN
   INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
   INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
 END;
+
+-- Backfilled from 0012: preserve historical limit window snapshots for quota analytics.
+CREATE TABLE IF NOT EXISTS limit_window_history (
+  source_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  window TEXT NOT NULL,
+  used_percent REAL NOT NULL,
+  remaining_percent REAL NOT NULL,
+  reset_at TEXT NOT NULL,
+  window_duration_minutes INTEGER NOT NULL,
+  source_type TEXT NOT NULL,
+  confidence TEXT NOT NULL,
+  status TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (source_id, provider, window, observed_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_limit_window_history_lookup
+  ON limit_window_history (source_id, provider, window, observed_at DESC);

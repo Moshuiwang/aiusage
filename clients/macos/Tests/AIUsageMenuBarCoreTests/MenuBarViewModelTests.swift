@@ -22,7 +22,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.sources.map(\.title), ["linux-dev", "macbook-pro"])
         XCTAssertEqual(state.sources.first?.subtitle, "来源明细缺失")
         XCTAssertTrue(state.limitRows.isEmpty)
-        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex"])
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         XCTAssertTrue(state.quotaRings.allSatisfy { ring in
             ring.outerPctText == "--" && ring.innerPctText == "--" &&
                 ring.outerTimeText == "--" && ring.innerTimeText == "--"
@@ -505,7 +505,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(claude.innerLabel, "7d")
         XCTAssertEqual(claude.sourceText, "BIAI · wang")
         XCTAssertEqual(claude.updatedText, "10:20 更新")
-        XCTAssertEqual(claude.availabilityText, "官方额度")
+        XCTAssertEqual(claude.availabilityText, "")
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
         XCTAssertEqual(codex.outerLabel, "额度")

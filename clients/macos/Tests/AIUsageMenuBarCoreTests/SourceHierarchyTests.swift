@@ -76,6 +76,24 @@ final class SourceHierarchyTests: XCTestCase {
         }
     }
 
+    func testFlatModelsAreSortedDescendingByTokensAcrossAgents() throws {
+        let summary = try load("navigation-models-owner")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
+        let macSource = try XCTUnwrap(state.sources.first { $0.id == "model-mac" })
+        let flatModels = try XCTUnwrap(macSource.flatModels)
+        XCTAssertEqual(flatModels.count, 4)
+        XCTAssertEqual(flatModels.map(\.tokens), [300, 200, 100, 50])
+        XCTAssertEqual(flatModels.first?.label, "claude-opus")
+        XCTAssertEqual(flatModels[1].label, "gpt-6-luna")
+    }
+
+    func testCustomMachineAliasesReplaceLongHostnames() throws {
+        let summary = try load("navigation-models-owner")
+        let aliases = ["mac": "MacBook Air", "linux": "GPU Server"]
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases)
+        XCTAssertEqual(state.sources.map(\.title), ["alice / MacBook Air", "alice / GPU Server"])
+    }
+
     private func load(_ name: String) throws -> MobileSummary {
         let url = try XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json"))
         return try JSONDecoder().decode(MobileSummary.self, from: Data(contentsOf: url))
