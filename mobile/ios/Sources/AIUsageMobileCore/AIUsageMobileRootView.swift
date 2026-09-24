@@ -357,6 +357,7 @@ struct InteractiveBarChart: View {
 
     private let claudeColor = BrandColor.claudeOrange
     private let codexColor = Color(red: 0.039, green: 0.518, blue: 1)
+    private let geminiColor = Color(red: 0.204, green: 0.780, blue: 0.349)
     private let unknownColor = Color.secondary.opacity(0.45)
 
     var body: some View {
@@ -439,6 +440,7 @@ struct InteractiveBarChart: View {
             HStack(spacing: 12) {
                 chartLegend("Claude", color: claudeColor)
                 chartLegend("Codex", color: codexColor)
+                chartLegend("Gemini", color: geminiColor)
                 chartLegend("未知", color: unknownColor)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -467,6 +469,11 @@ struct InteractiveBarChart: View {
                     Rectangle()
                         .fill(codexColor)
                         .frame(height: segmentHeight(point.codexTokens))
+                }
+                if point.geminiTokens > 0 {
+                    Rectangle()
+                        .fill(geminiColor)
+                        .frame(height: segmentHeight(point.geminiTokens))
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
@@ -510,6 +517,11 @@ struct ChartTooltip: View {
             Text("\(lines.claude) · \(lines.codex)")
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
+            if !lines.gemini.hasSuffix(" 0") {
+                Text(lines.gemini)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+            }
             if !lines.unknown.hasSuffix(" 0") {
                 Text(lines.unknown)
                     .font(.system(size: 9))

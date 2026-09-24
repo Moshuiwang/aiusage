@@ -274,7 +274,8 @@ final class MobileSummaryTests: XCTestCase {
             cacheRatio: 0,
             claudeTokens: 300_000_000,
             codexTokens: 100_000_000,
-            unknownTokens: 3_524_234
+            geminiTokens: 2_000_000,
+            unknownTokens: 1_524_234
         )
 
         let lines = TrendChartPresentation.tooltipLines(for: point)
@@ -283,7 +284,8 @@ final class MobileSummaryTests: XCTestCase {
         XCTAssertEqual(lines.total, "403.5M · 403,524,234")
         XCTAssertEqual(lines.claude, "Claude 300,000,000")
         XCTAssertEqual(lines.codex, "Codex 100,000,000")
-        XCTAssertEqual(lines.unknown, "未知 3,524,234")
+        XCTAssertEqual(lines.gemini, "Gemini 2,000,000")
+        XCTAssertEqual(lines.unknown, "未知 1,524,234")
     }
 
     func testTrendPointDecodesMissingSegmentsAsUnknownForOldCacheCompatibility() throws {
