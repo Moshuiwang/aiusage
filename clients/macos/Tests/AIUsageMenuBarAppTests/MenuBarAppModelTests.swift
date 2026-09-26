@@ -386,6 +386,56 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    /// #177 真机反馈：标题栏「HH:mm 更新」之前只看「所选 summary」自己的 sources——
+    /// 切到历史周期（如「本周」）后，会显示那份历史快照里更早的同步时间，而不是设备实际
+    /// 最新一次同步（体现在 todaySummary/缓存里）的时间。headerUpdatedText 必须取所有已知
+    /// summary 里最新的同步时间，与 quotaRings 取最新快照同一思路。
+    func testHeaderUpdatedTextTakesLatestSyncTimeAcrossAllKnownSummariesNotJustSelectedPeriod() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-07-18T22:00:00+08:00")
+        let olderSourceJSON = """
+        [{"source_id": "week-src", "machine": "mac", "os_user": "wang", "platform": "macos",
+          "display_name": null, "status": "ok",
+          "last_observed_at": "2026-07-11T09:23:00+08:00", "last_pushed_at": "2026-07-11T09:23:00+08:00",
+          "error_message": null}]
+        """
+        let newerSourceJSON = """
+        [{"source_id": "today-src", "machine": "mac", "os_user": "wang", "platform": "macos",
+          "display_name": null, "status": "ok",
+          "last_observed_at": "2026-07-18T21:12:00+08:00", "last_pushed_at": "2026-07-18T21:12:00+08:00",
+          "error_message": null}]
+        """
+        let todaySummary = try summary(
+            periodID: "today", totalTokens: 100, generatedAt: "2026-07-18T21:12:00+08:00",
+            sourcesJSON: newerSourceJSON
+        )
+        let historicalWeekSummary = try summary(
+            periodID: "week", totalTokens: 700, generatedAt: "2026-07-11T09:23:00+08:00",
+            sourcesJSON: olderSourceJSON
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: todaySummary, fetchedAt: now),
+                "week": CachedMenuSummary(summary: historicalWeekSummary, fetchedAt: now),
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertEqual(model.selectedPeriodID, "week")
+        // 切到「本周」（自身最新同步 09:23）后，标题栏仍必须显示设备实际最新同步时间 21:12
+        // （来自 todaySummary），不能回退到本周快照里更早的时间。
+        XCTAssertEqual(model.state.headerUpdatedText, "21:12 更新")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
     func testSyncNowSendsOneRequestPerPeriodOnToday() async throws {
         let loader = ControlledSummaryLoader()
         let model = MenuBarAppModel(
@@ -1042,7 +1092,8 @@ final class MenuBarAppModelTests: XCTestCase {
         periodID: String,
         totalTokens: Int,
         generatedAt: String = "2026-06-25T12:00:00+08:00",
-        providerSlots: [MobileProviderSlot] = []
+        providerSlots: [MobileProviderSlot] = [],
+        sourcesJSON: String = "[]"
     ) throws -> MobileSummary {
         let json = """
         {
@@ -1070,7 +1121,7 @@ final class MenuBarAppModelTests: XCTestCase {
             "end_date": "2026-06-25",
             "points": []
           },
-          "sources": [],
+          "sources": \(sourcesJSON),
           "breakdown": {
             "by_machine": [],
             "by_os_user": [],

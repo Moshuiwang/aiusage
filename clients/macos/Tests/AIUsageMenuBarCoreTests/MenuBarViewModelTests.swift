@@ -56,6 +56,31 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(crossDayState.headerUpdatedText, "06-02 10:40 更新")
     }
 
+    /// #177 真机反馈：标题栏时间之前只取「所选 summary」自己的 sources，切到历史周期后
+    /// 会显示历史快照里的旧同步时间。headerUpdatedText 必须取所有已知 summary（当前 +
+    /// todaySummary + 缓存）sources 里最新的一个，与额度环 quotaSlots 同一思路。
+    func testHeaderUpdatedTextTakesLatestAcrossAdditionalSources() throws {
+        let summary = try loadFixture()
+        // fixture 自身最新 lastObservedAt 是 "2026-06-02T10:40:00+08:00"。
+        let newerSource = MobileSource(
+            sourceID: "extra",
+            machine: "mac-extra",
+            osUser: "wang",
+            platform: "macos",
+            displayName: nil,
+            status: "ok",
+            lastObservedAt: "2026-06-02T21:12:00+08:00",
+            lastPushedAt: "2026-06-02T21:12:00+08:00",
+            errorMessage: nil
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "week",
+            now: try date("2026-06-02T22:00:00+08:00"),
+            additionalSources: [newerSource]
+        )
+        XCTAssertEqual(state.headerUpdatedText, "21:12 更新")
+    }
+
     func testLegacySharedMachineKeepsServerAggregateWithoutSplittingContributions() throws {
         let summary = try loadFixture()
         let sharedSources = [
@@ -176,10 +201,12 @@ final class MenuBarViewModelTests: XCTestCase {
             now: try date("2026-06-02T11:00:00+08:00")
         )
 
+        // #177 真机反馈：hour 粒度横轴标签改为「N点」，与 tooltip 的 "HH:mm" 分开——
+        // tooltip 仍用于图例联动展示，标签只用于横轴刻度。
         XCTAssertEqual(state.trendBars.count, 24)
-        XCTAssertEqual(state.trendBars[0].label, "00:00")
-        XCTAssertEqual(state.trendBars[12].label, "12:00")
-        XCTAssertEqual(state.trendBars[23].label, "23:00")
+        XCTAssertEqual(state.trendBars[0].label, "0点")
+        XCTAssertEqual(state.trendBars[12].label, "12点")
+        XCTAssertEqual(state.trendBars[23].label, "23点")
         XCTAssertTrue(state.trendBars[1].label.isEmpty)
         XCTAssertEqual(state.trendBars[1].tooltipTitle, "01:00")
 
@@ -1100,6 +1127,32 @@ final class MenuBarViewModelTests: XCTestCase {
         // 可用状态下浮层行必须带百分比（与不可用场景的「不含 %」相对）。
         XCTAssertEqual(claude.hoverRows.count, 2)
         XCTAssertTrue(claude.hoverRows.allSatisfy { $0.valueText.contains("%") })
+    }
+
+    /// #177 真机反馈：只有 7d/week 窗口、没有 session 窗口时（如 Codex），悬停浮层不能出现
+    /// 「额度 — · --」这种无数据占位行——只显示确实有数据的窗口行。
+    func testQuotaRingHoverRowsOmitWindowsWithoutData() throws {
+        let summary = try loadFixture()
+        let slot = providerSlot(
+            provider: "codex",
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "s", provider: "codex", window: "week",
+                    usedPercent: 12, remainingPercent: 88, resetAt: "2026-07-20T00:00:00+08:00",
+                    windowDurationMinutes: 10080, observedAt: "2026-07-18T09:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-07-18T10:00:00+08:00"),
+            quotaSlots: [slot]
+        )
+        let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
+        XCTAssertTrue(codex.isAvailable)
+        XCTAssertEqual(codex.hoverRows.count, 1, "got: \(codex.hoverRows)")
+        XCTAssertFalse(codex.hoverRows.contains { $0.valueText.contains("--") && $0.valueText.contains("—") })
     }
 
     func testQuotaRingsStructuralFloorAlwaysHasThreeFixedProvidersInOrder() throws {

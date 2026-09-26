@@ -15,21 +15,25 @@ struct MenuBarQuotaRingItem: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        // #177 真机反馈：三列等宽时圆环右侧空间放不下「Antigravity」会被截成「Antigra…」——
+        // 名称/倒计时改放到圆环下方居中，三家统一布局，不再依赖圆环右侧的窄列宽度。
+        VStack(spacing: 3) {
             ring
-            VStack(alignment: .leading, spacing: 1) {
-                // 三家名称同字号；列宽不够时先收紧字距，不强制撑出列宽。
+            VStack(spacing: 1) {
                 Text(data.displayName)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 10.5, weight: .semibold))
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                     .allowsTightening(true)
+                    .kerning(-0.2)
                 Text(data.isAvailable ? data.resetCountdownText : "暂不可用")
-                    .font(.system(size: 10.5))
+                    .font(.system(size: 10))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .lineLimit(1)
             }
         }
-        .padding(.vertical, isHovered ? 2 : 0)
+        // #177 真机反馈：悬停不能改变布局（之前 vertical padding 随悬停变化会让整体下沉 ~1pt）——
+        // 悬停只改背景色，不改几何尺寸。
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(isHovered ? Color.primary.opacity(0.05) : Color.clear)

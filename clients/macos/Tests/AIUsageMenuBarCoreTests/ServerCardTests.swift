@@ -40,14 +40,14 @@ final class ServerCardTests: XCTestCase {
         XCTAssertEqual(claudeRow.modelLabel, "Claude Opus 5")
         XCTAssertEqual(claudeRow.agentID, "claude")
         let claudePercent = Double(23_000_000) * 5.0 / 115_000_000.0 // = 1.0
-        XCTAssertEqual(claudeRow.quotaText, "Claude " + String(format: "%.1f%%", claudePercent))
+        XCTAssertEqual(claudeRow.quotaText, String(format: "%.1f%%", claudePercent))
 
         // 独立复算：gpt-5.6-sol 属于 Codex Agent，Sol 权重 1x。
         let codexRow = card.models[1]
         XCTAssertEqual(codexRow.modelLabel, "GPT-5.6 Sol")
         XCTAssertEqual(codexRow.agentID, "codex")
         let codexPercent = Double(11_000_000) * 1.0 / 22_000_000.0 // = 0.5
-        XCTAssertEqual(codexRow.quotaText, "Codex " + String(format: "%.1f%%", codexPercent))
+        XCTAssertEqual(codexRow.quotaText, String(format: "%.1f%%", codexPercent))
 
         // deepseek-v4-pro 挂在 claude agent 下但不是 Claude 系模型，决策为不计入 Claude 周额度。
         let deepseekRow = card.models[2]
@@ -81,8 +81,8 @@ final class ServerCardTests: XCTestCase {
         XCTAssertEqual(row.agentDisplayName, "Antigravity")
         // 独立复算：claude-opus 在 antigravity 通道内按 5x 权重、Gemini Flash 等价基准折算。
         let percent = Double(10_000_000) * 5.0 / 10_000_000.0 // = 5.0
-        XCTAssertEqual(row.quotaText, "Antigravity " + String(format: "%.1f%%", percent))
-        XCTAssertFalse(row.quotaText.contains("Claude"))
+        // #177 真机反馈：quotaText 不再带 Agent 名（色点已表明归属），只留百分比数字。
+        XCTAssertEqual(row.quotaText, String(format: "%.1f%%", percent))
     }
 
     // MARK: - 副标题：多用户 vs 单用户
@@ -150,7 +150,7 @@ final class ServerCardTests: XCTestCase {
         let row = MobileBreakdownRow(id: "m-a", label: "m-a", tokens: 100, sourceIDs: [], agents: [])
         let summary = makeSummary(periodID: "week", byMachine: [row], sources: [])
         let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
-        XCTAssertEqual(state.serverModelQuotaHeader, "约占各自周额度")
+        XCTAssertEqual(state.serverModelQuotaHeader, "周额度")
     }
 
     func testMonthHeaderTextAndWeeklyAveragedQuotaForFullMonth() throws {
@@ -178,7 +178,7 @@ final class ServerCardTests: XCTestCase {
 
         let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "month", now: now)
 
-        XCTAssertEqual(state.serverModelQuotaHeader, "周均占各自周额度")
+        XCTAssertEqual(state.serverModelQuotaHeader, "周均额度")
 
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
         let row = try XCTUnwrap(card.models.first)
@@ -189,7 +189,7 @@ final class ServerCardTests: XCTestCase {
         // 已计天数：9 月整月 = 30 天（含首尾），周均除数 = 30/7。
         let countedDays = 30.0
         let expectedWeeklyPercent = directPercent / (countedDays / 7.0)
-        XCTAssertEqual(row.quotaText, "Claude " + String(format: "%.1f%%", expectedWeeklyPercent))
+        XCTAssertEqual(row.quotaText, String(format: "%.1f%%", expectedWeeklyPercent))
         XCTAssertFalse(row.quotaText.contains(String(format: "%.1f", directPercent)))
     }
 
@@ -224,7 +224,7 @@ final class ServerCardTests: XCTestCase {
         let directPercent = Double(claudeTokens) * 1.0 / 115_000_000.0 // = 1.0
         let countedDays = 10.0
         let expectedWeeklyPercent = directPercent / (countedDays / 7.0) // = 0.7
-        XCTAssertEqual(row.quotaText, "Claude " + String(format: "%.1f%%", expectedWeeklyPercent))
+        XCTAssertEqual(row.quotaText, String(format: "%.1f%%", expectedWeeklyPercent))
     }
 
     // MARK: - 月视图：已计天数不可靠时不产出误导性数字（reviewer 复查发现的回退路径缺口）
@@ -323,7 +323,7 @@ final class ServerCardTests: XCTestCase {
         let directPercent = Double(claudeTokens) * 5.0 / 115_000_000.0
         let countedDays = 30.0 // 9 月整月（含首尾），不是到 10-15 的 45 天
         let expectedWeeklyPercent = directPercent / (countedDays / 7.0)
-        XCTAssertEqual(row.quotaText, "Claude " + String(format: "%.1f%%", expectedWeeklyPercent))
+        XCTAssertEqual(row.quotaText, String(format: "%.1f%%", expectedWeeklyPercent))
     }
 
     // MARK: - 独立 Opus 审查追加 #2：非 available 状态的模型一律「—」，不论挂哪个 Agent
@@ -379,18 +379,18 @@ final class ServerCardTests: XCTestCase {
 
         // 独立复算（用 Issue 背景里记录的换算常数字面值，不调用 ModelQuotaEstimator）：
         // claude-opus 挂 claude agent，opus 权重 5x，Claude 基准 1.15 亿：300*5/115,000,000 ≈ 0.0000130%，< 0.05 门限 → "< 0.1%"。
-        XCTAssertEqual(mac.models[0].quotaText, "Claude < 0.1%")
+        XCTAssertEqual(mac.models[0].quotaText, "< 0.1%")
         // gpt-6-luna / gpt-6-sol 模型名含 "gpt-6"，挂 codex agent，权重 3x，Codex 基准 2200 万：都 < 0.05 门限。
-        XCTAssertEqual(mac.models[1].quotaText, "Codex < 0.1%")
-        XCTAssertEqual(mac.models[2].quotaText, "Codex < 0.1%")
+        XCTAssertEqual(mac.models[1].quotaText, "< 0.1%")
+        XCTAssertEqual(mac.models[2].quotaText, "< 0.1%")
         // unknown 行 status="missing"（非 available），不论算出来多少都必须是「—」。
         XCTAssertEqual(mac.models[3].status, "missing")
         XCTAssertEqual(mac.models[3].quotaText, "—")
 
         XCTAssertEqual(linux.models.map(\.modelLabel), ["gpt-6-luna", "gpt-6-sol", "模型未知"])
         XCTAssertEqual(linux.models.map(\.tokens), [200, 100, 50])
-        XCTAssertEqual(linux.models[0].quotaText, "Codex < 0.1%")
-        XCTAssertEqual(linux.models[1].quotaText, "Codex < 0.1%")
+        XCTAssertEqual(linux.models[0].quotaText, "< 0.1%")
+        XCTAssertEqual(linux.models[1].quotaText, "< 0.1%")
         XCTAssertEqual(linux.models[2].status, "missing")
         XCTAssertEqual(linux.models[2].quotaText, "—")
 

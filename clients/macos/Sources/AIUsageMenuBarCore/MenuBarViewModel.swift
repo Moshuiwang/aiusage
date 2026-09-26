@@ -259,7 +259,8 @@ public enum MenuBarViewModel {
         selectedOffset: Int = 0,
         now: Date = Date(),
         machineAliases: [String: String]? = nil,
-        quotaSlots: [MobileProviderSlot]? = nil
+        quotaSlots: [MobileProviderSlot]? = nil,
+        additionalSources: [MobileSource] = []
     ) -> MenuBarState {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
@@ -301,7 +302,7 @@ public enum MenuBarViewModel {
             tokenBreakdownText: tokenBreakdownText(summary.period),
             healthText: healthText(okCount: okCount, total: summary.sources.count, problemCount: problemCount),
             primaryLimitText: primaryLimitText(primaryLimit),
-            headerUpdatedText: headerUpdatedText(summary.sources, fallback: summary.generatedAt, now: now),
+            headerUpdatedText: headerUpdatedText(summary.sources + additionalSources, fallback: summary.generatedAt, now: now),
             trendBars: bars,
             trendLegendTotals: aggregatedSegments(
                 summary.trend.points.filter { point in
@@ -494,7 +495,20 @@ public enum MenuBarViewModel {
         guard shouldShowAxisLabel(index: index, count: count) else {
             return ""
         }
+        // #177 真机反馈：hour 粒度的横轴刻度改用「N点」（如 "0点"/"12点"/"23点"），
+        // 与仍用 "HH:mm" 的 tooltip/图例联动展示分开——day 粒度保持现状（MM-dd）。
+        if granularity == "hour" {
+            return hourAxisLabel(point.bucket) ?? shortBucket(point.bucket, granularity: granularity)
+        }
         return shortBucket(point.bucket, granularity: granularity)
+    }
+
+    private static func hourAxisLabel(_ bucket: String) -> String? {
+        guard bucket.count >= 13, bucket.dropFirst(10).first == "T" else { return nil }
+        let hourStart = bucket.index(bucket.startIndex, offsetBy: 11)
+        let hourEnd = bucket.index(bucket.startIndex, offsetBy: 13)
+        guard let hour = Int(bucket[hourStart..<hourEnd]) else { return nil }
+        return "\(hour)点"
     }
 
     private static func shouldShowAxisLabel(index: Int, count: Int) -> Bool {
@@ -616,7 +630,7 @@ public enum MenuBarViewModel {
                             tokens: model.tokens,
                             valueText: TokenFormat.compact(model.tokens),
                             status: model.status,
-                            quotaText: serverQuotaText(adjustedEstimate, agentDisplayName: agentDisplayName)
+                            quotaText: serverQuotaText(adjustedEstimate)
                         ))
                     }
                 }
@@ -648,12 +662,13 @@ public enum MenuBarViewModel {
         )
     }
 
-    private static func serverQuotaText(_ estimate: ModelQuotaEstimate?, agentDisplayName: String) -> String {
+    // #177 真机反馈：色点已表明 Agent 归属，quotaText 不再重复带 Agent 名，只留百分比数字。
+    private static func serverQuotaText(_ estimate: ModelQuotaEstimate?) -> String {
         guard let estimate else { return "—" }
         if estimate.percent < 0.05 {
-            return "\(agentDisplayName) < 0.1%"
+            return "< 0.1%"
         }
-        return "\(agentDisplayName) " + String(format: "%.1f%%", estimate.percent)
+        return String(format: "%.1f%%", estimate.percent)
     }
 
     /// 月视图「已计天数」：period.start_date 到 min(period.end_date, now 所在日期) 的天数（含首尾）。
@@ -684,7 +699,7 @@ public enum MenuBarViewModel {
     }
 
     private static func serverModelQuotaHeader(periodID: String) -> String {
-        periodID == "month" ? "周均占各自周额度" : "约占各自周额度"
+        periodID == "month" ? "周均额度" : "周额度"
     }
 
     private static func sourceQuality(_ sourceType: String?) -> Int {
@@ -854,24 +869,30 @@ public enum MenuBarViewModel {
             let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: "更新") ?? "未更新"
             // #177：浮层不得泄露「最近成功值」残留的旧百分比——isAvailable=false 时只给状态说明 + 更新时间，
             // 不能沿用 outerPctText/innerPctText（它们对 isHistorical 的 quota 仍可能带着旧窗口的百分比）。
+            // #177 真机反馈：只显示确实有数据的窗口行——某个 Agent 只有 7d/week 窗口时
+            // （如 Codex），不能在悬停浮层里造出一条「额度 — · --」的空占位行。
             let hoverRows: [QuotaHoverRow]
             if isAvailable {
                 hoverRows = [
-                    QuotaHoverRow(
-                        label: weekWindow.map(windowLabel) ?? "长期",
-                        valueText: [
-                            weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
-                            weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
-                        ].joined(separator: " · ")
-                    ),
-                    QuotaHoverRow(
-                        label: outerWindow.map(windowLabel) ?? "额度",
-                        valueText: [
-                            outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
-                            outerWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
-                        ].joined(separator: " · ")
-                    ),
-                ]
+                    weekWindow.map { window in
+                        QuotaHoverRow(
+                            label: windowLabel(window),
+                            valueText: [
+                                "\(Int(window.usedPercent.rounded()))%",
+                                timeRemainingText(window.resetAt, now: now) ?? "--",
+                            ].joined(separator: " · ")
+                        )
+                    },
+                    outerWindow.map { window in
+                        QuotaHoverRow(
+                            label: windowLabel(window),
+                            valueText: [
+                                "\(Int(window.usedPercent.rounded()))%",
+                                timeRemainingText(window.resetAt, now: now) ?? "--",
+                            ].joined(separator: " · ")
+                        )
+                    },
+                ].compactMap { $0 }
             } else {
                 hoverRows = [
                     QuotaHoverRow(

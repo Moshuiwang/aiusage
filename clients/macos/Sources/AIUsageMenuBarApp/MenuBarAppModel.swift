@@ -64,7 +64,8 @@ final class MenuBarAppModel: ObservableObject {
             selectedOffset: selectedOffset,
             now: now(),
             machineAliases: config?.machineAliases,
-            quotaSlots: latestQuotaProviderSlots()
+            quotaSlots: latestQuotaProviderSlots(),
+            additionalSources: otherKnownSources()
         )
     }
 
@@ -87,6 +88,17 @@ final class MenuBarAppModel: ObservableObject {
             return summary.providerSlots
         }
         return latest.1
+    }
+
+    /// #177 真机反馈：标题栏「HH:mm 更新」不能只看所选 summary 自己的 sources——
+    /// 切到历史周期后必须仍反映设备实际最新一次同步（可能体现在 todaySummary 或其他缓存里），
+    /// 与 latestQuotaProviderSlots 同一思路，但这里要「所有」sources 而不是只挑最新一份。
+    private func otherKnownSources() -> [MobileSource] {
+        var sources = todaySummary?.sources ?? []
+        for cached in cachedSummaries.values {
+            sources.append(contentsOf: cached.summary.sources)
+        }
+        return sources
     }
 
     private static func parseGeneratedAt(_ iso: String?) -> Date? {

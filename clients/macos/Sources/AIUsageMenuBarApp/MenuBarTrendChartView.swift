@@ -36,10 +36,11 @@ struct MenuBarTrendChartView: View {
 
                     HStack(alignment: .bottom, spacing: 4) {
                         ForEach(bars) { bar in
+                            // #177 真机反馈：删除柱子上方的系统 .help 小浮层——它会被 Popover 右边缘截断，
+                            // 且下方图例 legendRow 已经联动显示该柱的时间与数值，浮层是多余的重复展示。
                             stackedBar(bar)
                                 .frame(maxWidth: .infinity)
                                 .opacity(dimmed(bar) ? 0.4 : 1)
-                                .help(bar.isFuture ? "" : "\(bar.tooltipTitle) · \(bar.valueText)")
                         }
                     }
                     .frame(height: chartHeight, alignment: .bottom)
@@ -102,22 +103,38 @@ struct MenuBarTrendChartView: View {
     }
 
     private var legendRow: some View {
+        // #177 真机反馈：「Claude」「Antigravity」之前会在图例里被折成两行——名称/数值一律
+        // lineLimit(1) 禁止折行，空间不足时靠 ViewThatFits 整体降级到更小字号，不允许单词断行。
+        ViewThatFits(in: .horizontal) {
+            legendContent(nameSize: 11, valueSize: 11)
+            legendContent(nameSize: 10, valueSize: 10)
+            legendContent(nameSize: 9, valueSize: 9)
+        }
+        .frame(minHeight: 16)
+    }
+
+    private func legendContent(nameSize: CGFloat, valueSize: CGFloat) -> some View {
         HStack(spacing: 12) {
             Text(hoveredBar.map { $0.isFuture ? "合计" : $0.tooltipTitle } ?? "合计")
                 .font(.system(size: 11, weight: .semibold))
+                .lineLimit(1)
             let activeSegments = (hoveredBar.flatMap { $0.isFuture ? nil : $0.segments }) ?? legendTotals
             // 图例只展示三个固定 Agent；unknown 段仍参与堆叠配色，但不占图例位。
             ForEach(MenuTrendProvider.allCases.filter { $0 != .unknown }, id: \.rawValue) { provider in
                 HStack(spacing: 5) {
                     Circle().fill(providerColor(provider)).frame(width: 7, height: 7)
-                    Text(provider.displayName).font(.system(size: 11))
+                    Text(provider.displayName)
+                        .font(.system(size: nameSize))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                     Text(valueText(for: provider, in: activeSegments))
-                        .font(.system(size: 11))
+                        .font(.system(size: valueSize))
                         .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
         }
-        .frame(minHeight: 16)
     }
 
     private func valueText(for provider: MenuTrendProvider, in segments: [MenuTrendSegment]) -> String {
