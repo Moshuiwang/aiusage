@@ -330,7 +330,6 @@ public enum MenuBarViewModel {
             sources: summary.sources,
             period: summary.period,
             now: now,
-            timezone: summary.timezone,
             machineAliases: machineAliases
         )
 
@@ -595,19 +594,12 @@ public enum MenuBarViewModel {
         sources: [MobileSource],
         period: MobilePeriod,
         now: Date,
-        timezone: String?,
         machineAliases: [String: String]?
     ) -> [MenuServerCard] {
         let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
         let hasModelDetail = !breakdown.byMachine.isEmpty
         let sourcesByID = Dictionary(sources.map { ($0.sourceID, $0) }, uniquingKeysWith: { first, _ in first })
         let totalTokens = period.totalTokens
-        let isMonth = period.id == "month"
-        // nil 表示「已计天数」不可靠（缺 start_date，或本地时钟早于 start_date）：
-        // 此时不能猜一个换算基准，月视图模型行必须显示「—」而不是被拉伸/压缩的误导数字。
-        let weeklyDivisor: Double? = isMonth
-            ? countedDaysForMonth(period: period, timezone: timezone, now: now).map { Double($0) / 7.0 }
-            : 1.0
         let nowReference = isoFormatterBasic.string(from: now)
 
         return rows.map { row in
@@ -643,17 +635,6 @@ public enum MenuBarViewModel {
                     let agentDisplayName = AgentBranding.displayName(for: agent.id)
                     let brandColor = AgentBranding.color(for: agent.id)
                     for model in agent.models where model.tokens > 0 {
-                        let estimate = ModelQuotaEstimator.estimateWeeklyQuota(
-                            modelID: model.id,
-                            label: model.label,
-                            agentID: agent.id,
-                            tokens: model.tokens
-                        )
-                        // weeklyDivisor 为 nil：月视图「已计天数」不可靠，不展示误导数字。
-                        // status != "available"：模型明细本身不可信（缺失/未知），不论算出来多少都不展示占比。
-                        let adjustedEstimate: ModelQuotaEstimate? = model.status == "available"
-                            ? weeklyDivisor.flatMap { divisor in estimate.map { weeklyAveraged($0, divisor: divisor) } }
-                            : nil
                         models.append(MenuServerModelRow(
                             id: "\(row.id)/\(agent.id)/\(model.id)",
                             modelID: model.id,
@@ -664,7 +645,9 @@ public enum MenuBarViewModel {
                             tokens: model.tokens,
                             valueText: TokenFormat.compact(model.tokens),
                             status: model.status,
-                            quotaText: serverQuotaText(adjustedEstimate)
+                            // #180：客户端估算（ModelQuotaEstimator 手写常数）已删除，改走服务端按官方额度校准
+                            // （另行规划）；本 PR 内这一列一律显示「—」，不回退旧常数。
+                            quotaText: "—"
                         ))
                     }
                 }
@@ -685,48 +668,6 @@ public enum MenuBarViewModel {
                 models: models
             )
         }
-    }
-
-    private static func weeklyAveraged(_ estimate: ModelQuotaEstimate, divisor: Double) -> ModelQuotaEstimate {
-        guard divisor > 0 else { return estimate }
-        return ModelQuotaEstimate(
-            agentID: estimate.agentID,
-            percent: estimate.percent / divisor,
-            dedicatedPercent: estimate.dedicatedPercent.map { $0 / divisor }
-        )
-    }
-
-    // #177 真机反馈：色点已表明 Agent 归属，quotaText 不再重复带 Agent 名，只留百分比数字。
-    private static func serverQuotaText(_ estimate: ModelQuotaEstimate?) -> String {
-        guard let estimate else { return "—" }
-        if estimate.percent < 0.05 {
-            return "< 0.1%"
-        }
-        return String(format: "%.1f%%", estimate.percent)
-    }
-
-    /// 月视图「已计天数」：period.start_date 到 min(period.end_date, now 所在日期) 的天数（含首尾）。
-    /// 缺 start_date，或本地时钟早于 start_date（now 所在日期 < start_date，视为不可靠时钟/数据），
-    /// 返回 nil——调用方必须不做换算并展示「—」，不能猜一个基准去拉伸/压缩累计值。
-    private static func countedDaysForMonth(period: MobilePeriod, timezone: String?, now: Date) -> Int? {
-        guard let startDateStr = period.startDate, !startDateStr.isEmpty else { return nil }
-        let tz = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = tz
-
-        dayFormatter.timeZone = tz
-
-        let todayStr = dayFormatter.string(from: now)
-        let endDateStr = period.endDate ?? todayStr
-        let cappedEndStr = min(endDateStr, todayStr)
-
-        guard let start = dayFormatter.date(from: startDateStr), let end = dayFormatter.date(from: cappedEndStr) else {
-            return nil
-        }
-        let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
-        // now 所在日期早于 start_date：时钟偏差或数据异常，天数会是负的——不可靠，返回 nil。
-        guard days >= 0 else { return nil }
-        return days + 1
     }
 
     private static func serverModelQuotaHeader(periodID: String) -> String {

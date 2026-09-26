@@ -3,11 +3,11 @@ import XCTest
 @testable import AIUsageMenuBarCore
 
 /// #177 收口：本文件原本还覆盖 `state.sources` / `MenuDisplayRow.flatModels` / `MenuFlatModelRow` /
-/// `ModelQuotaEstimator.estimateWeeklyQuotaPercentText`（视图层已改用 `state.serverCards` 展示，
+/// 旧文本 API `estimateWeeklyQuotaPercentText`（视图层已改用 `state.serverCards` 展示，
 /// 这些字段/旧文本 API 随之删除）。等价覆盖已迁移到 `ServerCardTests.swift`
-/// （owner 层级、Agent 归属决策、机器别名、月度换算等）和 `ModelQuotaEstimatorTests.swift`
-/// （权重估算，改用结构化 `estimateWeeklyQuota` API）。这里只保留与被删 API 无关的
-/// `MobileSummary.breakdown.bySource` Codable 往返测试。
+/// （owner 层级、Agent 归属决策、机器别名等）。#180：结构化权重估算器 `ModelQuotaEstimator`
+/// 本身也已删除（quotaText 改为固定「—」，等待服务端校准），`ModelQuotaEstimatorTests.swift`
+/// 随之一并删除。这里只保留与被删 API 无关的 `MobileSummary.breakdown.bySource` Codable 往返测试。
 final class SourceHierarchyTests: XCTestCase {
     func testOwnerFieldsSurviveDiskCacheRoundTrip() throws {
         let summary = try load("navigation-models-owner")
