@@ -11,7 +11,4 @@ public struct MenuPeriodSelection: Equatable, Sendable {
     }
 
     public var cacheKey: String { offset == 0 ? periodID : "\(periodID):\(offset)" }
-    public var canGoEarlier: Bool { periodID != "today" || offset > -6 }
-    public var canGoLater: Bool { offset < 0 }
-    public func moving(_ delta: Int) -> Self { Self(periodID: periodID, offset: offset + delta) }
 }

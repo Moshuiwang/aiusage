@@ -15,6 +15,14 @@ final class MenuBarAppModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var config: MenuBarRuntimeConfig?
 
+    /// #177 性能：`state`/`statusState` 曾是计算属性，视图 body 每读一次就重新跑一遍
+    /// MenuBarViewModel.build（单帧最多被读 ~18 次）。改成存储属性，只在输入真正变化时
+    /// （summary/selectedPeriodID/selectedOffset/todaySummary/config/cachedSummaries）重建一次。
+    @Published private(set) var state: MenuBarState
+    @Published private(set) var statusState: MenuBarState
+    /// 仅供测试观测 rebuildState() 被调用的次数，不参与任何展示逻辑。
+    internal private(set) var stateBuildCount = 0
+
     let paths: RuntimePaths
     private let loadSummary: MenuBarSummaryLoader
     private let loadRuntimeConfig: MenuBarRuntimeConfigProvider
@@ -55,41 +63,111 @@ final class MenuBarAppModel: ObservableObject {
         self.summary = periodSummaries[initialPeriodID]?.summary ?? MobileSummary.empty(periodID: initialPeriodID)
         self.todaySummary = periodSummaries["today"]?.summary
         self.hasLoadedUsableSummary = periodSummaries[initialPeriodID] != nil
+        // Swift 两阶段初始化：state/statusState 必须先有值才能调用 self 的方法（rebuildState()
+        // 内部要读 self.summary 等）。这里给一个占位空状态，随即在下面用 rebuildState() 覆盖成真值。
+        let placeholder = MenuBarViewModel.build(from: .empty(), selectedPeriodID: "today")
+        self.state = placeholder
+        self.statusState = placeholder
+        rebuildState()
     }
 
-    var state: MenuBarState {
-        MenuBarViewModel.build(
+    /// #177 性能：唯一负责重算 state/statusState 的入口——只在 summary / selectedPeriodID /
+    /// selectedOffset / todaySummary / config / cachedSummaries 真正变化后调用一次，
+    /// 不再让每次视图 body 读 model.state 都触发一次 MenuBarViewModel.build。
+    private func rebuildState() {
+        stateBuildCount += 1
+        state = MenuBarViewModel.build(
             from: summary,
             selectedPeriodID: selectedPeriodID,
             selectedOffset: selectedOffset,
-            machineAliases: config?.machineAliases
+            now: now(),
+            machineAliases: config?.machineAliases,
+            quotaSlots: latestQuotaProviderSlots(),
+            additionalSources: otherKnownSources()
         )
-    }
-
-    var hasConfig: Bool {
-        config != nil
-    }
-
-    var dashboardURL: URL? {
-        guard let value = config?.dashboardURL ?? config?.serverURL else {
-            return nil
-        }
-        return URL(string: value)
-    }
-
-    var selection: MenuPeriodSelection { MenuPeriodSelection(periodID: selectedPeriodID, offset: selectedOffset) }
-    var statusState: MenuBarState {
-        MenuBarViewModel.build(
+        statusState = MenuBarViewModel.build(
             from: todaySummary ?? .empty(),
             selectedPeriodID: "today",
             machineAliases: config?.machineAliases
         )
     }
 
-    func movePeriod(_ delta: Int) {
-        let next = selection.moving(delta)
-        guard next != selection else { return }
-        refresh(offset: next.offset)
+    /// 额度圆环必须来自当前所有已知 summary 快照中 generatedAt 最新的一份，
+    /// 不能随所选历史周期（selectedPeriodID/offset）而回退到那份快照缓存的旧额度。
+    private func latestQuotaProviderSlots() -> [MobileProviderSlot] {
+        var candidates: [(Date, [MobileProviderSlot])] = []
+        if let generatedAt = Self.parseGeneratedAt(summary.generatedAt) {
+            candidates.append((generatedAt, summary.providerSlots))
+        }
+        if let today = todaySummary, let generatedAt = Self.parseGeneratedAt(today.generatedAt) {
+            candidates.append((generatedAt, today.providerSlots))
+        }
+        for key in cachedSummaries.keys.sorted() {
+            guard let cached = cachedSummaries[key],
+                  let generatedAt = Self.parseGeneratedAt(cached.summary.generatedAt) else { continue }
+            candidates.append((generatedAt, cached.summary.providerSlots))
+        }
+        guard let latest = candidates.max(by: { $0.0 < $1.0 }) else {
+            return summary.providerSlots
+        }
+        return latest.1
+    }
+
+    /// #177 真机反馈：标题栏「HH:mm 更新」不能只看所选 summary 自己的 sources——
+    /// 切到历史周期后必须仍反映设备实际最新一次同步（可能体现在 todaySummary 或其他缓存里），
+    /// 与 latestQuotaProviderSlots 同一思路，但这里要「所有」sources 而不是只挑最新一份。
+    private func otherKnownSources() -> [MobileSource] {
+        var sources = todaySummary?.sources ?? []
+        for cached in cachedSummaries.values {
+            sources.append(contentsOf: cached.summary.sources)
+        }
+        return sources
+    }
+
+    // 与 MenuBarViewModel 同样的理由：ISO8601DateFormatter 构造本身有实测开销，
+    // 每次 latestQuotaProviderSlots() 会对 summary/todaySummary/所有 cachedSummaries 各解析一次，
+    // 缓存复用而不是每次 new。调用全部发生在 @MainActor 同步路径内。
+    nonisolated(unsafe) private static let generatedAtFormatterFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+    nonisolated(unsafe) private static let generatedAtFormatterBasic: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static func parseGeneratedAt(_ iso: String?) -> Date? {
+        guard let iso else { return nil }
+        if let date = generatedAtFormatterFractional.date(from: iso) {
+            return date
+        }
+        return generatedAtFormatterBasic.date(from: iso)
+    }
+
+    var hasConfig: Bool {
+        config != nil
+    }
+
+    var selection: MenuPeriodSelection { MenuPeriodSelection(periodID: selectedPeriodID, offset: selectedOffset) }
+
+    /// #176：期间菜单展开数据——只读已有缓存（内存优先，磁盘退路），绝不调用 loadSummary / 发网络请求。
+    func periodMenuRows(for periodID: String) -> [PeriodMenuRow] {
+        PeriodMenuBuilder.rows(
+            periodID: periodID,
+            now: now(),
+            timezone: summary.timezone ?? todaySummary?.timezone,
+            selectedOffset: periodID == selectedPeriodID ? selectedOffset : 0,
+            cached: { [cachedSummaries, paths] selection in
+                if let cached = cachedSummaries[selection.cacheKey] {
+                    return cached.summary
+                }
+                return SummaryCache.loadCachedSummary(
+                    from: paths.cacheURL(forPeriod: selection.periodID, offset: selection.offset)
+                )?.summary
+            }
+        )
     }
 
     func refresh(periodID: String? = nil, offset: Int? = nil, force: Bool = false) {
@@ -112,6 +190,7 @@ final class MenuBarAppModel: ObservableObject {
             if !force && isFresh(cached) {
                 isLoading = false
                 errorMessage = nil
+                rebuildState()
                 return
             }
         } else {
@@ -121,6 +200,7 @@ final class MenuBarAppModel: ObservableObject {
         }
         let runtimeConfig = loadRuntimeConfig(paths) ?? config
         config = runtimeConfig
+        rebuildState()
         guard let runtimeConfig, let baseURL = URL(string: runtimeConfig.serverURL) else {
             isLoading = false
             errorMessage = "需要配置服务地址"
@@ -162,6 +242,13 @@ final class MenuBarAppModel: ObservableObject {
         }
     }
 
+    /// 用户手动「立即同步」：标题栏按钮与 ⋯ 菜单共用。
+    /// 选中今天时 refreshToday 本身会强制刷新当前期，不能再额外 refresh，避免重复请求。
+    func syncNow() {
+        if selection != MenuPeriodSelection(periodID: "today") { refresh(force: true) }
+        refreshToday()
+    }
+
     // The menu bar continues to show today's value while the popover browses history.
     func refreshToday() {
         if selection == MenuPeriodSelection(periodID: "today") {
@@ -170,7 +257,10 @@ final class MenuBarAppModel: ObservableObject {
         }
         guard let runtimeConfig = loadRuntimeConfig(paths) ?? config,
               let baseURL = URL(string: runtimeConfig.serverURL) else { return }
-        if let cached = cachedSummaries["today"], !Self.isSameCacheDay(cached, now: now()) { todaySummary = nil }
+        if let cached = cachedSummaries["today"], !Self.isSameCacheDay(cached, now: now()) {
+            todaySummary = nil
+            rebuildState()
+        }
         todayRefreshSequence += 1
         let sequence = todayRefreshSequence
         let loader = loadSummary
@@ -234,12 +324,14 @@ final class MenuBarAppModel: ObservableObject {
             summary = .empty(periodID: selectedPeriodID)
             hasLoadedUsableSummary = false
         }
+        rebuildState()
     }
 
     private func store(_ summary: MobileSummary, for selected: MenuPeriodSelection) {
         cachedSummaries[selected.cacheKey] = CachedMenuSummary(summary: summary, fetchedAt: now())
         if selected == MenuPeriodSelection(periodID: "today") { todaySummary = summary }
         try? SummaryCache.save(summary, paths: paths, offset: selected.offset)
+        rebuildState()
     }
 
     private static func isSameCacheDay(_ cached: CachedMenuSummary, now: Date) -> Bool {

@@ -13,15 +13,19 @@ final class MenuBarAppModelTests: XCTestCase {
             config: testConfig(),
             cachedSummary: try summary(periodID: "today", totalTokens: 349_100_000)
         )
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         let popover = NSPopover()
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+        let fittingHeight = hosting.view.fittingSize.height
+        XCTAssertGreaterThan(fittingHeight, 220, "first layout must include the period picker and summary, not just the header")
+        // 模拟 NSPopover 展示时按 preferredContentSize 提交实际尺寸——不这样提交，内部
+        // ScrollView 在没有真实窗口时永远量出 0 高度，测不出「内容确实渲染了」。
+        hosting.view.setFrameSize(NSSize(width: MenuBarPopoverLayout.width, height: fittingHeight))
+        hosting.view.layoutSubtreeIfNeeded()
 
-        XCTAssertGreaterThan(popover.contentSize.height, 220, "first layout must include the period picker and summary, not just the header")
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1, "the actual hosted popover must contain one scrollable content region")
         XCTAssertGreaterThan(scrollViews.first?.frame.height ?? 0, 120)
@@ -37,25 +41,25 @@ final class MenuBarAppModelTests: XCTestCase {
         let model = MenuBarAppModel(
             paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: summary
         )
+        // 性能第二步：不再有 onContentHeightChange 回调/手工二次测量——直接开
+        // sizingOptions，让 preferredContentSize 跟随 SwiftUI 内容的理想高度。
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         let popover = NSPopover()
-        var hosting: NSHostingController<MenuBarPopoverView>!
-        hosting = NSHostingController(rootView: MenuBarPopoverView(model: model, onContentHeightChange: {
-            hosting.view.layoutSubtreeIfNeeded()
-            popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
-        }))
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         hosting.view.layoutSubtreeIfNeeded()
+        let fittingHeight = hosting.view.fittingSize.height
+        XCTAssertGreaterThan(fittingHeight, 220)
+        XCTAssertLessThanOrEqual(fittingHeight, (NSScreen.main?.visibleFrame.height ?? 800) + 1)
 
+        hosting.view.setFrameSize(NSSize(width: MenuBarPopoverLayout.width, height: fittingHeight))
+        hosting.view.layoutSubtreeIfNeeded()
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1)
         XCTAssertGreaterThan(scrollViews.first?.frame.height ?? 0, 120)
-        XCTAssertGreaterThan(popover.contentSize.height, 220)
-        XCTAssertLessThanOrEqual(popover.contentSize.height, (NSScreen.main?.visibleFrame.height ?? 800) + 1)
     }
 
     func testHostedPopoverInitialHeightProvidesFullViewportForLoadedSummary() throws {
@@ -68,7 +72,7 @@ final class MenuBarAppModelTests: XCTestCase {
             paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: summary, now: { fixedDate }
         )
         XCTAssertTrue(model.hasLoadedUsableSummary)
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
@@ -76,24 +80,24 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(fittingHeight, 500, "Loaded summary popover must start with an ample viewport, not collapsed to 200")
     }
 
-    func testShownPopoverKeepsContentViewport() throws {
+    // #177 Opus 审查：新版 Server 卡片默认收起，普通 fixture 不再必然超出可视区，之前把
+    // 这条测试的溢出断言直接改弱了。改成两条：一条用「足够多的 Server」构造必然溢出的场景，
+    // 保留原本的「能滚到底」断言；另一条用最小场景断言不强制滚动（不裁剪、不误判溢出）。
+    func testShownPopoverWithManyServersOverflowsAndCanScrollToBottom() throws {
         _ = NSApplication.shared
-        let fixtureURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("AIUsageMenuBarCoreTests/Fixtures/navigation-models-owner.json")
-        let summary = try JSONDecoder().decode(MobileSummary.self, from: Data(contentsOf: fixtureURL))
-        XCTAssertGreaterThan(summary.sources.count, 0)
+        let summary = try manyServerCardsSummary(machineCount: 40)
         let model = MenuBarAppModel(
             paths: try temporaryRuntimePaths(), config: testConfig(),
             cachedSummary: summary
         )
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
+        // 性能第二步：不再手工测量/设置 popover.contentSize——只开 sizingOptions，展示时交给
+        // NSPopover 自己读 preferredContentSize。
         let popover = NSPopover()
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
 
         let anchorWindow = NSWindow(
             contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
@@ -109,16 +113,97 @@ final class MenuBarAppModelTests: XCTestCase {
 
         XCTAssertTrue(popover.isShown)
         XCTAssertNotNil(hosting.view.window)
+        // 宽度恒为 360，与内容多少无关。
+        XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
+        let maxHeight = MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+        // 40 台 Server 的可滚动内容区必须被 frame(maxHeight:) 夹到上限——这条在生产代码里
+        // 去掉 `.frame(maxHeight: maxContentHeight)`（或把 maxContentHeight 传成 .infinity）
+        // 时会红：document.frame.height 会远超 maxHeight，下面这条断言直接失败。
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1)
         let scroll = try XCTUnwrap(scrollViews.first)
         let document = try XCTUnwrap(scroll.documentView)
         XCTAssertGreaterThan(scroll.frame.height, 120)
+        XCTAssertLessThanOrEqual(scroll.frame.height, maxHeight + 1)
+        // 40 台 Server（即便折叠）必须比可视区高得多，才是这条测试要守护的"确实会溢出"场景。
         XCTAssertGreaterThan(document.frame.height, scroll.contentView.bounds.height + 50)
         let bottom = document.frame.height - scroll.contentView.bounds.height
         scroll.contentView.scroll(to: NSPoint(x: 0, y: bottom))
         scroll.reflectScrolledClipView(scroll.contentView)
         XCTAssertGreaterThanOrEqual(scroll.contentView.bounds.maxY, document.frame.maxY - 1)
+    }
+
+    func testShownPopoverWithFewServersDoesNotForceOverflow() throws {
+        _ = NSApplication.shared
+        let summary = try manyServerCardsSummary(machineCount: 1)
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummary: summary
+        )
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
+        let popover = NSPopover()
+        popover.contentViewController = hosting
+        hosting.loadViewIfNeeded()
+        hosting.view.frame.size.width = MenuBarPopoverLayout.width
+        hosting.view.layoutSubtreeIfNeeded()
+        let fittingHeightBeforeShow = hosting.view.fittingSize.height
+
+        let anchorWindow = NSWindow(
+            contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
+            styleMask: .borderless, backing: .buffered, defer: false
+        )
+        anchorWindow.isReleasedWhenClosed = false
+        let anchor = NSButton(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        anchorWindow.contentView?.addSubview(anchor)
+        anchorWindow.orderFront(nil)
+        defer { popover.close(); anchorWindow.close() }
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        // 宽度恒为 360。
+        XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
+        let maxHeight = MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+        // 少内容：preferredContentSize.height 必须贴合内容理想高度（差 ≤2pt），且显著小于
+        // maxContentHeight——不强行撑到上限留白。hosting controller 取自生产工厂
+        // MenuBarPopoverLayout.makeHostingController；工厂不设 sizingOptions 时 preferredContentSize
+        // 停留在 .zero，下面第一条断言失败。
+        XCTAssertLessThanOrEqual(abs(hosting.preferredContentSize.height - fittingHeightBeforeShow), 2)
+        XCTAssertLessThan(hosting.preferredContentSize.height, maxHeight - 50)
+
+        let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
+        let scroll = try XCTUnwrap(scrollViews.first)
+        let document = try XCTUnwrap(scroll.documentView)
+        // 内容明显没有多到需要滚动：document 高度不应比可视区高出一大截（不误判溢出）。
+        XCTAssertLessThanOrEqual(document.frame.height, scroll.contentView.bounds.height + 50)
+    }
+
+    /// #177：构造 N 台机器的 Server 卡片场景，专供视口溢出/不溢出的测试用——不是产品口径 fixture。
+    /// `MobileSource` 没有公开的逐字段 init（只有 `Codable` 的 `init(from:)`），跨模块只能走 JSON 解码。
+    private func manyServerCardsSummary(machineCount: Int) throws -> MobileSummary {
+        let rows = (0..<machineCount).map { index in
+            MobileBreakdownRow(
+                id: "machine-\(index)", label: "machine-\(index)", tokens: 100,
+                sourceIDs: ["src-\(index)"]
+            )
+        }
+        let sourcesJSON = (0..<machineCount).map { index in
+            """
+            {
+              "source_id": "src-\(index)", "machine": "machine-\(index)", "os_user": "user\(index)",
+              "platform": "linux", "status": "ok",
+              "last_observed_at": "2026-06-25T11:00:00+08:00", "last_pushed_at": "2026-06-25T11:00:00+08:00"
+            }
+            """
+        }.joined(separator: ",")
+        let sources = try JSONDecoder().decode([MobileSource].self, from: Data("[\(sourcesJSON)]".utf8))
+        let base = try summary(periodID: "today", totalTokens: machineCount * 100)
+        return MobileSummary(
+            schemaVersion: base.schemaVersion, client: base.client, generatedAt: base.generatedAt,
+            timezone: base.timezone, period: base.period, trend: base.trend,
+            sources: sources,
+            breakdown: MobileBreakdown(byMachine: rows, byOSUser: [], byAgent: [], byModel: [], byDate: []),
+            limits: base.limits
+        )
     }
 
     func testHostedPopoverKeepsViewportThroughLoadAndHistorySwitch() async throws {
@@ -131,18 +216,22 @@ final class MenuBarAppModelTests: XCTestCase {
             )], now: { now }, loadSummary: loader.load
         )
         let popover = NSPopover()
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
 
         func assertVisibleViewport(_ phase: String) {
             hosting.view.layoutSubtreeIfNeeded()
-            popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+            let fittingHeight = hosting.view.fittingSize.height
+            XCTAssertGreaterThan(fittingHeight, 220, phase)
+            // 模拟 NSPopover 展示时按 preferredContentSize 提交实际尺寸，才能量出内部
+            // ScrollView 的真实高度（没有真实窗口时它永远是 0）。
+            hosting.view.setFrameSize(NSSize(width: MenuBarPopoverLayout.width, height: fittingHeight))
+            hosting.view.layoutSubtreeIfNeeded()
             let scroll = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
             XCTAssertEqual(scroll.count, 1, phase)
             XCTAssertGreaterThan(scroll.first?.frame.height ?? 0, 120, phase)
-            XCTAssertGreaterThan(popover.contentSize.height, 220, phase)
         }
 
         assertVisibleViewport("first open without cached data")
@@ -162,8 +251,8 @@ final class MenuBarAppModelTests: XCTestCase {
     }
 
     func testPopoverLayoutUsesMeasuredContentHeight() {
-        XCTAssertEqual(MenuBarPopoverLayout.width, 380)
-        XCTAssertEqual(MenuBarPopoverLayout.size(contentHeight: 642).height, 642)
+        // #177：Popover v2 定稿宽度收窄到 360pt（HANDOFF.md 第 3 节），预期值随设计变更更新。
+        XCTAssertEqual(MenuBarPopoverLayout.width, 360)
         XCTAssertEqual(MenuBarPopoverLayout.maxContentHeight(screenHeight: 922), 874)
     }
 
@@ -217,6 +306,183 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertFalse(model.isLoading)
         let requestCount = await loader.requestCount()
         XCTAssertEqual(requestCount, 0)
+    }
+
+    // #176：期间菜单只读已有缓存（内存优先，磁盘退路），绝不为展开菜单发请求。
+    func testPeriodMenuRowsReadsMemoryCacheWithoutNetworkRequest() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let cachedSummary = try summaryWithDate(
+            periodID: "today", date: "2026-06-24", startDate: "2026-06-24", totalTokens: 4200
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["today:-1": CachedMenuSummary(summary: cachedSummary, fetchedAt: now)],
+            now: { now }, loadSummary: loader.load
+        )
+
+        let rows = model.periodMenuRows(for: "today")
+
+        XCTAssertEqual(rows.count, 7)
+        XCTAssertEqual(rows[1].selection.offset, -1)
+        XCTAssertEqual(rows[1].totalText, "4.2K")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testPeriodMenuRowsFallBackToDiskCacheWithoutNetworkRequest() async throws {
+        let loader = ControlledSummaryLoader()
+        let paths = try temporaryRuntimePaths()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        // 本周一是 2026-06-22（now=06-25 周四），offset -1 起始应是 2026-06-15。
+        let diskSummary = try summaryWithDate(
+            periodID: "week", date: "2026-06-15", startDate: "2026-06-15", totalTokens: 777
+        )
+        try SummaryCache.save(diskSummary, paths: paths, offset: -1)
+        let model = MenuBarAppModel(paths: paths, config: testConfig(), now: { now }, loadSummary: loader.load)
+
+        let rows = model.periodMenuRows(for: "week")
+
+        XCTAssertEqual(rows[1].selection.offset, -1)
+        XCTAssertEqual(rows[1].totalText, "777")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testPeriodMenuRowsShowDashWhenNoCacheExists() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), now: { now }, loadSummary: loader.load
+        )
+
+        let rows = model.periodMenuRows(for: "today")
+
+        XCTAssertTrue(rows.allSatisfy { $0.totalText == "—" })
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testSwitchingToHistoricalPeriodKeepsQuotaRingsFromNewestSnapshot() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-07-18T12:00:00+08:00")
+        let freshClaudeWindow = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "session",
+            usedPercent: 26, remainingPercent: 74,
+            resetAt: "2026-07-18T18:00:00+08:00", windowDurationMinutes: 300,
+            observedAt: "2026-07-18T11:30:00+08:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let staleClaudeWindow = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "session",
+            usedPercent: 80, remainingPercent: 20,
+            resetAt: "2026-07-11T18:00:00+08:00", windowDurationMinutes: 300,
+            observedAt: "2026-07-11T09:00:00+08:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let todaySummary = try summary(
+            periodID: "today", totalTokens: 100, generatedAt: "2026-07-18T11:00:00+08:00",
+            providerSlots: [providerSlot(provider: "claude", windows: [freshClaudeWindow], status: "available")]
+        )
+        let historicalWeekSummary = try summary(
+            periodID: "week", totalTokens: 700, generatedAt: "2026-07-11T11:00:00+08:00",
+            providerSlots: [providerSlot(provider: "claude", windows: [staleClaudeWindow], status: "available")]
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: todaySummary, fetchedAt: now),
+                "week": CachedMenuSummary(summary: historicalWeekSummary, fetchedAt: now),
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertEqual(model.selectedPeriodID, "week")
+        XCTAssertEqual(model.summary.period.id, "week")
+        let claude = try XCTUnwrap(model.state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "26%", "切到历史周不应回退到那份快照缓存的旧额度")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    /// #177 真机反馈：标题栏「HH:mm 更新」之前只看「所选 summary」自己的 sources——
+    /// 切到历史周期（如「本周」）后，会显示那份历史快照里更早的同步时间，而不是设备实际
+    /// 最新一次同步（体现在 todaySummary/缓存里）的时间。headerUpdatedText 必须取所有已知
+    /// summary 里最新的同步时间，与 quotaRings 取最新快照同一思路。
+    func testHeaderUpdatedTextTakesLatestSyncTimeAcrossAllKnownSummariesNotJustSelectedPeriod() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-07-18T22:00:00+08:00")
+        let olderSourceJSON = """
+        [{"source_id": "week-src", "machine": "mac", "os_user": "wang", "platform": "macos",
+          "display_name": null, "status": "ok",
+          "last_observed_at": "2026-07-11T09:23:00+08:00", "last_pushed_at": "2026-07-11T09:23:00+08:00",
+          "error_message": null}]
+        """
+        let newerSourceJSON = """
+        [{"source_id": "today-src", "machine": "mac", "os_user": "wang", "platform": "macos",
+          "display_name": null, "status": "ok",
+          "last_observed_at": "2026-07-18T21:12:00+08:00", "last_pushed_at": "2026-07-18T21:12:00+08:00",
+          "error_message": null}]
+        """
+        let todaySummary = try summary(
+            periodID: "today", totalTokens: 100, generatedAt: "2026-07-18T21:12:00+08:00",
+            sourcesJSON: newerSourceJSON
+        )
+        let historicalWeekSummary = try summary(
+            periodID: "week", totalTokens: 700, generatedAt: "2026-07-11T09:23:00+08:00",
+            sourcesJSON: olderSourceJSON
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: todaySummary, fetchedAt: now),
+                "week": CachedMenuSummary(summary: historicalWeekSummary, fetchedAt: now),
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertEqual(model.selectedPeriodID, "week")
+        // 切到「本周」（自身最新同步 09:23）后，标题栏仍必须显示设备实际最新同步时间 21:12
+        // （来自 todaySummary），不能回退到本周快照里更早的时间。
+        XCTAssertEqual(model.state.headerUpdatedText, "21:12 更新")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testSyncNowSendsOneRequestPerPeriodOnToday() async throws {
+        let loader = ControlledSummaryLoader()
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            loadSummary: loader.load
+        )
+        model.syncNow()
+        await yieldToMainActor()
+        let onToday = await loader.totalRequestCount()
+        XCTAssertEqual(onToday, 1, "选中今天时立即同步只应请求一次 today")
+
+        let historyLoader = ControlledSummaryLoader()
+        let historyModel = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "week"),
+            loadSummary: historyLoader.load
+        )
+        historyModel.syncNow()
+        await yieldToMainActor()
+        let onWeek = await historyLoader.totalRequestCount()
+        XCTAssertEqual(onWeek, 2, "选中本周时应请求 week 与 today 各一次")
     }
 
     func testThreeVisiblePeriodsKeepIndependentFreshCaches() async throws {
@@ -536,7 +802,6 @@ final class MenuBarAppModelTests: XCTestCase {
 
         XCTAssertEqual(requestConfig.baseURL.absoluteString, "https://aiusage.chunbai.com")
         XCTAssertEqual(requestConfig.bearerToken, "new-token")
-        XCTAssertEqual(model.dashboardURL?.absoluteString, "https://aiusage.chunbai.com/dashboard")
     }
 
     func testSwitchingToFreshCacheInvalidatesAnOlderFailure() async throws {
@@ -582,7 +847,7 @@ final class MenuBarAppModelTests: XCTestCase {
         try await loader.waitForRequestCount(1)
         await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 100))
         await waitUntil { !model.isLoading }
-        model.movePeriod(-1)
+        model.refresh(offset: model.selectedOffset - 1)
         try await loader.waitForRequestCount(1)
         let request = try await loader.config(for: "today:-1")
         XCTAssertEqual(request.offset, -1)
@@ -594,7 +859,7 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(model.statusState.statusTitle, "100")
         XCTAssertEqual(SummaryCache.load(from: paths.cacheURL(forPeriod: "today", offset: 0))?.period.totalTokens, 100)
         XCTAssertEqual(SummaryCache.load(from: paths.cacheURL(forPeriod: "today", offset: -1))?.period.totalTokens, 900)
-        model.movePeriod(1)
+        model.refresh(offset: model.selectedOffset + 1)
         XCTAssertEqual(model.summary.period.totalTokens, 100)
         XCTAssertEqual(model.selectedOffset, 0)
         XCTAssertFalse(model.isLoading)
@@ -606,7 +871,7 @@ final class MenuBarAppModelTests: XCTestCase {
         let loader = ControlledSummaryLoader()
         let model = MenuBarAppModel(paths: try temporaryRuntimePaths(), config: testConfig(), loadSummary: loader.load)
         model.refresh(periodID: "month", offset: -1)
-        model.movePeriod(-1)
+        model.refresh(offset: model.selectedOffset - 1)
         try await loader.waitForRequestCount(2)
         await loader.complete(period: "month:-2", summary: try summary(periodID: "month", totalTokens: 200))
         await waitUntil { !model.isLoading }
@@ -631,7 +896,7 @@ final class MenuBarAppModelTests: XCTestCase {
             cachedSummaries: ["today:-1": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 999), fetchedAt: cachedAt)],
             now: { now }, loadSummary: loader.load
         )
-        model.movePeriod(-1)
+        model.refresh(offset: model.selectedOffset - 1)
         try await loader.waitForRequestCount(1)
         XCTAssertFalse(model.hasLoadedUsableSummary)
         XCTAssertEqual(model.summary.period.totalTokens, 0)
@@ -828,16 +1093,38 @@ final class MenuBarAppModelTests: XCTestCase {
         )
     }
 
+    private func providerSlot(
+        provider: String,
+        windows: [MobileLimitWindow],
+        status: String = "available",
+        reason: String? = nil
+    ) -> MobileProviderSlot {
+        MobileProviderSlot(
+            provider: provider,
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: status,
+                reason: reason,
+                lastVerifiedAt: windows.compactMap(\.observedAt).max(),
+                sourceID: windows.first?.sourceID,
+                sourceType: windows.first?.sourceType,
+                windows: windows
+            )
+        )
+    }
+
     private func summary(
         periodID: String,
         totalTokens: Int,
-        providerSlots: [MobileProviderSlot] = []
+        generatedAt: String = "2026-06-25T12:00:00+08:00",
+        providerSlots: [MobileProviderSlot] = [],
+        sourcesJSON: String = "[]"
     ) throws -> MobileSummary {
         let json = """
         {
           "schema_version": 1,
           "client": "macos",
-          "generated_at": "2026-06-25T12:00:00+08:00",
+          "generated_at": "\(generatedAt)",
           "timezone": "Asia/Shanghai",
           "period": {
             "id": "\(periodID)",
@@ -859,7 +1146,7 @@ final class MenuBarAppModelTests: XCTestCase {
             "end_date": "2026-06-25",
             "points": []
           },
-          "sources": [],
+          "sources": \(sourcesJSON),
           "breakdown": {
             "by_machine": [],
             "by_os_user": [],
@@ -898,6 +1185,103 @@ final class MenuBarAppModelTests: XCTestCase {
         }
         formatter.formatOptions = [.withInternetDateTime]
         return try XCTUnwrap(formatter.date(from: iso))
+    }
+
+    /// #176 期间菜单测试专用：需要精确控制 period.date / start_date 来模拟缓存的「实际起始日期」。
+    private func summaryWithDate(
+        periodID: String,
+        date: String,
+        startDate: String,
+        totalTokens: Int,
+        generatedAt: String = "2026-06-25T12:00:00+08:00"
+    ) throws -> MobileSummary {
+        let json = """
+        {
+          "schema_version": 1,
+          "client": "macos",
+          "generated_at": "\(generatedAt)",
+          "timezone": "Asia/Shanghai",
+          "period": {
+            "id": "\(periodID)",
+            "date": "\(date)",
+            "start_date": "\(startDate)",
+            "end_date": "\(startDate)",
+            "total_tokens": \(totalTokens),
+            "input_tokens": \(totalTokens),
+            "output_tokens": 0,
+            "cache_tokens": 0,
+            "cache_ratio": 0,
+            "machine": null,
+            "account": null
+          },
+          "trend": {
+            "period": "\(periodID)",
+            "granularity": "\(periodID == "today" ? "hour" : "day")",
+            "start_date": "\(startDate)",
+            "end_date": "\(startDate)",
+            "points": []
+          },
+          "sources": [],
+          "breakdown": {
+            "by_machine": [],
+            "by_os_user": [],
+            "by_agent": [],
+            "by_model": [],
+            "by_date": []
+          },
+          "limits": {
+            "observed_count": 0,
+            "total_count": 0,
+            "windows": []
+          }
+        }
+        """
+        return try JSONDecoder().decode(MobileSummary.self, from: Data(json.utf8))
+    }
+
+    // #177 性能：state 曾是计算属性，视图 body 每读一次就重建一遍 MenuBarState。
+    // 改成存储属性后，连续读多次 state 不该再触发重建；只有输入真正变化（这里用命中缓存的
+    // refresh 切换 period）才应该重建一次，且新 state 要反映新选中的期间。
+    func testReadingStateRepeatedlyDoesNotRebuildButChangingPeriodDoes() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(
+                    summary: try summary(periodID: "today", totalTokens: 100),
+                    fetchedAt: now.addingTimeInterval(-60)
+                ),
+                "week": CachedMenuSummary(
+                    summary: try summary(periodID: "week", totalTokens: 700),
+                    fetchedAt: now.addingTimeInterval(-60)
+                ),
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        let countAfterInit = model.stateBuildCount
+        for _ in 0..<20 {
+            _ = model.state
+        }
+        XCTAssertEqual(
+            model.stateBuildCount, countAfterInit,
+            "连续读 20 次 state 不应触发重建"
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertGreaterThan(
+            model.stateBuildCount, countAfterInit,
+            "切换到已缓存的 week 期间必须触发一次重建"
+        )
+        XCTAssertEqual(model.state.periodLabel, "本周", "重建后的 state 必须反映新选中的期间")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0, "week 缓存新鲜，不应发网络请求")
     }
 }
 
@@ -957,6 +1341,11 @@ private actor ControlledSummaryLoader {
 
     func requestCount() -> Int {
         configs.count
+    }
+
+    /// 实际调用次数（同一 period 重复请求也分别计数）。
+    func totalRequestCount() -> Int {
+        totalRequests
     }
 
     func config(for period: String) throws -> MobileSummaryClientConfig {

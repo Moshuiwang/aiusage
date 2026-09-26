@@ -2,42 +2,13 @@ import Foundation
 import XCTest
 @testable import AIUsageMenuBarCore
 
+/// #177 收口：本文件原本还覆盖 `state.sources` / `MenuDisplayRow.flatModels` / `MenuFlatModelRow` /
+/// `ModelQuotaEstimator.estimateWeeklyQuotaPercentText`（视图层已改用 `state.serverCards` 展示，
+/// 这些字段/旧文本 API 随之删除）。等价覆盖已迁移到 `ServerCardTests.swift`
+/// （owner 层级、Agent 归属决策、机器别名、月度换算等）和 `ModelQuotaEstimatorTests.swift`
+/// （权重估算，改用结构化 `estimateWeeklyQuota` API）。这里只保留与被删 API 无关的
+/// `MobileSummary.breakdown.bySource` Codable 往返测试。
 final class SourceHierarchyTests: XCTestCase {
-    func testOwnerSourceAgentModelHierarchyPreservesEveryIdentityAndValue() throws {
-        let summary = try load("navigation-models-owner")
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
-        let rows = try XCTUnwrap(summary.breakdown.bySource)
-        XCTAssertEqual(rows.count, 2)
-        XCTAssertEqual(state.sources.map(\.id), ["model-mac", "model-linux"])
-        XCTAssertEqual(state.sources.map(\.title), ["alice / mac", "alice / linux"])
-        XCTAssertEqual(state.sources.map(\.value), ["650", "350"])
-        XCTAssertEqual(state.dateRangeText, "2026-09-22")
-        XCTAssertEqual(rows.reduce(0) { $0 + $1.tokens }, summary.period.totalTokens)
-        var checkedModels = 0
-        for row in rows {
-            let presented = try XCTUnwrap(state.sources.first { $0.id == row.id })
-            let agents = try XCTUnwrap(presented.agents)
-            XCTAssertEqual(agents.count, 2)
-            XCTAssertEqual(agents.map(\.id), ["claude", "codex"])
-            XCTAssertEqual(agents.reduce(0) { $0 + $1.tokens }, row.tokens)
-            for agent in agents {
-                XCTAssertEqual(agent.models.reduce(0) { $0 + $1.tokens }, agent.tokens)
-                checkedModels += agent.models.count
-            }
-        }
-        XCTAssertEqual(checkedModels, 7)
-        let codex = try XCTUnwrap(state.sources.first?.agents?.first { $0.id == "codex" })
-        XCTAssertEqual(codex.models.map(\.id), ["gpt-6-luna", "gpt-6-sol", "unknown"])
-        XCTAssertEqual(codex.models.map(\.tokens), [200, 100, 50])
-        XCTAssertEqual(codex.models.map(\.title), ["gpt-6-luna", "gpt-6-sol", "模型未知"])
-        XCTAssertEqual(codex.models.last?.valueText, "50")
-        let missing = try XCTUnwrap(state.sources.last?.agents?.first { $0.id == "claude" })
-        XCTAssertEqual(missing.status, "missing")
-        XCTAssertEqual(missing.valueText, "数据缺失")
-        XCTAssertEqual(missing.tokens, 0)
-        XCTAssertTrue(missing.models.isEmpty)
-    }
-
     func testOwnerFieldsSurviveDiskCacheRoundTrip() throws {
         let summary = try load("navigation-models-owner")
         let encoded = try JSONEncoder().encode(summary)
@@ -47,51 +18,6 @@ final class SourceHierarchyTests: XCTestCase {
         XCTAssertEqual(decoded.breakdown.bySource?.first?.agents?.last?.models.count, 3)
         XCTAssertEqual(decoded.breakdown.bySource?.first?.machine, "mac")
         XCTAssertEqual(decoded.breakdown.bySource?.first?.osUser, "alice")
-    }
-
-    func testLegacySummaryKeepsSourceTotalsWithoutInventingAgentDetails() throws {
-        let summary = try load("mobile-summary")
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
-        XCTAssertNil(summary.breakdown.bySource)
-        XCTAssertEqual(state.sources.count, 2)
-        XCTAssertEqual(state.sources.map(\.value), ["3.0K", "2.0K"])
-        XCTAssertTrue(state.sources.allSatisfy { $0.agents == nil })
-    }
-
-    func testLegacyFallbackUsesMachineThenUserRowsWithoutSummingContributions() throws {
-        let original = try load("navigation-models-owner")
-        for usesMachine in [true, false] {
-            let row = MobileBreakdownRow(id: "server-aggregate", label: "已汇总来源", tokens: 777,
-                sourceIDs: ["model-mac", "model-linux"],
-                contributions: [MobileBreakdownContribution(sourceID: "model-mac", tokens: 10), MobileBreakdownContribution(sourceID: "model-linux", tokens: 20)])
-            let breakdown = MobileBreakdown(byMachine: usesMachine ? [row] : [], byOSUser: usesMachine ? [] : [row], byAgent: [], byModel: [], byDate: [])
-            let summary = MobileSummary(schemaVersion: original.schemaVersion, client: original.client, generatedAt: original.generatedAt, timezone: original.timezone, period: original.period, trend: original.trend, sources: original.sources, breakdown: breakdown, limits: original.limits)
-            let rows = MenuBarViewModel.build(from: summary, selectedPeriodID: "today").sources
-            XCTAssertEqual(rows.count, 1)
-            XCTAssertEqual(rows.first?.id, "server-aggregate")
-            XCTAssertEqual(rows.first?.title, "已汇总来源")
-            XCTAssertEqual(rows.first?.value, "777")
-            XCTAssertEqual(rows.first?.subtitle, "来源明细缺失")
-            XCTAssertNil(rows.first?.agents)
-        }
-    }
-
-    func testFlatModelsAreSortedDescendingByTokensAcrossAgents() throws {
-        let summary = try load("navigation-models-owner")
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
-        let macSource = try XCTUnwrap(state.sources.first { $0.id == "model-mac" })
-        let flatModels = try XCTUnwrap(macSource.flatModels)
-        XCTAssertEqual(flatModels.count, 4)
-        XCTAssertEqual(flatModels.map(\.tokens), [300, 200, 100, 50])
-        XCTAssertEqual(flatModels.first?.label, "claude-opus")
-        XCTAssertEqual(flatModels[1].label, "gpt-6-luna")
-    }
-
-    func testCustomMachineAliasesReplaceLongHostnames() throws {
-        let summary = try load("navigation-models-owner")
-        let aliases = ["mac": "MacBook Air", "linux": "GPU Server"]
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases)
-        XCTAssertEqual(state.sources.map(\.title), ["alice / MacBook Air", "alice / GPU Server"])
     }
 
     private func load(_ name: String) throws -> MobileSummary {
