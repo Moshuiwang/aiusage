@@ -112,6 +112,24 @@ final class MenuBarAppModel: ObservableObject {
     }
 
     var selection: MenuPeriodSelection { MenuPeriodSelection(periodID: selectedPeriodID, offset: selectedOffset) }
+
+    /// #176：期间菜单展开数据——只读已有缓存（内存优先，磁盘退路），绝不调用 loadSummary / 发网络请求。
+    func periodMenuRows(for periodID: String) -> [PeriodMenuRow] {
+        PeriodMenuBuilder.rows(
+            periodID: periodID,
+            now: now(),
+            timezone: summary.timezone ?? todaySummary?.timezone,
+            selectedOffset: periodID == selectedPeriodID ? selectedOffset : 0,
+            cached: { [cachedSummaries, paths] selection in
+                if let cached = cachedSummaries[selection.cacheKey] {
+                    return cached.summary
+                }
+                return SummaryCache.loadCachedSummary(
+                    from: paths.cacheURL(forPeriod: selection.periodID, offset: selection.offset)
+                )?.summary
+            }
+        )
+    }
     var statusState: MenuBarState {
         MenuBarViewModel.build(
             from: todaySummary ?? .empty(),

@@ -219,6 +219,61 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    // #176：期间菜单只读已有缓存（内存优先，磁盘退路），绝不为展开菜单发请求。
+    func testPeriodMenuRowsReadsMemoryCacheWithoutNetworkRequest() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let cachedSummary = try summaryWithDate(
+            periodID: "today", date: "2026-06-24", startDate: "2026-06-24", totalTokens: 4200
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["today:-1": CachedMenuSummary(summary: cachedSummary, fetchedAt: now)],
+            now: { now }, loadSummary: loader.load
+        )
+
+        let rows = model.periodMenuRows(for: "today")
+
+        XCTAssertEqual(rows.count, 7)
+        XCTAssertEqual(rows[1].selection.offset, -1)
+        XCTAssertEqual(rows[1].totalText, "4.2K")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testPeriodMenuRowsFallBackToDiskCacheWithoutNetworkRequest() async throws {
+        let loader = ControlledSummaryLoader()
+        let paths = try temporaryRuntimePaths()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        // 本周一是 2026-06-22（now=06-25 周四），offset -1 起始应是 2026-06-15。
+        let diskSummary = try summaryWithDate(
+            periodID: "week", date: "2026-06-15", startDate: "2026-06-15", totalTokens: 777
+        )
+        try SummaryCache.save(diskSummary, paths: paths, offset: -1)
+        let model = MenuBarAppModel(paths: paths, config: testConfig(), now: { now }, loadSummary: loader.load)
+
+        let rows = model.periodMenuRows(for: "week")
+
+        XCTAssertEqual(rows[1].selection.offset, -1)
+        XCTAssertEqual(rows[1].totalText, "777")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
+    func testPeriodMenuRowsShowDashWhenNoCacheExists() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), now: { now }, loadSummary: loader.load
+        )
+
+        let rows = model.periodMenuRows(for: "today")
+
+        XCTAssertTrue(rows.allSatisfy { $0.totalText == "—" })
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
     func testSwitchingToHistoricalPeriodKeepsQuotaRingsFromNewestSnapshot() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-07-18T12:00:00+08:00")
@@ -967,6 +1022,58 @@ final class MenuBarAppModelTests: XCTestCase {
         }
         formatter.formatOptions = [.withInternetDateTime]
         return try XCTUnwrap(formatter.date(from: iso))
+    }
+
+    /// #176 期间菜单测试专用：需要精确控制 period.date / start_date 来模拟缓存的「实际起始日期」。
+    private func summaryWithDate(
+        periodID: String,
+        date: String,
+        startDate: String,
+        totalTokens: Int,
+        generatedAt: String = "2026-06-25T12:00:00+08:00"
+    ) throws -> MobileSummary {
+        let json = """
+        {
+          "schema_version": 1,
+          "client": "macos",
+          "generated_at": "\(generatedAt)",
+          "timezone": "Asia/Shanghai",
+          "period": {
+            "id": "\(periodID)",
+            "date": "\(date)",
+            "start_date": "\(startDate)",
+            "end_date": "\(startDate)",
+            "total_tokens": \(totalTokens),
+            "input_tokens": \(totalTokens),
+            "output_tokens": 0,
+            "cache_tokens": 0,
+            "cache_ratio": 0,
+            "machine": null,
+            "account": null
+          },
+          "trend": {
+            "period": "\(periodID)",
+            "granularity": "\(periodID == "today" ? "hour" : "day")",
+            "start_date": "\(startDate)",
+            "end_date": "\(startDate)",
+            "points": []
+          },
+          "sources": [],
+          "breakdown": {
+            "by_machine": [],
+            "by_os_user": [],
+            "by_agent": [],
+            "by_model": [],
+            "by_date": []
+          },
+          "limits": {
+            "observed_count": 0,
+            "total_count": 0,
+            "windows": []
+          }
+        }
+        """
+        return try JSONDecoder().decode(MobileSummary.self, from: Data(json.utf8))
     }
 }
 

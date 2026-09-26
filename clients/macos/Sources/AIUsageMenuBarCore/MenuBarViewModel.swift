@@ -10,6 +10,8 @@ public struct MenuBarState: Equatable, Sendable {
     public let primaryLimitText: String
     public let lastUpdatedText: String
     public let trendBars: [MenuTrendBar]
+    /// #176：按 Agent 汇总所有（非未来）柱的分段 tokens，顺序 claude → codex → antigravity → unknown，0 的省略。
+    public let trendLegendTotals: [MenuTrendSegment]
     public let trendRefCeilingText: String
     public let trendCeilingFraction: Double
     public let trendMidFraction: Double
@@ -163,6 +165,8 @@ public struct MenuTrendBar: Equatable, Sendable, Identifiable {
     public let ratio: Double
     public let totalTokens: Int
     public let segments: [MenuTrendSegment]
+    /// #176：bucket 晚于「现在」（按 summary 时区）时为 true——无段、不参与柱高最大值。
+    public let isFuture: Bool
 }
 
 public struct MenuTrendSegment: Equatable, Sendable, Identifiable {
@@ -190,29 +194,21 @@ public struct MenuTrendColor: Equatable, Sendable {
 public enum MenuTrendProvider: String, CaseIterable, Equatable, Sendable {
     case claude
     case codex
-    case gemini
+    case antigravity
     case unknown
 
     public var displayName: String {
         switch self {
         case .claude: return "Claude"
         case .codex: return "Codex"
-        case .gemini: return "Gemini"
+        case .antigravity: return "Antigravity"
         case .unknown: return "未知"
         }
     }
 
+    /// #176：不再有第二套色值，堆叠色与 #175 的 AgentBranding（额度环、Server 模型行）完全一致。
     public var color: MenuTrendColor {
-        switch self {
-        case .claude:
-            return MenuTrendColor(red: 0.855, green: 0.467, blue: 0.337, opacity: 1)
-        case .codex:
-            return MenuTrendColor(red: 0.039, green: 0.518, blue: 1, opacity: 1)
-        case .gemini:
-            return MenuTrendColor(red: 0.204, green: 0.780, blue: 0.349, opacity: 1)
-        case .unknown:
-            return MenuTrendColor(red: 0.5, green: 0.5, blue: 0.52, opacity: 0.55)
-        }
+        AgentBranding.color(for: rawValue)
     }
 }
 
@@ -304,7 +300,10 @@ public enum MenuBarViewModel {
             }
             .first
 
-        let maxTokens = summary.trend.points.map(\.tokens).max() ?? 0
+        // 未来时段不参与最大值，与 trendBars 的 ratio 口径一致。
+        let maxTokens = summary.trend.points
+            .filter { !isFutureBucket($0.bucket, granularity: summary.trend.granularity, now: now, timezone: summary.timezone) }
+            .map(\.tokens).max() ?? 0
         let ceiling = maxTokens > 0 ? ceilingValue(maxTokens) : 1
         let midVal = midlineValue(ceiling: ceiling)
 
@@ -316,6 +315,8 @@ public enum MenuBarViewModel {
             timezone: summary.timezone,
             machineAliases: machineAliases
         )
+
+        let bars = trendBars(summary.trend, now: now, timezone: summary.timezone)
 
         return MenuBarState(
             statusTitle: tokenText,
@@ -330,7 +331,12 @@ public enum MenuBarViewModel {
             healthText: healthText(okCount: okCount, total: summary.sources.count, problemCount: problemCount),
             primaryLimitText: primaryLimitText(primaryLimit),
             lastUpdatedText: latestDataText(summary.sources, fallback: summary.generatedAt, timezone: summary.timezone),
-            trendBars: trendBars(summary.trend),
+            trendBars: bars,
+            trendLegendTotals: aggregatedSegments(
+                summary.trend.points.filter { point in
+                    !isFutureBucket(point.bucket, granularity: summary.trend.granularity, now: now, timezone: summary.timezone)
+                }
+            ),
             trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
             trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
@@ -414,10 +420,16 @@ public enum MenuBarViewModel {
         return timeText(latest ?? fallback, timezone: timezone)
     }
 
-    private static func trendBars(_ trend: MobileTrend) -> [MenuTrendBar] {
-        let maxTokens = max(trend.points.map(\.tokens).max() ?? 0, 1)
+    static func trendBars(_ trend: MobileTrend, now: Date, timezone: String?) -> [MenuTrendBar] {
+        let maxTokens = max(
+            trend.points
+                .filter { !isFutureBucket($0.bucket, granularity: trend.granularity, now: now, timezone: timezone) }
+                .map(\.tokens).max() ?? 0,
+            1
+        )
         return trend.points.enumerated().map { index, point in
-            MenuTrendBar(
+            let isFuture = isFutureBucket(point.bucket, granularity: trend.granularity, now: now, timezone: timezone)
+            return MenuTrendBar(
                 id: point.bucket,
                 label: axisLabel(
                     for: point,
@@ -426,45 +438,64 @@ public enum MenuBarViewModel {
                     granularity: trend.granularity
                 ),
                 tooltipTitle: shortBucket(point.bucket, granularity: trend.granularity),
-                valueText: TokenFormat.compact(point.tokens),
-                ratio: Double(point.tokens) / Double(maxTokens),
-                totalTokens: max(point.tokens, 0),
-                segments: trendSegments(point)
+                valueText: isFuture ? "" : TokenFormat.compact(point.tokens),
+                ratio: isFuture ? 0 : Double(point.tokens) / Double(maxTokens),
+                totalTokens: isFuture ? 0 : max(point.tokens, 0),
+                segments: isFuture ? [] : trendSegments(point),
+                isFuture: isFuture
             )
         }
     }
 
-    private static func trendSegments(_ point: MobileTrendPoint) -> [MenuTrendSegment] {
+    /// bucket 是否晚于「现在」：hour 粒度按完整 ISO 时刻比较；day 粒度（week/month）按 yyyy-MM-dd 本地日期比较。
+    static func isFutureBucket(_ bucket: String, granularity: String?, now: Date, timezone: String?) -> Bool {
+        let tz = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+        if granularity == "hour" {
+            guard let bucketDate = parseDate(bucket) else { return false }
+            return bucketDate > now
+        }
+        guard bucket.count >= 10 else { return false }
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = tz
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+        let todayStr = dayFormatter.string(from: now)
+        let bucketDay = String(bucket.prefix(10))
+        return bucketDay > todayStr
+    }
+
+    /// #176：段顺序自底向上 claude → codex → antigravity → unknown（Claude 在底）；段和 == tokens（守恒）。
+    static func trendSegments(_ point: MobileTrendPoint) -> [MenuTrendSegment] {
         let total = max(point.tokens, 0)
         guard total > 0 else { return [] }
 
         let rawClaude = max(point.claudeTokens, 0)
         let rawCodex = max(point.codexTokens, 0)
-        let rawGemini = max(point.geminiTokens, 0)
-        let rawKnown = rawClaude + rawCodex + rawGemini
+        let rawAntigravity = max(point.geminiTokens, 0)
+        let rawKnown = rawClaude + rawCodex + rawAntigravity
         let claude: Int
         let codex: Int
-        let gemini: Int
+        let antigravity: Int
         if rawKnown <= total {
             claude = rawClaude
             codex = rawCodex
-            gemini = rawGemini
+            antigravity = rawAntigravity
         } else if rawKnown == 0 {
             claude = 0
             codex = 0
-            gemini = 0
+            antigravity = 0
         } else {
             claude = total * rawClaude / rawKnown
             codex = total * rawCodex / rawKnown
-            gemini = total - claude - codex
+            antigravity = total - claude - codex
         }
-        let unknown = total - claude - codex - gemini
+        let unknown = total - claude - codex - antigravity
 
         return [
-            (MenuTrendProvider.unknown, unknown),
-            (.claude, claude),
+            (MenuTrendProvider.claude, claude),
             (.codex, codex),
-            (.gemini, gemini),
+            (.antigravity, antigravity),
+            (.unknown, unknown),
         ].compactMap { provider, tokens in
             guard tokens > 0 else { return nil }
             return MenuTrendSegment(
@@ -472,6 +503,24 @@ public enum MenuBarViewModel {
                 tokens: tokens,
                 fraction: Double(tokens) / Double(total)
             )
+        }
+    }
+
+    /// #176：跨若干 trend point 按 Agent 汇总，顺序 claude → codex → antigravity → unknown，0 的省略。
+    /// 供柱图图例合计（trendLegendTotals）与期间菜单行的 segments 共用。
+    static func aggregatedSegments(_ points: [MobileTrendPoint]) -> [MenuTrendSegment] {
+        var totals: [MenuTrendProvider: Int] = [:]
+        var grandTotal = 0
+        for point in points {
+            for segment in trendSegments(point) {
+                totals[segment.provider, default: 0] += segment.tokens
+                grandTotal += segment.tokens
+            }
+        }
+        guard grandTotal > 0 else { return [] }
+        return [MenuTrendProvider.claude, .codex, .antigravity, .unknown].compactMap { provider in
+            guard let tokens = totals[provider], tokens > 0 else { return nil }
+            return MenuTrendSegment(provider: provider, tokens: tokens, fraction: Double(tokens) / Double(grandTotal))
         }
     }
 

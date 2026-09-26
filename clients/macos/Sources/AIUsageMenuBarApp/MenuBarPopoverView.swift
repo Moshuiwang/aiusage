@@ -573,7 +573,8 @@ struct PopoverTrendBars: View {
                 .opacity(0.28)
         } else {
             VStack(spacing: 0) {
-                ForEach(bar.segments) { segment in
+                // segments 自底向上排列，VStack 自顶向下绘制，反转后 Claude 在底。
+                ForEach(bar.segments.reversed()) { segment in
                     Rectangle()
                         .fill(providerColor(segment.provider))
                         .frame(height: height * CGFloat(segment.fraction))

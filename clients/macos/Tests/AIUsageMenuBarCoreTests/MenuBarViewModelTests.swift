@@ -235,29 +235,47 @@ final class MenuBarViewModelTests: XCTestCase {
         )
 
         let bar = try XCTUnwrap(state.trendBars.first)
-        XCTAssertEqual(bar.segments.map(\.provider), [.unknown, .claude, .codex])
-        XCTAssertEqual(bar.segments.map(\.tokens), [100, 300, 200])
+        // #176: 段顺序自底向上 claude → codex → antigravity → unknown（Claude 在底）。
+        XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .unknown])
+        XCTAssertEqual(bar.segments.map(\.tokens), [300, 200, 100])
         XCTAssertEqual(bar.segments.reduce(0) { $0 + $1.tokens }, bar.totalTokens)
+        // 颜色必须与 AgentBranding（#175）完全一致，不再有第二套色值。
         XCTAssertEqual(
             MenuTrendProvider.claude.color,
-            MenuTrendColor(red: 0.855, green: 0.467, blue: 0.337, opacity: 1)
+            AgentBranding.color(for: "claude")
         )
         XCTAssertEqual(
             MenuTrendProvider.codex.color,
-            MenuTrendColor(red: 0.039, green: 0.518, blue: 1, opacity: 1)
+            AgentBranding.color(for: "codex")
         )
         XCTAssertEqual(
             MenuTrendProvider.unknown.color,
-            MenuTrendColor(red: 0.5, green: 0.5, blue: 0.52, opacity: 0.55)
+            AgentBranding.color(for: "unknown")
         )
         XCTAssertEqual(
-            MenuTrendProvider.gemini.color,
-            MenuTrendColor(red: 0.204, green: 0.780, blue: 0.349, opacity: 1)
+            MenuTrendProvider.antigravity.color,
+            AgentBranding.color(for: "antigravity")
         )
-        XCTAssertEqual(MenuTrendProvider.gemini.displayName, "Gemini")
+        XCTAssertEqual(
+            MenuTrendProvider.claude.color,
+            MenuTrendColor(red: 0.851, green: 0.467, blue: 0.341, opacity: 1)
+        )
+        XCTAssertEqual(
+            MenuTrendProvider.codex.color,
+            MenuTrendColor(red: 0.184, green: 0.486, blue: 0.965, opacity: 1)
+        )
+        XCTAssertEqual(
+            MenuTrendProvider.unknown.color,
+            MenuTrendColor(red: 0.557, green: 0.557, blue: 0.576, opacity: 1)
+        )
+        XCTAssertEqual(
+            MenuTrendProvider.antigravity.color,
+            MenuTrendColor(red: 0.608, green: 0.447, blue: 0.796, opacity: 1)
+        )
+        XCTAssertEqual(MenuTrendProvider.antigravity.displayName, "Antigravity")
     }
 
-    func testTrendWithGeminiTokensProducesGeminiSegment() throws {
+    func testTrendWithAntigravityTokensProducesAntigravitySegment() throws {
         let summary = try loadFixture()
         let trend = MobileTrend(
             period: "today",
@@ -297,9 +315,172 @@ final class MenuBarViewModelTests: XCTestCase {
         )
 
         let bar = try XCTUnwrap(state.trendBars.first)
-        XCTAssertEqual(bar.segments.map(\.provider), [.unknown, .claude, .codex, .gemini])
-        XCTAssertEqual(bar.segments.map(\.tokens), [100, 300, 200, 150])
+        XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .antigravity, .unknown])
+        XCTAssertEqual(bar.segments.map(\.tokens), [300, 200, 150, 100])
         XCTAssertEqual(bar.segments.reduce(0) { $0 + $1.tokens }, bar.totalTokens)
+    }
+
+    /// 结构下限：段顺序精确、守恒（从产物独立复算，不跑实现自己的断言）。
+    func testTrendStackOrderClaudeCodexAntigravityUnknownExact() throws {
+        let point = MobileTrendPoint(
+            bucket: "2026-06-02T10:00:00+08:00",
+            label: "10:00",
+            tokens: 1000,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheTokens: 0,
+            cacheRatio: 0,
+            claudeTokens: 500,
+            codexTokens: 300,
+            geminiTokens: 150,
+            unknownTokens: 50
+        )
+        let summary = try loadFixture()
+        let trend = MobileTrend(period: "today", granularity: "hour", startDate: "2026-06-02", endDate: "2026-06-02", points: [point])
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+        let bar = try XCTUnwrap(state.trendBars.first)
+        XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .antigravity, .unknown])
+        XCTAssertEqual(bar.segments.map(\.tokens), [500, 300, 150, 50])
+        // 守恒：独立复算 sum(segments.tokens) == totalTokens，不用实现自己的断言。
+        let recomputedSum = bar.segments.reduce(0) { $0 + $1.tokens }
+        XCTAssertEqual(recomputedSum, 1000)
+        XCTAssertEqual(recomputedSum, bar.totalTokens)
+    }
+
+    /// 超额缩放：已知分量之和超过 tokens 总量时按比例缩放，段和仍必须等于总量。
+    func testTrendOverAllocatedComponentsScaleDownAndStillConserve() throws {
+        let point = MobileTrendPoint(
+            bucket: "2026-06-02T10:00:00+08:00",
+            label: "10:00",
+            tokens: 1000,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheTokens: 0,
+            cacheRatio: 0,
+            claudeTokens: 500,
+            codexTokens: 400,
+            geminiTokens: 300,
+            unknownTokens: 0
+        )
+        let summary = try loadFixture()
+        let trend = MobileTrend(period: "today", granularity: "hour", startDate: "2026-06-02", endDate: "2026-06-02", points: [point])
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+        let bar = try XCTUnwrap(state.trendBars.first)
+        XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .antigravity])
+        XCTAssertEqual(bar.segments.map(\.tokens), [416, 333, 251])
+        XCTAssertEqual(bar.segments.reduce(0) { $0 + $1.tokens }, 1000)
+    }
+
+    /// 未来时段：week 当期，now 在周三 → 周四至周日 isFuture 且无段；过去几天不是。
+    func testFutureBucketsHaveNoSegmentsAndAreExcludedFromMax() throws {
+        let summary = try loadFixture()
+        // 2026-06-24 是周三（Monday=2026-06-22）。
+        let bucketDates = ["2026-06-22", "2026-06-23", "2026-06-24", "2026-06-25", "2026-06-26", "2026-06-27", "2026-06-28"]
+        let points = bucketDates.enumerated().map { index, bucket in
+            MobileTrendPoint(
+                bucket: bucket, label: bucket, tokens: (index + 1) * 100,
+                inputTokens: 0, outputTokens: 0, cacheTokens: 0, cacheRatio: 0,
+                claudeTokens: (index + 1) * 100
+            )
+        }
+        let trend = MobileTrend(period: "week", granularity: "day", startDate: "2026-06-22", endDate: "2026-06-28", points: points)
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits
+            ),
+            selectedPeriodID: "week",
+            now: try date("2026-06-24T09:00:00+08:00")
+        )
+        let bars = state.trendBars
+        XCTAssertEqual(bars.map(\.isFuture), [false, false, false, true, true, true, true])
+        for bar in bars where bar.isFuture {
+            XCTAssertTrue(bar.segments.isEmpty, "future bar \(bar.id) must carry no segments")
+            XCTAssertEqual(bar.totalTokens, 0)
+        }
+        // 未来点不参与最大值：过去最大 tokens 是 06-24 的 300，其 ratio 必须是 1.0。
+        let todayBar = try XCTUnwrap(bars.first { $0.id == "2026-06-24" })
+        XCTAssertEqual(todayBar.ratio, 1.0, accuracy: 0.001)
+        // 参考线/顶部刻度同样只按过去点计算：与只含过去三点的 trend 结果一致。
+        let pastOnly = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period,
+                trend: MobileTrend(period: "week", granularity: "day", startDate: "2026-06-22", endDate: "2026-06-28", points: Array(points.prefix(3))),
+                sources: summary.sources, breakdown: summary.breakdown, limits: summary.limits
+            ),
+            selectedPeriodID: "week",
+            now: try date("2026-06-24T09:00:00+08:00")
+        )
+        XCTAssertFalse(pastOnly.trendRefCeilingText.isEmpty)
+        XCTAssertEqual(state.trendRefCeilingText, pastOnly.trendRefCeilingText)
+        XCTAssertEqual(state.trendCeilingFraction, pastOnly.trendCeilingFraction, accuracy: 0.0001)
+        XCTAssertEqual(state.trendMidText, pastOnly.trendMidText)
+    }
+
+    func testHourBucketsFutureOnlyAfterNowAndHistoricalDayHasNoFuture() throws {
+        let buckets = ["2026-06-24T11:00:00+08:00", "2026-06-24T12:00:00+08:00", "2026-06-24T13:00:00+08:00"]
+        let now = try date("2026-06-24T12:30:00+08:00")
+        XCTAssertEqual(
+            buckets.map { MenuBarViewModel.isFutureBucket($0, granularity: "hour", now: now, timezone: "Asia/Shanghai") },
+            [false, false, true]
+        )
+        let yesterday = (0..<24).map { String(format: "2026-06-23T%02d:00:00+08:00", $0) }
+        XCTAssertEqual(yesterday.count, 24)
+        XCTAssertTrue(yesterday.allSatisfy { !MenuBarViewModel.isFutureBucket($0, granularity: "hour", now: now, timezone: "Asia/Shanghai") })
+    }
+
+    func testTrendLegendTotalsAggregateByAgentAcrossAllBars() throws {
+        let summary = try loadFixture()
+        let points = [
+            MobileTrendPoint(
+                bucket: "2026-06-01", label: "2026-06-01", tokens: 300,
+                inputTokens: 0, outputTokens: 0, cacheTokens: 0, cacheRatio: 0,
+                claudeTokens: 200, codexTokens: 100
+            ),
+            MobileTrendPoint(
+                bucket: "2026-06-02", label: "2026-06-02", tokens: 300,
+                inputTokens: 0, outputTokens: 0, cacheTokens: 0, cacheRatio: 0,
+                claudeTokens: 100, geminiTokens: 150, unknownTokens: 50
+            ),
+        ]
+        let trend = MobileTrend(period: "week", granularity: "day", startDate: "2026-06-01", endDate: "2026-06-02", points: points)
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits
+            ),
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+        // 独立复算：claude=200+100=300, codex=100, antigravity=150, unknown=50, total=600。
+        XCTAssertEqual(state.trendLegendTotals.map(\.provider), [.claude, .codex, .antigravity, .unknown])
+        XCTAssertEqual(state.trendLegendTotals.map(\.tokens), [300, 100, 150, 50])
+        let recomputedTotal = state.trendLegendTotals.reduce(0) { $0 + $1.tokens }
+        XCTAssertEqual(recomputedTotal, 600)
     }
 
     func testTrendWithoutProviderBreakdownDisplaysAllTokensAsUnknown() throws {
