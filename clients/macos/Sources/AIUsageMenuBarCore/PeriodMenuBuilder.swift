@@ -50,7 +50,7 @@ public enum PeriodMenuBuilder {
             let selection = MenuPeriodSelection(periodID: periodID, offset: offset)
             let bounds = periodBounds(periodID: periodID, offset: offset, today: today, calendar: calendar)
             let title = titleText(periodID: periodID, offset: offset, bounds: bounds, calendar: calendar)
-            let subtitle = subtitleText(periodID: periodID, bounds: bounds, calendar: calendar)
+            let subtitle = subtitleText(periodID: periodID, offset: offset, bounds: bounds, calendar: calendar)
             let expectedStartDate = dayString(bounds.start, calendar: calendar)
 
             let cachedSummary = cached(selection)
@@ -185,16 +185,49 @@ public enum PeriodMenuBuilder {
         }
     }
 
-    private static func subtitleText(periodID: String, bounds: Bounds, calendar: Calendar) -> String {
-        if periodID == "today" {
-            return dateText(bounds.start, calendar: calendar)
+    /// #177 第三轮真机反馈：副标题不能和标题重复同一段文本。
+    /// - today：offset 0/-1/-2（标题是「今天/昨天/前天」，不含日期）→ 副标题给「日期 + 星期」；
+    ///   offset <= -3（标题本身已经是日期）→ 副标题只给星期，不重复日期数字。
+    /// - week：offset 0/-1（标题是「本周/上周」）→ 副标题保持日期范围；
+    ///   offset <= -2（标题本身已经是日期范围）→ 副标题改成「第N周」，不重复同一段范围文本。
+    /// - month：标题（本月/上月/年月）与副标题（日期范围）格式本身不同，不存在重复，维持原样。
+    private static func subtitleText(periodID: String, offset: Int, bounds: Bounds, calendar: Calendar) -> String {
+        switch periodID {
+        case "today":
+            if offset >= -2 {
+                return "\(dateText(bounds.start, calendar: calendar)) \(weekdayText(bounds.start, calendar: calendar))"
+            }
+            return weekdayText(bounds.start, calendar: calendar)
+        case "week":
+            if offset >= -1 {
+                return rangeShortText(bounds.start, bounds.end, calendar: calendar)
+            }
+            return weekOfYearText(bounds.start, calendar: calendar)
+        default: // "month"
+            return rangeShortText(bounds.start, bounds.end, calendar: calendar)
         }
-        return rangeShortText(bounds.start, bounds.end, calendar: calendar)
     }
 
     private static func dateText(_ date: Date, calendar: Calendar) -> String {
         let c = calendar.dateComponents([.month, .day], from: date)
         return "\(c.month ?? 0)月\(c.day ?? 0)日"
+    }
+
+    private static let weekdayNames = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+
+    private static func weekdayText(_ date: Date, calendar: Calendar) -> String {
+        let weekday = calendar.component(.weekday, from: date) // 1=周日...7=周六
+        return weekdayNames[(weekday - 1 + weekdayNames.count) % weekdayNames.count]
+    }
+
+    /// 「第N周」按周一起始、ISO 风格（当年第一个包含≥4天的周为第1周）计数,与
+    /// `periodBounds` 里「周一起始」的口径一致,不受 Calendar 默认 `firstWeekday` 设置影响。
+    private static func weekOfYearText(_ date: Date, calendar: Calendar) -> String {
+        var isoCalendar = calendar
+        isoCalendar.firstWeekday = 2
+        isoCalendar.minimumDaysInFirstWeek = 4
+        let week = isoCalendar.component(.weekOfYear, from: date)
+        return "第\(week)周"
     }
 
     private static func monthText(_ date: Date, calendar: Calendar) -> String {

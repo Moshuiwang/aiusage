@@ -206,6 +206,53 @@ final class MenuBarAppModelTests: XCTestCase {
         )
     }
 
+    /// #177 第三轮：`manyServerCardsSummary` 只有壳（无 agents/models），展开后是「暂无模型明细」，
+    /// 量不出真实展开负载。这里补一份带真实 Agent/模型明细的重量级 fixture，专供 relayout 耗时测量用。
+    private func manyServerCardsSummaryWithModelDetail(machineCount: Int, modelsPerAgent: Int) throws -> MobileSummary {
+        // `MobileSourceAgent`/`MobileSourceModel` 跨模块（AIUsageMenuBarAppTests 不是
+        // AIUsageMenuBarCore 自己的测试目标）没有可见的逐字段 init，只能走 JSON 解码——
+        // 与 `manyServerCardsSummary` 里 `MobileSource` 同样的限制。
+        var totalTokens = 0
+        let rowsJSON = (0..<machineCount).map { index -> String in
+            let modelsJSON = (0..<modelsPerAgent).map { m in
+                """
+                {"id": "model-\(index)-\(m)", "label": "Model \(m)", "tokens": \(1_000 + m), "status": "available"}
+                """
+            }.joined(separator: ",")
+            let agentTokens = (0..<modelsPerAgent).reduce(0) { $0 + 1_000 + $1 }
+            totalTokens += agentTokens
+            return """
+            {
+              "id": "machine-\(index)", "label": "machine-\(index)", "tokens": \(agentTokens),
+              "source_ids": ["src-\(index)"],
+              "agents": [
+                {"id": "claude", "label": "Claude", "tokens": \(agentTokens), "status": "available", "models": [\(modelsJSON)]}
+              ]
+            }
+            """
+        }.joined(separator: ",")
+        let rows = try JSONDecoder().decode([MobileBreakdownRow].self, from: Data("[\(rowsJSON)]".utf8))
+
+        let sourcesJSON = (0..<machineCount).map { index in
+            """
+            {
+              "source_id": "src-\(index)", "machine": "machine-\(index)", "os_user": "user\(index)",
+              "platform": "linux", "status": "ok",
+              "last_observed_at": "2026-06-25T11:00:00+08:00", "last_pushed_at": "2026-06-25T11:00:00+08:00"
+            }
+            """
+        }.joined(separator: ",")
+        let sources = try JSONDecoder().decode([MobileSource].self, from: Data("[\(sourcesJSON)]".utf8))
+        let base = try summary(periodID: "today", totalTokens: totalTokens)
+        return MobileSummary(
+            schemaVersion: base.schemaVersion, client: base.client, generatedAt: base.generatedAt,
+            timezone: base.timezone, period: base.period, trend: base.trend,
+            sources: sources,
+            breakdown: MobileBreakdown(byMachine: rows, byOSUser: [], byAgent: [], byModel: [], byDate: []),
+            limits: base.limits
+        )
+    }
+
     func testHostedPopoverKeepsViewportThroughLoadAndHistorySwitch() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
@@ -254,6 +301,57 @@ final class MenuBarAppModelTests: XCTestCase {
         // #177：Popover v2 定稿宽度收窄到 360pt（HANDOFF.md 第 3 节），预期值随设计变更更新。
         XCTAssertEqual(MenuBarPopoverLayout.width, 360)
         XCTAssertEqual(MenuBarPopoverLayout.maxContentHeight(screenHeight: 922), 874)
+    }
+
+    /// #177 第三轮真机反馈：展开 Server 卡片非常慢的根因——`NSPopover.animates` 默认 true，
+    /// preferredContentSize 随展开变化时 AppKit 会做窗口级动画，动画期间反复用中间尺寸
+    /// 触发整棵内容树 relayout。生产代码唯一构造/配置 popover 的入口是
+    /// `MenuBarPopoverLayout.configure(_:)`（`StatusBarController.setupPopover()` 调用它），
+    /// 必须在这里关掉动画，不能依赖默认值。
+    func testPopoverConfigurationDisablesAnimationsToAvoidPerFrameRelayoutOnExpand() {
+        let popover = NSPopover()
+        MenuBarPopoverLayout.configure(popover)
+        XCTAssertFalse(
+            popover.animates,
+            "NSPopover.animates 默认 true：展开 Server 卡片改变 preferredContentSize 时会触发窗口级动画，" +
+            "动画期间反复用中间尺寸让整棵内容树重新 relayout——这是真机「展开非常慢」的根因，必须显式关掉"
+        )
+        XCTAssertEqual(popover.behavior, .transient)
+    }
+
+    /// #177 第三轮真机反馈：展开/收起改变 `preferredContentSize` 时，实际改变高度的那一次
+    /// `layoutSubtreeIfNeeded` 必须真的反映新高度——用真实的「收起 fittingSize」与「20 台
+    /// Server 全部有模型明细时的 fittingSize」对比，证明这不是空跑：内容树确实随展开数据量
+    /// 显著变化，NSPopover 在 animates=true 时会对这段真实高度差做窗口级动画，每帧都要在
+    /// 中间高度上重新问一次 SwiftUI「这个尺寸下你想多高」。逐帧耗时只能在真机用 Instruments/
+    /// 肉眼确认，这里只对「内容树本身确实是重量级的」给出可复算证据。
+    func testHeavyServerFixtureProducesSubstantialLayoutHeightUnlikeEmptyShell() throws {
+        let heavy = try manyServerCardsSummaryWithModelDetail(machineCount: 20, modelsPerAgent: 6)
+        let heavyModel = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: heavy
+        )
+        XCTAssertEqual(heavyModel.state.serverCards.count, 20)
+        XCTAssertEqual(heavyModel.state.serverCards.first?.models.count, 6, "fixture 必须真的带模型明细，不是空壳")
+
+        let heavyHosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: heavyModel))
+        heavyHosting.loadViewIfNeeded()
+        heavyHosting.view.frame.size.width = MenuBarPopoverLayout.width
+        heavyHosting.view.layoutSubtreeIfNeeded()
+        let heavyCollapsedHeight = heavyHosting.view.fittingSize.height
+
+        let empty = try manyServerCardsSummary(machineCount: 1)
+        let emptyModel = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: empty
+        )
+        let emptyHosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: emptyModel))
+        emptyHosting.loadViewIfNeeded()
+        emptyHosting.view.frame.size.width = MenuBarPopoverLayout.width
+        emptyHosting.view.layoutSubtreeIfNeeded()
+        let emptySingleCardHeight = emptyHosting.view.fittingSize.height
+
+        // 20 台带模型明细的 Server（哪怕全部收起）比 1 台空壳 Server 的内容树高得多——
+        // 证明真机场景下这棵树本身就重，animates=true 时每帧都要重新排布它，不是错觉。
+        XCTAssertGreaterThan(heavyCollapsedHeight, emptySingleCardHeight + 300)
     }
 
     func testStatusItemPresentationKeepsMenuBarEntryNumeric() throws {

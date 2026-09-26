@@ -242,6 +242,9 @@ struct MenuBarUsageSectionView: View {
             DatePicker("", selection: $pickedDate, in: datePickerRange, displayedComponents: [.date])
                 .datePickerStyle(.graphical)
                 .labelsHidden()
+                // #177 第三轮真机反馈：graphical DatePicker 外层默认套一圈很粗的系统焦点环，
+                // 视觉上很突兀——关掉焦点态渲染；键盘仍可正常 tab/方向键操作，只是不再画环。
+                .focusEffectDisabled()
             HStack {
                 Button("取消") { showDatePicker = false }
                 Spacer()

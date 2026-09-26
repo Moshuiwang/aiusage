@@ -10,12 +10,16 @@ struct MenuBarQuotaSectionView: View {
     @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            ForEach(rings) { ring in
-                // #177 Opus 审查：悬停浮层改用原生 .popover（独立窗口），不再靠手工 overlay + zIndex
-                // 定位——那样会被期间菜单等后方兄弟视图截断/遮挡。
+        // #177 第三轮真机反馈：三列强制等宽（约 101pt/列）时圆环右侧留给文字的空间不够放
+        // 「Antigravity」，之前把名称/倒计时整个挪到圆环下方——偏离设计稿（圆环在左、
+        // 名称+倒计时在右）。改回设计稿版式：每项按自身内容的自然宽度排布，项之间用
+        // Spacer 均分剩余空间，不再强制等宽。
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(Array(rings.enumerated()), id: \.element.id) { index, ring in
                 MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
-                    .frame(maxWidth: .infinity)
+                if index < rings.count - 1 {
+                    Spacer(minLength: 6)
+                }
             }
         }
         .padding(12)
@@ -46,21 +50,21 @@ struct MenuBarQuotaRingItem: View {
     }
 
     var body: some View {
-        // #177 真机反馈：三列等宽时圆环右侧空间放不下「Antigravity」会被截成「Antigra…」——
-        // 名称/倒计时改放到圆环下方居中，三家统一布局，不再依赖圆环右侧的窄列宽度。
-        VStack(spacing: 3) {
+        // #177 第三轮真机反馈：回到设计稿版式——圆环在左，名称 + 倒计时在右侧纵排。
+        // 名称 11pt semibold 一行完整显示，不缩放/不截断；容器（MenuBarQuotaSectionView）
+        // 已改成按内容自然宽度 + Spacer 均分布局，不再有等宽列挤压这一行的空间。
+        HStack(alignment: .center, spacing: 6) {
             ring
-            VStack(spacing: 1) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(data.displayName)
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                    .allowsTightening(true)
-                    .kerning(-0.2)
+                    .fixedSize()
                 Text(data.isAvailable ? data.resetCountdownText : "暂不可用")
-                    .font(.system(size: 10))
+                    .font(.system(size: 10.5))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .lineLimit(1)
+                    .fixedSize()
             }
         }
         // #177 真机反馈：悬停不能改变布局（之前 vertical padding 随悬停变化会让整体下沉 ~1pt）——

@@ -112,8 +112,17 @@ final class PeriodMenuBuilderTests: XCTestCase {
             periodID: "today", now: try date(fixedNowISO), timezone: "Asia/Shanghai",
             cached: { _ in nil }
         )
+        // #177 第三轮真机反馈：日粒度第 4 行起标题是具体日期（如「9月23日」），副标题不能
+        // 再重复同一个日期——今天/昨天/前天（标题不是日期）副标题写「日期 + 星期」；
+        // 标题已经是日期的行，副标题只写星期，不重复日期本身。
+        // 2026-09-26 是周六：09-25 周五、09-24 周四、09-23 周三、09-22 周二、09-21 周一、09-20 周日。
         XCTAssertEqual(rows.map(\.title), ["今天", "昨天", "前天", "9月23日", "9月22日", "9月21日", "9月20日"])
-        XCTAssertEqual(rows.map(\.subtitle), ["9月26日", "9月25日", "9月24日", "9月23日", "9月22日", "9月21日", "9月20日"])
+        XCTAssertEqual(rows.map(\.subtitle), ["9月26日 周六", "9月25日 周五", "9月24日 周四", "周三", "周二", "周一", "周日"])
+        // 结构下限：标题是日期的行，副标题绝不能和标题重复。
+        for row in rows[3...] {
+            XCTAssertNotEqual(row.title, row.subtitle)
+            XCTAssertFalse(row.subtitle.contains("月"), "标题已经是日期，副标题不该再夹带月/日数字")
+        }
     }
 
     func testWeekTitlesAndSubtitles() throws {
@@ -126,8 +135,11 @@ final class PeriodMenuBuilderTests: XCTestCase {
         XCTAssertEqual(rows[0].subtitle, "9月21日–26日") // 本周（offset 0）到今天为止
         XCTAssertEqual(rows[1].title, "上周")
         XCTAssertEqual(rows[1].subtitle, "9月14日–20日")
+        // #177 第三轮：offset<=-2 时标题已经是日期范围（rangeShortText），副标题不能再重复
+        // 同一段范围文本——改成「第N周」，N 按周一起始的自然周计数。
         XCTAssertEqual(rows[2].title, "9月7日–13日")
-        XCTAssertEqual(rows[2].subtitle, "9月7日–13日")
+        XCTAssertEqual(rows[2].subtitle, "第37周")
+        XCTAssertNotEqual(rows[2].title, rows[2].subtitle)
     }
 
     func testMonthTitlesAndSubtitles() throws {

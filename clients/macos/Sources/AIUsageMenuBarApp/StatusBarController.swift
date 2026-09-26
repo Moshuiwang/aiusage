@@ -21,6 +21,17 @@ enum MenuBarPopoverLayout {
         hostingController.sizingOptions = [.preferredContentSize]
         return hostingController
     }
+
+    /// #177 第三轮真机反馈：展开 Server 卡片会改变内容高度，进而改变
+    /// `NSHostingController.preferredContentSize`。`NSPopover.animates` 默认 true，
+    /// AppKit 会对这个尺寸变化做窗口级动画——动画期间会反复用中间尺寸向 SwiftUI 请求
+    /// relayout，相当于把整棵内容树（图表、额度环、全部 Server 卡片）在几百毫秒内重算好几遍，
+    /// 这就是真机上「展开非常慢」的根因。展开这类交互不需要弹窗级动画，直接关掉。
+    @MainActor
+    static func configure(_ popover: NSPopover) {
+        popover.behavior = .transient
+        popover.animates = false
+    }
 }
 
 @MainActor
@@ -84,7 +95,7 @@ final class StatusBarController: NSObject {
     }
 
     private func setupPopover() {
-        popover.behavior = .transient
+        MenuBarPopoverLayout.configure(popover)
         let hostingController = MenuBarPopoverLayout.makeHostingController(
             rootView: MenuBarPopoverView(model: model, onQuit: { [weak self] in
                 self?.quitFromPopover()
