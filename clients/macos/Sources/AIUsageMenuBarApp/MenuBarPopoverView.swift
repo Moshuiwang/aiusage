@@ -6,34 +6,32 @@ struct MenuBarPopoverView: View {
     @ObservedObject var model: MenuBarAppModel
     var onQuit: (() -> Void)?
     var onMore: (() -> Void)?
-    var onContentHeightChange: (() -> Void)?
-    @State private var contentHeight: CGFloat
-    @State private var hoveredBar: MenuTrendBar?
-    @State private var hoverLocation: CGPoint?
-    @State private var hoveredQuotaID: String?
     @State private var periodMenuOpen = false
-    @State private var expandedServerID: String?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorSchemeContrast) private var contrast
 
     init(
         model: MenuBarAppModel,
         onQuit: (() -> Void)? = nil,
-        onMore: (() -> Void)? = nil,
-        onContentHeightChange: (() -> Void)? = nil
+        onMore: (() -> Void)? = nil
     ) {
         self.model = model
         self.onQuit = onQuit
         self.onMore = onMore
-        self.onContentHeightChange = onContentHeightChange
-        let initialEstimate: CGFloat = model.hasLoadedUsableSummary ? 560 : 200
-        _contentHeight = State(initialValue: initialEstimate)
     }
 
     private var maxContentHeight: CGFloat {
         MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
     }
 
+    // 性能第二步：改用 NSHostingController.sizingOptions = [.preferredContentSize]（由
+    // StatusBarController 设置）让 Popover 跟随 SwiftUI 内容的理想尺寸，不再手工测量/回报高度。
+    // `ScrollView { content }.frame(maxHeight: maxContentHeight)` 在向 SwiftUI 询问「理想尺寸」
+    // （height 提议为 nil）时会先报告内容自身的自然高度——内容比 maxContentHeight 矮就直接贴合，
+    // 不留空白；只有内容超过 maxContentHeight 才会被这个 frame 夹到 maxContentHeight 并允许滚动。
+    // 实测过 ViewThatFits(先裸内容、超限才落回 ScrollView) 在真实内容（多 Server 卡片）逼近
+    // maxContentHeight 边界时不会被外层 frame(maxHeight:) 夹住（量出 935pt，上限 875pt）——
+    // 换成单一 ScrollView + frame(maxHeight:) 后同样场景稳定夹在上限内，见测试。
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -41,21 +39,12 @@ struct MenuBarPopoverView: View {
                 setupState
             } else {
                 ScrollView {
-                    mainContent.background(GeometryReader { geometry in
-                        Color.clear.preference(key: PopoverContentHeight.self, value: geometry.size.height)
-                    })
+                    mainContent
                 }
-                .frame(height: min(max(contentHeight, 200), maxContentHeight))
-                .onPreferenceChange(PopoverContentHeight.self) { height in
-                    guard height > 10 else { return }
-                    guard abs(contentHeight - height) > 0.5 else { return }
-                    contentHeight = height
-                    DispatchQueue.main.async { onContentHeightChange?() }
-                }
+                .frame(maxHeight: maxContentHeight)
             }
         }
         .frame(width: MenuBarPopoverLayout.width)
-        .fixedSize(horizontal: false, vertical: true)
         .modifier(PopoverGlassSurface(reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased))
     }
 
@@ -150,16 +139,11 @@ struct MenuBarPopoverView: View {
             }
 
             if !model.state.quotaRings.isEmpty {
-                quotaSection
+                MenuBarQuotaSectionView(rings: model.state.quotaRings)
             }
 
             if model.hasLoadedUsableSummary {
-                MenuBarUsageSectionView(
-                    model: model,
-                    periodMenuOpen: $periodMenuOpen,
-                    hoveredBar: $hoveredBar,
-                    hoverLocation: $hoverLocation
-                )
+                MenuBarUsageSectionView(model: model, periodMenuOpen: $periodMenuOpen)
             } else {
                 Text(model.isLoading ? "正在读取所选日期…" : "所选日期暂无可用数据")
                     .font(.callout).foregroundStyle(.secondary)
@@ -167,50 +151,18 @@ struct MenuBarPopoverView: View {
             }
 
             if !model.state.serverCards.isEmpty {
-                MenuBarServerListView(cards: model.state.serverCards, quotaHeader: model.state.serverModelQuotaHeader, expandedServerID: $expandedServerID)
+                MenuBarServerListView(cards: model.state.serverCards, quotaHeader: model.state.serverModelQuotaHeader)
             }
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 12)
-        .onChange(of: model.state.trendBars) { _, _ in
-            hoveredBar = nil; hoverLocation = nil
-        }
-    }
-
-    // MARK: – Quota section
-
-    private var quotaSection: some View {
-        HStack(alignment: .top, spacing: 6) {
-            ForEach(model.state.quotaRings) { ring in
-                // #177 Opus 审查：悬停浮层改用原生 .popover（独立窗口），不再靠手工 overlay + zIndex
-                // 定位——那样会被期间菜单等后方兄弟视图截断/遮挡。
-                MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(12)
-        .background(cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
-        )
     }
 
     // MARK: – Helpers
 
-    private var cardBackground: some ShapeStyle {
-        Color(nsColor: .windowBackgroundColor).opacity(reduceTransparency || contrast == .increased ? 1 : 0.55)
-    }
-
     private var secondaryTextColor: Color {
         Color(nsColor: .secondaryLabelColor)
     }
-}
-
-struct PopoverContentHeight: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 struct PopoverGlassSurface: ViewModifier {

@@ -13,15 +13,19 @@ final class MenuBarAppModelTests: XCTestCase {
             config: testConfig(),
             cachedSummary: try summary(periodID: "today", totalTokens: 349_100_000)
         )
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         let popover = NSPopover()
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+        let fittingHeight = hosting.view.fittingSize.height
+        XCTAssertGreaterThan(fittingHeight, 220, "first layout must include the period picker and summary, not just the header")
+        // 模拟 NSPopover 展示时按 preferredContentSize 提交实际尺寸——不这样提交，内部
+        // ScrollView 在没有真实窗口时永远量出 0 高度，测不出「内容确实渲染了」。
+        hosting.view.setFrameSize(NSSize(width: MenuBarPopoverLayout.width, height: fittingHeight))
+        hosting.view.layoutSubtreeIfNeeded()
 
-        XCTAssertGreaterThan(popover.contentSize.height, 220, "first layout must include the period picker and summary, not just the header")
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1, "the actual hosted popover must contain one scrollable content region")
         XCTAssertGreaterThan(scrollViews.first?.frame.height ?? 0, 120)
@@ -37,25 +41,25 @@ final class MenuBarAppModelTests: XCTestCase {
         let model = MenuBarAppModel(
             paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: summary
         )
+        // 性能第二步：不再有 onContentHeightChange 回调/手工二次测量——直接开
+        // sizingOptions，让 preferredContentSize 跟随 SwiftUI 内容的理想高度。
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         let popover = NSPopover()
-        var hosting: NSHostingController<MenuBarPopoverView>!
-        hosting = NSHostingController(rootView: MenuBarPopoverView(model: model, onContentHeightChange: {
-            hosting.view.layoutSubtreeIfNeeded()
-            popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
-        }))
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
         RunLoop.main.run(until: Date().addingTimeInterval(0.1))
         hosting.view.layoutSubtreeIfNeeded()
+        let fittingHeight = hosting.view.fittingSize.height
+        XCTAssertGreaterThan(fittingHeight, 220)
+        XCTAssertLessThanOrEqual(fittingHeight, (NSScreen.main?.visibleFrame.height ?? 800) + 1)
 
+        hosting.view.setFrameSize(NSSize(width: MenuBarPopoverLayout.width, height: fittingHeight))
+        hosting.view.layoutSubtreeIfNeeded()
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1)
         XCTAssertGreaterThan(scrollViews.first?.frame.height ?? 0, 120)
-        XCTAssertGreaterThan(popover.contentSize.height, 220)
-        XCTAssertLessThanOrEqual(popover.contentSize.height, (NSScreen.main?.visibleFrame.height ?? 800) + 1)
     }
 
     func testHostedPopoverInitialHeightProvidesFullViewportForLoadedSummary() throws {
@@ -68,7 +72,7 @@ final class MenuBarAppModelTests: XCTestCase {
             paths: try temporaryRuntimePaths(), config: testConfig(), cachedSummary: summary, now: { fixedDate }
         )
         XCTAssertTrue(model.hasLoadedUsableSummary)
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
@@ -86,13 +90,14 @@ final class MenuBarAppModelTests: XCTestCase {
             paths: try temporaryRuntimePaths(), config: testConfig(),
             cachedSummary: summary
         )
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
+        // 性能第二步：不再手工测量/设置 popover.contentSize——只开 sizingOptions，展示时交给
+        // NSPopover 自己读 preferredContentSize。
         let popover = NSPopover()
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
 
         let anchorWindow = NSWindow(
             contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
@@ -108,11 +113,18 @@ final class MenuBarAppModelTests: XCTestCase {
 
         XCTAssertTrue(popover.isShown)
         XCTAssertNotNil(hosting.view.window)
+        // 宽度恒为 360，与内容多少无关。
+        XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
+        let maxHeight = MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+        // 40 台 Server 的可滚动内容区必须被 frame(maxHeight:) 夹到上限——这条在生产代码里
+        // 去掉 `.frame(maxHeight: maxContentHeight)`（或把 maxContentHeight 传成 .infinity）
+        // 时会红：document.frame.height 会远超 maxHeight，下面这条断言直接失败。
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1)
         let scroll = try XCTUnwrap(scrollViews.first)
         let document = try XCTUnwrap(scroll.documentView)
         XCTAssertGreaterThan(scroll.frame.height, 120)
+        XCTAssertLessThanOrEqual(scroll.frame.height, maxHeight + 1)
         // 40 台 Server（即便折叠）必须比可视区高得多，才是这条测试要守护的"确实会溢出"场景。
         XCTAssertGreaterThan(document.frame.height, scroll.contentView.bounds.height + 50)
         let bottom = document.frame.height - scroll.contentView.bounds.height
@@ -128,13 +140,13 @@ final class MenuBarAppModelTests: XCTestCase {
             paths: try temporaryRuntimePaths(), config: testConfig(),
             cachedSummary: summary
         )
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         let popover = NSPopover()
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
         hosting.view.layoutSubtreeIfNeeded()
-        popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+        let fittingHeightBeforeShow = hosting.view.fittingSize.height
 
         let anchorWindow = NSWindow(
             contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
@@ -147,6 +159,16 @@ final class MenuBarAppModelTests: XCTestCase {
         defer { popover.close(); anchorWindow.close() }
         popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+
+        // 宽度恒为 360。
+        XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
+        let maxHeight = MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+        // 少内容：preferredContentSize.height 必须贴合内容理想高度（差 ≤2pt），且显著小于
+        // maxContentHeight——不强行撑到上限留白。hosting controller 取自生产工厂
+        // MenuBarPopoverLayout.makeHostingController；工厂不设 sizingOptions 时 preferredContentSize
+        // 停留在 .zero，下面第一条断言失败。
+        XCTAssertLessThanOrEqual(abs(hosting.preferredContentSize.height - fittingHeightBeforeShow), 2)
+        XCTAssertLessThan(hosting.preferredContentSize.height, maxHeight - 50)
 
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         let scroll = try XCTUnwrap(scrollViews.first)
@@ -194,18 +216,22 @@ final class MenuBarAppModelTests: XCTestCase {
             )], now: { now }, loadSummary: loader.load
         )
         let popover = NSPopover()
-        let hosting = NSHostingController(rootView: MenuBarPopoverView(model: model))
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
         popover.contentViewController = hosting
         hosting.loadViewIfNeeded()
         hosting.view.frame.size.width = MenuBarPopoverLayout.width
 
         func assertVisibleViewport(_ phase: String) {
             hosting.view.layoutSubtreeIfNeeded()
-            popover.contentSize = MenuBarPopoverLayout.size(contentHeight: hosting.view.fittingSize.height)
+            let fittingHeight = hosting.view.fittingSize.height
+            XCTAssertGreaterThan(fittingHeight, 220, phase)
+            // 模拟 NSPopover 展示时按 preferredContentSize 提交实际尺寸，才能量出内部
+            // ScrollView 的真实高度（没有真实窗口时它永远是 0）。
+            hosting.view.setFrameSize(NSSize(width: MenuBarPopoverLayout.width, height: fittingHeight))
+            hosting.view.layoutSubtreeIfNeeded()
             let scroll = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
             XCTAssertEqual(scroll.count, 1, phase)
             XCTAssertGreaterThan(scroll.first?.frame.height ?? 0, 120, phase)
-            XCTAssertGreaterThan(popover.contentSize.height, 220, phase)
         }
 
         assertVisibleViewport("first open without cached data")
@@ -227,7 +253,6 @@ final class MenuBarAppModelTests: XCTestCase {
     func testPopoverLayoutUsesMeasuredContentHeight() {
         // #177：Popover v2 定稿宽度收窄到 360pt（HANDOFF.md 第 3 节），预期值随设计变更更新。
         XCTAssertEqual(MenuBarPopoverLayout.width, 360)
-        XCTAssertEqual(MenuBarPopoverLayout.size(contentHeight: 642).height, 642)
         XCTAssertEqual(MenuBarPopoverLayout.maxContentHeight(screenHeight: 922), 874)
     }
 

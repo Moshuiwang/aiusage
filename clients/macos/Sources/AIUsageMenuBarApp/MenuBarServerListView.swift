@@ -2,10 +2,11 @@ import AIUsageMenuBarCore
 import SwiftUI
 
 /// #177：Server 卡片列表——中性配色，展开显示按 Agent 色点区分的模型明细。
+/// 性能第二步：expandedServerID 下沉到本视图自己持有，Popover 顶层不再持有展开状态。
 struct MenuBarServerListView: View {
     let cards: [MenuServerCard]
     let quotaHeader: String
-    @Binding var expandedServerID: String?
+    @State private var expandedServerID: String?
 
     var body: some View {
         VStack(spacing: 8) {

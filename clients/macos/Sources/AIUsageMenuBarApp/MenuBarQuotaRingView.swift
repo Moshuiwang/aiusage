@@ -1,6 +1,37 @@
 import AIUsageMenuBarCore
 import SwiftUI
 
+/// #177：额度条容器——横排若干个额度环。
+/// 性能第二步：hoveredQuotaID 下沉到本容器自己持有，Popover 顶层不再持有悬停状态。
+struct MenuBarQuotaSectionView: View {
+    let rings: [QuotaRingData]
+    @State private var hoveredQuotaID: String?
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            ForEach(rings) { ring in
+                // #177 Opus 审查：悬停浮层改用原生 .popover（独立窗口），不再靠手工 overlay + zIndex
+                // 定位——那样会被期间菜单等后方兄弟视图截断/遮挡。
+                MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(12)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.primary.opacity(0.07), lineWidth: 0.5)
+        )
+    }
+
+    private var cardBackground: some ShapeStyle {
+        Color(nsColor: .windowBackgroundColor).opacity(reduceTransparency || contrast == .increased ? 1 : 0.55)
+    }
+}
+
 /// #177：单环额度条——46pt 圆环，线宽 5，轨道 = 品牌色 16%，中心百分数；
 /// 不可用时同色虚线圆环 + "—" + "暂不可用"。悬停展示 7 天 / 5 小时两个窗口（用 .popover 呈现，
 /// 不与后方兄弟视图共用一层 zIndex，避免被截断/遮挡）。

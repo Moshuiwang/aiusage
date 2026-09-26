@@ -5,16 +5,15 @@ import SwiftUI
 struct MenuBarUsageSectionView: View {
     @ObservedObject var model: MenuBarAppModel
     @Binding var periodMenuOpen: Bool
-    @Binding var hoveredBar: MenuTrendBar?
-    @Binding var hoverLocation: CGPoint?
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var menuMode: String = "week"
     @State private var showDatePicker = false
     @State private var pickedDate = Date()
     // #177 Opus 审查：periodMenuRows 会读盘（内存/磁盘缓存），不能放在 body 里当计算属性用——
-    // 悬停柱状图时 hoveredBar/hoverLocation 变化会触发本视图重渲染，body 里的计算属性会跟着
-    // 反复调用。改成只在 selection 变化时算一次的缓存，菜单列表只在打开菜单时才计算。
+    // 改成只在 selection 变化时算一次的缓存，菜单列表只在打开菜单时才计算。
+    // 性能第二步：hoveredBar/hoverLocation 已下沉到 MenuBarTrendChartView 自己持有，
+    // 本视图不再持有也不再传递这两个 Binding。
     @State private var cachedCurrentRow: PeriodMenuRow?
     @State private var cachedMenuRows: [PeriodMenuRow] = []
 
@@ -71,9 +70,7 @@ struct MenuBarUsageSectionView: View {
                 bars: model.state.trendBars,
                 legendTotals: model.state.trendLegendTotals,
                 ceilingFraction: model.state.trendCeilingFraction,
-                ceilingText: model.state.trendRefCeilingText,
-                hoveredBar: $hoveredBar,
-                hoverLocation: $hoverLocation
+                ceilingText: model.state.trendRefCeilingText
             )
         }
         .padding(12)

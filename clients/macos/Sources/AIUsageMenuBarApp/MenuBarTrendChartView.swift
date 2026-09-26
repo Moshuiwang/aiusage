@@ -2,13 +2,15 @@ import AIUsageMenuBarCore
 import SwiftUI
 
 /// #177：按 Agent 堆叠的趋势柱状图——顶部虚线参考线 + 最大值标签，悬停联动图例。
+/// 性能第二步：hoveredBar 下沉到本视图自己持有（SwiftUI 官方建议：状态放在消费它的最小
+/// 子视图），鼠标移动不再写 Popover 顶层 @State 触发整棵树重求值。hoverLocation 只服务过
+/// 已删除的柱上小浮层，随之一起删除。
 struct MenuBarTrendChartView: View {
     let bars: [MenuTrendBar]
     let legendTotals: [MenuTrendSegment]
     let ceilingFraction: Double
     let ceilingText: String
-    @Binding var hoveredBar: MenuTrendBar?
-    @Binding var hoverLocation: CGPoint?
+    @State private var hoveredBar: MenuTrendBar?
 
     private let chartHeight: CGFloat = 92
 
@@ -50,10 +52,11 @@ struct MenuBarTrendChartView: View {
                 .onContinuousHover { phase in
                     switch phase {
                     case .active(let loc):
-                        hoverLocation = loc
-                        hoveredBar = MenuTrendSelection.nearestBar(in: bars, xLocation: Double(loc.x), width: Double(geo.size.width))
+                        let nearest = MenuTrendSelection.nearestBar(in: bars, xLocation: Double(loc.x), width: Double(geo.size.width))
+                        // 鼠标在同一根柱子内移动时 nearest 不变——不写 state，避免无效刷新。
+                        if hoveredBar?.id != nearest?.id { hoveredBar = nearest }
                     case .ended:
-                        hoveredBar = nil; hoverLocation = nil
+                        hoveredBar = nil
                     }
                 }
             }
@@ -71,6 +74,7 @@ struct MenuBarTrendChartView: View {
 
             legendRow
         }
+        .onChange(of: bars) { _, _ in hoveredBar = nil }
     }
 
     private func dimmed(_ bar: MenuTrendBar) -> Bool {

@@ -8,17 +8,18 @@ enum MenuBarPopoverLayout {
     /// #177：Popover v2 定稿宽度（HANDOFF.md 第 3 节），从旧版 380pt 收窄到设计值 360pt。
     static let width: CGFloat = 360
     static let bottomMargin: CGFloat = 48
-    static let minContentHeight: CGFloat = 200
 
     static func maxContentHeight(screenHeight: CGFloat?) -> CGFloat {
         let baseHeight = screenHeight ?? 800
         return max(320, baseHeight - bottomMargin)
     }
 
-    static func size(contentHeight: CGFloat, screenHeight: CGFloat? = nil) -> NSSize {
-        let maxHeight = maxContentHeight(screenHeight: screenHeight)
-        let clampedHeight = min(max(contentHeight, 1), maxHeight)
-        return NSSize(width: width, height: clampedHeight)
+    /// Popover 内容的 hosting controller：交给系统按 SwiftUI 理想尺寸维护 preferredContentSize。
+    @MainActor
+    static func makeHostingController(rootView: MenuBarPopoverView) -> NSHostingController<MenuBarPopoverView> {
+        let hostingController = NSHostingController(rootView: rootView)
+        hostingController.sizingOptions = [.preferredContentSize]
+        return hostingController
     }
 }
 
@@ -84,20 +85,17 @@ final class StatusBarController: NSObject {
 
     private func setupPopover() {
         popover.behavior = .transient
-        let hostingController = NSHostingController(
+        let hostingController = MenuBarPopoverLayout.makeHostingController(
             rootView: MenuBarPopoverView(model: model, onQuit: { [weak self] in
                 self?.quitFromPopover()
             }, onMore: { [weak self] in
                 self?.showMoreMenu()
-            }, onContentHeightChange: { [weak self] in
-                self?.updatePopoverSize()
             })
         )
         hostingController.view.wantsLayer = true
         hostingController.view.layer?.backgroundColor = NSColor.clear.cgColor
         popoverHostingController = hostingController
         popover.contentViewController = hostingController
-        updatePopoverSize()
     }
 
     func quitFromPopover() {
@@ -109,15 +107,6 @@ final class StatusBarController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.updateStatusItemPresentation()
-            }
-            .store(in: &cancellables)
-
-        model.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.updatePopoverSize()
-                }
             }
             .store(in: &cancellables)
 
@@ -149,20 +138,6 @@ final class StatusBarController: NSObject {
                 self.model.prefetchCommonPeriods()
             }
         }
-    }
-
-    private func updatePopoverSize() {
-        guard let hostingController = popoverHostingController else {
-            return
-        }
-        hostingController.loadViewIfNeeded()
-        hostingController.view.frame.size.width = MenuBarPopoverLayout.width
-        hostingController.view.layoutSubtreeIfNeeded()
-        let fittingHeight = hostingController.view.fittingSize.height
-        let screenHeight = hostingController.view.window?.screen?.visibleFrame.height ?? NSScreen.main?.visibleFrame.height
-        let size = MenuBarPopoverLayout.size(contentHeight: fittingHeight, screenHeight: screenHeight)
-        hostingController.view.setFrameSize(size)
-        popover.contentSize = size
     }
 
     private func configurePopoverWindow() {
@@ -241,7 +216,6 @@ final class StatusBarController: NSObject {
             popover.performClose(sender)
         } else {
             model.refresh()
-            updatePopoverSize()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             configurePopoverWindow()
             popover.contentViewController?.view.window?.makeKey()
