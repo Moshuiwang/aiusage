@@ -120,35 +120,4 @@ public enum ModelQuotaEstimator: Sendable {
 
         return nil
     }
-
-    /// 估算模型 Token 对应的周额度百分比文本（旧文本 API，基于 `estimateWeeklyQuota` 的薄包装）。
-    /// - Returns: 格式化的周额度百分比文本，例如 "约占周额度 2.4%"
-    public static func estimateWeeklyQuotaPercentText(
-        modelID: String,
-        label: String = "",
-        agentID: String = "",
-        tokens: Int
-    ) -> String? {
-        guard let estimate = estimateWeeklyQuota(modelID: modelID, label: label, agentID: agentID, tokens: tokens) else {
-            return nil
-        }
-        if let dedicatedPercent = estimate.dedicatedPercent {
-            return formatFablePercent(mainPercent: estimate.percent, dedicatedPercent: dedicatedPercent)
-        }
-        return formatPercent(estimate.percent)
-    }
-
-    private static func formatPercent(_ percent: Double) -> String {
-        if percent < 0.05 {
-            return "约占周额度 < 0.1%"
-        } else {
-            return String(format: "约占周额度 %.1f%%", percent)
-        }
-    }
-
-    private static func formatFablePercent(mainPercent: Double, dedicatedPercent: Double) -> String {
-        let mainStr = mainPercent < 0.05 ? "< 0.1%" : String(format: "%.1f%%", mainPercent)
-        let dedicatedStr = dedicatedPercent < 0.05 ? "< 0.1%" : String(format: "%.0f%%", dedicatedPercent)
-        return "约占周额度 \(mainStr) (专属约 \(dedicatedStr))"
-    }
 }

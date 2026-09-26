@@ -8,15 +8,13 @@ public struct MenuBarState: Equatable, Sendable {
     public let tokenBreakdownText: String
     public let healthText: String
     public let primaryLimitText: String
-    public let lastUpdatedText: String
+    /// #177：标题栏副标题用的钟表时间「HH:mm 更新」（跨天为「MM-dd HH:mm 更新」）。
+    public let headerUpdatedText: String
     public let trendBars: [MenuTrendBar]
     /// #176：按 Agent 汇总所有（非未来）柱的分段 tokens，顺序 claude → codex → antigravity → unknown，0 的省略。
     public let trendLegendTotals: [MenuTrendSegment]
     public let trendRefCeilingText: String
     public let trendCeilingFraction: Double
-    public let trendMidFraction: Double
-    public let trendMidText: String
-    public let sources: [MenuDisplayRow]
     public let limitRows: [MenuDisplayRow]
     public let breakdownSections: [MenuDisplaySection]
     public let quotaRings: [QuotaRingData]
@@ -133,28 +131,43 @@ public enum AgentBranding {
 public struct QuotaRingData: Equatable, Sendable, Identifiable {
     public let id: String
     public let displayName: String
-    public let outerRed: Double; public let outerGreen: Double; public let outerBlue: Double
-    public let innerRed: Double; public let innerGreen: Double; public let innerBlue: Double
-    public let outerFraction: Double
-    public let innerFraction: Double
+    /// #177：单环视图用的主窗口填充比例（周窗口优先，否则 session 窗口；不可用时 0）——
+    /// 与 primaryPctText 同口径，供新版单环圆环绘制。
+    public let primaryFraction: Double
     public let outerPctText: String
     public let innerPctText: String
     public let outerTimeText: String
     public let innerTimeText: String
     public let outerLabel: String
     public let innerLabel: String
-    public let sourceText: String
     public let updatedText: String
     public let availabilityText: String
-    public let usageText: String
     /// 固定品牌色，不随用量高低变化。
     public let brandColor: MenuTrendColor
-    /// 周窗口优先，否则 session 窗口；不可用时 "—"。
+    /// 周窗口优先，否则 session 窗口；不可用时 "—"。带 % 后缀，仅供文本整体展示。
     public let primaryPctText: String
+    /// #177：不带 % 的主窗口占比数字（如 "26"），不可用时 "—"——视图拼一次单独字号的 %，
+    /// 避免 primaryPctText 已带 % 时再次拼接出「26%%」。
+    public let primaryPctNumberText: String
     /// 所有可见窗口中最近一次重置的倒计时（如 "3d 23h"），不可用时 "--"。
     public let resetCountdownText: String
     /// 仅当官方观测且状态正常的窗口存在时为 true。
     public let isAvailable: Bool
+    /// #177：悬停浮层用的行数据。isAvailable=false 时不含任何百分比——只显示降级状态说明与更新时间，
+    /// 不能把「最近成功值」窗口残留的旧百分比泄露到浮层里。
+    public let hoverRows: [QuotaHoverRow]
+}
+
+/// #177：额度条悬停浮层的一行（标签 + 值文本）。
+public struct QuotaHoverRow: Equatable, Sendable, Identifiable {
+    public var id: String { label }
+    public let label: String
+    public let valueText: String
+
+    public init(label: String, valueText: String) {
+        self.label = label
+        self.valueText = valueText
+    }
 }
 
 public struct MenuTrendBar: Equatable, Sendable, Identifiable {
@@ -212,37 +225,6 @@ public enum MenuTrendProvider: String, CaseIterable, Equatable, Sendable {
     }
 }
 
-public struct MenuFlatModelRow: Equatable, Sendable, Identifiable {
-    public let id: String
-    public let modelID: String
-    public let label: String
-    public let agentID: String
-    public let tokens: Int
-    public let status: String
-    public let quotaWeeklyPercentText: String?
-
-    public init(
-        id: String,
-        modelID: String,
-        label: String,
-        agentID: String,
-        tokens: Int,
-        status: String,
-        quotaWeeklyPercentText: String? = nil
-    ) {
-        self.id = id
-        self.modelID = modelID
-        self.label = label
-        self.agentID = agentID
-        self.tokens = tokens
-        self.status = status
-        self.quotaWeeklyPercentText = quotaWeeklyPercentText
-    }
-
-    public var title: String { status == "missing" ? "模型未知" : label }
-    public var valueText: String { TokenFormat.compact(tokens) }
-}
-
 public struct MenuDisplayRow: Equatable, Sendable, Identifiable {
     public let id: String
     public let title: String
@@ -250,8 +232,6 @@ public struct MenuDisplayRow: Equatable, Sendable, Identifiable {
     public let value: String
     public let status: String
     public let platform: String?
-    public let agents: [MobileSourceAgent]?
-    public let flatModels: [MenuFlatModelRow]?
 
     public init(
         id: String,
@@ -259,14 +239,10 @@ public struct MenuDisplayRow: Equatable, Sendable, Identifiable {
         subtitle: String,
         value: String,
         status: String,
-        platform: String? = nil,
-        agents: [MobileSourceAgent]? = nil,
-        flatModels: [MenuFlatModelRow]? = nil
+        platform: String? = nil
     ) {
         self.id = id; self.title = title; self.subtitle = subtitle
         self.value = value; self.status = status; self.platform = platform
-        self.agents = agents
-        self.flatModels = flatModels
     }
 }
 
@@ -305,7 +281,6 @@ public enum MenuBarViewModel {
             .filter { !isFutureBucket($0.bucket, granularity: summary.trend.granularity, now: now, timezone: summary.timezone) }
             .map(\.tokens).max() ?? 0
         let ceiling = maxTokens > 0 ? ceilingValue(maxTokens) : 1
-        let midVal = midlineValue(ceiling: ceiling)
 
         let cards = serverCards(
             summary.breakdown,
@@ -323,14 +298,10 @@ public enum MenuBarViewModel {
             periodLabel: selectedOffset == 0 ? periodLabel(selectedPeriodID) : (selectedPeriodID == "today" ? "历史日期" : selectedPeriodID == "week" ? "历史周" : "历史月"),
             dateRangeText: dateRangeText(summary.period),
             heroTotalText: tokenText,
-            tokenBreakdownText: [
-                "输入 \(TokenFormat.compact(summary.period.inputTokens))",
-                "输出 \(TokenFormat.compact(summary.period.outputTokens))",
-                "Cache \(TokenFormat.compact(summary.period.cacheTokens))",
-            ].joined(separator: " · "),
+            tokenBreakdownText: tokenBreakdownText(summary.period),
             healthText: healthText(okCount: okCount, total: summary.sources.count, problemCount: problemCount),
             primaryLimitText: primaryLimitText(primaryLimit),
-            lastUpdatedText: latestDataText(summary.sources, fallback: summary.generatedAt, timezone: summary.timezone),
+            headerUpdatedText: headerUpdatedText(summary.sources, fallback: summary.generatedAt, now: now),
             trendBars: bars,
             trendLegendTotals: aggregatedSegments(
                 summary.trend.points.filter { point in
@@ -339,9 +310,6 @@ public enum MenuBarViewModel {
             ),
             trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
-            trendMidFraction: maxTokens > 0 && midVal > 0 ? Double(midVal) / Double(ceiling) : 0,
-            trendMidText: maxTokens > 0 && midVal > 0 ? ceilingText(midVal) : "",
-            sources: sourceRows(summary.sources, breakdown: summary.breakdown, generatedAt: summary.generatedAt, machineAliases: machineAliases),
             limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(from: quotaDisplaySlots, now: now),
@@ -398,26 +366,24 @@ public enum MenuBarViewModel {
         return "用量归属不完整：部分用量未归属到 Claude/Codex"
     }
 
-    private static func timeText(_ generatedAt: String?, timezone: String?) -> String {
-        guard let generatedAt else { return "--" }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        var date = formatter.date(from: generatedAt)
-        if date == nil {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: generatedAt)
-        }
-        guard let d = date else { return "--" }
-        let elapsed = Int(-d.timeIntervalSinceNow)
-        if elapsed < 60 { return "刚刚" }
-        if elapsed < 3600 { return "\(elapsed / 60) 分钟前" }
-        if elapsed < 86400 { return "\(elapsed / 3600) 小时前" }
-        return "\(elapsed / 86400) 天前"
+    /// #177：标题栏副标题用的钟表时间「HH:mm 更新」（同日）或「MM-dd HH:mm 更新」（跨天）。
+    private static func headerUpdatedText(_ sources: [MobileSource], fallback: String?, now: Date) -> String {
+        let latest = sources.compactMap { $0.lastObservedAt }.max()
+        let nowRef = ISO8601DateFormatter().string(from: now)
+        return compactDateTime(latest ?? fallback, reference: nowRef, suffix: "更新") ?? "--"
     }
 
-    private static func latestDataText(_ sources: [MobileSource], fallback: String?, timezone: String?) -> String {
-        let latest = sources.compactMap { $0.lastObservedAt }.max()
-        return timeText(latest ?? fallback, timezone: timezone)
+    /// #177：用量区总量下方的分项文案，缓存段用命中率百分比而不是原始 token 数。
+    private static func tokenBreakdownText(_ period: MobilePeriod) -> String {
+        let total = max(period.totalTokens, 0)
+        let cacheTokens = min(max(period.cacheTokens, 0), max(total, 0))
+        let cacheRate = total > 0 ? Double(cacheTokens) / Double(total) * 100 : 0
+        let cacheText = String(format: "%.1f%%", locale: Locale(identifier: "en_US_POSIX"), cacheRate)
+        return [
+            "输入 \(TokenFormat.compact(period.inputTokens))",
+            "输出 \(TokenFormat.compact(period.outputTokens))",
+            "缓存命中 \(cacheText)",
+        ].joined(separator: " · ")
     }
 
     static func trendBars(_ trend: MobileTrend, now: Date, timezone: String?) -> [MenuTrendBar] {
@@ -572,97 +538,6 @@ public enum MenuBarViewModel {
         }
 
         return cleaned
-    }
-
-    public static func formatSourceTitle(label: String, machine: String?, aliases: [String: String]? = nil) -> String {
-        if let rawMachine = machine, !rawMachine.isEmpty {
-            let prettyMachine = formatMachineName(rawMachine, aliases: aliases)
-            if prettyMachine != rawMachine && label.contains(rawMachine) {
-                return label.replacingOccurrences(of: rawMachine, with: prettyMachine)
-            }
-        }
-        if let alias = aliases?[label], !alias.isEmpty {
-            return alias
-        }
-        if label.contains(" / ") {
-            let parts = label.components(separatedBy: " / ")
-            if parts.count == 2 {
-                let user = parts[0]
-                let mac = formatMachineName(parts[1], aliases: aliases)
-                return "\(user) / \(mac)"
-            }
-        }
-        if let alias = aliases?[label], !alias.isEmpty {
-            return alias
-        }
-        return label
-    }
-
-    private static func sourceRows(
-        _ sources: [MobileSource],
-        breakdown: MobileBreakdown,
-        generatedAt: String?,
-        machineAliases: [String: String]? = nil
-    ) -> [MenuDisplayRow] {
-        if let rows = breakdown.bySource {
-            let metadata = Dictionary(sources.map { ($0.sourceID, $0) }, uniquingKeysWith: { first, _ in first })
-            return rows.map { row in
-                let source = metadata[row.id]
-                let time = compactDateTime(source?.lastObservedAt ?? source?.lastPushedAt, reference: generatedAt, suffix: "更新") ?? "未上报"
-                let rawMachine = row.machine ?? source?.machine ?? ""
-                let prettyMachine = formatMachineName(rawMachine, aliases: machineAliases)
-                let subtitle = [prettyMachine, source?.platform ?? "", time].filter { !$0.isEmpty }.joined(separator: " · ")
-                let title = formatSourceTitle(label: row.label, machine: row.machine ?? source?.machine, aliases: machineAliases)
-
-                var flatModels: [MenuFlatModelRow] = []
-                if let agents = row.agents {
-                    for agent in agents {
-                        for model in agent.models {
-                            let quotaWeekly = ModelQuotaEstimator.estimateWeeklyQuotaPercentText(
-                                modelID: model.id,
-                                label: model.label,
-                                agentID: agent.id,
-                                tokens: model.tokens
-                            )
-                            flatModels.append(MenuFlatModelRow(
-                                id: "\(row.id)/\(agent.id)/\(model.id)",
-                                modelID: model.id,
-                                label: model.label,
-                                agentID: agent.id,
-                                tokens: model.tokens,
-                                status: model.status,
-                                quotaWeeklyPercentText: quotaWeekly
-                            ))
-                        }
-                    }
-                }
-                flatModels.sort { $0.tokens > $1.tokens }
-
-                return MenuDisplayRow(
-                    id: row.id,
-                    title: title,
-                    subtitle: subtitle,
-                    value: TokenFormat.compact(row.tokens),
-                    status: source?.status ?? "unknown",
-                    platform: source?.platform,
-                    agents: row.agents,
-                    flatModels: flatModels
-                )
-            }
-        }
-        let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
-        return rows.map { row in
-            let title = formatSourceTitle(label: row.label, machine: nil, aliases: machineAliases)
-            return MenuDisplayRow(
-                id: row.id,
-                title: title,
-                subtitle: "来源明细缺失",
-                value: TokenFormat.compact(row.tokens),
-                status: "missing",
-                agents: nil,
-                flatModels: nil
-            )
-        }
     }
 
     // MARK: - #175 Server 卡片（按机器分组）
@@ -955,22 +830,13 @@ public enum MenuBarViewModel {
                 .sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
                 .first
             let outerWindow = sessionWindow ?? otherWindow
-            let selectedSourceID = wins.map(\.sourceID).first
-            let sourceID = slot.quota.sourceID ?? selectedSourceID
             let verifiedAt = slot.quota.lastVerifiedAt ?? wins.compactMap(\.observedAt).max()
-            let (name, oR, oG, oB, iR, iG, iB): (String, Double, Double, Double, Double, Double, Double)
+            let name: String
             switch provider {
-            case "claude":
-                name = "Claude"; oR = 0.855; oG = 0.467; oB = 0.337; iR = 0.918; iG = 0.659; iB = 0.510
-            case "codex":
-                name = "Codex"
-                oR = 0.039; oG = 0.518; oB = 1.0; iR = 0.353; iG = 0.784; iB = 0.980
-            case "antigravity":
-                name = "Antigravity"
-                oR = 0.259; oG = 0.522; oB = 0.957; iR = 0.400; iG = 0.650; iB = 1.0
-            default:
-                name = provider.prefix(1).uppercased() + provider.dropFirst()
-                oR = 0.200; oG = 0.600; oB = 0.800; iR = 0.400; iG = 0.750; iB = 0.900
+            case "claude": name = "Claude"
+            case "codex": name = "Codex"
+            case "antigravity": name = "Antigravity"
+            default: name = provider.prefix(1).uppercased() + provider.dropFirst()
             }
             let hasVisibleWindow = outerWindow != nil || weekWindow != nil
             // 「最近成功值」（quota 非 available 但保留了旧窗口）也必须降级，不当可信额度展示。
@@ -984,57 +850,62 @@ public enum MenuBarViewModel {
                     return (window, reset)
                 }
                 .min { $0.1 < $1.1 }?.0
+            let availabilityTextValue = quotaAvailabilityText(slot.quota, hasVisibleWindow: hasVisibleWindow)
+            let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: "更新") ?? "未更新"
+            // #177：浮层不得泄露「最近成功值」残留的旧百分比——isAvailable=false 时只给状态说明 + 更新时间，
+            // 不能沿用 outerPctText/innerPctText（它们对 isHistorical 的 quota 仍可能带着旧窗口的百分比）。
+            let hoverRows: [QuotaHoverRow]
+            if isAvailable {
+                hoverRows = [
+                    QuotaHoverRow(
+                        label: weekWindow.map(windowLabel) ?? "长期",
+                        valueText: [
+                            weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
+                            weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                        ].joined(separator: " · ")
+                    ),
+                    QuotaHoverRow(
+                        label: outerWindow.map(windowLabel) ?? "额度",
+                        valueText: [
+                            outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
+                            outerWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                        ].joined(separator: " · ")
+                    ),
+                ]
+            } else {
+                hoverRows = [
+                    QuotaHoverRow(
+                        label: "状态",
+                        valueText: [
+                            availabilityTextValue.isEmpty ? "暂不可用" : availabilityTextValue,
+                            updatedTextValue,
+                        ].joined(separator: " · ")
+                    )
+                ]
+            }
             return QuotaRingData(
                 id: provider, displayName: name,
-                outerRed: oR, outerGreen: oG, outerBlue: oB,
-                innerRed: iR, innerGreen: iG, innerBlue: iB,
-                outerFraction: (outerWindow?.usedPercent ?? 0) / 100.0,
-                innerFraction: (weekWindow?.usedPercent ?? 0) / 100.0,
+                primaryFraction: (primaryWindow?.usedPercent ?? 0) / 100.0,
                 outerPctText: outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
                 innerPctText: weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
                 outerTimeText: outerWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 outerLabel: outerWindow.map(windowLabel) ?? "额度",
                 innerLabel: weekWindow.map(windowLabel) ?? "长期",
-                sourceText: sourceText(provider: provider, sourceID: sourceID),
-                updatedText: compactDateTime(
-                    verifiedAt,
-                    reference: reference,
-                    suffix: "更新"
-                ) ?? "未更新",
-                availabilityText: quotaAvailabilityText(
-                    slot.quota,
-                    hasVisibleWindow: hasVisibleWindow
-                ),
-                usageText: usageText(slot.usage),
+                updatedText: updatedTextValue,
+                availabilityText: availabilityTextValue,
                 brandColor: brandColor(for: provider),
                 primaryPctText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
+                primaryPctNumberText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))" } ?? "—",
                 resetCountdownText: nearestResetWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
-                isAvailable: isAvailable
+                isAvailable: isAvailable,
+                hoverRows: hoverRows
             )
         }
     }
 
     private static func brandColor(for provider: String) -> MenuTrendColor {
         AgentBranding.color(for: provider)
-    }
-
-    private static func usageText(_ usage: MobileProviderUsage) -> String {
-        guard usage.status == "available" else {
-            return "用量不可用"
-        }
-        let totalTokens = max(usage.totalTokens, 0)
-        guard totalTokens > 0 else {
-            return "用量 0"
-        }
-        let cacheTokens = min(max(usage.cacheTokens, 0), totalTokens)
-        let cacheRate = Double(cacheTokens) / Double(totalTokens) * 100
-        let cacheText = String(
-            format: "%.1f%%",
-            locale: Locale(identifier: "en_US_POSIX"),
-            cacheRate
-        )
-        return "用量 \(TokenFormat.compact(totalTokens)) · \(cacheText)"
     }
 
     private static func quotaAvailabilityText(
@@ -1077,15 +948,6 @@ public enum MenuBarViewModel {
         if minutes > 0 && minutes % 60 == 0 { return "\(minutes / 60)h" }
         if minutes > 0 { return "\(minutes)m" }
         return window.window
-    }
-
-    private static func sourceText(provider: String, sourceID: String?) -> String {
-        if let sourceID, let range = sourceID.range(of: "biai-", options: .caseInsensitive) {
-            let account = String(sourceID[range.upperBound...])
-            return account.isEmpty ? "BIAI" : "BIAI · \(account)"
-        }
-        if provider == "antigravity" { return "Antigravity 官方" }
-        return provider == "codex" ? "Codex 官方" : "Claude 官方"
     }
 
     private static func isSessionLimitWindow(_ window: MobileLimitWindow) -> Bool {
@@ -1132,15 +994,6 @@ public enum MenuBarViewModel {
                      100_000_000, 200_000_000, 500_000_000,
                      1_000_000_000, 2_000_000_000, 5_000_000_000]
         return tiers.first { $0 > maxTokens } ?? (maxTokens * 2)
-    }
-
-    private static func midlineValue(ceiling: Int) -> Int {
-        let tiers = [1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000, 200_000, 500_000,
-                     1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000, 50_000_000,
-                     100_000_000, 200_000_000, 500_000_000,
-                     1_000_000_000, 2_000_000_000, 5_000_000_000]
-        let half = ceiling / 2
-        return tiers.last { $0 <= half } ?? 0
     }
 
     private static func ceilingText(_ ceiling: Int) -> String {

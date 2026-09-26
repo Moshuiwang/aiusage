@@ -104,13 +104,6 @@ final class MenuBarAppModel: ObservableObject {
         config != nil
     }
 
-    var dashboardURL: URL? {
-        guard let value = config?.dashboardURL ?? config?.serverURL else {
-            return nil
-        }
-        return URL(string: value)
-    }
-
     var selection: MenuPeriodSelection { MenuPeriodSelection(periodID: selectedPeriodID, offset: selectedOffset) }
 
     /// #176：期间菜单展开数据——只读已有缓存（内存优先，磁盘退路），绝不调用 loadSummary / 发网络请求。
@@ -136,12 +129,6 @@ final class MenuBarAppModel: ObservableObject {
             selectedPeriodID: "today",
             machineAliases: config?.machineAliases
         )
-    }
-
-    func movePeriod(_ delta: Int) {
-        let next = selection.moving(delta)
-        guard next != selection else { return }
-        refresh(offset: next.offset)
     }
 
     func refresh(periodID: String? = nil, offset: Int? = nil, force: Bool = false) {

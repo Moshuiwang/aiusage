@@ -4,7 +4,8 @@ import Combine
 import SwiftUI
 
 enum MenuBarPopoverLayout {
-    static let width: CGFloat = 380
+    /// #177：Popover v2 定稿宽度（HANDOFF.md 第 3 节），从旧版 380pt 收窄到设计值 360pt。
+    static let width: CGFloat = 360
     static let bottomMargin: CGFloat = 48
     static let minContentHeight: CGFloat = 200
 

@@ -54,7 +54,6 @@ final class ProviderSlotViewModelTests: XCTestCase {
 
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
-        XCTAssertEqual(codex.usageText, "用量不可用")
         XCTAssertEqual(codex.outerPctText, "--")
         XCTAssertEqual(codex.innerPctText, "--")
         XCTAssertEqual(codex.outerTimeText, "--")
@@ -86,13 +85,11 @@ final class ProviderSlotViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.usageText, "用量 3.1K · 9.7%")
         XCTAssertEqual(claude.innerPctText, "78%")
         XCTAssertNotEqual(claude.innerTimeText, "--")
         XCTAssertEqual(claude.availabilityText, "")
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
-        XCTAssertEqual(codex.usageText, "用量 1.6K · 6.2%")
         XCTAssertEqual(codex.outerPctText, "43%")
         XCTAssertNotEqual(codex.outerTimeText, "--")
         XCTAssertNil(state.providerUsageCoverageText)
@@ -107,7 +104,6 @@ final class ProviderSlotViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.usageText, "用量 3.1K · 9.7%")
         XCTAssertEqual(claude.outerPctText, "--")
         XCTAssertEqual(claude.innerPctText, "--")
         XCTAssertEqual(claude.outerTimeText, "--")
@@ -126,7 +122,6 @@ final class ProviderSlotViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.usageText, "用量不可用")
         XCTAssertEqual(claude.innerPctText, "78%")
         XCTAssertNotEqual(claude.innerTimeText, "--")
     }
@@ -140,12 +135,10 @@ final class ProviderSlotViewModelTests: XCTestCase {
         )
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.usageText, "用量不可用")
         XCTAssertEqual(claude.outerPctText, "--")
         XCTAssertEqual(claude.innerPctText, "--")
         XCTAssertEqual(claude.outerTimeText, "--")
         XCTAssertEqual(claude.innerTimeText, "--")
-        XCTAssertFalse(claude.usageText.contains("0"))
         XCTAssertFalse(claude.outerPctText.contains("0%"))
         XCTAssertFalse(claude.innerPctText.contains("100%"))
     }
@@ -305,7 +298,6 @@ final class ProviderSlotViewModelTests: XCTestCase {
 
         XCTAssertEqual(ring.outerPctText, "--")
         XCTAssertEqual(ring.innerPctText, "20%")
-        XCTAssertEqual(ring.sourceText, "BIAI · source-b")
     }
 
     func testEveryOwnerScenarioKeepsFixedSlotsAndShowsLastSuccessfulQuota() throws {

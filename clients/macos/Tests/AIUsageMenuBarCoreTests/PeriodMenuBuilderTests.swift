@@ -33,6 +33,80 @@ final class PeriodMenuBuilderTests: XCTestCase {
         XCTAssertEqual(rows.map(\.selection.offset), [0, -1, -2, -3, -4, -5])
     }
 
+    // #177：「选择其他日期…」把 DatePicker 选中日期换算成当前粒度 offset。
+    func testOffsetForDateConvertsDayWeekMonthGranularities() throws {
+        let now = try date(fixedNowISO)
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-09-24T00:00:00+08:00"), periodID: "today", now: now, timezone: "Asia/Shanghai"),
+            -2
+        )
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-09-14T00:00:00+08:00"), periodID: "week", now: now, timezone: "Asia/Shanghai"),
+            -1
+        )
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-08-15T00:00:00+08:00"), periodID: "month", now: now, timezone: "Asia/Shanghai"),
+            -1
+        )
+    }
+
+    // #177 Opus 审查追加：未来日期一律裁到 0（今天/本周/本月），不能算出正的未来 offset。
+    func testOffsetForDateClampsFutureDatesToZero() throws {
+        let now = try date(fixedNowISO) // 2026-09-26（周六）
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-09-27T00:00:00+08:00"), periodID: "today", now: now, timezone: "Asia/Shanghai"),
+            0
+        )
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-10-05T00:00:00+08:00"), periodID: "week", now: now, timezone: "Asia/Shanghai"),
+            0
+        )
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-12-01T00:00:00+08:00"), periodID: "month", now: now, timezone: "Asia/Shanghai"),
+            0
+        )
+    }
+
+    // #177 Opus 审查追加：周从周一开始，选中「周日」必须归到上一个周一开始的那一周，不是下一周。
+    func testOffsetForDateSundayBelongsToWeekStartingPriorMonday() throws {
+        let now = try date(fixedNowISO) // 周六 2026-09-26，本周一是 2026-09-21
+        // 2026-09-20 是周日，属于 09-14（周一）～09-20（周日）那一周，与直接选 09-14 结果一致（-1）。
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2026-09-20T00:00:00+08:00"), periodID: "week", now: now, timezone: "Asia/Shanghai"),
+            -1
+        )
+    }
+
+    // #177 Opus 审查追加：月份差跨年份边界要正确计入年份差，不能只比较月份数字。
+    func testOffsetForDateMonthDiffCrossesYearBoundary() throws {
+        let now = try date(fixedNowISO) // 2026-09-26
+        // 2025-09-01 到 2026-09-26：跨一个整年，应为 12 个月前。
+        XCTAssertEqual(
+            PeriodMenuBuilder.offset(forDate: try date("2025-09-01T00:00:00+08:00"), periodID: "month", now: now, timezone: "Asia/Shanghai"),
+            -12
+        )
+    }
+
+    // #177 Opus 审查追加：DatePicker 给的是设备本地日历语义的 Date，不能直接当服务时区的绝对时刻算。
+    // 设备在东京时区选中"今天"的本地日期，用户在上海服务时区看仍必须是"今天"（offset 0），
+    // 而不是因为绝对时刻换算成上海时间已经是前一天而被误判成"昨天"（offset -1）。
+    func testOffsetForPickedDateReinterpretsDeviceLocalDateInServerTimezone() throws {
+        var tokyoCalendar = Calendar(identifier: .gregorian)
+        tokyoCalendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Tokyo"))
+        let now = try date(fixedNowISO) // 2026-09-26T12:00:00+08:00（上海服务时区的"现在"，即"今天"）
+        // 设备在东京时区，本地日历显示的是 2026-09-26 00:00（用户眼中选中的是"今天"）；
+        // 这个绝对时刻按上海时区解释是 2026-09-25 23:00（前一天）。
+        let pickedInTokyo = try date("2026-09-26T00:00:00+09:00")
+
+        let naive = PeriodMenuBuilder.offset(forDate: pickedInTokyo, periodID: "today", now: now, timezone: "Asia/Shanghai")
+        XCTAssertEqual(naive, -1, "不做设备日历重建时，绝对时刻换算会把东京的今天误判成上海的昨天")
+
+        let reinterpreted = PeriodMenuBuilder.offsetForPickedDate(
+            pickedInTokyo, periodID: "today", now: now, timezone: "Asia/Shanghai", deviceCalendar: tokyoCalendar
+        )
+        XCTAssertEqual(reinterpreted, 0, "先按设备本地日历取年月日、再在服务时区重建后，必须仍是今天")
+    }
+
     func testTodayTitlesAndSubtitles() throws {
         let rows = PeriodMenuBuilder.rows(
             periodID: "today", now: try date(fixedNowISO), timezone: "Asia/Shanghai",

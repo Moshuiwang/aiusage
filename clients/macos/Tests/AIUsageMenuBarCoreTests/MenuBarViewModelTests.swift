@@ -15,12 +15,16 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.periodLabel, "本周")
         XCTAssertEqual(state.dateRangeText, "2026-05-27 ～ 2026-06-02")
         XCTAssertEqual(state.heroTotalText, "5.0K")
-        XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · Cache 800")
+        XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · 缓存命中 16.0%")
         XCTAssertEqual(state.healthText, "2/2 正常")
         XCTAssertEqual(state.primaryLimitText, "暂无可信额度")
-        XCTAssertTrue(state.lastUpdatedText.hasSuffix("前"), "Expected relative time, got: \(state.lastUpdatedText)")
-        XCTAssertEqual(state.sources.map(\.title), ["linux-dev", "macbook-pro"])
-        XCTAssertEqual(state.sources.first?.subtitle, "来源明细缺失")
+        // #177 Opus 审查：headerUpdatedText 锁具体值而不是宽松的 hasSuffix；跨天分支见
+        // testHeaderUpdatedTextLocksClockFormatSameDayAndCrossDay。
+        XCTAssertEqual(state.headerUpdatedText, "10:40 更新")
+        // #177：旧 state.sources / flatModels 已删除，等价覆盖迁移到 serverCards——
+        // 该 fixture 没有 agents 明细（legacy 格式），Server 卡片必须只有汇总值，不能凭空造出模型行。
+        XCTAssertEqual(state.serverCards.map(\.title), ["linux-dev", "macbook-pro"])
+        XCTAssertTrue(state.serverCards.allSatisfy { $0.models.isEmpty })
         XCTAssertTrue(state.limitRows.isEmpty)
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         XCTAssertTrue(state.quotaRings.allSatisfy { ring in
@@ -33,6 +37,23 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.breakdownSections.first?.rows.first?.subtitle, "1 个来源")
         XCTAssertEqual(state.trendBars.map(\.label), ["06-01", "06-02"])
         XCTAssertEqual(state.trendBars.last?.ratio, 1.0)
+    }
+
+    // #177 Opus 审查：headerUpdatedText 锁「HH:mm 更新」（同日）与「MM-dd HH:mm 更新」（跨天）两个分支的具体值。
+    func testHeaderUpdatedTextLocksClockFormatSameDayAndCrossDay() throws {
+        let summary = try loadFixture()
+        // fixture 里最新的 source lastObservedAt 是 "2026-06-02T10:40:00+08:00"（linux-dev-wang）。
+        let sameDayState = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00")
+        )
+        XCTAssertEqual(sameDayState.headerUpdatedText, "10:40 更新")
+
+        let crossDayState = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "week",
+            now: try date("2026-06-03T09:00:00+08:00")
+        )
+        XCTAssertEqual(crossDayState.headerUpdatedText, "06-02 10:40 更新")
     }
 
     func testLegacySharedMachineKeepsServerAggregateWithoutSplittingContributions() throws {
@@ -109,11 +130,13 @@ final class MenuBarViewModelTests: XCTestCase {
             now: try date("2026-06-02T11:00:00+08:00")
         )
 
-        XCTAssertEqual(state.sources.count, 1)
-        XCTAssertEqual(state.sources.map(\.title), ["ip-10-50-128-30.eu-west-1.compute.internal"])
-        XCTAssertEqual(state.sources.map(\.value), ["800.0K"])
-        XCTAssertNil(state.sources.first?.agents)
-        XCTAssertEqual(state.sources.first?.subtitle, "来源明细缺失")
+        // #177：旧 state.sources 已删除，等价覆盖迁移到 serverCards——
+        // 一台机器被 3 个不同 os_user 的 source 共享时必须仍是一张卡，不按 source 拆分。
+        XCTAssertEqual(state.serverCards.count, 1)
+        XCTAssertEqual(state.serverCards.map(\.title), ["ip-10-50-128-30.eu-west-1.compute.internal"])
+        XCTAssertEqual(state.serverCards.map(\.valueText), ["800.0K"])
+        XCTAssertTrue(state.serverCards.first?.models.isEmpty == true)
+        XCTAssertTrue(state.serverCards.first?.subtitle.hasPrefix("3 个用户") == true, "got: \(state.serverCards.first?.subtitle ?? "")")
     }
 
     func testTrendAxisUsesSparseFullRangeLabelsLikeMobileApp() throws {
@@ -436,7 +459,6 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertFalse(pastOnly.trendRefCeilingText.isEmpty)
         XCTAssertEqual(state.trendRefCeilingText, pastOnly.trendRefCeilingText)
         XCTAssertEqual(state.trendCeilingFraction, pastOnly.trendCeilingFraction, accuracy: 0.0001)
-        XCTAssertEqual(state.trendMidText, pastOnly.trendMidText)
     }
 
     func testHourBucketsFutureOnlyAfterNowAndHistoricalDayHasNoFuture() throws {
@@ -591,11 +613,11 @@ final class MenuBarViewModelTests: XCTestCase {
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "96%")
         XCTAssertEqual(claude.innerPctText, "47%")
-        XCTAssertEqual(claude.outerFraction, 0.96, accuracy: 0.001)
+        // #177：单环视图以周窗口为主（week 优先于 session），primaryFraction 取 47% 而非 outer 的 96%。
+        XCTAssertEqual(claude.primaryFraction, 0.47, accuracy: 0.001)
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
         XCTAssertEqual(codex.outerPctText, "59%")
-        XCTAssertEqual(codex.outerFraction, 0.59, accuracy: 0.001)
     }
 
     func testQuotaRingsIgnoreExpiredAndCacheOnlyWindows() throws {
@@ -674,8 +696,8 @@ final class MenuBarViewModelTests: XCTestCase {
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
         XCTAssertEqual(claude.innerPctText, "52%")
-        XCTAssertEqual(claude.outerFraction, 0, accuracy: 0.001)
-        XCTAssertEqual(claude.innerFraction, 0.52, accuracy: 0.001)
+        // #177：outer(session) 已过期不可见时，primaryFraction 退回 week 窗口的 52%。
+        XCTAssertEqual(claude.primaryFraction, 0.52, accuracy: 0.001)
         XCTAssertEqual(state.primaryLimitText, "Claude week · 52% 已用")
         XCTAssertEqual(state.limitRows.map(\.title), ["Claude week"])
     }
@@ -734,14 +756,12 @@ final class MenuBarViewModelTests: XCTestCase {
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerLabel, "5h")
         XCTAssertEqual(claude.innerLabel, "7d")
-        XCTAssertEqual(claude.sourceText, "BIAI · wang")
         XCTAssertEqual(claude.updatedText, "10:20 更新")
         XCTAssertEqual(claude.availabilityText, "")
 
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
         XCTAssertEqual(codex.outerLabel, "额度")
         XCTAssertEqual(codex.outerPctText, "--")
-        XCTAssertEqual(codex.sourceText, "Codex 官方")
         XCTAssertEqual(codex.updatedText, "08:00 更新")
         XCTAssertEqual(codex.availabilityText, "额度暂不可用")
     }
@@ -773,7 +793,6 @@ final class MenuBarViewModelTests: XCTestCase {
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
-        XCTAssertEqual(claude.sourceText, "BIAI · wangzhipeng")
         XCTAssertEqual(claude.updatedText, "10:00 更新")
         XCTAssertTrue(claude.availabilityText.contains("额度暂不可用"))
     }
@@ -820,7 +839,6 @@ final class MenuBarViewModelTests: XCTestCase {
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
         XCTAssertEqual(claude.innerPctText, "20%")
-        XCTAssertEqual(claude.sourceText, "Claude 官方")
     }
 
     func testQuotaRingsAreDecoupledFromSelectedPeriodSummarySlots() throws {
@@ -1034,8 +1052,17 @@ final class MenuBarViewModelTests: XCTestCase {
         ], status: "missing", reason: "provider_failed")
         XCTAssertFalse(keptLastSuccess.isAvailable)
         XCTAssertEqual(keptLastSuccess.primaryPctText, "—")
+        XCTAssertEqual(keptLastSuccess.primaryPctNumberText, "—")
         XCTAssertEqual(keptLastSuccess.resetCountdownText, "--")
         XCTAssertTrue(keptLastSuccess.availabilityText.contains("最近成功值"))
+        // #177 Opus 审查：isAvailable=false 时浮层不得泄露「最近成功值」窗口残留的旧百分比（80%）——
+        // 悬停行必须只显示降级状态说明，不能出现任何 "%"。
+        XCTAssertFalse(keptLastSuccess.hoverRows.isEmpty)
+        XCTAssertTrue(
+            keptLastSuccess.hoverRows.allSatisfy { !$0.valueText.contains("%") },
+            "got: \(keptLastSuccess.hoverRows)"
+        )
+        XCTAssertTrue(keptLastSuccess.hoverRows.contains { $0.valueText.contains("最近成功值") })
     }
 
     func testQuotaRingPrimaryPctPrefersWeekAndCountsDownToNearestReset() throws {
@@ -1064,9 +1091,15 @@ final class MenuBarViewModelTests: XCTestCase {
         )
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.primaryPctText, "26%")
+        // #177 Opus 审查：primaryPctNumberText 不带 %，视图自己拼一次单独字号的 %，
+        // 避免 primaryPctText（已带 %）再被拼接出「26%%」。
+        XCTAssertEqual(claude.primaryPctNumberText, "26")
         // 最近一次重置来自 session 窗口（18:00 早于 07-20 00:00）
         XCTAssertEqual(claude.resetCountdownText, "8h 0min")
         XCTAssertTrue(claude.isAvailable)
+        // 可用状态下浮层行必须带百分比（与不可用场景的「不含 %」相对）。
+        XCTAssertEqual(claude.hoverRows.count, 2)
+        XCTAssertTrue(claude.hoverRows.allSatisfy { $0.valueText.contains("%") })
     }
 
     func testQuotaRingsStructuralFloorAlwaysHasThreeFixedProvidersInOrder() throws {

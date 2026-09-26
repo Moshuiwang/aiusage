@@ -425,6 +425,62 @@ final class ServerCardTests: XCTestCase {
         XCTAssertEqual(card.title, "工作机")
     }
 
+    // MARK: - 迁移自已删除的 SourceHierarchyTests：byMachine 优先于 byOSUser 回退，且不对 contributions 求和
+
+    func testFallbackPrefersByMachineOverByOSUserAndDoesNotSumContributions() throws {
+        for usesMachine in [true, false] {
+            let row = MobileBreakdownRow(
+                id: "server-aggregate",
+                label: "已汇总来源",
+                tokens: 777,
+                sourceIDs: ["s1", "s2"],
+                contributions: [
+                    MobileBreakdownContribution(sourceID: "s1", tokens: 10),
+                    MobileBreakdownContribution(sourceID: "s2", tokens: 20),
+                ]
+            )
+            let summary = makeSummary(
+                periodID: "today",
+                byMachine: usesMachine ? [row] : [],
+                byOSUser: usesMachine ? [] : [row],
+                sources: [
+                    source(id: "s1", machine: "server-aggregate", osUser: "alice", status: "ok"),
+                    source(id: "s2", machine: "server-aggregate", osUser: "bob", status: "ok"),
+                ]
+            )
+
+            let cards = MenuBarViewModel.build(from: summary, selectedPeriodID: "today").serverCards
+            XCTAssertEqual(cards.count, 1, "usesMachine=\(usesMachine)")
+            XCTAssertEqual(cards.first?.id, "server-aggregate", "usesMachine=\(usesMachine)")
+            // 值必须取 row.tokens 本身（777），不是把 contributions 加总（10+20=30）。
+            XCTAssertEqual(cards.first?.valueText, "777", "usesMachine=\(usesMachine)")
+            // byOSUser 回退路径（hasModelDetail 只看 byMachine 是否非空）没有模型明细，不能凭空造出模型行。
+            XCTAssertTrue(cards.first?.models.isEmpty == true, "usesMachine=\(usesMachine)")
+        }
+    }
+
+    // MARK: - 迁移自已删除的 SourceHierarchyTests：机器别名回退到 formatMachineName(label) 并剥离 .local 后缀
+
+    func testMachineAliasFallsBackToFormattedLabelWhenRawIDMissesAlias() throws {
+        let machineRow = MobileBreakdownRow(
+            id: "host-raw-id",
+            label: "mymachine.local",
+            tokens: 100,
+            sourceIDs: ["src-1"],
+            agents: []
+        )
+        let summary = makeSummary(periodID: "today", byMachine: [machineRow], sources: [
+            source(id: "src-1", machine: "host-raw-id", osUser: "alice", status: "ok")
+        ])
+        // aliases 里没有 "host-raw-id"（row.id 原名），只有剥离 ".local" 后缀后的 "mymachine"。
+        let aliases = ["mymachine": "工作站"]
+
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases)
+        let card = try XCTUnwrap(state.serverCards.first { $0.id == "host-raw-id" })
+
+        XCTAssertEqual(card.title, "工作站")
+    }
+
     // MARK: - Fixtures
 
     private func makeSummary(
@@ -433,9 +489,10 @@ final class ServerCardTests: XCTestCase {
         endDate: String? = nil,
         totalTokens: Int? = nil,
         byMachine: [MobileBreakdownRow],
+        byOSUser: [MobileBreakdownRow] = [],
         sources: [MobileSource]
     ) -> MobileSummary {
-        let resolvedTotal = totalTokens ?? byMachine.reduce(0) { $0 + $1.tokens }
+        let resolvedTotal = totalTokens ?? (byMachine + byOSUser).reduce(0) { $0 + $1.tokens }
         return MobileSummary(
             schemaVersion: 1,
             client: "macos",
@@ -456,7 +513,7 @@ final class ServerCardTests: XCTestCase {
             ),
             trend: MobileTrend(period: periodID, granularity: "day", startDate: startDate, endDate: endDate, points: []),
             sources: sources,
-            breakdown: MobileBreakdown(byMachine: byMachine, byOSUser: [], byAgent: [], byModel: [], byDate: []),
+            breakdown: MobileBreakdown(byMachine: byMachine, byOSUser: byOSUser, byAgent: [], byModel: [], byDate: []),
             limits: MobileLimits(observedCount: 0, totalCount: 0, windows: [])
         )
     }

@@ -69,6 +69,64 @@ public enum PeriodMenuBuilder {
         }
     }
 
+    /// #177：「选择其他日期…」把用户在 DatePicker 里选的日期换算成当前粒度的 offset。
+    /// 换算结果不做范围裁剪——调用方经 `MenuPeriodSelection(periodID:offset:)` 构造时会按既有规则自动裁剪
+    /// （today: -6...0，week/month: ...0），与期间菜单近几期的 offset 限制保持同一套规则。
+    public static func offset(forDate date: Date, periodID: String, now: Date, timezone: String?) -> Int {
+        let tz = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = tz
+        let today = calendar.startOfDay(for: now)
+        let day = calendar.startOfDay(for: date)
+        let raw: Int
+        switch periodID {
+        case "week":
+            let thisMonday = mondayOf(today, calendar: calendar)
+            let pickedMonday = mondayOf(day, calendar: calendar)
+            let days = calendar.dateComponents([.day], from: pickedMonday, to: thisMonday).day ?? 0
+            raw = -(days / 7)
+        case "month":
+            let thisComps = calendar.dateComponents([.year, .month], from: today)
+            let dayComps = calendar.dateComponents([.year, .month], from: day)
+            let months = ((thisComps.year ?? 0) - (dayComps.year ?? 0)) * 12
+                + ((thisComps.month ?? 0) - (dayComps.month ?? 0))
+            raw = -months
+        default: // "today"
+            let days = calendar.dateComponents([.day], from: day, to: today).day ?? 0
+            raw = -days
+        }
+        // 未来日期（无论粒度）一律裁到 0（即「今天/本周/本月」），不能算出正的未来 offset。
+        return min(0, raw)
+    }
+
+    /// #177：DatePicker 选中的 `Date` 是「设备本地日历」语义（用户在日历上点的哪一天），
+    /// 与 `offset(forDate:)` 假设的「已经是服务时区的绝对时刻」不同——设备时区与服务时区不一致时，
+    /// 直接把 DatePicker 的 Date 传给 `offset(forDate:)` 会按绝对时刻换算导致跨天（例如东京本地
+    /// 00:00 在上海时区已经是前一天 23:00）。这里先用调用方传入的本地日历取出选中日期的年/月/日，
+    /// 再在服务时区重建该日期后才计算 offset。`deviceCalendar` 默认 `.current`（真实设备日历），
+    /// 测试可以传入固定时区的 Calendar 来复现「设备时区 ≠ 服务时区」的场景，不受运行测试的机器
+    /// 自身时区影响。
+    public static func offsetForPickedDate(
+        _ date: Date,
+        periodID: String,
+        now: Date,
+        timezone: String?,
+        deviceCalendar: Calendar = .current
+    ) -> Int {
+        let tz = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+        var serverCalendar = Calendar(identifier: .gregorian)
+        serverCalendar.timeZone = tz
+        let localComponents = deviceCalendar.dateComponents([.year, .month, .day], from: date)
+        let reinterpreted = serverCalendar.date(from: localComponents) ?? date
+        return offset(forDate: reinterpreted, periodID: periodID, now: now, timezone: timezone)
+    }
+
+    private static func mondayOf(_ day: Date, calendar: Calendar) -> Date {
+        let weekday = calendar.component(.weekday, from: day) // 1=周日...7=周六
+        let daysSinceMonday = (weekday + 5) % 7
+        return calendar.date(byAdding: .day, value: -daysSinceMonday, to: day) ?? day
+    }
+
     private struct Bounds {
         let start: Date
         let end: Date
