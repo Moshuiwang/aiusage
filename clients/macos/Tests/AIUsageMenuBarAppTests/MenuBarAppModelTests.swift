@@ -386,6 +386,30 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    func testSyncNowSendsOneRequestPerPeriodOnToday() async throws {
+        let loader = ControlledSummaryLoader()
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            loadSummary: loader.load
+        )
+        model.syncNow()
+        await yieldToMainActor()
+        let onToday = await loader.totalRequestCount()
+        XCTAssertEqual(onToday, 1, "选中今天时立即同步只应请求一次 today")
+
+        let historyLoader = ControlledSummaryLoader()
+        let historyModel = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "week"),
+            loadSummary: historyLoader.load
+        )
+        historyModel.syncNow()
+        await yieldToMainActor()
+        let onWeek = await historyLoader.totalRequestCount()
+        XCTAssertEqual(onWeek, 2, "选中本周时应请求 week 与 today 各一次")
+    }
+
     func testThreeVisiblePeriodsKeepIndependentFreshCaches() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
@@ -1196,6 +1220,11 @@ private actor ControlledSummaryLoader {
 
     func requestCount() -> Int {
         configs.count
+    }
+
+    /// 实际调用次数（同一 period 重复请求也分别计数）。
+    func totalRequestCount() -> Int {
+        totalRequests
     }
 
     func config(for period: String) throws -> MobileSummaryClientConfig {

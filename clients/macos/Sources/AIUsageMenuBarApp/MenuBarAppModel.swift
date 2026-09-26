@@ -201,6 +201,13 @@ final class MenuBarAppModel: ObservableObject {
         }
     }
 
+    /// 用户手动「立即同步」：标题栏按钮与 ⋯ 菜单共用。
+    /// 选中今天时 refreshToday 本身会强制刷新当前期，不能再额外 refresh，避免重复请求。
+    func syncNow() {
+        if selection != MenuPeriodSelection(periodID: "today") { refresh(force: true) }
+        refreshToday()
+    }
+
     // The menu bar continues to show today's value while the popover browses history.
     func refreshToday() {
         if selection == MenuPeriodSelection(periodID: "today") {

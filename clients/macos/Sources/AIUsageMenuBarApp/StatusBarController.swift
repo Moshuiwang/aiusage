@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import AIUsageMenuBarCore
 import Combine
 import SwiftUI
@@ -45,6 +46,7 @@ final class StatusBarController: NSObject {
     private var cancellables: Set<AnyCancellable> = []
     private var timer: Timer?
     private var popoverHostingController: NSHostingController<MenuBarPopoverView>?
+    private lazy var loginItemController = LoginItemController(manager: SMAppServiceLoginItemManager())
 
     init(paths: RuntimePaths, quitApplication: @escaping () -> Void = { NSApp.terminate(nil) }) {
         self.paths = paths
@@ -85,6 +87,8 @@ final class StatusBarController: NSObject {
         let hostingController = NSHostingController(
             rootView: MenuBarPopoverView(model: model, onQuit: { [weak self] in
                 self?.quitFromPopover()
+            }, onMore: { [weak self] in
+                self?.showMoreMenu()
             }, onContentHeightChange: { [weak self] in
                 self?.updatePopoverSize()
             })
@@ -141,8 +145,7 @@ final class StatusBarController: NSObject {
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                if self.model.selection != MenuPeriodSelection(periodID: "today") { self.model.refresh(force: true) }
-                self.model.refreshToday()
+                self.model.syncNow()
                 self.model.prefetchCommonPeriods()
             }
         }
@@ -168,6 +171,65 @@ final class StatusBarController: NSObject {
         }
         window.isOpaque = false
         window.backgroundColor = .clear
+    }
+
+    // MARK: – 更多菜单（#178）
+
+    private func showMoreMenu() {
+        let info = MoreMenuInfo.build(
+            sources: model.summary.sources,
+            cacheBytes: CacheDirectorySize.compute(at: paths.periodCacheDirectoryURL),
+            versionText: currentVersionText()
+        )
+        let bundleURL = Bundle.main.bundleURL
+        let isSupported = LoginItemSupport.isSupported(bundleURL: bundleURL)
+        let menu = MoreMenuBuilder.build(
+            info: info,
+            isLoginItemChecked: isSupported && loginItemController.isChecked,
+            isLoginItemSupported: isSupported,
+            target: self,
+            syncAction: #selector(syncFromMoreMenu),
+            loginItemAction: #selector(toggleLoginItemFromMoreMenu),
+            quitAction: #selector(quitFromMoreMenuAction)
+        )
+        // 从「⋯」按钮所在位置弹出：popUp(in: nil) 把 at 当成屏幕坐标，用当前鼠标位置
+        // （用户刚点了按钮）近似按钮位置——真实弹出坐标/视觉效果需回 Mac 侧截图确认。
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    private func currentVersionText() -> String {
+        let info = Bundle.main.infoDictionary
+        return AppVersionText.make(
+            shortVersion: info?["CFBundleShortVersionString"] as? String,
+            build: info?["CFBundleVersion"] as? String,
+            commit: info?["AIUsageGitCommit"] as? String
+        )
+    }
+
+    @objc private func syncFromMoreMenu() {
+        model.syncNow()
+    }
+
+    @objc private func toggleLoginItemFromMoreMenu() {
+        do {
+            try loginItemController.toggle()
+            // 首次注册常处于「需要批准」，直接带用户去系统设置的登录项页面完成批准。
+            if loginItemController.needsApproval {
+                SMAppService.openSystemSettingsLoginItems()
+            }
+        } catch {
+            AppRuntimeLog.append("loginItem toggle failed: \(error)", paths: paths)
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "登录时启动设置失败"
+            alert.informativeText = error.localizedDescription
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    }
+
+    @objc private func quitFromMoreMenuAction() {
+        quitFromPopover()
     }
 
     @objc private func togglePopover(_ sender: Any?) {

@@ -72,7 +72,7 @@ struct MenuBarPopoverView: View {
             }
             Spacer(minLength: 4)
             glassCircleButton(systemName: "arrow.clockwise", help: "立即同步", accessibilityLabel: "立即同步", isBusy: model.isLoading) {
-                model.refresh(force: true)
+                model.syncNow()
             }
             glassCircleButton(systemName: "ellipsis", help: "更多", accessibilityLabel: "更多") {
                 onMore?()
