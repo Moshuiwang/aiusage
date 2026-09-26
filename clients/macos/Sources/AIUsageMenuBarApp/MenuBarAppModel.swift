@@ -62,8 +62,42 @@ final class MenuBarAppModel: ObservableObject {
             from: summary,
             selectedPeriodID: selectedPeriodID,
             selectedOffset: selectedOffset,
-            machineAliases: config?.machineAliases
+            now: now(),
+            machineAliases: config?.machineAliases,
+            quotaSlots: latestQuotaProviderSlots()
         )
+    }
+
+    /// 额度圆环必须来自当前所有已知 summary 快照中 generatedAt 最新的一份，
+    /// 不能随所选历史周期（selectedPeriodID/offset）而回退到那份快照缓存的旧额度。
+    private func latestQuotaProviderSlots() -> [MobileProviderSlot] {
+        var candidates: [(Date, [MobileProviderSlot])] = []
+        if let generatedAt = Self.parseGeneratedAt(summary.generatedAt) {
+            candidates.append((generatedAt, summary.providerSlots))
+        }
+        if let today = todaySummary, let generatedAt = Self.parseGeneratedAt(today.generatedAt) {
+            candidates.append((generatedAt, today.providerSlots))
+        }
+        for key in cachedSummaries.keys.sorted() {
+            guard let cached = cachedSummaries[key],
+                  let generatedAt = Self.parseGeneratedAt(cached.summary.generatedAt) else { continue }
+            candidates.append((generatedAt, cached.summary.providerSlots))
+        }
+        guard let latest = candidates.max(by: { $0.0 < $1.0 }) else {
+            return summary.providerSlots
+        }
+        return latest.1
+    }
+
+    private static func parseGeneratedAt(_ iso: String?) -> Date? {
+        guard let iso else { return nil }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: iso) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: iso)
     }
 
     var hasConfig: Bool {

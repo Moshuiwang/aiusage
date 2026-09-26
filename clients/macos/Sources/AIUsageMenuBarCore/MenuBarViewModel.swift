@@ -38,6 +38,14 @@ public struct QuotaRingData: Equatable, Sendable, Identifiable {
     public let updatedText: String
     public let availabilityText: String
     public let usageText: String
+    /// 固定品牌色，不随用量高低变化。
+    public let brandColor: MenuTrendColor
+    /// 周窗口优先，否则 session 窗口；不可用时 "—"。
+    public let primaryPctText: String
+    /// 所有可见窗口中最近一次重置的倒计时（如 "3d 23h"），不可用时 "--"。
+    public let resetCountdownText: String
+    /// 仅当官方观测且状态正常的窗口存在时为 true。
+    public let isAvailable: Bool
 }
 
 public struct MenuTrendBar: Equatable, Sendable, Identifiable {
@@ -171,12 +179,14 @@ public enum MenuBarViewModel {
         selectedPeriodID: String,
         selectedOffset: Int = 0,
         now: Date = Date(),
-        machineAliases: [String: String]? = nil
+        machineAliases: [String: String]? = nil,
+        quotaSlots: [MobileProviderSlot]? = nil
     ) -> MenuBarState {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
         let displaySlots = fixedProviderSlots(summary.providerSlots)
+        let quotaDisplaySlots = fixedProviderSlots(quotaSlots ?? summary.providerSlots)
         let currentProviderWindows = currentProviderWindows(displaySlots, now: now)
         let primaryLimit = currentProviderWindows
             .sorted { lhs, rhs in
@@ -212,11 +222,7 @@ public enum MenuBarViewModel {
             sources: sourceRows(summary.sources, breakdown: summary.breakdown, generatedAt: summary.generatedAt, machineAliases: machineAliases),
             limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(
-                from: displaySlots,
-                generatedAt: summary.generatedAt,
-                now: now
-            ),
+            quotaRings: quotaRings(from: quotaDisplaySlots, now: now),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage)
         )
     }
@@ -614,9 +620,10 @@ public enum MenuBarViewModel {
 
     private static func quotaRings(
         from slots: [MobileProviderSlot],
-        generatedAt: String?,
         now: Date
     ) -> [QuotaRingData] {
+        // 额度与所选时间段无关：更新时间以「现在」为参照，不参照所选 summary 的 generatedAt。
+        let reference = ISO8601DateFormatter().string(from: now)
         let providerOrder = ["claude", "codex", "antigravity"]
         return slots.sorted {
             let lhs = providerOrder.firstIndex(of: canonicalProvider($0.provider)) ?? providerOrder.count
@@ -644,12 +651,24 @@ public enum MenuBarViewModel {
                 name = "Codex"
                 oR = 0.039; oG = 0.518; oB = 1.0; iR = 0.353; iG = 0.784; iB = 0.980
             case "antigravity":
-                name = "Gemini"
+                name = "Antigravity"
                 oR = 0.259; oG = 0.522; oB = 0.957; iR = 0.400; iG = 0.650; iB = 1.0
             default:
                 name = provider.prefix(1).uppercased() + provider.dropFirst()
                 oR = 0.200; oG = 0.600; oB = 0.800; iR = 0.400; iG = 0.750; iB = 0.900
             }
+            let hasVisibleWindow = outerWindow != nil || weekWindow != nil
+            // 「最近成功值」（quota 非 available 但保留了旧窗口）也必须降级，不当可信额度展示。
+            let isAvailable = slot.quota.status == "available" && hasVisibleWindow
+            let primaryWindow = isAvailable ? (weekWindow ?? outerWindow) : nil
+            let nearestResetWindow = [outerWindow, weekWindow]
+                .filter { _ in isAvailable }
+                .compactMap { $0 }
+                .compactMap { window -> (MobileLimitWindow, Date)? in
+                    guard let reset = parseDate(window.resetAt) else { return nil }
+                    return (window, reset)
+                }
+                .min { $0.1 < $1.1 }?.0
             return QuotaRingData(
                 id: provider, displayName: name,
                 outerRed: oR, outerGreen: oG, outerBlue: oB,
@@ -665,15 +684,32 @@ public enum MenuBarViewModel {
                 sourceText: sourceText(provider: provider, sourceID: sourceID),
                 updatedText: compactDateTime(
                     verifiedAt,
-                    reference: generatedAt,
+                    reference: reference,
                     suffix: "更新"
                 ) ?? "未更新",
                 availabilityText: quotaAvailabilityText(
                     slot.quota,
-                    hasVisibleWindow: outerWindow != nil || weekWindow != nil
+                    hasVisibleWindow: hasVisibleWindow
                 ),
-                usageText: usageText(slot.usage)
+                usageText: usageText(slot.usage),
+                brandColor: brandColor(for: provider),
+                primaryPctText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
+                resetCountdownText: nearestResetWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                isAvailable: isAvailable
             )
+        }
+    }
+
+    private static func brandColor(for provider: String) -> MenuTrendColor {
+        switch provider {
+        case "claude":
+            return MenuTrendColor(red: 0.851, green: 0.467, blue: 0.341, opacity: 1)
+        case "codex":
+            return MenuTrendColor(red: 0.184, green: 0.486, blue: 0.965, opacity: 1)
+        case "antigravity":
+            return MenuTrendColor(red: 0.608, green: 0.447, blue: 0.796, opacity: 1)
+        default:
+            return MenuTrendColor(red: 0.557, green: 0.557, blue: 0.576, opacity: 1)
         }
     }
 

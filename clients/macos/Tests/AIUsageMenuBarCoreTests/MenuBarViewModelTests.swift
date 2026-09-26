@@ -642,6 +642,263 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(claude.sourceText, "Claude 官方")
     }
 
+    func testQuotaRingsAreDecoupledFromSelectedPeriodSummarySlots() throws {
+        let summary = try loadFixture()
+        let quotaSlots = [
+            providerSlot(
+                provider: "claude",
+                windows: [
+                    MobileLimitWindow(
+                        sourceID: "claude-main", provider: "claude", window: "session",
+                        usedPercent: 26, remainingPercent: 74,
+                        resetAt: "2026-07-18T18:00:00+08:00", windowDurationMinutes: 300,
+                        observedAt: "2026-07-18T09:00:00+08:00", sourceType: "official_cli",
+                        confidence: "observed", status: "ok", official: true
+                    )
+                ]
+            )
+        ]
+        let historicalWeekSlots = [
+            providerSlot(
+                provider: "claude",
+                windows: [
+                    MobileLimitWindow(
+                        sourceID: "claude-main", provider: "claude", window: "session",
+                        usedPercent: 80, remainingPercent: 20,
+                        resetAt: "2026-07-11T18:00:00+08:00", windowDurationMinutes: 300,
+                        observedAt: "2026-07-11T09:00:00+08:00", sourceType: "official_cli",
+                        confidence: "observed", status: "ok", official: true
+                    )
+                ]
+            )
+        ]
+        let historicalMonthSlots = [
+            providerSlot(
+                provider: "claude",
+                windows: [
+                    MobileLimitWindow(
+                        sourceID: "claude-main", provider: "claude", window: "session",
+                        usedPercent: 55, remainingPercent: 45,
+                        resetAt: "2026-06-20T18:00:00+08:00", windowDurationMinutes: 300,
+                        observedAt: "2026-06-20T09:00:00+08:00", sourceType: "official_cli",
+                        confidence: "observed", status: "ok", official: true
+                    )
+                ]
+            )
+        ]
+        let now = try date("2026-07-18T10:00:00+08:00")
+
+        let weekState = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: historicalWeekSlots
+            ),
+            selectedPeriodID: "week", selectedOffset: -1, now: now,
+            quotaSlots: quotaSlots
+        )
+        let monthState = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: historicalMonthSlots
+            ),
+            selectedPeriodID: "month", selectedOffset: -2, now: now,
+            quotaSlots: quotaSlots
+        )
+
+        XCTAssertEqual(weekState.quotaRings, monthState.quotaRings)
+        let claude = try XCTUnwrap(weekState.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "26%")
+        XCTAssertEqual(claude.primaryPctText, "26%")
+    }
+
+    func testQuotaRingDisplayNameForAntigravityAndFixedBrandColors() throws {
+        let summary = try loadFixture()
+        let quotaSlots = [
+            providerSlot(provider: "claude", windows: []),
+            providerSlot(provider: "codex", windows: []),
+            providerSlot(provider: "antigravity", windows: []),
+        ]
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00"),
+            quotaSlots: quotaSlots
+        )
+
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
+        let antigravity = try XCTUnwrap(state.quotaRings.first { $0.id == "antigravity" })
+        XCTAssertEqual(antigravity.displayName, "Antigravity")
+
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
+        XCTAssertEqual(claude.brandColor, MenuTrendColor(red: 0.851, green: 0.467, blue: 0.341, opacity: 1))
+        XCTAssertEqual(codex.brandColor, MenuTrendColor(red: 0.184, green: 0.486, blue: 0.965, opacity: 1))
+        XCTAssertEqual(antigravity.brandColor, MenuTrendColor(red: 0.608, green: 0.447, blue: 0.796, opacity: 1))
+    }
+
+    func testQuotaRingUpdatedTextIgnoresSelectedSummaryGeneratedAt() throws {
+        let fixture = try loadFixture()
+        let data = try JSONEncoder().encode(fixture)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        object["generated_at"] = "2026-07-18T09:50:00+08:00"
+        let todaySummary = try JSONDecoder().decode(
+            MobileSummary.self, from: JSONSerialization.data(withJSONObject: object)
+        )
+        object["generated_at"] = "2026-07-11T09:50:00+08:00"
+        let historicalSummary = try JSONDecoder().decode(
+            MobileSummary.self, from: JSONSerialization.data(withJSONObject: object)
+        )
+        let quotaSlots = [
+            providerSlot(
+                provider: "claude",
+                windows: [
+                    MobileLimitWindow(
+                        sourceID: "claude-main", provider: "claude", window: "session",
+                        usedPercent: 26, remainingPercent: 74,
+                        resetAt: "2026-07-18T18:00:00+08:00", windowDurationMinutes: 300,
+                        observedAt: "2026-07-18T09:00:00+08:00", sourceType: "official_cli",
+                        confidence: "observed", status: "ok", official: true
+                    )
+                ],
+                lastVerifiedAt: "2026-07-18T09:00:00+08:00"
+            )
+        ]
+        let now = try date("2026-07-18T10:00:00+08:00")
+        let fromToday = MenuBarViewModel.build(
+            from: todaySummary, selectedPeriodID: "today", now: now, quotaSlots: quotaSlots
+        )
+        let fromHistory = MenuBarViewModel.build(
+            from: historicalSummary, selectedPeriodID: "week", selectedOffset: -1, now: now, quotaSlots: quotaSlots
+        )
+        let todayRing = try XCTUnwrap(fromToday.quotaRings.first { $0.id == "claude" })
+        let historyRing = try XCTUnwrap(fromHistory.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(todayRing.updatedText, "09:00 更新")
+        XCTAssertEqual(historyRing.updatedText, "09:00 更新", "圆环更新时间不应随所选历史期变化")
+        XCTAssertEqual(fromToday.quotaRings, fromHistory.quotaRings)
+    }
+
+    func testQuotaRingDegradesAvailabilityForNonObservedOrFailedWindows() throws {
+        let summary = try loadFixture()
+
+        func ring(windows: [MobileLimitWindow], status: String = "available", reason: String? = nil) throws -> QuotaRingData {
+            let slot = providerSlot(provider: "claude", windows: windows, status: status, reason: reason)
+            let state = MenuBarViewModel.build(
+                from: summary, selectedPeriodID: "today",
+                now: try date("2026-07-18T10:00:00+08:00"),
+                quotaSlots: [slot]
+            )
+            return try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        }
+
+        // estimated：confidence 非 observed
+        let estimated = try ring(windows: [
+            MobileLimitWindow(
+                sourceID: "s", provider: "claude", window: "session",
+                usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-18T18:00:00+08:00",
+                windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                sourceType: "official_cli", confidence: "estimated", status: "ok", official: true
+            )
+        ])
+        XCTAssertFalse(estimated.isAvailable)
+        XCTAssertEqual(estimated.primaryPctText, "—")
+
+        // missing：quota.status 为 missing，无 window
+        let missing = try ring(windows: [], status: "missing")
+        XCTAssertFalse(missing.isAvailable)
+        XCTAssertEqual(missing.primaryPctText, "—")
+
+        // unsupported：quota.reason 为 unsupported
+        let unsupported = try ring(windows: [], status: "missing", reason: "unsupported")
+        XCTAssertFalse(unsupported.isAvailable)
+        XCTAssertEqual(unsupported.primaryPctText, "—")
+        XCTAssertTrue(unsupported.availabilityText.contains("暂不可用"))
+
+        // official == false
+        let notOfficial = try ring(windows: [
+            MobileLimitWindow(
+                sourceID: "s", provider: "claude", window: "session",
+                usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-18T18:00:00+08:00",
+                windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                sourceType: "official_cli", confidence: "observed", status: "ok", official: false
+            )
+        ])
+        XCTAssertFalse(notOfficial.isAvailable)
+        XCTAssertEqual(notOfficial.primaryPctText, "—")
+
+        // status != ok
+        let notOk = try ring(windows: [
+            MobileLimitWindow(
+                sourceID: "s", provider: "claude", window: "session",
+                usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-18T18:00:00+08:00",
+                windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                sourceType: "official_cli", confidence: "observed", status: "error", official: true
+            )
+        ])
+        XCTAssertFalse(notOk.isAvailable)
+        XCTAssertEqual(notOk.primaryPctText, "—")
+
+        // missing 但带着 App 层嫁接回来的「最近成功值」窗口（官方/observed/ok）：仍必须降级
+        let keptLastSuccess = try ring(windows: [
+            MobileLimitWindow(
+                sourceID: "s", provider: "claude", window: "session",
+                usedPercent: 80, remainingPercent: 20, resetAt: "2026-07-18T18:00:00+08:00",
+                windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+            )
+        ], status: "missing", reason: "provider_failed")
+        XCTAssertFalse(keptLastSuccess.isAvailable)
+        XCTAssertEqual(keptLastSuccess.primaryPctText, "—")
+        XCTAssertEqual(keptLastSuccess.resetCountdownText, "--")
+        XCTAssertTrue(keptLastSuccess.availabilityText.contains("最近成功值"))
+    }
+
+    func testQuotaRingPrimaryPctPrefersWeekAndCountsDownToNearestReset() throws {
+        let summary = try loadFixture()
+        let slot = providerSlot(
+            provider: "claude",
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "session",
+                    usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-18T18:00:00+08:00",
+                    windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                ),
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "week",
+                    usedPercent: 26, remainingPercent: 74, resetAt: "2026-07-20T00:00:00+08:00",
+                    windowDurationMinutes: 10080, observedAt: "2026-07-18T09:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                ),
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-07-18T10:00:00+08:00"),
+            quotaSlots: [slot]
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.primaryPctText, "26%")
+        // 最近一次重置来自 session 窗口（18:00 早于 07-20 00:00）
+        XCTAssertEqual(claude.resetCountdownText, "8h 0min")
+        XCTAssertTrue(claude.isAvailable)
+    }
+
+    func testQuotaRingsStructuralFloorAlwaysHasThreeFixedProvidersInOrder() throws {
+        let summary = try loadFixture()
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00"),
+            quotaSlots: []
+        )
+        XCTAssertEqual(state.quotaRings.count, 3)
+        XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
+    }
+
     func testTrendSelectionFollowsMouseLocation() throws {
         let summary = try loadFixture()
         let state = MenuBarViewModel.build(

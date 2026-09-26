@@ -219,6 +219,54 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(requestCount, 0)
     }
 
+    func testSwitchingToHistoricalPeriodKeepsQuotaRingsFromNewestSnapshot() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-07-18T12:00:00+08:00")
+        let freshClaudeWindow = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "session",
+            usedPercent: 26, remainingPercent: 74,
+            resetAt: "2026-07-18T18:00:00+08:00", windowDurationMinutes: 300,
+            observedAt: "2026-07-18T11:30:00+08:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let staleClaudeWindow = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "session",
+            usedPercent: 80, remainingPercent: 20,
+            resetAt: "2026-07-11T18:00:00+08:00", windowDurationMinutes: 300,
+            observedAt: "2026-07-11T09:00:00+08:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let todaySummary = try summary(
+            periodID: "today", totalTokens: 100, generatedAt: "2026-07-18T11:00:00+08:00",
+            providerSlots: [providerSlot(provider: "claude", windows: [freshClaudeWindow], status: "available")]
+        )
+        let historicalWeekSummary = try summary(
+            periodID: "week", totalTokens: 700, generatedAt: "2026-07-11T11:00:00+08:00",
+            providerSlots: [providerSlot(provider: "claude", windows: [staleClaudeWindow], status: "available")]
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: todaySummary, fetchedAt: now),
+                "week": CachedMenuSummary(summary: historicalWeekSummary, fetchedAt: now),
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertEqual(model.selectedPeriodID, "week")
+        XCTAssertEqual(model.summary.period.id, "week")
+        let claude = try XCTUnwrap(model.state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.outerPctText, "26%", "切到历史周不应回退到那份快照缓存的旧额度")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0)
+    }
+
     func testThreeVisiblePeriodsKeepIndependentFreshCaches() async throws {
         let loader = ControlledSummaryLoader()
         let now = try date("2026-06-25T12:00:00+08:00")
@@ -828,16 +876,37 @@ final class MenuBarAppModelTests: XCTestCase {
         )
     }
 
+    private func providerSlot(
+        provider: String,
+        windows: [MobileLimitWindow],
+        status: String = "available",
+        reason: String? = nil
+    ) -> MobileProviderSlot {
+        MobileProviderSlot(
+            provider: provider,
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: status,
+                reason: reason,
+                lastVerifiedAt: windows.compactMap(\.observedAt).max(),
+                sourceID: windows.first?.sourceID,
+                sourceType: windows.first?.sourceType,
+                windows: windows
+            )
+        )
+    }
+
     private func summary(
         periodID: String,
         totalTokens: Int,
+        generatedAt: String = "2026-06-25T12:00:00+08:00",
         providerSlots: [MobileProviderSlot] = []
     ) throws -> MobileSummary {
         let json = """
         {
           "schema_version": 1,
           "client": "macos",
-          "generated_at": "2026-06-25T12:00:00+08:00",
+          "generated_at": "\(generatedAt)",
           "timezone": "Asia/Shanghai",
           "period": {
             "id": "\(periodID)",
