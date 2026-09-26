@@ -87,6 +87,59 @@ final class SourceHierarchyTests: XCTestCase {
         XCTAssertEqual(flatModels[1].label, "gpt-6-luna")
     }
 
+    /// #175 决策的口径变化会透过薄包装影响到这条旧路径（reviewer 复查发现的回归覆盖缺口）：
+    /// Claude Agent 下的非 Claude 系模型不再显示百分比；Codex Agent 下即便模型名像 Claude 也按 Codex 基准计算。
+    func testFlatModelsReflectAgentOwnershipDecisionForNonFamilyModelNames() throws {
+        let breakdown = MobileBreakdown(
+            byMachine: [],
+            byOSUser: [],
+            byAgent: [],
+            byModel: [],
+            byDate: [],
+            bySource: [
+                MobileBreakdownRow(
+                    id: "mixed-source",
+                    label: "mixed-source",
+                    tokens: 5_000_000 + 22_000_000,
+                    sourceIDs: ["mixed-source"],
+                    agents: [
+                        MobileSourceAgent(id: "claude", label: "Claude", tokens: 5_000_000, status: "available", models: [
+                            MobileSourceModel(id: "deepseek-v4-pro", label: "DeepSeek V4 Pro", tokens: 5_000_000, status: "available"),
+                        ]),
+                        MobileSourceAgent(id: "codex", label: "Codex", tokens: 22_000_000, status: "available", models: [
+                            MobileSourceModel(id: "claude-mini", label: "claude-mini", tokens: 22_000_000, status: "available"),
+                        ]),
+                    ]
+                ),
+            ]
+        )
+        let original = try load("navigation-models-owner")
+        let summary = MobileSummary(
+            schemaVersion: original.schemaVersion,
+            client: original.client,
+            generatedAt: original.generatedAt,
+            timezone: original.timezone,
+            period: original.period,
+            trend: original.trend,
+            sources: original.sources,
+            breakdown: breakdown,
+            limits: original.limits
+        )
+
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
+        let source = try XCTUnwrap(state.sources.first { $0.id == "mixed-source" })
+        let flatModels = try XCTUnwrap(source.flatModels)
+        XCTAssertEqual(flatModels.count, 2)
+
+        // Claude Agent 下的 deepseek-v4-pro：不是 Claude 系模型名，决策为不计入 Claude 周额度。
+        let deepseek = try XCTUnwrap(flatModels.first { $0.modelID == "deepseek-v4-pro" })
+        XCTAssertNil(deepseek.quotaWeeklyPercentText)
+
+        // Codex Agent 下的 claude-mini：Agent 归属优先于模型名，按 Codex 基准（22M/22M=1.0）计算，不是「未知」。
+        let claudeMiniUnderCodex = try XCTUnwrap(flatModels.first { $0.modelID == "claude-mini" })
+        XCTAssertEqual(claudeMiniUnderCodex.quotaWeeklyPercentText, "约占周额度 1.0%")
+    }
+
     func testCustomMachineAliasesReplaceLongHostnames() throws {
         let summary = try load("navigation-models-owner")
         let aliases = ["mac": "MacBook Air", "linux": "GPU Server"]

@@ -19,6 +19,113 @@ public struct MenuBarState: Equatable, Sendable {
     public let breakdownSections: [MenuDisplaySection]
     public let quotaRings: [QuotaRingData]
     public let providerUsageCoverageText: String?
+    /// #175：Server 按机器分组的卡片，每张卡展开显示该机器上各模型的用量与「占所属 Agent 周额度」估算。
+    public let serverCards: [MenuServerCard]
+    /// 标题栏「N 台 Server」只数在线（至少一个 source status == "ok"）的机器。
+    public let onlineServerCount: Int
+    /// Server 模型行的额度列头：日/周为直接估算，月为周均换算。
+    public let serverModelQuotaHeader: String
+}
+
+/// #175：一台机器一张 Server 卡。
+public struct MenuServerCard: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String
+    public let platform: String?
+    /// 「用户 · HH:mm 同步」；多用户时用户段为「N 个用户」。
+    public let subtitle: String
+    public let valueText: String
+    /// 该机器 tokens 占当期总量的百分比文本，如 "38%"；总量为 0 时 "—"。
+    public let sharePercentText: String
+    public let isOnline: Bool
+    public let models: [MenuServerModelRow]
+
+    public init(
+        id: String,
+        title: String,
+        platform: String?,
+        subtitle: String,
+        valueText: String,
+        sharePercentText: String,
+        isOnline: Bool,
+        models: [MenuServerModelRow]
+    ) {
+        self.id = id
+        self.title = title
+        self.platform = platform
+        self.subtitle = subtitle
+        self.valueText = valueText
+        self.sharePercentText = sharePercentText
+        self.isOnline = isOnline
+        self.models = models
+    }
+}
+
+/// #175：Server 卡内的一行模型用量。
+public struct MenuServerModelRow: Equatable, Sendable, Identifiable {
+    public let id: String
+    public let modelID: String
+    public let agentID: String
+    public let agentDisplayName: String
+    public let agentBrandColor: MenuTrendColor
+    public let modelLabel: String
+    public let tokens: Int
+    public let valueText: String
+    /// 模型明细状态（如 "available" / "missing"）；非 "available" 时 quotaText 一律 "—"。
+    public let status: String
+    /// 形如 "Claude 4.9%"；<0.05% 时 "Claude < 0.1%"；无法估算或 status 非 available 时 "—"。
+    public let quotaText: String
+
+    public init(
+        id: String,
+        modelID: String,
+        agentID: String,
+        agentDisplayName: String,
+        agentBrandColor: MenuTrendColor,
+        modelLabel: String,
+        tokens: Int,
+        valueText: String,
+        status: String,
+        quotaText: String
+    ) {
+        self.id = id
+        self.modelID = modelID
+        self.agentID = agentID
+        self.agentDisplayName = agentDisplayName
+        self.agentBrandColor = agentBrandColor
+        self.modelLabel = modelLabel
+        self.tokens = tokens
+        self.valueText = valueText
+        self.status = status
+        self.quotaText = quotaText
+    }
+}
+
+/// Agent 品牌展示（名称 + 固定品牌色），供额度环与 Server 模型行复用。
+public enum AgentBranding {
+    public static func displayName(for agentID: String) -> String {
+        switch agentID.lowercased() {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "antigravity": return "Antigravity"
+        default:
+            guard let first = agentID.first else { return "未知" }
+            return String(first).uppercased() + agentID.dropFirst()
+        }
+    }
+
+    public static func color(for agentID: String) -> MenuTrendColor {
+        switch agentID.lowercased() {
+        case "claude":
+            return MenuTrendColor(red: 0.851, green: 0.467, blue: 0.341, opacity: 1)
+        case "codex":
+            return MenuTrendColor(red: 0.184, green: 0.486, blue: 0.965, opacity: 1)
+        case "antigravity":
+            return MenuTrendColor(red: 0.608, green: 0.447, blue: 0.796, opacity: 1)
+        default:
+            return MenuTrendColor(red: 0.557, green: 0.557, blue: 0.576, opacity: 1)
+        }
+    }
 }
 
 public struct QuotaRingData: Equatable, Sendable, Identifiable {
@@ -201,6 +308,15 @@ public enum MenuBarViewModel {
         let ceiling = maxTokens > 0 ? ceilingValue(maxTokens) : 1
         let midVal = midlineValue(ceiling: ceiling)
 
+        let cards = serverCards(
+            summary.breakdown,
+            sources: summary.sources,
+            period: summary.period,
+            now: now,
+            timezone: summary.timezone,
+            machineAliases: machineAliases
+        )
+
         return MenuBarState(
             statusTitle: tokenText,
             periodLabel: selectedOffset == 0 ? periodLabel(selectedPeriodID) : (selectedPeriodID == "today" ? "历史日期" : selectedPeriodID == "week" ? "历史周" : "历史月"),
@@ -223,7 +339,10 @@ public enum MenuBarViewModel {
             limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(from: quotaDisplaySlots, now: now),
-            providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage)
+            providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage),
+            serverCards: cards,
+            onlineServerCount: cards.filter(\.isOnline).count,
+            serverModelQuotaHeader: serverModelQuotaHeader(periodID: summary.period.id)
         )
     }
 
@@ -497,6 +616,153 @@ public enum MenuBarViewModel {
         }
     }
 
+    // MARK: - #175 Server 卡片（按机器分组）
+
+    private static func serverCards(
+        _ breakdown: MobileBreakdown,
+        sources: [MobileSource],
+        period: MobilePeriod,
+        now: Date,
+        timezone: String?,
+        machineAliases: [String: String]?
+    ) -> [MenuServerCard] {
+        let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
+        let hasModelDetail = !breakdown.byMachine.isEmpty
+        let sourcesByID = Dictionary(sources.map { ($0.sourceID, $0) }, uniquingKeysWith: { first, _ in first })
+        let totalTokens = period.totalTokens
+        let isMonth = period.id == "month"
+        // nil 表示「已计天数」不可靠（缺 start_date，或本地时钟早于 start_date）：
+        // 此时不能猜一个换算基准，月视图模型行必须显示「—」而不是被拉伸/压缩的误导数字。
+        let weeklyDivisor: Double? = isMonth
+            ? countedDaysForMonth(period: period, timezone: timezone, now: now).map { Double($0) / 7.0 }
+            : 1.0
+        let nowReference = ISO8601DateFormatter().string(from: now)
+
+        return rows.map { row in
+            let matchedSources = (row.sourceIDs ?? []).compactMap { sourcesByID[$0] }
+            let isOnline = matchedSources.contains { $0.status == "ok" }
+            let distinctUsers = Array(Set(matchedSources.compactMap(\.osUser))).sorted()
+            let userText: String
+            if distinctUsers.count > 1 {
+                userText = "\(distinctUsers.count) 个用户"
+            } else if let user = distinctUsers.first {
+                userText = user
+            } else {
+                userText = "未知用户"
+            }
+            let latestTime = matchedSources.compactMap { $0.lastPushedAt ?? $0.lastObservedAt }.max()
+            let timeText = compactDateTime(latestTime, reference: nowReference, suffix: "同步") ?? "未同步"
+            let platform = matchedSources.compactMap(\.platform).first
+
+            // aliases 的 key 是机器原名（row.id，如上报用的 hostname），不是 breakdown 已经美化过的 label；
+            // 先按原名精确查，查不到再走 formatMachineName(row.label, aliases:) 的既有猜测逻辑。
+            let title = machineAliases?[row.id].flatMap { $0.isEmpty ? nil : $0 }
+                ?? formatMachineName(row.label, aliases: machineAliases)
+            let sharePercentText: String
+            if totalTokens > 0 {
+                sharePercentText = "\(Int((Double(row.tokens) / Double(totalTokens) * 100).rounded()))%"
+            } else {
+                sharePercentText = "—"
+            }
+
+            var models: [MenuServerModelRow] = []
+            if hasModelDetail, let agents = row.agents {
+                for agent in agents {
+                    let agentDisplayName = AgentBranding.displayName(for: agent.id)
+                    let brandColor = AgentBranding.color(for: agent.id)
+                    for model in agent.models where model.tokens > 0 {
+                        let estimate = ModelQuotaEstimator.estimateWeeklyQuota(
+                            modelID: model.id,
+                            label: model.label,
+                            agentID: agent.id,
+                            tokens: model.tokens
+                        )
+                        // weeklyDivisor 为 nil：月视图「已计天数」不可靠，不展示误导数字。
+                        // status != "available"：模型明细本身不可信（缺失/未知），不论算出来多少都不展示占比。
+                        let adjustedEstimate: ModelQuotaEstimate? = model.status == "available"
+                            ? weeklyDivisor.flatMap { divisor in estimate.map { weeklyAveraged($0, divisor: divisor) } }
+                            : nil
+                        models.append(MenuServerModelRow(
+                            id: "\(row.id)/\(agent.id)/\(model.id)",
+                            modelID: model.id,
+                            agentID: agent.id,
+                            agentDisplayName: agentDisplayName,
+                            agentBrandColor: brandColor,
+                            modelLabel: model.label,
+                            tokens: model.tokens,
+                            valueText: TokenFormat.compact(model.tokens),
+                            status: model.status,
+                            quotaText: serverQuotaText(adjustedEstimate, agentDisplayName: agentDisplayName)
+                        ))
+                    }
+                }
+            }
+            models.sort { lhs, rhs in
+                if lhs.tokens != rhs.tokens { return lhs.tokens > rhs.tokens }
+                return lhs.modelID < rhs.modelID
+            }
+
+            return MenuServerCard(
+                id: row.id,
+                title: title,
+                platform: platform,
+                subtitle: "\(userText) · \(timeText)",
+                valueText: TokenFormat.compact(row.tokens),
+                sharePercentText: sharePercentText,
+                isOnline: isOnline,
+                models: models
+            )
+        }
+    }
+
+    private static func weeklyAveraged(_ estimate: ModelQuotaEstimate, divisor: Double) -> ModelQuotaEstimate {
+        guard divisor > 0 else { return estimate }
+        return ModelQuotaEstimate(
+            agentID: estimate.agentID,
+            percent: estimate.percent / divisor,
+            dedicatedPercent: estimate.dedicatedPercent.map { $0 / divisor }
+        )
+    }
+
+    private static func serverQuotaText(_ estimate: ModelQuotaEstimate?, agentDisplayName: String) -> String {
+        guard let estimate else { return "—" }
+        if estimate.percent < 0.05 {
+            return "\(agentDisplayName) < 0.1%"
+        }
+        return "\(agentDisplayName) " + String(format: "%.1f%%", estimate.percent)
+    }
+
+    /// 月视图「已计天数」：period.start_date 到 min(period.end_date, now 所在日期) 的天数（含首尾）。
+    /// 缺 start_date，或本地时钟早于 start_date（now 所在日期 < start_date，视为不可靠时钟/数据），
+    /// 返回 nil——调用方必须不做换算并展示「—」，不能猜一个基准去拉伸/压缩累计值。
+    private static func countedDaysForMonth(period: MobilePeriod, timezone: String?, now: Date) -> Int? {
+        guard let startDateStr = period.startDate, !startDateStr.isEmpty else { return nil }
+        let tz = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = tz
+
+        let dayFormatter = DateFormatter()
+        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dayFormatter.timeZone = tz
+        dayFormatter.dateFormat = "yyyy-MM-dd"
+
+        let todayStr = dayFormatter.string(from: now)
+        let endDateStr = period.endDate ?? todayStr
+        let cappedEndStr = min(endDateStr, todayStr)
+
+        guard let start = dayFormatter.date(from: startDateStr), let end = dayFormatter.date(from: cappedEndStr) else {
+            return nil
+        }
+        let days = calendar.dateComponents([.day], from: start, to: end).day ?? 0
+        // now 所在日期早于 start_date：时钟偏差或数据异常，天数会是负的——不可靠，返回 nil。
+        guard days >= 0 else { return nil }
+        return days + 1
+    }
+
+    private static func serverModelQuotaHeader(periodID: String) -> String {
+        periodID == "month" ? "周均占各自周额度" : "约占各自周额度"
+    }
+
     private static func sourceQuality(_ sourceType: String?) -> Int {
         switch sourceType {
         case "oauth_usage_api": return 4
@@ -701,16 +967,7 @@ public enum MenuBarViewModel {
     }
 
     private static func brandColor(for provider: String) -> MenuTrendColor {
-        switch provider {
-        case "claude":
-            return MenuTrendColor(red: 0.851, green: 0.467, blue: 0.341, opacity: 1)
-        case "codex":
-            return MenuTrendColor(red: 0.184, green: 0.486, blue: 0.965, opacity: 1)
-        case "antigravity":
-            return MenuTrendColor(red: 0.608, green: 0.447, blue: 0.796, opacity: 1)
-        default:
-            return MenuTrendColor(red: 0.557, green: 0.557, blue: 0.576, opacity: 1)
-        }
+        AgentBranding.color(for: provider)
     }
 
     private static func usageText(_ usage: MobileProviderUsage) -> String {

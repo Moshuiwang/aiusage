@@ -99,4 +99,41 @@ final class ModelQuotaEstimatorTests: XCTestCase {
         )
         XCTAssertEqual(largeFlashText, "约占周额度 5.0%")
     }
+
+    // MARK: - #175 结构化 API：额度占比按 Agent 归属
+
+    func testStructuredEstimateAttributesAntigravityHostedClaudeModelToAntigravityNotClaude() throws {
+        let raw = ModelQuotaEstimator.estimateWeeklyQuota(
+            modelID: "claude-opus-4-6-thinking",
+            label: "claude-opus-4-6-thinking",
+            agentID: "antigravity",
+            tokens: 10_000_000
+        )
+        let estimate = try XCTUnwrap(raw)
+        XCTAssertEqual(estimate.agentID, "antigravity")
+        XCTAssertEqual(estimate.percent, 5.0, accuracy: 0.0001)
+        XCTAssertNil(estimate.dedicatedPercent)
+    }
+
+    func testStructuredEstimateReturnsNilForNonClaudeModelUnderClaudeAgent() {
+        let estimate = ModelQuotaEstimator.estimateWeeklyQuota(
+            modelID: "deepseek-v4-pro",
+            label: "DeepSeek V4 Pro",
+            agentID: "claude",
+            tokens: 5_000_000
+        )
+        XCTAssertNil(estimate)
+    }
+
+    func testStructuredEstimateStillReturnsClaudeForRealClaudeModelUnderClaudeAgent() throws {
+        let raw = ModelQuotaEstimator.estimateWeeklyQuota(
+            modelID: "claude-opus-5",
+            label: "Claude Opus 5",
+            agentID: "claude",
+            tokens: 23_000_000
+        )
+        let estimate = try XCTUnwrap(raw)
+        XCTAssertEqual(estimate.agentID, "claude")
+        XCTAssertEqual(estimate.percent, 1.0, accuracy: 0.0001)
+    }
 }
