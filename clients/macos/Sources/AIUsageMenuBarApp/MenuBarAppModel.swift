@@ -15,6 +15,14 @@ final class MenuBarAppModel: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var config: MenuBarRuntimeConfig?
 
+    /// #177 性能：`state`/`statusState` 曾是计算属性，视图 body 每读一次就重新跑一遍
+    /// MenuBarViewModel.build（单帧最多被读 ~18 次）。改成存储属性，只在输入真正变化时
+    /// （summary/selectedPeriodID/selectedOffset/todaySummary/config/cachedSummaries）重建一次。
+    @Published private(set) var state: MenuBarState
+    @Published private(set) var statusState: MenuBarState
+    /// 仅供测试观测 rebuildState() 被调用的次数，不参与任何展示逻辑。
+    internal private(set) var stateBuildCount = 0
+
     let paths: RuntimePaths
     private let loadSummary: MenuBarSummaryLoader
     private let loadRuntimeConfig: MenuBarRuntimeConfigProvider
@@ -55,10 +63,20 @@ final class MenuBarAppModel: ObservableObject {
         self.summary = periodSummaries[initialPeriodID]?.summary ?? MobileSummary.empty(periodID: initialPeriodID)
         self.todaySummary = periodSummaries["today"]?.summary
         self.hasLoadedUsableSummary = periodSummaries[initialPeriodID] != nil
+        // Swift 两阶段初始化：state/statusState 必须先有值才能调用 self 的方法（rebuildState()
+        // 内部要读 self.summary 等）。这里给一个占位空状态，随即在下面用 rebuildState() 覆盖成真值。
+        let placeholder = MenuBarViewModel.build(from: .empty(), selectedPeriodID: "today")
+        self.state = placeholder
+        self.statusState = placeholder
+        rebuildState()
     }
 
-    var state: MenuBarState {
-        MenuBarViewModel.build(
+    /// #177 性能：唯一负责重算 state/statusState 的入口——只在 summary / selectedPeriodID /
+    /// selectedOffset / todaySummary / config / cachedSummaries 真正变化后调用一次，
+    /// 不再让每次视图 body 读 model.state 都触发一次 MenuBarViewModel.build。
+    private func rebuildState() {
+        stateBuildCount += 1
+        state = MenuBarViewModel.build(
             from: summary,
             selectedPeriodID: selectedPeriodID,
             selectedOffset: selectedOffset,
@@ -66,6 +84,11 @@ final class MenuBarAppModel: ObservableObject {
             machineAliases: config?.machineAliases,
             quotaSlots: latestQuotaProviderSlots(),
             additionalSources: otherKnownSources()
+        )
+        statusState = MenuBarViewModel.build(
+            from: todaySummary ?? .empty(),
+            selectedPeriodID: "today",
+            machineAliases: config?.machineAliases
         )
     }
 
@@ -101,15 +124,26 @@ final class MenuBarAppModel: ObservableObject {
         return sources
     }
 
-    private static func parseGeneratedAt(_ iso: String?) -> Date? {
-        guard let iso else { return nil }
+    // 与 MenuBarViewModel 同样的理由：ISO8601DateFormatter 构造本身有实测开销，
+    // 每次 latestQuotaProviderSlots() 会对 summary/todaySummary/所有 cachedSummaries 各解析一次，
+    // 缓存复用而不是每次 new。调用全部发生在 @MainActor 同步路径内。
+    nonisolated(unsafe) private static let generatedAtFormatterFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: iso) {
+        return formatter
+    }()
+    nonisolated(unsafe) private static let generatedAtFormatterBasic: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static func parseGeneratedAt(_ iso: String?) -> Date? {
+        guard let iso else { return nil }
+        if let date = generatedAtFormatterFractional.date(from: iso) {
             return date
         }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: iso)
+        return generatedAtFormatterBasic.date(from: iso)
     }
 
     var hasConfig: Bool {
@@ -135,13 +169,6 @@ final class MenuBarAppModel: ObservableObject {
             }
         )
     }
-    var statusState: MenuBarState {
-        MenuBarViewModel.build(
-            from: todaySummary ?? .empty(),
-            selectedPeriodID: "today",
-            machineAliases: config?.machineAliases
-        )
-    }
 
     func refresh(periodID: String? = nil, offset: Int? = nil, force: Bool = false) {
         let selected = MenuPeriodSelection(
@@ -163,6 +190,7 @@ final class MenuBarAppModel: ObservableObject {
             if !force && isFresh(cached) {
                 isLoading = false
                 errorMessage = nil
+                rebuildState()
                 return
             }
         } else {
@@ -172,6 +200,7 @@ final class MenuBarAppModel: ObservableObject {
         }
         let runtimeConfig = loadRuntimeConfig(paths) ?? config
         config = runtimeConfig
+        rebuildState()
         guard let runtimeConfig, let baseURL = URL(string: runtimeConfig.serverURL) else {
             isLoading = false
             errorMessage = "需要配置服务地址"
@@ -228,7 +257,10 @@ final class MenuBarAppModel: ObservableObject {
         }
         guard let runtimeConfig = loadRuntimeConfig(paths) ?? config,
               let baseURL = URL(string: runtimeConfig.serverURL) else { return }
-        if let cached = cachedSummaries["today"], !Self.isSameCacheDay(cached, now: now()) { todaySummary = nil }
+        if let cached = cachedSummaries["today"], !Self.isSameCacheDay(cached, now: now()) {
+            todaySummary = nil
+            rebuildState()
+        }
         todayRefreshSequence += 1
         let sequence = todayRefreshSequence
         let loader = loadSummary
@@ -292,12 +324,14 @@ final class MenuBarAppModel: ObservableObject {
             summary = .empty(periodID: selectedPeriodID)
             hasLoadedUsableSummary = false
         }
+        rebuildState()
     }
 
     private func store(_ summary: MobileSummary, for selected: MenuPeriodSelection) {
         cachedSummaries[selected.cacheKey] = CachedMenuSummary(summary: summary, fetchedAt: now())
         if selected == MenuPeriodSelection(periodID: "today") { todaySummary = summary }
         try? SummaryCache.save(summary, paths: paths, offset: selected.offset)
+        rebuildState()
     }
 
     private static func isSameCacheDay(_ cached: CachedMenuSummary, now: Date) -> Bool {

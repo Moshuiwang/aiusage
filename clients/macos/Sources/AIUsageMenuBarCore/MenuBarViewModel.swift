@@ -253,6 +253,40 @@ public struct MenuDisplaySection: Equatable, Sendable, Identifiable {
 }
 
 public enum MenuBarViewModel {
+    // 性能：ISO8601DateFormatter / DateFormatter 的构造本身有实测开销（~0.16ms/次），
+    // 一次 build 内会被 parseDate 等调用几十次——缓存复用而不是每次 new。
+    // 调用全部发生在主线程同步路径内（SwiftUI body / MenuBarAppModel），可安全共享可变实例。
+    nonisolated(unsafe) private static let isoFormatterFractional: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    /// 默认 formatOptions（.withInternetDateTime）——与 `ISO8601DateFormatter().string(from:)` 的
+    /// 默认行为一致，因此同一个实例可同时用于「生成参照字符串」与「解析回退」两处。
+    nonisolated(unsafe) private static let isoFormatterBasic: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    /// "yyyy-MM-dd" 本地日期比较用；timeZone 按调用方传入的 tz 每次赋值（属性赋值远比重新构造
+    /// DateFormatter 便宜——真正贵的是 Locale/TimeZone 查找与对象初始化本身）。
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    /// compactDateTime 用：时区固定 Asia/Shanghai，只有 dateFormat（HH:mm / MM-dd HH:mm）随调用变化。
+    private static let compactTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return formatter
+    }()
+
     public static func build(
         from summary: MobileSummary,
         selectedPeriodID: String,
@@ -267,8 +301,8 @@ public enum MenuBarViewModel {
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
         let displaySlots = fixedProviderSlots(summary.providerSlots)
         let quotaDisplaySlots = fixedProviderSlots(quotaSlots ?? summary.providerSlots)
-        let currentProviderWindows = currentProviderWindows(displaySlots, now: now)
-        let primaryLimit = currentProviderWindows
+        let limitWindows = currentProviderWindows(displaySlots, now: now)
+        let primaryLimit = limitWindows
             .sorted { lhs, rhs in
                 if lhs.usedPercent == rhs.usedPercent {
                     return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
@@ -276,11 +310,19 @@ public enum MenuBarViewModel {
                 return lhs.usedPercent > rhs.usedPercent
             }
             .first
+        // 额度环所需的窗口在此一次性算好（每个 slot 一次 trustedProviderWindows），
+        // 而不是在 quotaRings 内部按 slot 重算一遍。
+        let quotaSlotsWithWindows = quotaDisplaySlots.map { slot in
+            (slot, currentProviderWindows([slot], now: now))
+        }
 
-        // 未来时段不参与最大值，与 trendBars 的 ratio 口径一致。
-        let maxTokens = summary.trend.points
-            .filter { !isFutureBucket($0.bucket, granularity: summary.trend.granularity, now: now, timezone: summary.timezone) }
-            .map(\.tokens).max() ?? 0
+        // 每个 trend point 的 isFuture 只判定一次，maxTokens/图例合计/柱状图三处复用，
+        // 而不是各自重新扫描一遍 points。
+        let futureFlags = summary.trend.points.map {
+            isFutureBucket($0.bucket, granularity: summary.trend.granularity, now: now, timezone: summary.timezone)
+        }
+        let nonFuturePoints = zip(summary.trend.points, futureFlags).filter { !$0.1 }.map(\.0)
+        let maxTokens = nonFuturePoints.map(\.tokens).max() ?? 0
         let ceiling = maxTokens > 0 ? ceilingValue(maxTokens) : 1
 
         let cards = serverCards(
@@ -292,7 +334,7 @@ public enum MenuBarViewModel {
             machineAliases: machineAliases
         )
 
-        let bars = trendBars(summary.trend, now: now, timezone: summary.timezone)
+        let bars = trendBars(summary.trend, futureFlags: futureFlags, maxTokens: maxTokens)
 
         return MenuBarState(
             statusTitle: tokenText,
@@ -304,16 +346,12 @@ public enum MenuBarViewModel {
             primaryLimitText: primaryLimitText(primaryLimit),
             headerUpdatedText: headerUpdatedText(summary.sources + additionalSources, fallback: summary.generatedAt, now: now),
             trendBars: bars,
-            trendLegendTotals: aggregatedSegments(
-                summary.trend.points.filter { point in
-                    !isFutureBucket(point.bucket, granularity: summary.trend.granularity, now: now, timezone: summary.timezone)
-                }
-            ),
+            trendLegendTotals: aggregatedSegments(nonFuturePoints),
             trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
-            limitRows: sortedLimits(currentProviderWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
+            limitRows: sortedLimits(limitWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(from: quotaDisplaySlots, now: now),
+            quotaRings: quotaRings(from: quotaSlotsWithWindows, now: now),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage),
             serverCards: cards,
             onlineServerCount: cards.filter(\.isOnline).count,
@@ -370,7 +408,7 @@ public enum MenuBarViewModel {
     /// #177：标题栏副标题用的钟表时间「HH:mm 更新」（同日）或「MM-dd HH:mm 更新」（跨天）。
     private static func headerUpdatedText(_ sources: [MobileSource], fallback: String?, now: Date) -> String {
         let latest = sources.compactMap { $0.lastObservedAt }.max()
-        let nowRef = ISO8601DateFormatter().string(from: now)
+        let nowRef = isoFormatterBasic.string(from: now)
         return compactDateTime(latest ?? fallback, reference: nowRef, suffix: "更新") ?? "--"
     }
 
@@ -387,15 +425,14 @@ public enum MenuBarViewModel {
         ].joined(separator: " · ")
     }
 
-    static func trendBars(_ trend: MobileTrend, now: Date, timezone: String?) -> [MenuTrendBar] {
-        let maxTokens = max(
-            trend.points
-                .filter { !isFutureBucket($0.bucket, granularity: trend.granularity, now: now, timezone: timezone) }
-                .map(\.tokens).max() ?? 0,
-            1
-        )
+    /// - Parameters:
+    ///   - futureFlags: 每个 point 对应的 isFuture，须与 trend.points 等长且同序——由调用方
+    ///     一次性算好传入，避免这里再重新扫描一遍 points。
+    ///   - maxTokens: 非未来 points 的 token 最大值（未做 floor(1)），调用方已经算过一次。
+    static func trendBars(_ trend: MobileTrend, futureFlags: [Bool], maxTokens: Int) -> [MenuTrendBar] {
+        let denominator = max(maxTokens, 1)
         return trend.points.enumerated().map { index, point in
-            let isFuture = isFutureBucket(point.bucket, granularity: trend.granularity, now: now, timezone: timezone)
+            let isFuture = index < futureFlags.count ? futureFlags[index] : false
             return MenuTrendBar(
                 id: point.bucket,
                 label: axisLabel(
@@ -406,7 +443,7 @@ public enum MenuBarViewModel {
                 ),
                 tooltipTitle: shortBucket(point.bucket, granularity: trend.granularity),
                 valueText: isFuture ? "" : TokenFormat.compact(point.tokens),
-                ratio: isFuture ? 0 : Double(point.tokens) / Double(maxTokens),
+                ratio: isFuture ? 0 : Double(point.tokens) / Double(denominator),
                 totalTokens: isFuture ? 0 : max(point.tokens, 0),
                 segments: isFuture ? [] : trendSegments(point),
                 isFuture: isFuture
@@ -422,10 +459,7 @@ public enum MenuBarViewModel {
             return bucketDate > now
         }
         guard bucket.count >= 10 else { return false }
-        let dayFormatter = DateFormatter()
-        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
         dayFormatter.timeZone = tz
-        dayFormatter.dateFormat = "yyyy-MM-dd"
         let todayStr = dayFormatter.string(from: now)
         let bucketDay = String(bucket.prefix(10))
         return bucketDay > todayStr
@@ -574,7 +608,7 @@ public enum MenuBarViewModel {
         let weeklyDivisor: Double? = isMonth
             ? countedDaysForMonth(period: period, timezone: timezone, now: now).map { Double($0) / 7.0 }
             : 1.0
-        let nowReference = ISO8601DateFormatter().string(from: now)
+        let nowReference = isoFormatterBasic.string(from: now)
 
         return rows.map { row in
             let matchedSources = (row.sourceIDs ?? []).compactMap { sourcesByID[$0] }
@@ -680,10 +714,7 @@ public enum MenuBarViewModel {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = tz
 
-        let dayFormatter = DateFormatter()
-        dayFormatter.locale = Locale(identifier: "en_US_POSIX")
         dayFormatter.timeZone = tz
-        dayFormatter.dateFormat = "yyyy-MM-dd"
 
         let todayStr = dayFormatter.string(from: now)
         let endDateStr = period.endDate ?? todayStr
@@ -823,20 +854,21 @@ public enum MenuBarViewModel {
         return (candidate.observedAt ?? "") > (existing.observedAt ?? "")
     }
 
+    /// - Parameter slotsWithWindows: (slot, currentProviderWindows([slot], now:)) 对，由调用方
+    ///   （build）一次性算好传入，避免每个 slot 在这里重新触发一遍 trustedProviderWindows。
     private static func quotaRings(
-        from slots: [MobileProviderSlot],
+        from slotsWithWindows: [(MobileProviderSlot, [MobileLimitWindow])],
         now: Date
     ) -> [QuotaRingData] {
         // 额度与所选时间段无关：更新时间以「现在」为参照，不参照所选 summary 的 generatedAt。
-        let reference = ISO8601DateFormatter().string(from: now)
+        let reference = isoFormatterBasic.string(from: now)
         let providerOrder = ["claude", "codex", "antigravity"]
-        return slots.sorted {
-            let lhs = providerOrder.firstIndex(of: canonicalProvider($0.provider)) ?? providerOrder.count
-            let rhs = providerOrder.firstIndex(of: canonicalProvider($1.provider)) ?? providerOrder.count
-            return lhs == rhs ? $0.provider < $1.provider : lhs < rhs
-        }.map { slot in
+        return slotsWithWindows.sorted {
+            let lhs = providerOrder.firstIndex(of: canonicalProvider($0.0.provider)) ?? providerOrder.count
+            let rhs = providerOrder.firstIndex(of: canonicalProvider($1.0.provider)) ?? providerOrder.count
+            return lhs == rhs ? $0.0.provider < $1.0.provider : lhs < rhs
+        }.map { slot, wins in
             let provider = canonicalProvider(slot.provider)
-            let wins = currentProviderWindows([slot], now: now)
             let bestWindows = bestWindowPerType(wins)
             let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
             let weekWindow = bestWindows.first(where: isWeekLimitWindow)
@@ -1000,13 +1032,10 @@ public enum MenuBarViewModel {
 
     private static func parseDate(_ iso: String?) -> Date? {
         guard let iso, iso.count >= 19 else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: iso) {
+        if let date = isoFormatterFractional.date(from: iso) {
             return date
         }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: iso)
+        return isoFormatterBasic.date(from: iso)
     }
 
     private static func ceilingValue(_ maxTokens: Int) -> Int {
@@ -1087,11 +1116,8 @@ public enum MenuBarViewModel {
         let isSameDay = reference.flatMap(parseDate).map {
             calendar.isDate(date, inSameDayAs: $0)
         } ?? false
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = isSameDay ? "HH:mm" : "MM-dd HH:mm"
-        let text = formatter.string(from: date)
+        compactTimeFormatter.dateFormat = isSameDay ? "HH:mm" : "MM-dd HH:mm"
+        let text = compactTimeFormatter.string(from: date)
         return "\(text) \(suffix)"
     }
 

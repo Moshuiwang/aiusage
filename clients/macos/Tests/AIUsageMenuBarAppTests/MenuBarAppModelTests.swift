@@ -1213,6 +1213,51 @@ final class MenuBarAppModelTests: XCTestCase {
         """
         return try JSONDecoder().decode(MobileSummary.self, from: Data(json.utf8))
     }
+
+    // #177 性能：state 曾是计算属性，视图 body 每读一次就重建一遍 MenuBarState。
+    // 改成存储属性后，连续读多次 state 不该再触发重建；只有输入真正变化（这里用命中缓存的
+    // refresh 切换 period）才应该重建一次，且新 state 要反映新选中的期间。
+    func testReadingStateRepeatedlyDoesNotRebuildButChangingPeriodDoes() async throws {
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(
+                    summary: try summary(periodID: "today", totalTokens: 100),
+                    fetchedAt: now.addingTimeInterval(-60)
+                ),
+                "week": CachedMenuSummary(
+                    summary: try summary(periodID: "week", totalTokens: 700),
+                    fetchedAt: now.addingTimeInterval(-60)
+                ),
+            ],
+            cacheFreshnessInterval: 300,
+            now: { now },
+            loadSummary: loader.load
+        )
+
+        let countAfterInit = model.stateBuildCount
+        for _ in 0..<20 {
+            _ = model.state
+        }
+        XCTAssertEqual(
+            model.stateBuildCount, countAfterInit,
+            "连续读 20 次 state 不应触发重建"
+        )
+
+        model.refresh(periodID: "week")
+        await yieldToMainActor()
+
+        XCTAssertGreaterThan(
+            model.stateBuildCount, countAfterInit,
+            "切换到已缓存的 week 期间必须触发一次重建"
+        )
+        XCTAssertEqual(model.state.periodLabel, "本周", "重建后的 state 必须反映新选中的期间")
+        let requestCount = await loader.requestCount()
+        XCTAssertEqual(requestCount, 0, "week 缓存新鲜，不应发网络请求")
+    }
 }
 
 private actor ControlledSummaryLoader {
