@@ -1,0 +1,85 @@
+/** #183-a：精度分级门槛（grade）与逐日留出回测的基本行为。 */
+import { describe, expect, it } from "vitest";
+import { grade, leaveOneDayOutMaxError } from "../src/calibration/backtest";
+import { nonNegativeLeastSquares } from "../src/calibration/nnls";
+import type { Interval } from "../src/calibration/types";
+
+describe("grade", () => {
+  it("effectiveDeltaU ≥10 且回测最大误差 ≤10% → A", () => {
+    expect(grade(10, 0.1)).toBe("A");
+    expect(grade(50, 0)).toBe("A");
+  });
+
+  it("effectiveDeltaU ≥4 且回测最大误差 ≤25% → B（不满足 A 的门槛时降级，不是直接 A）", () => {
+    expect(grade(4, 0.25)).toBe("B");
+    expect(grade(10, 0.2)).toBe("B"); // effU 够 A，但误差超过 10%，只能是 B
+  });
+
+  it("effectiveDeltaU 或误差任一不达标 → none", () => {
+    expect(grade(3.9, 0.05)).toBe("none"); // effU 不够
+    expect(grade(4, 0.26)).toBe("none"); // 误差超过 B 门槛
+    expect(grade(0, 0)).toBe("none");
+  });
+
+  it("回测误差为 null（没有任何一天满足最小 ΔU 门槛）时永远 none，不管 effectiveDeltaU 多大", () => {
+    expect(grade(1000, null)).toBe("none");
+  });
+
+  it("误差取绝对值：负的相对误差同样受门槛约束", () => {
+    expect(grade(10, -0.05)).toBe("A");
+    expect(grade(10, -0.2)).toBe("B");
+  });
+
+  it("【变异证据】未见族（effectiveDeltaU=0）如果不经过门槛检查直接判 A/B，会把没见过的族错误定级", () => {
+    const brokenGrade = (effU: number, err: number | null) => (err !== null && Math.abs(err) <= 0.25 ? "B" : "none");
+    expect(grade(0, 0.1)).toBe("none"); // 正确实现：effU=0 不达标，none
+    expect(brokenGrade(0, 0.1)).toBe("B"); // 错误实现：忘记检查 effectiveDeltaU 门槛，直接判 B
+  });
+});
+
+function iv(t0: string, deltaU: number, feature: number): Interval {
+  return {
+    sourceId: "s",
+    cycleIndex: 0,
+    t0,
+    t1: t0,
+    u0: 0,
+    u1: deltaU,
+    deltaU,
+    familyPricedTokens: { a: feature },
+  };
+}
+
+describe("leaveOneDayOutMaxError", () => {
+  const fit = (rows: number[][], targets: number[], weights: number[]) => nonNegativeLeastSquares(rows, targets, weights);
+  const w = () => 1;
+
+  it("完美线性数据（y=2x，跨多天）留出回测误差应接近 0", () => {
+    const intervals = [
+      iv("2026-09-01T00:00:00Z", 20, 10),
+      iv("2026-09-02T00:00:00Z", 40, 20),
+      iv("2026-09-03T00:00:00Z", 60, 30),
+      iv("2026-09-04T00:00:00Z", 80, 40),
+    ];
+    const err = leaveOneDayOutMaxError(intervals, ["a"], fit, w);
+    expect(err).not.toBeNull();
+    expect(Math.abs(err as number)).toBeLessThan(0.05);
+  });
+
+  it("当天实际 ΔU 之和小于最小门槛（3）时跳过该天，不产出误判的巨大相对误差", () => {
+    const intervals = [
+      iv("2026-09-01T00:00:00Z", 20, 10),
+      iv("2026-09-02T00:00:00Z", 20, 10),
+      iv("2026-09-03T00:00:00Z", 1, 0.5), // 当天 ΔU=1 <3，应被跳过
+    ];
+    const err = leaveOneDayOutMaxError(intervals, ["a"], fit, w);
+    // 只有两天参与（09-01、09-02），线性完美拟合，误差应接近 0；09-03 被跳过不会拉高误差。
+    expect(err).not.toBeNull();
+    expect(Math.abs(err as number)).toBeLessThan(0.05);
+  });
+
+  it("没有任何一天的 ΔU 达到门槛时返回 null", () => {
+    const intervals = [iv("2026-09-01T00:00:00Z", 1, 0.5), iv("2026-09-02T00:00:00Z", 2, 1)];
+    expect(leaveOneDayOutMaxError(intervals, ["a"], fit, w)).toBeNull();
+  });
+});
