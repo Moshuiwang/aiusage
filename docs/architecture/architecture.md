@@ -36,6 +36,18 @@ flowchart LR
 
 用户现在真实看到的是 Web dashboard 和 iPhone App / Widget 的只读结果。后续 Android、macOS、Windows 也必须沿用同一套 read model 和 DTO：Web 是完整 dashboard，iOS / Android 是移动查看，macOS / Windows 是轻量入口。它们不执行采集，不执行 SSH，不重新定义 token / limits 口径。
 
+> **产品范围决定（#199，2026-09-27，尚未实施）**：产品只支持 macOS 菜单栏 popover 和 iPhone 端。
+> Web dashboard（`webApi`/`dashboard` 一支）已决定整体废弃；Android、Windows 客户端方向随之搁置。
+> 上面的流程图和依赖方向仍按当前代码描述，未按该决定裁剪——废弃尚未落地，删除前需先盘点确认
+> Mac/iPhone 无调用（见 #199 验收清单）。Mac 菜单栏与 iPhone 已经只读 `mobileApi`
+> (`/api/mobile/summary`)，不读 `webApi`。
+
+模型周额度校准（epic #180）在 D1 之上加了一段每日批处理：`quota-calibration-cron.ts` 每日 cron
+按 provider 轮换读取 28 天官方周额度读数与小时用量，写回 `quota_calibration` 表；`read-model` 读它
+给 breakdown 挂 `quota_estimate`，菜单栏据此显示「≈x.x%」。采集端 `account_fingerprint.py` 上报
+不可逆账户指纹写 `account_observations`，用于发现同一 provider 下的账户切换/冲突（冲突时该
+provider 整体降级为不显示，不做部分归因）。
+
 Apple Watch 的稳定安装和表盘组件路线见 [`watch-companion-testflight.md`](watch-companion-testflight.md)。该路线复用 `/api/mobile/summary` 和 iPhone App 缓存，不新增数据库或服务端接口。
 
 ## 依赖方向
@@ -80,8 +92,10 @@ CLI / HTTP handler / clients
 | `cloudflare/native-worker/src/mobile-summary.ts` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
 | `cloudflare/native-worker/src/version-contract.ts` | 服务端版本判定：四态、最低支持版本策略、wire 校验与脱敏。 | —— |
 | `cloudflare/migrations/` | D1 schema 与迁移；守卫是 `tests/test_d1_schema_migration.py` 的显式列布局快照。 | —— |
+| `cloudflare/native-worker/src/quota-calibration-cron.ts` + `src/calibration/` | 每日 cron 按 provider 轮换拟合模型周额度校准系数，覆盖写 `quota_calibration`。 | 不摸 D1 之外的状态；纯计算内核不直接查 D1。 |
 | `cli.py` | 命令解析和调用编排（采集端）。 | 不直接写展示口径。 |
 | `pusher.py` | 设备本机采集和 HTTP 上报。 | 不读取其他 OS 用户 home，不做 server-side 聚合。 |
+| `account_fingerprint.py` | 采集端生成不可逆账户指纹并随上报写入，供 `account_observations` 做账户冲突检测。 | 不上报可逆或明文账户标识。 |
 | `version_contract.py`（采集端半边） | 本机上报版本块的构造与出站自检、发布通道枚举。 | 不做 HTTP、不依赖包内其它模块；服务端判定权威在 `version-contract.ts`。 |
 | `limits_*` / provider modules | 官方额度来源、provider runtime、doctor、scheduler、push。#74/PM-2 起不落本地库。 | 不污染 daily usage baseline，不保存 token/cookie/raw response。 |
 
@@ -112,6 +126,12 @@ CLI / HTTP handler / clients
 - `Usage Ledger hourly fact`：本机按最近窗口扫描并按记录时间切成小时桶；服务端按来源、agent、client、时间窗口、账号、归因状态和 provenance upsert，同一小时重复上报只更新最新值，不累加。
 - `实时上报`：macOS 本机当前通过 LaunchAgent `com.chunbai.aiusage.pusher` 每 300 秒运行 Python pusher。默认增量 lookback 为 48 小时，用于覆盖日志延迟和近期归档，不代表上传 48 小时内每个 session 明细。
 - `Cloudflare D1`：当前生产 canonical store。D1 是 Cloudflare 托管的 SQLite-compatible serverless SQL 数据库，不是 PostgreSQL。#74 起服务端不再有本地 SQLite adapter；采集端唯一的本地库是 `collector_store.py` 的 outbox（缓冲，不是档案）。
+- `D1 读取预算`（#190）：Cloudflare Free 计划 D1 有每日 rows_read/rows_written 免费额度，客户端
+  高频预取（本周/本月）会在极少 rollup 复用的情况下让 read model 反复全表扫描
+  `usage_hourly_facts`/`usage_hourly_models`。0014 迁移给 rollup 表补 `total_cost` 并加表达式索引
+  以减少扫描；客户端侧预取频率需保持低频（不是「打开一次面板拉一次」就重复拉全部周期）。
+  `scripts/check_cf_usage.py` 已纳入 D1 rows_read/rows_written 巡检，发布新版本后必须回源确认
+  水位（证据等级 7），不能只看部署成功。
 
 详细 SQLite 表和当前 snapshot 顶层字段见 [`database.md`](database.md) 与
 [`interfaces.md`](interfaces.md)。旧 `docs/architecture.md` 中的 `snapshot_builds`
@@ -196,19 +216,8 @@ CLI / HTTP handler / clients
 
 示例配置可以提交，例如 `config/*.example.json`。本地真实配置不能提交，例如 `config/sources.local.json` 和 `config/limits.local.json`。
 
-## 立即收敛的问题
-
-P1：
-
-- `server.py` 只保留 HTTP 适配，业务编排放入 `server_services.py`。
-- `collector.py` / SSH source 明确标记为 legacy。
-- `.gitignore` 覆盖本地数据、构建产物、token、日志。
-
-P2：
-
-- `snapshot_builder.py` 内部继续拆 limits/hourly residual helper，但仍保留它作为 Web summary read model owner。
-- 聚合测试继续从 HTTP 层下沉到 read model/service 层，降低后续改入口时的回归成本。
-
-P3：
-
-- Widget 配置共享设计已收敛到 `docs/architecture/widget-configuration-sharing.md`；实现前必须先配置 App Group + Keychain access group。
+> 本节曾维护的 P1/P2 收敛清单引用的 `server.py`/`server_services.py`/`snapshot_builder.py`
+> 已随 #74 删除（服务端收敛到 Cloudflare Worker + D1），清单本身已过时，任务真值改看 GitHub
+> Issue，不在本文件重建进度表。Widget 配置共享设计仍见
+> [`widget-configuration-sharing.md`](widget-configuration-sharing.md)，但截至本次核实未在
+> `mobile/ios*` 中找到 App Group / Keychain access group 的落地代码，视为未实施。
