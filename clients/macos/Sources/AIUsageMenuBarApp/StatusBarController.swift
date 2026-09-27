@@ -44,7 +44,7 @@ enum MenuBarStatusItemPresentation {
     }
 
     static func tooltip(for state: MenuBarState) -> String {
-        "AI Usage · \(state.periodLabel) \(state.statusTitle)"
+        "AI Usage · \(state.periodLabel)\(state.periodTitleSuffix) \(state.statusTitle)"
     }
 }
 

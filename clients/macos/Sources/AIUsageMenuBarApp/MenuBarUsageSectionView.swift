@@ -27,7 +27,11 @@ struct MenuBarUsageSectionView: View {
                     periodMenuOpen = true
                 } label: {
                     HStack(spacing: 6) {
-                        Text(cachedCurrentRow?.title ?? model.state.periodLabel)
+                        // #186：期间菜单顶部按钮的标题来自 cachedCurrentRow（PeriodMenuBuilder
+                        // 缓存行）而不是 model.state.periodLabel——periodTitleSuffix 必须拼在
+                        // 实际渲染的标题后面，否则本机时区标注只会出现在状态栏 tooltip 里，
+                        // 弹层按钮上完全看不到。
+                        Text((cachedCurrentRow?.title ?? model.state.periodLabel) + model.state.periodTitleSuffix)
                             .font(.system(size: 14, weight: .semibold))
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 9, weight: .bold))

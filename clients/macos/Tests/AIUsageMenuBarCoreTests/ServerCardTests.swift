@@ -30,7 +30,8 @@ final class ServerCardTests: XCTestCase {
             source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
         ])
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week",
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
 
         // 结构下限：零用量模型必须被剔除，行数精确为 3。
@@ -70,7 +71,8 @@ final class ServerCardTests: XCTestCase {
             source(id: "src-1", machine: "gpu-1", osUser: "bob", status: "ok")
         ])
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week",
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "gpu-1" })
         let row = try XCTUnwrap(card.models.first)
 
@@ -101,7 +103,8 @@ final class ServerCardTests: XCTestCase {
             + [source(id: "u6", machine: "solo-mac", osUser: "carol", status: "ok")]
         let summary = makeSummary(periodID: "today", byMachine: [multiUserMachine, singleUserMachine], sources: sources)
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",
+            deviceTimeZone: shanghaiTZForTests)
 
         let multi = try XCTUnwrap(state.serverCards.first { $0.id == "shared-linux" })
         XCTAssertTrue(multi.subtitle.hasPrefix("5 个用户"), "got: \(multi.subtitle)")
@@ -123,7 +126,8 @@ final class ServerCardTests: XCTestCase {
         ]
         let summary = makeSummary(periodID: "today", totalTokens: 1000, byMachine: [machineA, machineB, machineC], sources: sources)
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",
+            deviceTimeZone: shanghaiTZForTests)
 
         let cardA = try XCTUnwrap(state.serverCards.first { $0.id == "m-a" })
         let cardB = try XCTUnwrap(state.serverCards.first { $0.id == "m-b" })
@@ -151,17 +155,20 @@ final class ServerCardTests: XCTestCase {
         let row = MobileBreakdownRow(id: "m-a", label: "m-a", tokens: 100, sourceIDs: [], agents: [])
         let weekSummary = makeSummary(periodID: "week", byMachine: [row], sources: [])
         XCTAssertEqual(
-            MenuBarViewModel.build(from: weekSummary, selectedPeriodID: "week").serverModelQuotaHeader,
+            MenuBarViewModel.build(from: weekSummary, selectedPeriodID: "week",
+            deviceTimeZone: shanghaiTZForTests).serverModelQuotaHeader,
             "周额度"
         )
         let todaySummary = makeSummary(periodID: "today", byMachine: [row], sources: [])
         XCTAssertEqual(
-            MenuBarViewModel.build(from: todaySummary, selectedPeriodID: "today").serverModelQuotaHeader,
+            MenuBarViewModel.build(from: todaySummary, selectedPeriodID: "today",
+            deviceTimeZone: shanghaiTZForTests).serverModelQuotaHeader,
             "周额度"
         )
         let monthSummary = makeSummary(periodID: "month", byMachine: [row], sources: [])
         XCTAssertEqual(
-            MenuBarViewModel.build(from: monthSummary, selectedPeriodID: "month").serverModelQuotaHeader,
+            MenuBarViewModel.build(from: monthSummary, selectedPeriodID: "month",
+            deviceTimeZone: shanghaiTZForTests).serverModelQuotaHeader,
             "周均额度"
         )
     }
@@ -184,7 +191,8 @@ final class ServerCardTests: XCTestCase {
             source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
         ])
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
         let row = try XCTUnwrap(card.models.first)
 
@@ -204,7 +212,8 @@ final class ServerCardTests: XCTestCase {
         let url = try XCTUnwrap(Bundle.module.url(forResource: "navigation-models-owner", withExtension: "json"))
         let summary = try JSONDecoder().decode(MobileSummary.self, from: Data(contentsOf: url))
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",
+            deviceTimeZone: shanghaiTZForTests)
 
         // 结构下限：卡片数、每张卡的行数精确断言。
         XCTAssertEqual(state.serverCards.count, 2)
@@ -254,7 +263,8 @@ final class ServerCardTests: XCTestCase {
         ])
         let aliases = ["host-a": "工作机"]
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases)
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases,
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "host-a" })
 
         // aliases 的 key 是机器原名 "host-a"，不是 breakdown 里已经美化过的 label "Pretty A"；
@@ -286,7 +296,8 @@ final class ServerCardTests: XCTestCase {
                 ]
             )
 
-            let cards = MenuBarViewModel.build(from: summary, selectedPeriodID: "today").serverCards
+            let cards = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",
+            deviceTimeZone: shanghaiTZForTests).serverCards
             XCTAssertEqual(cards.count, 1, "usesMachine=\(usesMachine)")
             XCTAssertEqual(cards.first?.id, "server-aggregate", "usesMachine=\(usesMachine)")
             // 值必须取 row.tokens 本身（777），不是把 contributions 加总（10+20=30）。
@@ -312,7 +323,8 @@ final class ServerCardTests: XCTestCase {
         // aliases 里没有 "host-raw-id"（row.id 原名），只有剥离 ".local" 后缀后的 "mymachine"。
         let aliases = ["mymachine": "工作站"]
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases)
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases,
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "host-raw-id" })
 
         XCTAssertEqual(card.title, "工作站")
@@ -345,7 +357,8 @@ final class ServerCardTests: XCTestCase {
             source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
         ])
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week",
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
         XCTAssertEqual(card.models.count, 3)
 
@@ -383,7 +396,8 @@ final class ServerCardTests: XCTestCase {
             source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
         ])
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week",
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
         let row = try XCTUnwrap(card.models.first)
 
@@ -409,7 +423,8 @@ final class ServerCardTests: XCTestCase {
             source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
         ])
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week",
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
         let row = try XCTUnwrap(card.models.first)
 
@@ -445,10 +460,45 @@ final class ServerCardTests: XCTestCase {
         let state = MenuBarViewModel.build(
             from: summary, selectedPeriodID: "today",
             now: try isoDate("2026-09-27T19:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
 
         XCTAssertTrue(card.subtitle.hasSuffix("18:31 同步"), "got: \(card.subtitle)")
+    }
+
+    /// #186：Server 卡片「HH:mm 同步」是「时刻类」——本机时区与 summary.timezone 不同时按
+    /// 本机时区显示。用与上一条测试相同的两条 source，换成 deviceTimeZone=America/Los_Angeles，
+    /// 最新时刻 18:31 北京时间换算到洛杉矶（同一天，UTC-7）应显示 "03:31 同步"，不是 "18:31 同步"。
+    func testSubtitleSyncTimeFollowsDeviceTimezoneNotSummaryTimezone() throws {
+        let machineRow = MobileBreakdownRow(
+            id: "mac-1", label: "mac-1", tokens: 100,
+            sourceIDs: ["utc-src", "local-src"], agents: []
+        )
+        let sources = [
+            MobileSource(
+                sourceID: "utc-src", machine: "mac-1", osUser: "alice", platform: "linux",
+                displayName: nil, status: "ok",
+                lastObservedAt: "2026-09-27T10:31:37+00:00", lastPushedAt: "2026-09-27T10:31:37+00:00",
+                errorMessage: nil
+            ),
+            MobileSource(
+                sourceID: "local-src", machine: "mac-1", osUser: "alice", platform: "macos",
+                displayName: nil, status: "ok",
+                lastObservedAt: "2026-09-27T16:47:12+08:00", lastPushedAt: "2026-09-27T16:47:12+08:00",
+                errorMessage: nil
+            ),
+        ]
+        let summary = makeSummary(periodID: "today", byMachine: [machineRow], sources: sources)
+
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try isoDate("2026-09-27T19:00:00+08:00"),
+            deviceTimeZone: try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        )
+        let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
+
+        XCTAssertTrue(card.subtitle.hasSuffix("03:31 同步"), "got: \(card.subtitle)")
     }
 
     // MARK: - Fixtures

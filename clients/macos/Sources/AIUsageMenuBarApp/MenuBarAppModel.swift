@@ -4,6 +4,10 @@ import Foundation
 typealias MenuBarSummaryLoader = @Sendable (MobileSummaryClientConfig) async throws -> MobileSummary
 typealias MenuBarRuntimeConfigProvider = @MainActor (RuntimePaths) -> MenuBarRuntimeConfig?
 typealias MenuBarNowProvider = @MainActor () -> Date
+/// #186 P1 修复（PR #197 Codex 审查）：不能是存一次就不变的 TimeZone 值——用户运行中在系统
+/// 设置里切换时区后，界面必须不重启就能反映新时区，所以每次 rebuildState() 都要重新调用它，
+/// 而不是缓存 init 时第一次读到的结果。
+typealias MenuBarTimeZoneProvider = @MainActor () -> TimeZone
 
 @MainActor
 final class MenuBarAppModel: ObservableObject {
@@ -27,6 +31,15 @@ final class MenuBarAppModel: ObservableObject {
     private let loadSummary: MenuBarSummaryLoader
     private let loadRuntimeConfig: MenuBarRuntimeConfigProvider
     private let now: MenuBarNowProvider
+    /// #186：本机时区提供者——默认 `{ .autoupdatingCurrent }`（每次调用都读当前系统时区，不是
+    /// init 时读一次就存住的快照），测试注入固定时区。传给 MenuBarViewModel.build 的「时刻类」
+    /// 显示（悬停重置时刻、标题栏/Server 更新时间），不影响仍走 summary.timezone 的「日界类」逻辑。
+    private let deviceTimeZoneProvider: MenuBarTimeZoneProvider
+    /// #186 P1 修复：系统时区变化的通知 token——运行中用户切换时区会发 NSSystemTimeZoneDidChange，
+    /// 必须主动 rebuildState() 一次，否则界面停留在上次读到的时区，直到下一次别的原因触发重建。
+    /// `nonisolated(unsafe)`：deinit 是 nonisolated，只在对象销毁、没有并发访问时读这个值，
+    /// 安全等价于其他仅在 init/deinit 单点访问一次的资源清理（NSObjectProtocol 本身不是 Sendable）。
+    private nonisolated(unsafe) var timeZoneChangeObserver: NSObjectProtocol?
     private let cacheFreshnessInterval: TimeInterval
     private var refreshSequence = 0
     @Published private(set) var hasLoadedUsableSummary: Bool
@@ -40,6 +53,7 @@ final class MenuBarAppModel: ObservableObject {
         cachedSummaries: [String: CachedMenuSummary] = [:],
         cacheFreshnessInterval: TimeInterval = 300,
         now: @escaping MenuBarNowProvider = { Date() },
+        deviceTimeZoneProvider: @escaping MenuBarTimeZoneProvider = { .autoupdatingCurrent },
         loadSummary: @escaping MenuBarSummaryLoader = { config in
             try await MobileSummaryClient(config: config).load()
         },
@@ -52,6 +66,7 @@ final class MenuBarAppModel: ObservableObject {
         self.loadSummary = loadSummary
         self.loadRuntimeConfig = loadRuntimeConfig
         self.now = now
+        self.deviceTimeZoneProvider = deviceTimeZoneProvider
         self.cacheFreshnessInterval = max(cacheFreshnessInterval, 0)
         var periodSummaries = cachedSummaries.filter { Self.isSameCacheDay($0.value, now: now()) }
         if let cachedSummary, periodSummaries[cachedSummary.period.id] == nil {
@@ -69,6 +84,23 @@ final class MenuBarAppModel: ObservableObject {
         self.state = placeholder
         self.statusState = placeholder
         rebuildState()
+
+        // #186 P1 修复：系统时区变化不会自己让已经算好的 state 重新渲染——必须主动订阅
+        // NSSystemTimeZoneDidChange 并触发一次 rebuildState()，否则用户切换时区后菜单栏
+        // 停留在旧时区，直到下一次因为别的原因（如定时器刷新数据）恰好重建。
+        self.timeZoneChangeObserver = NotificationCenter.default.addObserver(
+            forName: .NSSystemTimeZoneDidChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.rebuildState()
+            }
+        }
+    }
+
+    deinit {
+        if let timeZoneChangeObserver {
+            NotificationCenter.default.removeObserver(timeZoneChangeObserver)
+        }
     }
 
     /// #177 性能：唯一负责重算 state/statusState 的入口——只在 summary / selectedPeriodID /
@@ -76,6 +108,10 @@ final class MenuBarAppModel: ObservableObject {
     /// 不再让每次视图 body 读 model.state 都触发一次 MenuBarViewModel.build。
     private func rebuildState() {
         stateBuildCount += 1
+        // #186 P1 修复：每次重建都重新调用 provider，而不是读一个 init 时缓存的属性——
+        // 否则用户运行中切换系统时区，provider 早就会返回新值，但这里如果还是读旧的存储属性，
+        // 界面依然不会变。
+        let deviceTimeZone = deviceTimeZoneProvider()
         state = MenuBarViewModel.build(
             from: summary,
             selectedPeriodID: selectedPeriodID,
@@ -83,12 +119,14 @@ final class MenuBarAppModel: ObservableObject {
             now: now(),
             machineAliases: config?.machineAliases,
             quotaSlots: latestQuotaProviderSlots(),
-            additionalSources: otherKnownSources()
+            additionalSources: otherKnownSources(),
+            deviceTimeZone: deviceTimeZone
         )
         statusState = MenuBarViewModel.build(
             from: todaySummary ?? .empty(),
             selectedPeriodID: "today",
-            machineAliases: config?.machineAliases
+            machineAliases: config?.machineAliases,
+            deviceTimeZone: deviceTimeZone
         )
     }
 
