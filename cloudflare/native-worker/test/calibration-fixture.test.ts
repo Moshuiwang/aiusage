@@ -5,10 +5,19 @@
  * `test/calibration_fixture.json` 的 `_comment` 字段——这份 fixture 一个字节不许手写、
  * 不许手改。这份数据反映的是 2026-09-27 生产账户的真实使用形态，不是为了凑测试编的。
  *
+ * 2026-09-27 二次导出（#183 数据完整性核查后的补扫）：Mac Codex 在 mac-local 9/14–9/20
+ * 缺失的 model 行已通过 `--ledger-mode incremental --ledger-lookback-hours 323` 回填并回源
+ * 核对（77 条 fact 全部带模型行，token 合计一致，见 Issue #183 评论）。二次导出后重跑本文件：
+ * Codex 的 unattributed 完整性门禁不再剔除任何区间（`unattributedDroppedIntervals` 从 10
+ * 变为 0，可用区间从 21 增到 34），但 Codex 逐日留出回测误差仍然巨大（约 5.5，即 550%，
+ * 比补扫前的 5.78 只略微下降），全部族仍定级 none——backfill 解决的是「模型行缺失」这一项
+ * 数据完整性问题，不能解决 Codex 账户读数本身漂移大、报告空洞多这些独立问题（详见 Issue
+ * #183 数据完整性核查评论第 2、3、5 节）。
+ *
  * 结论对照 #183 设计 v1 §0（数据依据）和数据完整性核查评论：Claude 现在能算出 B 档信号
- * （逐日留出最大误差落在 [10%,25%] 区间）；Codex 因大量小时事实缺 model 行、被 unattributed
- * 完整性门禁剔除大部分早期区间，剩余数据本身漂移也大，定级 none；Antigravity 数据不足
- * （3 天、频繁重置），定级 none。这些是从这份真实 fixture 跑出来的结果，不是预设结论。
+ * （逐日留出最大误差落在 [10%,25%] 区间）；Codex 因账户读数漂移大、报告空洞多，定级 none
+ * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 数据不足（3 天、频繁重置），
+ * 定级 none。这些是从这份真实 fixture 跑出来的结果，不是预设结论。
  */
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
@@ -19,7 +28,7 @@ import { priceWeightedTokens } from "../src/calibration/constants";
 import type { HourlyFamilyFact, LimitObservation } from "../src/calibration/types";
 
 const FIXTURE_PATH = new URL("./calibration_fixture.json", import.meta.url);
-const NOW = new Date("2026-09-27T10:00:00Z"); // 快照导出时刻之后不久，覆盖整段 28 天训练窗口。
+const NOW = new Date("2026-09-27T11:00:00Z"); // 快照导出时刻之后不久（补扫后重新导出），覆盖整段 28 天训练窗口。
 
 async function loadFixture(): Promise<{ limit_observations: LimitObservation[]; hourly_family_facts: HourlyFamilyFact[] }> {
   const raw = await readFile(FIXTURE_PATH, "utf8");
@@ -40,11 +49,20 @@ describe("calibration fixture：结构下限", () => {
 });
 
 describe("calibration fixture：周期与重置次数（精确值，对照 #183 数据完整性核查）", () => {
-  it("Claude：2 个周期、1 次重置", async () => {
+  it("Claude：4 个周期（1 次真实重置 + 2 个新到账来源各贡献 1 条历史孤立读数）", async () => {
+    // 二次导出比首次多出 2 条：`linux-biai-wangzhipeng`（07-18 单条）、`claude-main`
+    // （08-02 单条，reset_at 早于 observed_at，本身就是陈旧占位读数）——这两个来源在首次
+    // 导出时刻还未在 limit_window_history 里出现过，是首次导出之后、二次导出之前新上报的。
+    // 账户级周期切分不按 source_id 分组（见 src/calibration/index.ts 顶部注释），这两条孤立
+    // 读数各自因为跟主时间线的 reset_at 差异 >2 分钟被切成独立周期，但每个周期只有 1 条读数，
+    // 无法组成任何 ≥2 点区间，不参与拟合与回测（对照下面「Claude 定级」用例：sample_intervals
+    // 从 55 增到 57，是主时间线新增的真实读数，不是这两条孤立点贡献的）。
     const { limit_observations } = await loadFixture();
     const rows = limit_observations.filter((r) => r.provider === "claude");
     const cycles = withResetAnchors(splitCycles(rows));
-    expect(cycles).toHaveLength(2);
+    expect(cycles).toHaveLength(4);
+    const degenerate = cycles.filter((c) => c.readings.length === 1);
+    expect(degenerate).toHaveLength(2);
   });
 
   it("Codex：4 个周期、3 次重置（9/19 一次自然 + 9/26 两次，含滚动噪音已被丢弃）", async () => {
@@ -101,18 +119,25 @@ describe("calibration fixture：Claude 定级（逐族）", () => {
 });
 
 describe("calibration fixture：Codex 定级（设计结论：现在不可用）", () => {
-  it("因大量小时事实缺 model 行被 unattributed 门禁剔除、剩余数据本身漂移也大，全部族定级 none", async () => {
+  it("mac-local 9/14–9/20 model 行补扫后，unattributed 门禁不再剔除任何区间，但账户读数漂移大、报告空洞多，全部族仍定级 none", async () => {
+    // 补扫前（见本文件头注释）unattributedDroppedIntervals=10、sample_intervals=21、
+    // backtest_max_err≈5.78；补扫后 0 / 34 / ≈5.50——可用区间变多了，但回测误差量级没有
+    //实质改善（仍是「不可用」>50% 的量级好几倍），跟 Issue #183 数据完整性核查结论一致：
+    // model 行缺失只是 Codex 数据问题的一部分，账户读数本身长时间空洞、饱和 plateau 才是
+    // 主因，补扫不能单独解决。
     const { limit_observations, hourly_family_facts } = await loadFixture();
     const codexObs = limit_observations.filter((r) => r.provider === "codex");
     const out = calibrate("codex", codexObs, hourly_family_facts, { now: NOW });
-    expect(out.unattributedDroppedIntervals).toBeGreaterThan(0); // 数据完整性核查预期的剔除确实发生了
+    expect(out.unattributedDroppedIntervals).toBe(0);
     expect(Object.keys(Object.fromEntries(out.results.map((r) => [r.model_family, r]))).sort()).toEqual(["gpt-5.6", "gpt-6", "review"]);
     for (const r of out.results) {
       expect(r.grade).toBe("none");
+      // 回测误差仍然巨大（远超「不可用」阈值 0.5），确认「剔除消失」不等于「数据变可用」。
+      expect(Math.abs(r.backtest_max_err as number)).toBeGreaterThan(1);
     }
   });
 
-  it("独立验证：unattributed 剔除确实来自「缺 model 行」的事实，不是巧合触发", async () => {
+  it("独立验证：fixture 里仍然存在 unattributed 事实（linux-biai-wangzp 等来源仍缺 model 行），只是量不足以在任一区间触发 5% 门禁", async () => {
     const { hourly_family_facts } = await loadFixture();
     const codexFacts = hourly_family_facts.filter((f) => f.provider === "codex");
     const unattributed = codexFacts.filter((f) => f.model_family === "unattributed");
