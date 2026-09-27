@@ -4,7 +4,14 @@
 
 AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI coding usage 观测工具。项目名称暂时保留历史命名，但后续产品形态不再以 macOS Widget 为核心。
 
-它要把多台设备、多个 OS 用户、多个 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态，汇总成一个可信的个人数据产品。Web dashboard 是当前完整查看入口；客户端按 `clients/` 分层推进：iPhone App + iOS Widget 是已落地方向，Android 复用移动端摘要合同，macOS 走菜单栏或轻量桌面入口，Windows 走托盘或轻量桌面入口。macOS Widget 退出后续产品路线，只保留历史兼容和参考价值。
+它要把多台设备、多个 OS 用户、多个 AI coding agent 的用量事实、采集健康状态和可验证的额度窗口状态，汇总成一个可信的个人数据产品。
+
+**产品范围决定（用户 2026-09-27，#199，尚未实施）**：产品只支持 macOS 菜单栏 popover 和 iPhone
+端；Apple Watch 不急。**Web dashboard 已决定整体废弃**（Worker 的 `/`、`/dashboard`、只供网页
+使用的 `/api/summary` 等接口与静态资源），不再是「当前完整查看入口」；Android、Windows 客户端
+方向随之搁置，不是当前工作范围。本文件下方仍保留的 Web / Android / Windows 章节是**决策生效前的
+历史产品设计**，代码尚未按 #199 清理，冲突以本段决策和 #199 issue 为准。macOS Widget 退出产品
+路线，只保留历史兼容和参考价值。
 
 ## 核心问题
 
@@ -123,7 +130,8 @@ AI Usage Widget 不是单纯的 Widget 原型，而是一个个人使用的 AI c
 
 - Claude Code：OAuth Usage API -> Claude CLI `/usage` -> Claude Web API。
 - Codex：`~/.codex/auth.json` OAuth/WHAM usage -> `codex app-server` RPC `account/rateLimits/read`。
-- Antigravity：后续通过本地 Language Server spike，不进入 Claude + Codex MVP。
+- Antigravity：已实现（`antigravity_limits_provider.py`），只看 Gemini 池；额度暂从 Mac
+  本机读取，跨时区场景待研究。
 
 ## 展示面
 
@@ -139,6 +147,8 @@ CLI 是工程化验证入口和终端侧 pusher 的基础，必须能执行：
 - 在测试环境使用 fixture 和临时路径运行。
 
 ### Web Dashboard
+
+> **已决定废弃（#199，2026-09-27，尚未实施）**：以下描述是决策生效前的历史设计，不代表未来方向。
 
 Web dashboard 是主要用户界面，目标是从浏览器查看所有终端：
 
@@ -185,6 +195,8 @@ Apple Watch 是 iPhone App 的 companion glance 入口，产品边界见 [`watch
 
 ### Android App / Widget
 
+> **随 #199 搁置（2026-09-27）**：当前产品范围只做 macOS 菜单栏 + iPhone，Android 不是当前工作目标；以下是搁置前的历史设计。
+
 Android 复用 iPhone 的移动信息架构：
 
 - App 展示今日、本周期、source health、机器/账号/agent drilldown 和可信 limits 状态。
@@ -200,6 +212,8 @@ macOS 后续只做轻量工作台入口：
 - 不承载完整 dashboard，不执行采集，不直接读取 SQLite。
 
 ### Windows Tray / Desktop
+
+> **随 #199 搁置（2026-09-27）**：当前产品范围只做 macOS 菜单栏 + iPhone，Windows 不是当前工作目标；以下是搁置前的历史设计。
 
 Windows 后续只做轻量工作台入口：
 

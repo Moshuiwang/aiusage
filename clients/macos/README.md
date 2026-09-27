@@ -50,6 +50,6 @@ python3 clients/macos/scripts/install_menu_bar_app.py \
 
 Popover 提供日、周、月三个入口。日可回看最近 7 天；周从周一开始，月按自然月，不能进入未来。日期以服务端返回为准。来源默认折叠，展开后显示 Claude / Codex，再展开可看模型；缺失数据明确标记。菜单栏数字始终显示今日用量。
 
-macOS 26 及以上使用系统 Liquid Glass。更早系统保留系统材质背景；开启“降低透明度”或提高对比度时使用实色背景。
+Popover 使用系统背景材质（Liquid Glass 暂未实现，见 #155）；开启“降低透明度”或提高对比度时使用实色背景。
 
 Token 默认从 `AI_USAGE_INGEST_TOKEN` 读取，只写到用户本机的 `config.json`，不会写入仓库。

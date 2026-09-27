@@ -44,6 +44,10 @@
 
 Round 8 不做客户端物理搬迁，只给 AI 明确当前真实代码和目标目录。
 
+> **产品范围决定（#199，2026-09-27，尚未实施）**：产品只支持 macOS 菜单栏 popover 和 iPhone 端。
+> Web dashboard 已决定整体废弃；Android、Windows 随之搁置，不是当前工作目标。下表仍按当前代码
+> 现状列出这些行，代码尚未按决定清理，冲突以 #199 为准。
+
 | 平台 | 用户体验 | 当前真实代码 | 目标目录 | 本轮动作 |
 | --- | --- | --- | --- | --- |
 | Web | 完整 dashboard：机器、OS 用户、agent、趋势、source health、可信 limits。 | `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管） | `clients/web` | 只记录映射。 |
@@ -68,10 +72,12 @@ Round 8 不做客户端物理搬迁，只给 AI 明确当前真实代码和目�
 | `cloudflare/native-worker/src/index.ts` | HTTP route 分发与 summary 缓存（#126 起认证在 `auth.ts`、health 装配在 `health.ts`、响应工具在 `http.ts`）。 |
 | `cloudflare/native-worker/src/write-model/`（barrel `write-model.ts`） | Usage ingest payload 校验和敏感字段边界（#126 目录化）。 |
 | `cloudflare/migrations/` | D1 schema、upsert 口径与迁移。 |
-| `cloudflare/native-worker/src/read-model.ts` | `/api/summary` read model。 |
+| `cloudflare/native-worker/src/read-model/`（barrel `read-model.ts`） | `/api/summary` read model。 |
 | `cloudflare/native-worker/src/mobile-summary.ts` | `/api/mobile/summary` DTO。 |
-| `limits_*` / provider modules | 官方额度 provider、runtime、doctor、scheduler、push。 |
+| `cloudflare/native-worker/src/quota-calibration-cron.ts` + `src/calibration/` | 模型周额度校准每日 cron 与计算内核。 |
+| `limits_*` / provider modules | 官方额度 provider、runtime、doctor、scheduler、push（含已实现的 Antigravity provider）。 |
 | `pusher.py` | 设备本机采集和 HTTP push。 |
+| `account_fingerprint.py` | 采集端账户指纹上报。 |
 
 > Python 服务端一列（`server.py` 到 `mobile_summary.py` + `storage_sqlite.py`）已于 #74 删除，
 > 服务端唯一实现是 Cloudflare Worker + D1（#67 决策）。
