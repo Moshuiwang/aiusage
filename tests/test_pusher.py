@@ -19,6 +19,7 @@ from ai_usage_widget.models import CommandResult
 from ai_usage_widget.pusher import (
     DevicePusher,
     IngestHTTPClient,
+    _account_observations,
     _facts_digest,
     _usage_hourly_facts_from_mswusage,
 )
@@ -243,8 +244,12 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual(facts[0]["usage"]["total_tokens"], 155)
         self.assertEqual(facts[0]["window_end"], "2026-06-11T14:00:00+08:00")
 
-    def test_pusher_attaches_account_fingerprint_when_source_path_configured(self) -> None:
-        """#181：配置了 account_fingerprint_sources.codex 之后，fact 里要带上指纹。"""
+    def test_pusher_adds_top_level_account_observation_when_source_path_configured(self) -> None:
+        """#181 P1-1：配置了 account_fingerprint_sources.codex 之后，指纹只出现在 payload
+        顶层一条「账户观察」记录里（本次读取时刻观察到该账户），绝不逐条写进每个
+        usage_hourly_facts[].ai_account——否则账户切换后，full-rescan 会把旧账户期间的
+        历史 token 全部标成新账户（Codex #185 review P1-1）。
+        """
         self.config.account_fingerprint_sources = {
             "codex": str(FIXTURES / "codex_account_auth_sample.json"),
         }
@@ -262,7 +267,13 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
                     "total_tokens": 155,
                     "event_count": 2,
                     "session_count": 1,
-                }
+                },
+                {
+                    "hour": "2026-06-11T12:00:00+08:00",
+                    "total_tokens": 50,
+                    "event_count": 1,
+                    "session_count": 1,
+                },
             ],
             "sessions": [],
         })
@@ -276,20 +287,30 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
 
         self.assertTrue(result["success"])
-        facts = http_client.last_json["usage_hourly_facts"]
-        self.assertEqual(len(facts), 1)
+        payload = http_client.last_json
+        facts = payload["usage_hourly_facts"]
+        self.assertEqual(len(facts), 2)
+        # 结构下限：每一条 fact 的 ai_account 都不含 account_fingerprint（不只查第一条）。
+        for fact in facts:
+            self.assertNotIn("account_fingerprint", fact["ai_account"])
         expected_fp = compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333")
-        self.assertEqual(facts[0]["ai_account"]["account_fingerprint"], expected_fp)
+        observations = payload["account_observations"]
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0]["agent"], "codex")
+        self.assertEqual(observations[0]["provider"], "codex")
+        self.assertEqual(observations[0]["account_fingerprint"], expected_fp)
+        # observed_at 是本次读取时刻，跟 payload 顶层的 observed_at 是同一个值——
+        # 语义是"在这一刻观察到这个账户登录"，不是某条历史小时的窗口时间。
+        self.assertEqual(observations[0]["observed_at"], payload["observed_at"])
         # fixture 里带着的 refresh token 原文绝不能出现在上报 payload 里的任何地方。
-        payload_text = json.dumps(http_client.last_json, ensure_ascii=False)
+        payload_text = json.dumps(payload, ensure_ascii=False)
         self.assertNotIn("codex-fixture-refresh-token-secret", payload_text)
         self.assertNotIn("codex-fixture-access-token", payload_text)
 
-    def test_pusher_account_fingerprint_key_is_absent_when_source_not_configured(self) -> None:
-        """没配置 account_fingerprint_sources 时必须降级为「完全不写这个 key」，不猜、不报错、
-        不中断采集——跟 limits 那条路径（`_windows_payload_with_account_fingerprints`）的口径
-        统一：没有指纹就不出现这个字段，不写 ``null``。写 ``null`` 会让服务端以后没法区分
-        「这条 fact 就是没有指纹」和「这条 fact 的指纹值恰好是 null」两种意思。
+    def test_pusher_account_observations_absent_when_source_not_configured(self) -> None:
+        """没配置 account_fingerprint_sources 时必须降级为「完全不写这个字段」，不猜、
+        不报错、不中断采集——顶层 account_observations key 整个不出现，facts 里也从来
+        不该出现 account_fingerprint（这条本来就不可能出现，只是确认没有回潮）。
         """
         daily_stdout = '{"daily": [{"period": "2026-06-11", "agent": "codex", "totalTokens": 10}]}'
         mswusage_stdout = json.dumps({
@@ -312,15 +333,47 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
 
         self.assertTrue(result["success"])
-        facts = http_client.last_json["usage_hourly_facts"]
-        self.assertNotIn("account_fingerprint", facts[0]["ai_account"])
+        payload = http_client.last_json
+        self.assertNotIn("account_observations", payload)
+        self.assertNotIn("account_fingerprint", payload["usage_hourly_facts"][0]["ai_account"])
 
-    def test_pusher_account_fingerprint_does_not_change_fact_id(self) -> None:
-        """#181 关键不变量：account_fingerprint 绝不能影响 fact_id，否则同一账户换一次
-        指纹来源（甚至同账户换机器时读到不同表示）就会在 D1 里长出一条新的 fact_id，
-        变成重复计数。这里同一份 usage 报告分别在“无指纹来源”和“配置了指纹来源”两种
-        情况下各生成一次 fact，断言两次的 fact_id 完全相同——从产物（fact_id 字符串）
-        直接比较，不依赖任何内部实现细节。
+    def test_pusher_account_observations_absent_when_source_path_unreadable(self) -> None:
+        """反向路径：配置了 account_fingerprint_sources 指向的路径，但那份文件根本不存在
+        （或读不出/解析不出）时，同样要降级为「完全不写 account_observations」——不能因为
+        『配置过』这件事本身就在 payload 顶层留下一个空列表或者报错中断采集。
+        """
+        self.config.account_fingerprint_sources = {
+            "codex": str(FIXTURES / "does_not_exist_codex_account.json"),
+        }
+        daily_stdout = '{"daily": [{"period": "2026-06-11", "agent": "codex", "totalTokens": 10}]}'
+        mswusage_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [{"date": "2026-06-11", "agent": "codex", "total_tokens": 10}],
+            "hourly": [{"hour": "2026-06-11T13:00:00+08:00", "total_tokens": 10, "event_count": 1, "session_count": 1}],
+            "sessions": [],
+        })
+        executor = FakeExecutor([
+            CommandResult(stdout=daily_stdout, exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout=mswusage_stdout, exit_code=0),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertTrue(result["success"])
+        payload = http_client.last_json
+        self.assertNotIn("account_observations", payload)
+
+    def test_pusher_account_fingerprint_source_does_not_change_facts_at_all(self) -> None:
+        """#181 关键不变量：account_fingerprint_sources 配置与否，绝不能改变任何一个
+        usage_hourly_facts 条目（包括 fact_id 和整个 ai_account 子对象）——指纹信息
+        现在完全走顶层 account_observations，跟逐条 fact 的计算路径正交。用整个 fact
+        对象相等（不仅 fact_id）比较，覆盖"只挪了字段名字但还是塞进了 fact"这类绕过。
         """
         report = {
             "provenance": "mswusage_codex_token_count",
@@ -331,19 +384,40 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
             ],
         }
 
-        facts_without_fingerprint = _usage_hourly_facts_from_mswusage(self.config, report)
+        facts_without_source = _usage_hourly_facts_from_mswusage(self.config, report)
 
         self.config.account_fingerprint_sources = {
             "codex": str(FIXTURES / "codex_account_auth_sample.json"),
         }
-        facts_with_fingerprint = _usage_hourly_facts_from_mswusage(self.config, report)
+        facts_with_source = _usage_hourly_facts_from_mswusage(self.config, report)
 
-        self.assertEqual(facts_without_fingerprint[0]["fact_id"], facts_with_fingerprint[0]["fact_id"])
-        # 双重确认这条守卫真的测到了「指纹确实不同」这件事，不是恒真断言：没配置来源时
-        # key 完全不出现；配置了来源时 key 出现且有一个非空指纹值。
-        self.assertNotIn("account_fingerprint", facts_without_fingerprint[0]["ai_account"])
-        self.assertIn("account_fingerprint", facts_with_fingerprint[0]["ai_account"])
-        self.assertIsNotNone(facts_with_fingerprint[0]["ai_account"]["account_fingerprint"])
+        self.assertEqual(facts_without_source, facts_with_source)
+        self.assertNotIn("account_fingerprint", facts_with_source[0]["ai_account"])
+
+    def test_pusher_account_observations_cover_multiple_configured_providers(self) -> None:
+        """同时配置 claude 和 codex 两个 provider 的指纹来源时，account_observations
+        必须各出一条，且 provider/agent 与指纹值互不串号——不是只测单 provider 路径。
+        """
+        self.config.account_fingerprint_sources = {
+            "codex": str(FIXTURES / "codex_account_auth_sample.json"),
+            "claude": str(FIXTURES / "claude_account_config_sample.json"),
+        }
+
+        observations = _account_observations(self.config, "2026-06-11T14:05:00+08:00")
+
+        self.assertEqual(len(observations), 2)
+        by_agent = {item["agent"]: item for item in observations}
+        self.assertEqual(
+            by_agent["codex"]["account_fingerprint"],
+            compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333"),
+        )
+        self.assertEqual(
+            by_agent["claude"]["account_fingerprint"],
+            compute_account_fingerprint("claude", "11111111-1111-1111-1111-111111111111"),
+        )
+        for item in observations:
+            self.assertEqual(item["provider"], item["agent"])
+            self.assertEqual(item["observed_at"], "2026-06-11T14:05:00+08:00")
 
     def test_pusher_sends_usage_ledger_facts_with_unconfirmed_attribution_without_ai_accounts(self) -> None:
         daily_stdout = '{"daily": []}'
