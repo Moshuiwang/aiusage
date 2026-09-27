@@ -349,19 +349,46 @@ final class ServerCardTests: XCTestCase {
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
         XCTAssertEqual(card.models.count, 3)
 
+        // grade A + basis week：精确锁定文案，不是恒真的 contains("精度 A")——grade B 的行
+        // 换成同样断言也会通过，必须锁具体文本才能守住「按实际 grade 分支」这个行为。
         let opus = try XCTUnwrap(card.models.first { $0.modelID == "claude-opus-5" })
         XCTAssertEqual(opus.quotaText, "≈2.3%")
-        XCTAssertTrue(opus.quotaHelpText.contains("估算"), "got: \(opus.quotaHelpText)")
-        XCTAssertTrue(opus.quotaHelpText.contains("精度 A"), "got: \(opus.quotaHelpText)")
-        XCTAssertFalse(opus.quotaHelpText.contains("周均"), "week basis 不应提示周均: \(opus.quotaHelpText)")
+        XCTAssertEqual(opus.quotaHelpText, "估算精度 A（约 ±10%），基于官方额度校准")
 
+        // grade B + basis weekly_average：精度换成 B 档，且追加周均折算说明。
         let haiku = try XCTUnwrap(card.models.first { $0.modelID == "claude-haiku-5" })
         XCTAssertEqual(haiku.quotaText, "≈<0.1%")
-        XCTAssertTrue(haiku.quotaHelpText.contains("月视图为周均"), "got: \(haiku.quotaHelpText)")
+        XCTAssertEqual(haiku.quotaHelpText, "估算精度 B（约 ±25%），基于官方额度校准；月视图为周均")
 
         let sol = try XCTUnwrap(card.models.first { $0.modelID == "gpt-6-sol" })
         XCTAssertEqual(sol.quotaText, "—")
-        XCTAssertTrue(sol.quotaHelpText.contains("校准中或数据不足"), "got: \(sol.quotaHelpText)")
+        XCTAssertEqual(sol.quotaHelpText, "校准中或数据不足，暂不估算")
+    }
+
+    // MARK: - #184 追加：未知 grade（不是 "A"/"B"）视同没有估算，不编一句听起来权威的说明
+
+    func testUnknownGradeIsTreatedAsNoEstimate() throws {
+        let machineRow = MobileBreakdownRow(
+            id: "mac-1", label: "mac-1", tokens: 100, sourceIDs: ["src-1"],
+            agents: [
+                MobileSourceAgent(id: "claude", label: "Claude", tokens: 100, status: "available", models: [
+                    MobileSourceModel(
+                        id: "claude-future-model", label: "Claude Future Model", tokens: 100, status: "available",
+                        quotaEstimate: MobileQuotaEstimate(percent: 3.0, grade: "C", basis: "week")
+                    ),
+                ]),
+            ]
+        )
+        let summary = makeSummary(periodID: "week", byMachine: [machineRow], sources: [
+            source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
+        ])
+
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
+        let row = try XCTUnwrap(card.models.first)
+
+        XCTAssertEqual(row.quotaText, "—")
+        XCTAssertEqual(row.quotaHelpText, "校准中或数据不足，暂不估算")
     }
 
     // MARK: - #184：非 available 模型即便带 quota_estimate 也必须仍是「—」（不得伪装成官方额度）

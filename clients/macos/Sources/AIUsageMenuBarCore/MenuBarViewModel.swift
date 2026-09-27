@@ -704,8 +704,10 @@ public enum MenuBarViewModel {
 
     /// #184：把服务端 `quota_estimate` 变成展示文本 + 悬停说明。
     /// 数值必须带「≈」——AGENTS.md 关键不变量：不得把估算伪装成官方额度。
+    /// 追加：未知 grade（不是 "A"/"B"）视同没有估算——服务端合同只承诺下发 A/B
+    /// （见 quota-estimate.ts），客户端不为陌生等级编一句听起来权威的说明。
     private static func quotaEstimateTexts(_ estimate: MobileQuotaEstimate?) -> (text: String, helpText: String) {
-        guard let estimate else {
+        guard let estimate, let gradeHelpText = gradePrecisionHelpText(estimate.grade) else {
             return ("—", "校准中或数据不足，暂不估算")
         }
         let text: String
@@ -714,11 +716,19 @@ public enum MenuBarViewModel {
         } else {
             text = String(format: "≈%.1f%%", estimate.percent)
         }
-        var helpText = "估算：基于官方额度校准（精度 A 约 ±10% / B 约 ±25%）"
+        var helpText = gradeHelpText
         if estimate.basis == "weekly_average" {
             helpText += "；月视图为周均"
         }
         return (text, helpText)
+    }
+
+    private static func gradePrecisionHelpText(_ grade: String) -> String? {
+        switch grade {
+        case "A": return "估算精度 A（约 ±10%），基于官方额度校准"
+        case "B": return "估算精度 B（约 ±25%），基于官方额度校准"
+        default: return nil
+        }
     }
 
     private static func sourceQuality(_ sourceType: String?) -> Int {
@@ -839,7 +849,9 @@ public enum MenuBarViewModel {
         if candidateQuality != existingQuality {
             return candidateQuality > existingQuality
         }
-        return (candidate.observedAt ?? "") > (existing.observedAt ?? "")
+        // 真机 bug 同类修复：不同来源可能带不同时区 offset，直接比较 ISO 字符串是字典序，
+        // 必须先解析成真实时间再比较（同 latestISOString 的思路）。
+        return (parseDate(candidate.observedAt) ?? .distantPast) > (parseDate(existing.observedAt) ?? .distantPast)
     }
 
     /// - Parameter slotsWithWindows: (slot, currentProviderWindows([slot], now:)) 对，由调用方
@@ -866,7 +878,7 @@ public enum MenuBarViewModel {
                 .sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
                 .first
             let outerWindow = sessionWindow ?? otherWindow
-            let verifiedAt = slot.quota.lastVerifiedAt ?? wins.compactMap(\.observedAt).max()
+            let verifiedAt = slot.quota.lastVerifiedAt ?? latestISOString(wins.compactMap(\.observedAt))
             let name: String
             switch provider {
             case "claude": name = "Claude"
@@ -1161,9 +1173,14 @@ public enum MenuBarViewModel {
 
     private static func compactResetTime(_ resetAt: String?, generatedAt: String?) -> String? {
         guard let resetAt else { return nil }
+        // 真机 bug 同类修复：resetAt / generatedAt 各自带不同时区 offset 时，日期部分的原始
+        // 字符串前缀可能相同或反直觉地大小颠倒（同一 UTC 时刻换算成北京时间可能已经跨天），
+        // 必须解析成真实时间、按北京日历日比较，不能比较字符串前缀。
         let suffix: String
-        if let generatedAt, resetAt.prefix(10) < generatedAt.prefix(10) {
-            suffix = "已过"
+        if let resetDate = parseDate(resetAt), let generatedAt, let generatedDate = parseDate(generatedAt) {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+            suffix = calendar.startOfDay(for: resetDate) < calendar.startOfDay(for: generatedDate) ? "已过" : "重置"
         } else {
             suffix = "重置"
         }
