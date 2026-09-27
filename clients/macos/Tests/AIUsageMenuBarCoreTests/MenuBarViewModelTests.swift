@@ -14,6 +14,8 @@ final class MenuBarViewModelTests: XCTestCase {
 
         XCTAssertEqual(state.statusTitle, "5.0K")
         XCTAssertEqual(state.periodLabel, "本周")
+        // #186 回归守卫：本机时区与 summary.timezone 偏移相同时不加任何标注。
+        XCTAssertEqual(state.periodTitleSuffix, "")
         XCTAssertEqual(state.dateRangeText, "2026-05-27 ～ 2026-06-02")
         XCTAssertEqual(state.heroTotalText, "5.0K")
         XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · 缓存命中 16.0%")
@@ -54,8 +56,12 @@ final class MenuBarViewModelTests: XCTestCase {
             deviceTimeZone: losAngeles
         )
 
-        // 期间标题追加标注；日界类字段（起止日期）逐字不变。
-        XCTAssertEqual(state.periodLabel, "本周（北京时间）")
+        // 期间标题追加标注——periodLabel 本身保持不含标注的基础文本（期间菜单弹层按钮显示的是
+        // PeriodMenuBuilder 缓存行 title，不是 periodLabel；periodTitleSuffix 由调用方
+        // 【MenuBarUsageSectionView】拼接到实际渲染的标题后面，这里只锁 MenuBarState 的两个字段）。
+        // 日界类字段（起止日期）逐字不变。
+        XCTAssertEqual(state.periodLabel, "本周")
+        XCTAssertEqual(state.periodTitleSuffix, "（北京时间）")
         XCTAssertEqual(state.dateRangeText, "2026-05-27 ～ 2026-06-02")
 
         // headerUpdatedText 是「时刻类」——fixture 最新 lastObservedAt "2026-06-02T10:40:00+08:00"
@@ -1403,6 +1409,10 @@ final class MenuBarViewModelTests: XCTestCase {
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         let row = try XCTUnwrap(claude.hoverRows.first)
         XCTAssertTrue(row.valueText.contains("今天 13:00"), "got: \(row.valueText)")
+
+        // #186 补充覆盖：额度环旁的 updatedText 同样是「时刻类」——observedAt "2026-07-18T07:30:00-07:00"
+        // 换算到本机（洛杉矶）与 now（洛杉矶 08:00 同一天）同日，应显示 "07:30 更新"，不是北京时间。
+        XCTAssertEqual(claude.updatedText, "07:30 更新")
     }
 
     /// #177 第四轮 Opus 审查防回归：跨午夜——now 是北京时间 23:30，resetAt 是次日 00:30，
@@ -1596,6 +1606,15 @@ final class MenuBarViewModelTests: XCTestCase {
             deviceTimeZone: shanghaiTZForTests)
         let row = try XCTUnwrap(state.limitRows.first)
         XCTAssertTrue(row.value.hasSuffix("重置"), "got: \(row.value)")
+
+        // #186 补充覆盖：
+        // 1. row.value 实际渲染的钟点是「时刻类」——resetAt "2026-09-27T01:00:00-07:00" 换算到
+        //    本机（Shanghai）是 09-27 16:00，与 generatedAt 换算到 Shanghai 后的 09-28 不同日，
+        //    格式带 "MM-dd"，必须是 "09-27 16:00 重置"，不是洛杉矶时间 "01:00"。
+        XCTAssertEqual(row.value, "09-27 16:00 重置")
+        // 2. summary.timezone 不是 Asia/Shanghai 时的标注文案分支（"服务时区"）此前没有测试覆盖——
+        //    本机 Shanghai 与 summary America/Los_Angeles 当前偏移不同，应标注「（服务时区）」。
+        XCTAssertEqual(state.periodTitleSuffix, "（服务时区）")
     }
 
     func testTrendSelectionFollowsMouseLocation() throws {

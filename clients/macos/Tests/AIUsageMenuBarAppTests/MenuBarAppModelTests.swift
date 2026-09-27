@@ -291,6 +291,22 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(MenuBarStatusItemPresentation.tooltip(for: state), "AI Usage · 今天 366.4M")
     }
 
+    /// #186：periodTitleSuffix 是独立字段（不烘进 periodLabel），tooltip 必须自己把它拼上去，
+    /// 否则本机时区标注只会出现在 MenuBarState 里，状态栏 tooltip 上完全看不到。
+    func testStatusItemPresentationTooltipAppendsPeriodTitleSuffix() throws {
+        let state = MenuBarViewModel.build(
+            from: try summary(periodID: "today", totalTokens: 366_442_154),
+            selectedPeriodID: "today",
+            now: try date("2026-07-18T12:00:00+08:00"),
+            deviceTimeZone: try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        )
+
+        XCTAssertEqual(state.periodTitleSuffix, "（北京时间）")
+        XCTAssertEqual(
+            MenuBarStatusItemPresentation.tooltip(for: state), "AI Usage · 今天（北京时间） 366.4M"
+        )
+    }
+
     func testStatusItemPresentationUsesNewAutosaveNameForVisiblePlacement() {
         XCTAssertEqual(
             MenuBarStatusItemPresentation.autosaveName,
@@ -437,6 +453,40 @@ final class MenuBarAppModelTests: XCTestCase {
     }
 
     /// #177 真机反馈：标题栏「HH:mm 更新」之前只看「所选 summary」自己的 sources——
+    /// #186：MenuBarAppModel 的 init(deviceTimeZone:) 必须真的一路传到 rebuildState() 内两次
+    /// MenuBarViewModel.build 调用，不能在中途被吞掉、悄悄退回 .current——用与本机大概率不同的
+    /// America/Los_Angeles 反证：headerUpdatedText 与 periodTitleSuffix 都必须反映构造时传入的
+    /// 时区，而不是运行测试的机器自己的时区。
+    func testDeviceTimeZoneFromInitFlowsThroughToRebuiltState() throws {
+        let loader = ControlledSummaryLoader()
+        let losAngeles = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        let todaySummary = try summary(
+            periodID: "today", totalTokens: 100,
+            generatedAt: "2026-07-18T21:12:00+08:00",
+            sourcesJSON: """
+            [{"source_id": "s", "machine": "mac", "os_user": "wang", "platform": "macos",
+              "display_name": null, "status": "ok",
+              "last_observed_at": "2026-07-18T21:12:00+08:00", "last_pushed_at": "2026-07-18T21:12:00+08:00",
+              "error_message": null}]
+            """
+        )
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "today"),
+            cachedSummary: todaySummary,
+            now: { try! self.date("2026-07-18T22:00:00+08:00") },
+            deviceTimeZone: losAngeles,
+            loadSummary: loader.load
+        )
+
+        // 21:12 北京时间换算到洛杉矶（同为 07-18）是 06:12；如果 deviceTimeZone 没传到
+        // build()，会退回 .current（本机真实时区）或误用别的时区，输出就不会是 "06:12 更新"。
+        XCTAssertEqual(model.state.headerUpdatedText, "06:12 更新")
+        // fixture 的 summary.timezone 固定 "Asia/Shanghai"，与洛杉矶当前偏移不同——
+        // periodTitleSuffix 必须带标注。
+        XCTAssertEqual(model.state.periodTitleSuffix, "（北京时间）")
+    }
+
     /// 切到历史周期（如「本周」）后，会显示那份历史快照里更早的同步时间，而不是设备实际
     /// 最新一次同步（体现在 todaySummary/缓存里）的时间。headerUpdatedText 必须取所有已知
     /// summary 里最新的同步时间，与 quotaRings 取最新快照同一思路。
@@ -472,6 +522,7 @@ final class MenuBarAppModelTests: XCTestCase {
             ],
             cacheFreshnessInterval: 300,
             now: { now },
+            deviceTimeZone: shanghaiTZForTests,
             loadSummary: loader.load
         )
 
@@ -1285,6 +1336,7 @@ final class MenuBarAppModelTests: XCTestCase {
             ],
             cacheFreshnessInterval: 300,
             now: { now },
+            deviceTimeZone: shanghaiTZForTests,
             loadSummary: loader.load
         )
 

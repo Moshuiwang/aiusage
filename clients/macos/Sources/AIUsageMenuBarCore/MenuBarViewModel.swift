@@ -3,6 +3,11 @@ import Foundation
 public struct MenuBarState: Equatable, Sendable {
     public let statusTitle: String
     public let periodLabel: String
+    /// #186：本机时区与 summary.timezone 当前 UTC 偏移不同时的期间标题标注（如
+    /// 「（北京时间）」），偏移相同时为空串。`periodLabel` 本身不含这个标注——期间菜单弹层的
+    /// 标题按钮显示的是 `PeriodMenuBuilder` 缓存行的 title（不是 periodLabel），调用方需要把
+    /// 这个字段拼到实际渲染的标题文本后面，才能让标注在弹层按钮上也可见。
+    public let periodTitleSuffix: String
     public let dateRangeText: String
     public let heroTotalText: String
     public let tokenBreakdownText: String
@@ -293,7 +298,7 @@ public enum MenuBarViewModel {
         return formatter
     }()
 
-    /// #177 第四轮真机反馈：额度悬停浮层的具体重置时刻用「HH:mm」，时区随 summary（resetMomentText 每次赋值）。
+    /// #177 第四轮真机反馈：额度悬停浮层的具体重置时刻用「HH:mm」；#186 起时区随 deviceTimeZone（resetMomentText 每次赋值），不再是 summary.timezone。
     private static let resetMomentTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -301,7 +306,7 @@ public enum MenuBarViewModel {
         return formatter
     }()
 
-    /// resetMomentText 用：「M月d日」，时区随 summary。
+    /// resetMomentText 用：「M月d日」；#186 起时区随 deviceTimeZone，不再是 summary.timezone。
     private static let resetMomentDayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -376,7 +381,8 @@ public enum MenuBarViewModel {
 
         return MenuBarState(
             statusTitle: tokenText,
-            periodLabel: basePeriodLabel + periodTitleSuffix,
+            periodLabel: basePeriodLabel,
+            periodTitleSuffix: periodTitleSuffix,
             dateRangeText: dateRangeText(summary.period),
             heroTotalText: tokenText,
             tokenBreakdownText: tokenBreakdownText(summary.period),
@@ -1068,8 +1074,9 @@ public enum MenuBarViewModel {
         return window.windowDurationMinutes >= 7 * 24 * 60
     }
 
-    /// #177 第四轮真机反馈：额度悬停浮层的重置时刻改用具体时间点（按 summary 时区，缺省
-    /// Asia/Shanghai），不再是倒计时——圆环旁的 resetCountdownText 不受影响，仍用 timeRemainingText。
+    /// #177 第四轮真机反馈：额度悬停浮层的重置时刻改用具体时间点，不再是倒计时——圆环旁的
+    /// resetCountdownText 不受影响，仍用 timeRemainingText。#186 起 timezone 参数由调用方传入
+    /// deviceTimeZone（时刻类，按本机时区），不再是 summary.timezone。
     /// 同一天简写「今天 HH:mm」，次日「明天 HH:mm」，其余「M月d日 周X HH:mm」。
     /// internal（非 private）：与 trendBars/isFutureBucket 等同款惯例——供单测直接调用，
     /// 不必绕开 build() 里 trustedProviderWindows 的过期过滤才能测到边界分支。

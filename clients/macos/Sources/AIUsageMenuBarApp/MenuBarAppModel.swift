@@ -27,6 +27,10 @@ final class MenuBarAppModel: ObservableObject {
     private let loadSummary: MenuBarSummaryLoader
     private let loadRuntimeConfig: MenuBarRuntimeConfigProvider
     private let now: MenuBarNowProvider
+    /// #186：本机时区——默认真实设备时区，测试注入固定时区。传给 MenuBarViewModel.build
+    /// 的「时刻类」显示（悬停重置时刻、标题栏/Server 更新时间），不影响仍走 summary.timezone
+    /// 的「日界类」逻辑。
+    private let deviceTimeZone: TimeZone
     private let cacheFreshnessInterval: TimeInterval
     private var refreshSequence = 0
     @Published private(set) var hasLoadedUsableSummary: Bool
@@ -40,6 +44,7 @@ final class MenuBarAppModel: ObservableObject {
         cachedSummaries: [String: CachedMenuSummary] = [:],
         cacheFreshnessInterval: TimeInterval = 300,
         now: @escaping MenuBarNowProvider = { Date() },
+        deviceTimeZone: TimeZone = .current,
         loadSummary: @escaping MenuBarSummaryLoader = { config in
             try await MobileSummaryClient(config: config).load()
         },
@@ -52,6 +57,7 @@ final class MenuBarAppModel: ObservableObject {
         self.loadSummary = loadSummary
         self.loadRuntimeConfig = loadRuntimeConfig
         self.now = now
+        self.deviceTimeZone = deviceTimeZone
         self.cacheFreshnessInterval = max(cacheFreshnessInterval, 0)
         var periodSummaries = cachedSummaries.filter { Self.isSameCacheDay($0.value, now: now()) }
         if let cachedSummary, periodSummaries[cachedSummary.period.id] == nil {
@@ -83,12 +89,14 @@ final class MenuBarAppModel: ObservableObject {
             now: now(),
             machineAliases: config?.machineAliases,
             quotaSlots: latestQuotaProviderSlots(),
-            additionalSources: otherKnownSources()
+            additionalSources: otherKnownSources(),
+            deviceTimeZone: deviceTimeZone
         )
         statusState = MenuBarViewModel.build(
             from: todaySummary ?? .empty(),
             selectedPeriodID: "today",
-            machineAliases: config?.machineAliases
+            machineAliases: config?.machineAliases,
+            deviceTimeZone: deviceTimeZone
         )
     }
 
