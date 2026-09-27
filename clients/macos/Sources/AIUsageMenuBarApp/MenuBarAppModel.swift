@@ -287,14 +287,27 @@ final class MenuBarAppModel: ObservableObject {
         }
     }
 
-    /// 后台预取常用历史周期（本周、本月），确保呈现时 100% 瞬时读取本地库
+    /// #190：week/month 后台预取的最小重拉间隔，独立于 cacheFreshnessInterval（用户手动切换/
+    /// 打开面板时的展示新鲜度）。定时器刷新间隔通常是 600s，若预取新鲜度复用 300s 的
+    /// cacheFreshnessInterval，会导致每轮定时器都重新拉取本周/本月（各自扫数千行事实表），
+    /// 把 D1 免费额度的日读取推高到 82.5%。预取只是为了让面板打开时命中缓存，不必跟随
+    /// 定时器频率，1 小时刷新一次即可。
+    private static let prefetchMinimumInterval: TimeInterval = 3600
+
+    private func isPrefetchFresh(_ cached: CachedMenuSummary) -> Bool {
+        let age = now().timeIntervalSince(cached.fetchedAt)
+        return age >= 0 && age < Self.prefetchMinimumInterval && Self.isSameCacheDay(cached, now: now())
+    }
+
+    /// 后台预取常用历史周期（本周、本月），确保呈现时 100% 瞬时读取本地库。
+    /// 低频：仅当缓存不存在、缓存已超过 prefetchMinimumInterval，或跨了服务日时才请求。
     func prefetchCommonPeriods() {
         guard let runtimeConfig = loadRuntimeConfig(paths) ?? config,
               let baseURL = URL(string: runtimeConfig.serverURL) else { return }
         let periods = ["week", "month"]
         let loader = loadSummary
         for period in periods {
-            if let cached = cachedSummaries[period], isFresh(cached) {
+            if let cached = cachedSummaries[period], isPrefetchFresh(cached) {
                 continue
             }
             Task {
