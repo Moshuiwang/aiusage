@@ -691,6 +691,8 @@ describe.sequential("native TS Worker write API parity", () => {
         { ...validClaude, account_fingerprint: "fp:CLAUDE:35f06f61d06d4aa38b8a3b94" },
         { ...validClaude, observed_at: 12345 },
         { ...validClaude, observed_at: "not-a-date" },
+        // Codex PR #187 审查 P2：provider 与指纹前缀不一致（跨 provider 组装错误）必须丢弃。
+        { ...validClaude, account_fingerprint: "fp:codex:ad5d4ce6324ab7e5a0909ba8" },
       ],
     };
 

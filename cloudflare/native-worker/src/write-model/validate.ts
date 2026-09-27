@@ -64,6 +64,8 @@ function validateIngestPayload(payload: unknown): IngestRequest {
       if (typeof item.agent !== "string" || !item.agent.trim()) return false;
       if (typeof item.provider !== "string" || !item.provider.trim()) return false;
       if (typeof item.account_fingerprint !== "string" || !ACCOUNT_FINGERPRINT_PATTERN.test(item.account_fingerprint)) return false;
+      // 指纹前缀的 provider 必须与记录的 provider 一致，跨 provider 组装错误的观察丢弃。
+      if (!item.account_fingerprint.startsWith(`fp:${item.provider.trim().toLowerCase()}:`)) return false;
       const observedAtValue = item.observed_at;
       if (typeof observedAtValue !== "string" || Number.isNaN(new Date(observedAtValue).getTime())) return false;
       return true;
