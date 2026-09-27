@@ -95,6 +95,13 @@ D1_ONLY_TABLE_COLUMNS = {
 # `usage_blocks` is absent on purpose: #91 stopped collection, no reader or
 # writer remains on either side, and 0008 drops the table from deployed D1.
 FRESH_INSTALL_TABLE_COLUMNS = {
+    "account_observations": [
+        ('source_id', 'TEXT', 1, None, 1),
+        ('provider', 'TEXT', 1, None, 2),
+        ('account_fingerprint', 'TEXT', 1, None, 3),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
     "ai_accounts": [
         ('provider', 'TEXT', 1, None, 1),
         ('account_id', 'TEXT', 1, None, 2),
@@ -147,6 +154,17 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('platform', 'TEXT', 1, None, 0),
         ('first_seen_at', 'TEXT', 1, None, 0),
         ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
+    "quota_calibration": [
+        ('provider', 'TEXT', 1, None, 1),
+        ('model_family', 'TEXT', 1, None, 2),
+        ('coef', 'REAL', 1, None, 0),
+        ('effective_delta_u', 'REAL', 1, None, 0),
+        ('backtest_max_err', 'REAL', 0, None, 0),
+        ('grade', 'TEXT', 1, None, 0),
+        ('sample_intervals', 'INTEGER', 1, None, 0),
+        ('fitted_at', 'TEXT', 1, None, 0),
+        ('formula_version', 'TEXT', 1, None, 0),
     ],
     "os_identities": [
         ('machine_id', 'TEXT', 1, None, 1),
@@ -378,6 +396,8 @@ FRESH_INSTALL_TABLE_COLUMNS = {
 }
 
 FRESH_INSTALL_CREATED_INDEXES = {
+    "account_observations": {
+    },
     "ai_accounts": {
     },
     "collection_runs": {
@@ -385,12 +405,15 @@ FRESH_INSTALL_CREATED_INDEXES = {
     },
     "limit_window_history": {
         "idx_limit_window_history_lookup": (0, 0, ('source_id', 'provider', 'window', 'observed_at')),
+        "idx_limit_window_history_provider": (0, 0, ('provider', 'window', 'observed_at')),
     },
     "limit_windows": {
     },
     "machines": {
     },
     "os_identities": {
+    },
+    "quota_calibration": {
     },
     "rejected_ingest_attempts": {
         "idx_rejected_ingest_attempts_last_seen": (0, 0, ('last_seen_at',)),
