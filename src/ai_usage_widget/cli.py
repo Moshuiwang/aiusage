@@ -8,6 +8,7 @@ import sys
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 
+from . import account_fingerprint
 from .backup import backup_sqlite
 from .config import ConfigError, validate_device_config
 from .claude_limits_provider import ClaudeCliUsageProvider, ClaudeOAuthProvider, ClaudeOAuthWithCliFallbackProvider
@@ -684,6 +685,49 @@ def _tag_provider(provider, *, provider_name: str, source_id: str):
     return provider
 
 
+def _account_fingerprints_from_limits_config(limits_config) -> dict[str, str | None]:
+    """#181：额度窗口指纹只从 ``--limits-config`` 里显式配置的路径算，绝不猜测默认路径。
+
+    键是 ``runtime_id(provider_config)``（即 window 的 ``source_id``）——同一 provider
+    类型下的多账户各占一个 source_id，不能按 provider 类型名去查，否则多账户会互相覆盖。
+    Codex 复用已有的 ``auth_file``（跟 token 是同一份 ``auth.json``，``tokens.account_id``
+    与 ``tokens.access_token`` 本就同处一份文件）；Claude 需要单独配置 ``account_config_path``
+    ——它是不同的一份文件（``oauthAccount.accountUuid`` 那种），不能假设复用 auth_file。
+    没配置对应路径的 provider 完全不出现在返回的 dict 里（不是 ``None`` 值，是缺这个键），
+    调用方据此原样跳过，不附加字段。
+    """
+    fingerprints: dict[str, str | None] = {}
+    if limits_config is None:
+        return fingerprints
+    for provider_config in limits_config.enabled_providers:
+        key = runtime_id(provider_config)
+        if provider_config.provider == "codex" and provider_config.auth_file:
+            fingerprints[key] = account_fingerprint.codex_account_fingerprint(provider_config.auth_file)
+        elif provider_config.provider == "claude" and provider_config.account_config_path:
+            fingerprints[key] = account_fingerprint.claude_account_fingerprint(provider_config.account_config_path)
+    return fingerprints
+
+
+def _windows_payload_with_account_fingerprints(
+    windows, account_fingerprints: dict[str, str | None]
+) -> list[dict[str, Any]]:
+    """把每个窗口的 snapshot 和它对应的账户指纹拼在一起。
+
+    按 ``source_id`` 匹配（不是 ``provider``）——同一 provider 类型下的多账户各自
+    只应该拿到自己那份指纹。指纹缺失（没配置路径，或配置了但读不到/解析不出）时
+    完全不写这个 key，而不是写一个 ``None``——跟已有 payload 字段的降级口径一致，
+    也避免服务端以后把「没有这个字段」和「这个字段是 null」当成两种不同的意思。
+    """
+    result: list[dict[str, Any]] = []
+    for window in windows:
+        snapshot = window.to_snapshot_dict()
+        fingerprint = account_fingerprints.get(snapshot["source_id"])
+        if fingerprint:
+            snapshot["account_fingerprint"] = fingerprint
+        result.append(snapshot)
+    return result
+
+
 def _run_push_limits(args):
     limits_config = load_limits_config(args.limits_config) if args.limits_config else None
     providers = load_fixture_providers(args.provider_fixture) if args.provider_fixture else {}
@@ -697,11 +741,12 @@ def _run_push_limits(args):
         providers=providers,
     )
     result = runtime.collect(provider_names=provider_names)
+    account_fingerprints = _account_fingerprints_from_limits_config(limits_config)
     payload = {
         "schema_version": 1,
         "observed_at": _limits_payload_observed_at(result.windows),
         "timezone": args.timezone or (limits_config.timezone if limits_config else "Asia/Shanghai"),
-        "windows": [window.to_snapshot_dict() for window in result.windows],
+        "windows": _windows_payload_with_account_fingerprints(result.windows, account_fingerprints),
     }
     push_response = None
     delivered = None

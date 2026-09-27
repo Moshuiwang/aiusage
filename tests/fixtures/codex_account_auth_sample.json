@@ -1,0 +1,9 @@
+{
+  "tokens": {
+    "id_token": "codex-fixture-id-token",
+    "access_token": "codex-fixture-access-token",
+    "refresh_token": "codex-fixture-refresh-token-secret",
+    "account_id": "33333333-3333-3333-3333-333333333333"
+  },
+  "last_refresh": "2026-06-01T00:00:00Z"
+}
