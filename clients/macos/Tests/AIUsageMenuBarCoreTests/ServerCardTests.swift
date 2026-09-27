@@ -318,6 +318,112 @@ final class ServerCardTests: XCTestCase {
         XCTAssertEqual(card.title, "工作站")
     }
 
+    // MARK: - #184：quotaText 由服务端 quota_estimate 驱动，不再恒为「—」
+
+    func testQuotaTextShowsApproxPercentWhenEstimatePresentAndDashWhenAbsent() throws {
+        let machineRow = MobileBreakdownRow(
+            id: "mac-1", label: "mac-1", tokens: 100, sourceIDs: ["src-1"],
+            agents: [
+                MobileSourceAgent(id: "claude", label: "Claude", tokens: 60, status: "available", models: [
+                    MobileSourceModel(
+                        id: "claude-opus-5", label: "Claude Opus 5", tokens: 40, status: "available",
+                        quotaEstimate: MobileQuotaEstimate(percent: 2.34, grade: "A", basis: "week")
+                    ),
+                    // 极小占比：<0.05 显示「≈<0.1%」而不是「≈0.0%」。
+                    MobileSourceModel(
+                        id: "claude-haiku-5", label: "Claude Haiku 5", tokens: 20, status: "available",
+                        quotaEstimate: MobileQuotaEstimate(percent: 0.03, grade: "B", basis: "weekly_average")
+                    ),
+                ]),
+                MobileSourceAgent(id: "codex", label: "Codex", tokens: 40, status: "available", models: [
+                    // 没有 quota_estimate（校准未覆盖该族）：仍是「—」。
+                    MobileSourceModel(id: "gpt-6-sol", label: "GPT-6 Sol", tokens: 40, status: "available"),
+                ]),
+            ]
+        )
+        let summary = makeSummary(periodID: "week", byMachine: [machineRow], sources: [
+            source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
+        ])
+
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
+        XCTAssertEqual(card.models.count, 3)
+
+        let opus = try XCTUnwrap(card.models.first { $0.modelID == "claude-opus-5" })
+        XCTAssertEqual(opus.quotaText, "≈2.3%")
+        XCTAssertTrue(opus.quotaHelpText.contains("估算"), "got: \(opus.quotaHelpText)")
+        XCTAssertTrue(opus.quotaHelpText.contains("精度 A"), "got: \(opus.quotaHelpText)")
+        XCTAssertFalse(opus.quotaHelpText.contains("周均"), "week basis 不应提示周均: \(opus.quotaHelpText)")
+
+        let haiku = try XCTUnwrap(card.models.first { $0.modelID == "claude-haiku-5" })
+        XCTAssertEqual(haiku.quotaText, "≈<0.1%")
+        XCTAssertTrue(haiku.quotaHelpText.contains("月视图为周均"), "got: \(haiku.quotaHelpText)")
+
+        let sol = try XCTUnwrap(card.models.first { $0.modelID == "gpt-6-sol" })
+        XCTAssertEqual(sol.quotaText, "—")
+        XCTAssertTrue(sol.quotaHelpText.contains("校准中或数据不足"), "got: \(sol.quotaHelpText)")
+    }
+
+    // MARK: - #184：非 available 模型即便带 quota_estimate 也必须仍是「—」（不得伪装成官方额度）
+
+    func testQuotaTextStaysDashWhenModelStatusIsNotAvailableEvenWithEstimatePresent() throws {
+        let machineRow = MobileBreakdownRow(
+            id: "mac-1", label: "mac-1", tokens: 100, sourceIDs: ["src-1"],
+            agents: [
+                MobileSourceAgent(id: "codex", label: "Codex", tokens: 100, status: "available", models: [
+                    MobileSourceModel(
+                        id: "unknown", label: "模型未知", tokens: 100, status: "missing",
+                        quotaEstimate: MobileQuotaEstimate(percent: 5.0, grade: "A", basis: "week")
+                    ),
+                ]),
+            ]
+        )
+        let summary = makeSummary(periodID: "week", byMachine: [machineRow], sources: [
+            source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")
+        ])
+
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week")
+        let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
+        let row = try XCTUnwrap(card.models.first)
+
+        XCTAssertEqual(row.status, "missing")
+        XCTAssertEqual(row.quotaText, "—")
+    }
+
+    // MARK: - 真机 bug：不同时区 offset 的 lastPushedAt 字符串比较选错「最新」
+
+    func testSubtitleSyncTimeComparesActualTimeNotStringAcrossDifferentTimezoneOffsets() throws {
+        let machineRow = MobileBreakdownRow(
+            id: "mac-1", label: "mac-1", tokens: 100,
+            sourceIDs: ["utc-src", "local-src"], agents: []
+        )
+        // 10:31:37+00:00 = 18:31:37 北京时间，晚于 16:47:12+08:00；字符串比较会选中后者（"16" < "18" 但
+        // 字符串 "16:47:12+08:00" > "10:31:37+00:00"，.max() 会误选 local-src）。
+        let sources = [
+            MobileSource(
+                sourceID: "utc-src", machine: "mac-1", osUser: "alice", platform: "linux",
+                displayName: nil, status: "ok",
+                lastObservedAt: "2026-09-27T10:31:37+00:00", lastPushedAt: "2026-09-27T10:31:37+00:00",
+                errorMessage: nil
+            ),
+            MobileSource(
+                sourceID: "local-src", machine: "mac-1", osUser: "alice", platform: "macos",
+                displayName: nil, status: "ok",
+                lastObservedAt: "2026-09-27T16:47:12+08:00", lastPushedAt: "2026-09-27T16:47:12+08:00",
+                errorMessage: nil
+            ),
+        ]
+        let summary = makeSummary(periodID: "today", byMachine: [machineRow], sources: sources)
+
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try isoDate("2026-09-27T19:00:00+08:00")
+        )
+        let card = try XCTUnwrap(state.serverCards.first { $0.id == "mac-1" })
+
+        XCTAssertTrue(card.subtitle.hasSuffix("18:31 同步"), "got: \(card.subtitle)")
+    }
+
     // MARK: - Fixtures
 
     private func makeSummary(

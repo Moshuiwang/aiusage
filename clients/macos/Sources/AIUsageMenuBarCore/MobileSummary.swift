@@ -326,9 +326,40 @@ public struct MobileSourceModel: Codable, Equatable, Sendable, Identifiable {
     public let label: String
     public let tokens: Int
     public let status: String
+    /// #184：服务端按官方额度校准算出的估算（缺省表示不可显示，不是 null——见 quota-estimate.ts 注释）。
+    public let quotaEstimate: MobileQuotaEstimate?
 
     public var title: String { status == "missing" ? "模型未知" : label }
     public var valueText: String { TokenFormat.compact(tokens) }
+
+    public init(id: String, label: String, tokens: Int, status: String, quotaEstimate: MobileQuotaEstimate? = nil) {
+        self.id = id
+        self.label = label
+        self.tokens = tokens
+        self.status = status
+        self.quotaEstimate = quotaEstimate
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case tokens
+        case status
+        case quotaEstimate = "quota_estimate"
+    }
+}
+
+/// #184：`quota_estimate` 字段——`percent` 单位是百分点（2.3 表示 2.3%）。
+public struct MobileQuotaEstimate: Codable, Equatable, Sendable {
+    public let percent: Double
+    public let grade: String
+    public let basis: String
+
+    public init(percent: Double, grade: String, basis: String) {
+        self.percent = percent
+        self.grade = grade
+        self.basis = basis
+    }
 }
 
 public struct MobileBreakdownContribution: Codable, Equatable, Sendable {

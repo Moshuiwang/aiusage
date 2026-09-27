@@ -81,6 +81,33 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.headerUpdatedText, "21:12 更新")
     }
 
+    // 真机 bug：headerUpdatedText 取所有 source 最新同步时间时按 ISO **字符串**比大小，不同来源
+    // 带不同时区 offset（+00:00 / +08:00）时字符串比较会选错——必须解析成 Date 再比较真实时间。
+    func testHeaderUpdatedTextComparesActualTimeNotStringAcrossDifferentTimezoneOffsets() throws {
+        let summary = try loadFixture()
+        // 10:31:37+00:00 = 18:31:37 北京时间，晚于 16:47:12+08:00；但字符串
+        // "2026-09-27T16:47:12+08:00" 在字典序上大于 "2026-09-27T10:31:37+00:00"，
+        // 旧实现的 .max() 会误选后者（更早的 16:47）。
+        let utcSource = MobileSource(
+            sourceID: "utc-src", machine: "utc-machine", osUser: "wang", platform: "linux",
+            displayName: nil, status: "ok",
+            lastObservedAt: "2026-09-27T10:31:37+00:00", lastPushedAt: "2026-09-27T10:31:37+00:00",
+            errorMessage: nil
+        )
+        let localSource = MobileSource(
+            sourceID: "local-src", machine: "mac", osUser: "wang", platform: "macos",
+            displayName: nil, status: "ok",
+            lastObservedAt: "2026-09-27T16:47:12+08:00", lastPushedAt: "2026-09-27T16:47:12+08:00",
+            errorMessage: nil
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "week",
+            now: try date("2026-09-27T19:00:00+08:00"),
+            additionalSources: [utcSource, localSource]
+        )
+        XCTAssertEqual(state.headerUpdatedText, "18:31 更新")
+    }
+
     func testLegacySharedMachineKeepsServerAggregateWithoutSplittingContributions() throws {
         let summary = try loadFixture()
         let sharedSources = [

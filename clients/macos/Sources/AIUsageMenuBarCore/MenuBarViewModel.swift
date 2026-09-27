@@ -73,8 +73,11 @@ public struct MenuServerModelRow: Equatable, Sendable, Identifiable {
     public let valueText: String
     /// 模型明细状态（如 "available" / "missing"）；非 "available" 时 quotaText 一律 "—"。
     public let status: String
-    /// 形如 "Claude 4.9%"；<0.05% 时 "Claude < 0.1%"；无法估算或 status 非 available 时 "—"。
+    /// 形如 "≈4.9%"；<0.05% 时 "≈<0.1%"；无法估算或 status 非 available 时 "—"。
     public let quotaText: String
+    /// #184：quotaText 悬停说明——有估算时讲精度等级与折算口径，没有时讲原因（不得省略，
+    /// 避免用户把裸「—」误读成「本模型没有额度」而不是「估算不可用」）。
+    public let quotaHelpText: String
 
     public init(
         id: String,
@@ -86,7 +89,8 @@ public struct MenuServerModelRow: Equatable, Sendable, Identifiable {
         tokens: Int,
         valueText: String,
         status: String,
-        quotaText: String
+        quotaText: String,
+        quotaHelpText: String
     ) {
         self.id = id
         self.modelID = modelID
@@ -98,6 +102,7 @@ public struct MenuServerModelRow: Equatable, Sendable, Identifiable {
         self.valueText = valueText
         self.status = status
         self.quotaText = quotaText
+        self.quotaHelpText = quotaHelpText
     }
 }
 
@@ -426,7 +431,7 @@ public enum MenuBarViewModel {
 
     /// #177：标题栏副标题用的钟表时间「HH:mm 更新」（同日）或「MM-dd HH:mm 更新」（跨天）。
     private static func headerUpdatedText(_ sources: [MobileSource], fallback: String?, now: Date) -> String {
-        let latest = sources.compactMap { $0.lastObservedAt }.max()
+        let latest = latestISOString(sources.compactMap { $0.lastObservedAt })
         let nowRef = isoFormatterBasic.string(from: now)
         return compactDateTime(latest ?? fallback, reference: nowRef, suffix: "更新") ?? "--"
     }
@@ -634,7 +639,7 @@ public enum MenuBarViewModel {
             } else {
                 userText = "未知用户"
             }
-            let latestTime = matchedSources.compactMap { $0.lastPushedAt ?? $0.lastObservedAt }.max()
+            let latestTime = latestISOString(matchedSources.compactMap { $0.lastPushedAt ?? $0.lastObservedAt })
             let timeText = compactDateTime(latestTime, reference: nowReference, suffix: "同步") ?? "未同步"
             let platform = matchedSources.compactMap(\.platform).first
 
@@ -655,6 +660,10 @@ public enum MenuBarViewModel {
                     let agentDisplayName = AgentBranding.displayName(for: agent.id)
                     let brandColor = AgentBranding.color(for: agent.id)
                     for model in agent.models where model.tokens > 0 {
+                        // #184：只在 status == "available" 时信任服务端 quota_estimate——非 available
+                        // 的模型行（如「模型未知」撤销分摊占位）即便意外带了字段也不能展示估算。
+                        let estimate = model.status == "available" ? model.quotaEstimate : nil
+                        let (quotaText, quotaHelpText) = Self.quotaEstimateTexts(estimate)
                         models.append(MenuServerModelRow(
                             id: "\(row.id)/\(agent.id)/\(model.id)",
                             modelID: model.id,
@@ -665,9 +674,8 @@ public enum MenuBarViewModel {
                             tokens: model.tokens,
                             valueText: TokenFormat.compact(model.tokens),
                             status: model.status,
-                            // #180：客户端估算（ModelQuotaEstimator 手写常数）已删除，改走服务端按官方额度校准
-                            // （另行规划）；本 PR 内这一列一律显示「—」，不回退旧常数。
-                            quotaText: "—"
+                            quotaText: quotaText,
+                            quotaHelpText: quotaHelpText
                         ))
                     }
                 }
@@ -692,6 +700,25 @@ public enum MenuBarViewModel {
 
     private static func serverModelQuotaHeader(periodID: String) -> String {
         periodID == "month" ? "周均额度" : "周额度"
+    }
+
+    /// #184：把服务端 `quota_estimate` 变成展示文本 + 悬停说明。
+    /// 数值必须带「≈」——AGENTS.md 关键不变量：不得把估算伪装成官方额度。
+    private static func quotaEstimateTexts(_ estimate: MobileQuotaEstimate?) -> (text: String, helpText: String) {
+        guard let estimate else {
+            return ("—", "校准中或数据不足，暂不估算")
+        }
+        let text: String
+        if estimate.percent < 0.05 {
+            text = "≈<0.1%"
+        } else {
+            text = String(format: "≈%.1f%%", estimate.percent)
+        }
+        var helpText = "估算：基于官方额度校准（精度 A 约 ±10% / B 约 ±25%）"
+        if estimate.basis == "weekly_average" {
+            helpText += "；月视图为周均"
+        }
+        return (text, helpText)
     }
 
     private static func sourceQuality(_ sourceType: String?) -> Int {
@@ -1038,6 +1065,15 @@ public enum MenuBarViewModel {
             return date
         }
         return isoFormatterBasic.date(from: iso)
+    }
+
+    /// 真机 bug：不同来源可能带不同时区 offset（如 +00:00 与 +08:00），直接对 ISO
+    /// 字符串做 `.max()` 是字典序比较，会选错「最新」——必须先解析成真实时间再比较。
+    /// 解析失败的字符串按 .distantPast 处理，不让它们意外赢过能解析的时间。
+    private static func latestISOString(_ values: [String]) -> String? {
+        values.max { lhs, rhs in
+            (parseDate(lhs) ?? .distantPast) < (parseDate(rhs) ?? .distantPast)
+        }
     }
 
     private static func ceilingValue(_ maxTokens: Int) -> Int {
