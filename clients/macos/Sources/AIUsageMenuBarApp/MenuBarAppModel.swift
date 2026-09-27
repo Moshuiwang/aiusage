@@ -242,11 +242,39 @@ final class MenuBarAppModel: ObservableObject {
         }
     }
 
-    /// 用户手动「立即同步」：标题栏按钮与 ⋯ 菜单共用。
+    /// 用户手动「立即同步」：标题栏按钮与 ⋯ 菜单共用。行为不变——无条件强刷当前选中期。
     /// 选中今天时 refreshToday 本身会强制刷新当前期，不能再额外 refresh，避免重复请求。
     func syncNow() {
         if selection != MenuPeriodSelection(periodID: "today") { refresh(force: true) }
         refreshToday()
+    }
+
+    /// #191（PR #191 Codex 审查 P1）：定时器专用入口，取代原来 startRefreshTimer 里直接调用
+    /// syncNow() + prefetchCommonPeriods()。syncNow() 对非 today 的当前选中期是无条件
+    /// force refresh，如果面板停在 week/month（offset 0）不动，每轮定时器仍会绕过 #190 加的
+    /// 预取节流重新扫描——syncNow 的 refresh(force:true) 和 prefetchCommonPeriods 用的是同一个
+    /// cachedSummaries["week"/"month"] 缓存位，但 syncNow 完全不查询它就强制发请求。
+    /// timerTick 把「当前选中的非 today 期」也纳入同一套 prefetchMinimumInterval 节流：
+    /// - 选中期恰好是 week/month 且 offset 为 0（即 prefetchCommonPeriods 本来就会覆盖的那份
+    ///   缓存）：不重复处理，交给下面的 prefetchCommonPeriods 统一节流，避免同一 tick 内对
+    ///   同一 cacheKey 发两次请求。
+    /// - 其余情况（历史 offset、或非 week/month 期间）：按 isPrefetchFresh 同样的新鲜度规则
+    ///   判断是否需要 force refresh。
+    /// 手动「立即同步」按钮/菜单继续调用 syncNow()，行为不变（无条件强刷）。
+    func timerTick() {
+        refreshToday()
+        let selected = selection
+        if selected != MenuPeriodSelection(periodID: "today") {
+            let coveredByPrefetch = selected.offset == 0
+                && (selected.periodID == "week" || selected.periodID == "month")
+            if !coveredByPrefetch {
+                let cached = cachedSummaries[selected.cacheKey]
+                if cached == nil || !isPrefetchFresh(cached!) {
+                    refresh(force: true)
+                }
+            }
+        }
+        prefetchCommonPeriods()
     }
 
     // The menu bar continues to show today's value while the popover browses history.
@@ -287,23 +315,60 @@ final class MenuBarAppModel: ObservableObject {
         }
     }
 
-    /// 后台预取常用历史周期（本周、本月），确保呈现时 100% 瞬时读取本地库
+    /// #190：week/month 后台预取的最小重拉间隔，独立于 cacheFreshnessInterval（用户手动切换/
+    /// 打开面板时的展示新鲜度）。定时器刷新间隔通常是 600s，若预取新鲜度复用 300s 的
+    /// cacheFreshnessInterval，会导致每轮定时器都重新拉取本周/本月（各自扫数千行事实表），
+    /// 把 D1 免费额度的日读取推高到 82.5%。预取只是为了让面板打开时命中缓存，不必跟随
+    /// 定时器频率，1 小时刷新一次即可。
+    private static let prefetchMinimumInterval: TimeInterval = 3600
+
+    private func isPrefetchFresh(_ cached: CachedMenuSummary) -> Bool {
+        let age = now().timeIntervalSince(cached.fetchedAt)
+        return age >= 0 && age < Self.prefetchMinimumInterval && Self.isSameCacheDay(cached, now: now())
+    }
+
+    /// 后台预取常用历史周期（本周、本月），确保呈现时 100% 瞬时读取本地库。
+    /// 低频：仅当缓存不存在、缓存已超过 prefetchMinimumInterval，或跨了服务日时才请求。
     func prefetchCommonPeriods() {
         guard let runtimeConfig = loadRuntimeConfig(paths) ?? config,
               let baseURL = URL(string: runtimeConfig.serverURL) else { return }
         let periods = ["week", "month"]
         let loader = loadSummary
         for period in periods {
-            if let cached = cachedSummaries[period], isFresh(cached) {
+            if let cached = cachedSummaries[period], isPrefetchFresh(cached) {
                 continue
             }
+            let requestedAt = now()
             Task {
                 do {
                     let loaded = try await loader(MobileSummaryClientConfig(
                         baseURL: baseURL, bearerToken: runtimeConfig.token, period: period, offset: 0
                     ))
                     guard loaded.period.id == period else { return }
-                    self.store(loaded, for: MenuPeriodSelection(periodID: period))
+                    // #191（PR #191 Codex 审查 P2）：与 refresh()/refreshToday() 同样的道理——
+                    // 请求发起和响应落地之间如果跨了服务日（上海时区午夜），这份响应描述的是
+                    // 「跨日前」的本周/本月，写进缓存会让新的一天里继续展示过期统计，且因为
+                    // fetchedAt 是刚写入的「新」时间戳，还会被 isPrefetchFresh 误判成新鲜、
+                    // 挡住下一轮本该立即重新请求的预取。直接丢弃，不 store，让下一次
+                    // prefetchCommonPeriods 因为缓存缺失/跨日而重新请求。
+                    guard Self.sameServiceDay(requestedAt, self.now(), timezone: loaded.timezone) else { return }
+                    let selected = MenuPeriodSelection(periodID: period)
+                    // reviewer 在 #191 收口前发现：store() 只写 cachedSummaries，不会更新
+                    // self.summary（rebuildState() 读的是 self.summary）。timerTick() 把
+                    // 「当前选中的 week/month（offset 0）」完全交给这里节流后，如果面板正停
+                    // 在该期间上，必须像 refresh() 成功回调一样同步刷新 self.summary，
+                    // 否则面板会一直显示旧数字，直到关闭重开才重新读到缓存。
+                    if self.selection == selected {
+                        let displayed = Self.summaryKeepingLastSuccessfulQuota(
+                            loaded, fallback: self.cachedSummaries[selected.cacheKey]?.summary
+                        )
+                        self.summary = displayed
+                        self.hasLoadedUsableSummary = true
+                        self.errorMessage = nil
+                        self.store(displayed, for: selected)
+                    } else {
+                        self.store(loaded, for: selected)
+                    }
                 } catch {
                     // 后台静默预取失败不打扰用户
                 }
