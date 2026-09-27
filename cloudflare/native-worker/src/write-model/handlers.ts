@@ -106,13 +106,13 @@ async function refreshDisplayRollups(db: D1Database, facts: UsageHourlyFact[] = 
       INSERT INTO usage_hourly_rollups (
         bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
         attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
       SELECT strftime('%Y-%m-%dT%H:00:00', window_start, '+8 hours') || '+08:00',
              max(strftime('%Y-%m-%dT%H:%M:%S', window_end, '+8 hours')) || '+08:00',
              source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
              attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
-             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*)
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
       FROM usage_hourly_facts WHERE date(window_start, '+8 hours') = ?
       GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, '+8 hours'), source_id, machine_id, os_user,
                ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
@@ -122,11 +122,11 @@ async function refreshDisplayRollups(db: D1Database, facts: UsageHourlyFact[] = 
       INSERT OR REPLACE INTO usage_daily_rollups (
         date, bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
         attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count
+        reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
       SELECT ?, ?, ?, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
              attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
-             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*)
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
       FROM usage_hourly_facts WHERE date(window_start, '+8 hours') = ?
       GROUP BY source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
     `).bind(date, start, endValue, date));

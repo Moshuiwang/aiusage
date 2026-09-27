@@ -16,6 +16,9 @@ COLLECTOR_VERSION_MIGRATION_SQL = (
 REJECTED_INGEST_MIGRATION_SQL = (
     MIGRATIONS_DIR / "0009_rejected_ingest_attempts.sql"
 )
+ROLLUP_COST_MIGRATION_SQL = (
+    MIGRATIONS_DIR / "0014_rollup_cost_and_range_indexes.sql"
+)
 
 # The source_report_states layout as it exists on a database already migrated to
 # 0006. Deliberately spelled out instead of replayed from 0001/0004: 0001 was
@@ -292,6 +295,7 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('event_count', 'INTEGER', 1, None, 0),
         ('session_count', 'INTEGER', 1, None, 0),
         ('fact_count', 'INTEGER', 1, None, 0),
+        ('total_cost', 'REAL', 0, None, 0),
     ],
     "usage_reconciliation_ranges": [
         ('source_id', 'TEXT', 1, None, 1),
@@ -392,6 +396,7 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('event_count', 'INTEGER', 1, None, 0),
         ('session_count', 'INTEGER', 1, None, 0),
         ('fact_count', 'INTEGER', 1, None, 0),
+        ('total_cost', 'REAL', 0, None, 0),
     ],
 }
 
@@ -434,6 +439,7 @@ FRESH_INSTALL_CREATED_INDEXES = {
     },
     "usage_daily_rollups": {
         "idx_usage_daily_rollups_date": (0, 0, ('date',)),
+        "idx_usage_daily_rollups_bucket_julianday": (0, 0, (None,)),
     },
     "usage_fact_revisions": {},
     "usage_reconciliation_ranges": {},
@@ -447,11 +453,13 @@ FRESH_INSTALL_CREATED_INDEXES = {
         "idx_usage_hourly_facts_source": (0, 0, ('source_id', 'window_start')),
         "idx_usage_hourly_facts_unique_hour": (1, 0, ('source_id', 'agent', 'client', 'window_start', 'window_end', 'ai_provider', 'ai_account_id', 'attribution_confidence', 'provenance')),
         "idx_usage_hourly_facts_window": (0, 0, ('window_start', 'window_end')),
+        "idx_usage_hourly_facts_window_julianday": (0, 0, (None,)),
     },
     "usage_hourly_models": {
     },
     "usage_hourly_rollups": {
         "idx_usage_hourly_rollups_bucket": (0, 0, ('bucket_start',)),
+        "idx_usage_hourly_rollups_bucket_julianday": (0, 0, (None,)),
     },
 }
 
@@ -700,6 +708,10 @@ class TestD1SchemaMigration(unittest.TestCase):
 
     def test_projection_recovery_upgrade_matches_schema_and_tracks_only_usage_changes(self) -> None:
         migration = (MIGRATIONS_DIR / "0011_reconciliation_and_projection_recovery.sql").read_text(encoding="utf-8")
+        # 0011 建的 usage_rollup_dirty_update 触发器后来被 0014 P1 用 DROP+CREATE 改过一次
+        # WHEN 条件（补 total_cost），所以"0011 单独重放"不再等于 0001 的最终形状——必须
+        # 把 0014 也接着重放一遍，才是这张表在真实部署库上真正会经历的完整升级链。
+        rollup_cost_migration = (MIGRATIONS_DIR / "0014_rollup_cost_and_range_indexes.sql").read_text(encoding="utf-8")
         trigger_names = ["usage_rollup_dirty_insert", "usage_rollup_dirty_update", "usage_rollup_dirty_delete"]
         with sqlite3.connect(":memory:") as conn:
             conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
@@ -727,6 +739,7 @@ class TestD1SchemaMigration(unittest.TestCase):
                         '2026-07-18T01:04:00Z', '2026-07-18T01:04:00Z', '2026-07-18T01:04:00Z')
             """)
             conn.executescript(migration)
+            conn.executescript(rollup_cost_migration)
             for table in ("usage_rollup_dirty_days", "usage_reconciliation_ranges"):
                 self.assertEqual(_table_columns(conn, table), FRESH_INSTALL_TABLE_COLUMNS[table])
             self.assertEqual(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall(), expected_triggers)
@@ -933,6 +946,130 @@ class TestD1SchemaMigration(unittest.TestCase):
             {"sqlite_autoindex_source_report_states_1": ("pk", 1, ("source_id",))},
         )
         self.assertEqual(leftover_tables, ["source_report_states"])
+
+    def test_rollup_cost_migration_backfills_existing_rows_without_data_loss(self) -> None:
+        """0014 must really exist for: a deployed D1 already holding rollup rows computed
+        before total_cost existed. The fresh-install / full-chain parity tests above cannot
+        catch a migration that leaves every pre-existing row's new column NULL -- they both
+        build from an *empty* database, run the migration, and only insert data afterwards.
+        This is the pre-0014 upgrade path with real rows already sitting in the tables
+        (mirrors test_collector_version_migration_upgrades_deployed_table_without_data_loss's
+        method for 0007's rebuild)."""
+        legacy_pre_0014_ddl = """
+        CREATE TABLE usage_hourly_facts (
+          fact_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, machine_id TEXT NOT NULL,
+          os_user TEXT NOT NULL, ai_provider TEXT NOT NULL, ai_account_id TEXT NOT NULL,
+          agent TEXT NOT NULL, client TEXT, window_start TEXT NOT NULL, window_end TEXT NOT NULL,
+          timezone TEXT NOT NULL, input_tokens INTEGER NOT NULL DEFAULT 0,
+          output_tokens INTEGER NOT NULL DEFAULT 0, cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+          cache_read_tokens INTEGER NOT NULL DEFAULT 0, reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
+          total_tokens INTEGER NOT NULL DEFAULT 0, total_cost REAL, event_count INTEGER NOT NULL DEFAULT 0,
+          session_count INTEGER NOT NULL DEFAULT 0, attribution_confidence TEXT NOT NULL,
+          provenance TEXT NOT NULL, account_evidence_json TEXT, metadata_json TEXT,
+          first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL
+        );
+        CREATE TABLE usage_hourly_rollups (
+          bucket_start TEXT NOT NULL, bucket_end TEXT NOT NULL, source_id TEXT NOT NULL,
+          machine_id TEXT NOT NULL, os_user TEXT NOT NULL, ai_provider TEXT NOT NULL,
+          ai_account_id TEXT NOT NULL, agent TEXT NOT NULL, client TEXT NOT NULL,
+          attribution_confidence TEXT NOT NULL, provenance TEXT NOT NULL,
+          input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+          cache_creation_tokens INTEGER NOT NULL, cache_read_tokens INTEGER NOT NULL,
+          reasoning_output_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
+          event_count INTEGER NOT NULL, session_count INTEGER NOT NULL, fact_count INTEGER NOT NULL,
+          PRIMARY KEY (bucket_start, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
+        );
+        CREATE TABLE usage_daily_rollups (
+          date TEXT NOT NULL, bucket_start TEXT NOT NULL, bucket_end TEXT NOT NULL, source_id TEXT NOT NULL,
+          machine_id TEXT NOT NULL, os_user TEXT NOT NULL, ai_provider TEXT NOT NULL,
+          ai_account_id TEXT NOT NULL, agent TEXT NOT NULL, client TEXT NOT NULL,
+          attribution_confidence TEXT NOT NULL, provenance TEXT NOT NULL,
+          input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+          cache_creation_tokens INTEGER NOT NULL, cache_read_tokens INTEGER NOT NULL,
+          reasoning_output_tokens INTEGER NOT NULL, total_tokens INTEGER NOT NULL,
+          event_count INTEGER NOT NULL, session_count INTEGER NOT NULL, fact_count INTEGER NOT NULL,
+          PRIMARY KEY (date, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
+        );
+        """
+        with sqlite3.connect(":memory:") as conn:
+            conn.executescript(legacy_pre_0014_ddl)
+
+            # Two facts on the same day/hour/identity, one priced and one not, plus one
+            # completely uncosted hour -- exercises "some NULL in the group" (SUM skips
+            # them) and "all NULL in the group" (SUM returns NULL) in the same migration run.
+            conn.executemany(
+                """
+                INSERT INTO usage_hourly_facts (
+                    fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+                    window_start, window_end, timezone, total_tokens, total_cost,
+                    attribution_confidence, provenance, first_seen_at, last_seen_at
+                ) VALUES (?, 'src-1', 'mac', 'tester', 'claude', 'claude-main', 'claude', 'claude',
+                          ?, ?, 'Asia/Shanghai', ?, ?, 'observed', 'local-ledger', 'now', 'now')
+                """,
+                [
+                    ("fact-priced-1", "2026-07-12T09:00:00+08:00", "2026-07-12T09:59:59+08:00", 100, 0.5),
+                    ("fact-priced-2", "2026-07-12T09:00:00+08:00", "2026-07-12T09:59:59+08:00", 200, 1.5),
+                    ("fact-null-cost", "2026-07-12T10:00:00+08:00", "2026-07-12T10:59:59+08:00", 50, None),
+                ],
+            )
+
+            # Pre-existing rollup rows, computed the old way (no total_cost column at all).
+            hourly_rows = [
+                ("2026-07-12T09:00:00+08:00", "2026-07-12T09:59:59+08:00", "src-1", "mac", "tester",
+                 "claude", "claude-main", "claude", "claude", "observed", "local-ledger", 300, 0, 0, 0, 0, 300, 1, 1, 2),
+                ("2026-07-12T10:00:00+08:00", "2026-07-12T10:59:59+08:00", "src-1", "mac", "tester",
+                 "claude", "claude-main", "claude", "claude", "observed", "local-ledger", 50, 0, 0, 0, 0, 50, 1, 1, 1),
+                # No matching facts at all (historical fallback import) -- must stay NULL.
+                ("2026-05-01T09:00:00+08:00", "2026-05-01T09:59:59+08:00", "src-1", "mac", "tester",
+                 "claude", "claude-main", "claude", "claude", "observed", "historical_ccusage_fallback_v1", 999, 0, 0, 0, 0, 999, 0, 0, 0),
+            ]
+            conn.executemany(
+                "INSERT INTO usage_hourly_rollups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                hourly_rows,
+            )
+            daily_rows = [
+                ("2026-07-12", "2026-07-12T00:00:00+08:00", "2026-07-12T23:59:59+08:00", "src-1", "mac", "tester",
+                 "claude", "claude-main", "claude", "claude", "observed", "local-ledger", 350, 0, 0, 0, 0, 350, 2, 2, 3),
+                ("2026-05-01", "2026-05-01T00:00:00+08:00", "2026-05-01T23:59:59+08:00", "src-1", "mac", "tester",
+                 "claude", "claude-main", "claude", "claude", "observed", "historical_ccusage_fallback_v1", 999, 0, 0, 0, 0, 999, 0, 0, 0),
+            ]
+            conn.executemany(
+                "INSERT INTO usage_daily_rollups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                daily_rows,
+            )
+
+            # Old shapes: hourly has 20 columns (index 0-19), daily has 21 (index 0-20).
+            # total_cost lands at index 20 / 21 respectively after the migration.
+            hourly_before = [row[:20] for row in conn.execute(
+                "SELECT * FROM usage_hourly_rollups ORDER BY bucket_start, provenance"
+            ).fetchall()]
+            daily_before = [row[:21] for row in conn.execute(
+                "SELECT * FROM usage_daily_rollups ORDER BY date, provenance"
+            ).fetchall()]
+
+            conn.executescript(ROLLUP_COST_MIGRATION_SQL.read_text(encoding="utf-8"))
+
+            hourly_after = conn.execute(
+                "SELECT * FROM usage_hourly_rollups ORDER BY bucket_start, provenance"
+            ).fetchall()
+            daily_after = conn.execute(
+                "SELECT * FROM usage_daily_rollups ORDER BY date, provenance"
+            ).fetchall()
+
+        # No row lost, no pre-existing column changed -- only the trailing total_cost is new.
+        self.assertEqual([row[:20] for row in hourly_after], hourly_before)
+        self.assertEqual([row[:21] for row in daily_after], daily_before)
+        self.assertEqual(len(hourly_after), 3)
+        self.assertEqual(len(daily_after), 2)
+
+        hourly_cost_by_bucket = {row[0]: row[20] for row in hourly_after}
+        self.assertEqual(hourly_cost_by_bucket["2026-07-12T09:00:00+08:00"], 2.0)  # 0.5 + 1.5
+        self.assertIsNone(hourly_cost_by_bucket["2026-07-12T10:00:00+08:00"])  # SUM over an all-NULL group
+        self.assertIsNone(hourly_cost_by_bucket["2026-05-01T09:00:00+08:00"])  # fallback row, no facts at all
+
+        daily_cost_by_date = {row[0]: row[21] for row in daily_after}
+        self.assertEqual(daily_cost_by_date["2026-07-12"], 2.0)  # 0.5 + 1.5, the NULL-cost hour contributes nothing
+        self.assertIsNone(daily_cost_by_date["2026-05-01"])
 
     def test_limit_window_migration_keeps_latest_row_for_stable_key(self) -> None:
         with sqlite3.connect(":memory:") as conn:

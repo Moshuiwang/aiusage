@@ -65,7 +65,29 @@ async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<
   return withoutSupersededActiveCache(bestLimitWindows(limits));
 }
 
-async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, endDate: string, timezone: string): Promise<Record<string, unknown>[]> {
+/**
+ * #190：账户小时行 + 逐条目 total_cost 一次拿齐。
+ *
+ * costsByItem 一律从这里已经读到的、去重前的行上直接汇总（对齐 itemKey(source_id, date,
+ * agent)），不再对 usage_hourly_facts 单独发一次 fetchFactRows：rollup 的 total_cost 是
+ * facts.total_cost 按更细的分组键（含 client/attribution_confidence/provenance）求和的结果，
+ * SUM 满足结合律——按 itemKey 对全部去重前 rollup 行再求一次和，与直接对 facts 按 itemKey
+ * 求和在浮点精度内相等（同一批底层 fact 行，只是中间分组粒度不同、累加顺序不同，不保证
+ * 逐位相等，但两条实现都不对 total_cost 做四舍五入直接下发，测试用 toBeCloseTo 而不是
+ * toBe）。归档 daily fallback 分支不参与这次求和：旧实现的 fetchFactRows 只读
+ * usage_hourly_facts，从不读 usage_daily_rollups，历史 fallback 覆盖的日期本来就没有
+ * facts 级 total_cost，这里保持同样的缺省。
+ *
+ * machineFilter/accountFilter 在求和之前应用（而不是让调用方在返回的 costsByItem 上
+ * 自己过滤）：旧实现里 summary.ts 是先用 accountHourlyRowMatchesFilter 过滤 factRows，
+ * 再调 factCostsByItem——itemKey 本身不含 machine/account，如果某个 source_id 的行分布在
+ * 不止一个 machine_id/os_user 上（schema 不禁止，虽然实践中 source_id 通常一机一用户），
+ * 求和前不过滤会把请求过滤范围之外的机器/账户的成本也算进同一个 itemKey，与旧行为不符。
+ */
+async function fetchAccountHourlyRows(
+  db: D1Database, startDate: string | null, endDate: string, timezone: string,
+  machineFilter?: string | null, accountFilter?: string | null,
+): Promise<{ rows: Record<string, unknown>[]; costsByItem: Map<string, number> }> {
   const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
   const rollupTable = startDate === endDate ? "usage_hourly_rollups" : "usage_daily_rollups";
   const pending = await hasPendingRollups(db, startDate, endDate);
@@ -74,12 +96,16 @@ async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, 
     const inPeriod = rollupRows.filter((row) =>
       accountHourlyRowInPeriod(row, startDate, endDate, timezone)
     );
-    return rollupTable === "usage_daily_rollups"
+    const rows = rollupTable === "usage_daily_rollups"
       ? preferHistoricalDailyFallbackRows(inPeriod)
       : preferLegacyHourlyBackfillRows(inPeriod);
+    const filteredForCost = inPeriod.filter((row) => accountHourlyRowMatchesFilter(row, machineFilter, accountFilter));
+    return { rows, costsByItem: factCostsByItem(filteredForCost) };
   }
-  const facts = preferLegacyHourlyBackfillRows((await fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive))
-    .filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
+  const rawFacts = (await fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive))
+    .filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
+  const costsByItem = factCostsByItem(rawFacts.filter((row) => accountHourlyRowMatchesFilter(row, machineFilter, accountFilter)));
+  const facts = preferLegacyHourlyBackfillRows(rawFacts);
   if (rollupTable === "usage_daily_rollups") {
     // Archived daily totals are themselves the retained historical source and
     // may have no hourly facts. Keep their existing precedence during recovery.
@@ -88,9 +114,9 @@ async function fetchAccountHourlyRows(db: D1Database, startDate: string | null, 
         && accountHourlyRowInPeriod(row, startDate, endDate, timezone));
     const archiveKeys = new Set(archived.map(row => itemKey(str(row.source_id), localDateFromWindowStart(row.window_start) ?? "", str(row.agent))));
     const uncoveredFacts = facts.filter(row => !archiveKeys.has(itemKey(str(row.source_id), localDateFromWindowStart(row.window_start) ?? "", str(row.agent))));
-    return preferHistoricalDailyFallbackRows([...uncoveredFacts, ...archived]);
+    return { rows: preferHistoricalDailyFallbackRows([...uncoveredFacts, ...archived]), costsByItem };
   }
-  return facts;
+  return { rows: facts, costsByItem };
 }
 
 export async function hasPendingRollups(db: D1Database, startDate: string | null = null, endDate: string | null = null): Promise<boolean> {
@@ -150,17 +176,6 @@ function preferLegacyHourlyBackfillRows(rows: Record<string, unknown>[]): Record
   });
 }
 
-async function fetchFactRows(
-  db: D1Database,
-  startDate: string | null,
-  endDate: string,
-  timezone: string,
-): Promise<Record<string, unknown>[]> {
-  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
-  return fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive)
-    .then((rows) => rows.filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone)));
-}
-
 async function fetchAccountRowsFromTable(
   db: D1Database,
   table: "usage_hourly_rollups" | "usage_daily_rollups" | "usage_hourly_facts",
@@ -177,7 +192,7 @@ async function fetchAccountRowsFromTable(
                source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
                attribution_confidence, provenance, input_tokens, output_tokens,
                cache_creation_tokens, cache_read_tokens, reasoning_output_tokens,
-               total_tokens, NULL AS total_cost, event_count, session_count, fact_count
+               total_tokens, total_cost, event_count, session_count, fact_count
         FROM ${table}) f`;
   const rows = await all<Record<string, unknown>>(
     db,
@@ -315,11 +330,9 @@ async function fetchQuotaCalibration(db: D1Database): Promise<QuotaCalibrationRo
 
 export {
   all,
-  factCostsByItem,
   fetchAccountHourlyRows,
   fetchAccountRowsFromTable,
   fetchAiAccounts,
-  fetchFactRows,
   fetchHourlyModelRows,
   fetchLimitWindows,
   fetchQuotaCalibration,

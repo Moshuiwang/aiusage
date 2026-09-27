@@ -307,6 +307,10 @@ CREATE TABLE IF NOT EXISTS usage_hourly_rollups (
   event_count INTEGER NOT NULL,
   session_count INTEGER NOT NULL,
   fact_count INTEGER NOT NULL,
+  -- Backfilled from 0014: sum(total_cost) per bucket, so summary can read item-level
+  -- cost straight off the rollup it already fetched instead of a second facts scan.
+  -- Must stay last: ALTER TABLE ADD COLUMN can only append.
+  total_cost REAL,
   PRIMARY KEY (bucket_start, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
 );
 
@@ -332,6 +336,8 @@ CREATE TABLE IF NOT EXISTS usage_daily_rollups (
   event_count INTEGER NOT NULL,
   session_count INTEGER NOT NULL,
   fact_count INTEGER NOT NULL,
+  -- Backfilled from 0014: same rationale as usage_hourly_rollups.total_cost above.
+  total_cost REAL,
   PRIMARY KEY (date, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
 );
 
@@ -340,6 +346,18 @@ CREATE INDEX IF NOT EXISTS idx_usage_hourly_rollups_bucket
 
 CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_date
   ON usage_daily_rollups(date);
+
+-- Backfilled from 0014: julianday() range predicates on window_start/bucket_start
+-- (read-model/db.ts periodWhere) can't use a plain column index once the column is
+-- wrapped in julianday(); these expression indexes match that exact predicate shape.
+CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_window_julianday
+  ON usage_hourly_facts(julianday(window_start));
+
+CREATE INDEX IF NOT EXISTS idx_usage_hourly_rollups_bucket_julianday
+  ON usage_hourly_rollups(julianday(bucket_start));
+
+CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_bucket_julianday
+  ON usage_daily_rollups(julianday(bucket_start));
 
 CREATE INDEX IF NOT EXISTS idx_source_accuracy_status
   ON source_accuracy(accuracy_status, source_id, agent);
@@ -378,6 +396,9 @@ BEGIN
   INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
 END;
 
+-- Backfilled from 0014 P1（Codex 审查）：WHEN 条件曾经不含 total_cost，只改
+-- total_cost（其它列不变）的 UPDATE 不会把当天标脏，rollup 的 sum(total_cost)
+-- 永远不会重算——0014 的 total_cost 回填对这类后续更新形同虚设。NULL 用 IS NOT 比较。
 CREATE TRIGGER IF NOT EXISTS usage_rollup_dirty_update
 AFTER UPDATE ON usage_hourly_facts
 WHEN OLD.source_id IS NOT NEW.source_id OR OLD.machine_id IS NOT NEW.machine_id
@@ -388,8 +409,8 @@ WHEN OLD.source_id IS NOT NEW.source_id OR OLD.machine_id IS NOT NEW.machine_id
   OR OLD.provenance IS NOT NEW.provenance OR OLD.input_tokens IS NOT NEW.input_tokens
   OR OLD.output_tokens IS NOT NEW.output_tokens OR OLD.cache_creation_tokens IS NOT NEW.cache_creation_tokens
   OR OLD.cache_read_tokens IS NOT NEW.cache_read_tokens OR OLD.reasoning_output_tokens IS NOT NEW.reasoning_output_tokens
-  OR OLD.total_tokens IS NOT NEW.total_tokens OR OLD.event_count IS NOT NEW.event_count
-  OR OLD.session_count IS NOT NEW.session_count
+  OR OLD.total_tokens IS NOT NEW.total_tokens OR OLD.total_cost IS NOT NEW.total_cost
+  OR OLD.event_count IS NOT NEW.event_count OR OLD.session_count IS NOT NEW.session_count
 BEGIN
   INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
   INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;

@@ -3,7 +3,7 @@ import { buildMobileSummary } from "../mobile-summary";
 import { buildVersionHealth } from "../version-contract";
 import { accountHourlyRowsToDailyRows, accountHourlyRowsToHourlyRows, accountHourlySummary } from "./account-hourly";
 import {
-  all, factCostsByItem, fetchAccountHourlyRows, fetchAiAccounts, fetchFactRows,
+  all, fetchAccountHourlyRows, fetchAiAccounts,
   fetchHourlyModelRows, fetchLimitWindows, fetchQuotaCalibration, fetchSourceIdentities,
 } from "./db";
 import { buildLimitStatus, effectiveLimitWindow } from "./limits-select";
@@ -47,12 +47,14 @@ async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
     periodId === "today" && endDate === formatDate(refTime) ? refTime : null,
   );
   const allLimits = await fetchLimitWindows(db, null);
-  const accountHourlyRows = await fetchAccountHourlyRows(db, startDate, endDate, request.timezone);
+  const { rows: accountHourlyRows, costsByItem } = await fetchAccountHourlyRows(
+    db, startDate, endDate, request.timezone, request.machine, request.account,
+  );
   const aiAccounts = await fetchAiAccounts(db);
   const quotaCalibrationByKey = indexQuotaCalibration(await fetchQuotaCalibration(db));
   return {
     refTime, periodId, startDate, endDate, hourAxisValues, identities,
-    statusRows, accuracyRows, limits, allLimits, accountHourlyRows, aiAccounts, quotaCalibrationByKey,
+    statusRows, accuracyRows, limits, allLimits, accountHourlyRows, costsByItem, aiAccounts, quotaCalibrationByKey,
   };
 }
 
@@ -60,7 +62,7 @@ type SummaryInputs = Awaited<ReturnType<typeof loadSummaryInputs>>;
 
 /** 阶段 2：过滤与投影——把账户小时行派生成日行/时行/模型分解等视图输入。 */
 async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: SummaryInputs) {
-  const { periodId, startDate, endDate, accountHourlyRows, refTime, quotaCalibrationByKey } = inputs;
+  const { periodId, startDate, endDate, accountHourlyRows, costsByItem, refTime, quotaCalibrationByKey } = inputs;
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
@@ -73,10 +75,7 @@ async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: 
       })
       .filter(Boolean),
   );
-  const factRows = (await fetchFactRows(db, startDate, endDate, request.timezone))
-    .filter((row) => accountHourlyRowMatchesFilter(row, request.machine, request.account));
   const canonicalProviderTokens = providerTokensByItem(filteredAccountHourlyRows);
-  const costsByItem = factCostsByItem(factRows);
   const rows = accountHourlyRowsToDailyRows(filteredAccountHourlyRows).map((row) => ({
     ...row,
     total_cost: costsByItem.get(itemKey(row.source_id, row.date, row.agent)) ?? null,
