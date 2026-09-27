@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Callable, Dict, List
 
 from .limits import LimitContractError, LimitWindow, parse_limit_window
+
+#: 按 window_duration_minutes 或 reset 间隔推断窗口类别的容差（分钟）。
+#: week ~= 10080 分钟（7 天），session ~= 300 分钟（5 小时）。真实数据有抖动
+#: （提前/延后几分钟核对），留出容差但不越界到会与另一类混淆的范围。
+_WEEK_DURATION_RANGE_MINUTES = (9000, 11500)
+_SESSION_DURATION_RANGE_MINUTES = (200, 400)
 
 
 class AntigravityProviderError(RuntimeError):
@@ -24,7 +31,7 @@ def parse_antigravity_user_status(payload: Dict[str, Any]) -> List[LimitWindow]:
     else:
         status_payload = _object_field(payload, "user_status", "userStatus", "status")
     return _parse_windows(
-        _limits_container(status_payload),
+        _limits_container(status_payload, observed_at=observed_at),
         observed_at=observed_at,
         source_type="language_server",
     )
@@ -40,7 +47,7 @@ def parse_antigravity_command_model_configs(payload: Dict[str, Any]) -> List[Lim
     observed_at = _string_field(payload, "observed_at")
     config_payload = _object_field(payload, "command_model_configs", "commandModelConfigs", "configs")
     return _parse_windows(
-        _limits_container(config_payload),
+        _limits_container(config_payload, observed_at=observed_at),
         observed_at=observed_at,
         source_type="language_server_config",
     )
@@ -69,15 +76,23 @@ class AntigravityLimitsProvider:
 
 def _parse_windows(container: Any, *, observed_at: str, source_type: str) -> List[LimitWindow]:
     items = _window_items(container)
-    windows = [
-        _parse_window(
-            window=window,
-            window_payload=window_payload,
-            observed_at=observed_at,
-            source_type=source_type,
-        )
-        for window, window_payload in items
-    ]
+    windows: List[LimitWindow] = []
+    for window, window_payload in items:
+        # #182：一个窗口字段缺失（例如没有 reset_at）不该让整批解析全炸——
+        # 之前任何单个窗口出错都会冒泡到 collect()，被 limits_runtime 兜底成
+        # 单条 window=unknown/provider_failed，哪怕另一个窗口的数据完整可信。
+        # 这里按窗口隔离故障：跳过解析失败的那一个，保留其它能解析出来的。
+        try:
+            windows.append(
+                _parse_window(
+                    window=window,
+                    window_payload=window_payload,
+                    observed_at=observed_at,
+                    source_type=source_type,
+                )
+            )
+        except LimitContractError:
+            continue
     if not windows:
         raise LimitContractError("limit_schema_invalid", "Antigravity limits payload must include at least one window")
     return windows
@@ -109,7 +124,7 @@ def _parse_window(
     )
 
 
-def _limits_container(payload: Dict[str, Any]) -> Any:
+def _limits_container(payload: Dict[str, Any], *, observed_at: str = "") -> Any:
     for name in ("limits", "windows", "quota_windows", "quotaWindows"):
         if name in payload:
             return payload[name]
@@ -128,24 +143,26 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
             for b in target_group["buckets"]:
                 if not isinstance(b, dict):
                     continue
-                win_id = str(b.get("window") or b.get("bucketId") or "").lower()
                 rem_frac = b.get("remainingFraction", b.get("remaining_fraction"))
                 rem_pct = b.get("remainingPercent", b.get("remaining_percent"))
                 if rem_frac is None and rem_pct is not None:
                     rem_frac = float(rem_pct) / 100.0
+                if rem_frac is None:
+                    # 没有可信的剩余量字段，跟着猜类别毫无意义——丢掉这个桶。
+                    continue
                 reset_time = b.get("resetTime") or b.get("reset_time") or b.get("resetAt") or b.get("resetsAt")
-                if "week" in win_id:
-                    res_windows["week"] = {
-                        "remainingFraction": rem_frac,
-                        "resetAt": reset_time,
-                        "windowDurationMins": 10080,
-                    }
-                elif "5h" in win_id or "session" in win_id or "hour" in win_id:
-                    res_windows["session"] = {
-                        "remainingFraction": rem_frac,
-                        "resetAt": reset_time,
-                        "windowDurationMins": 300,
-                    }
+                duration_mins = b.get("windowDurationMins") or b.get("window_duration_minutes")
+                category = _classify_bucket_window(b, reset_time=reset_time, duration_mins=duration_mins, observed_at=observed_at)
+                if category is None:
+                    # #182：假设——TZ 上实际返回的桶标识可能不含 week/session 关键词
+                    # （例如纯 UUID）。无法从关键词、时长或 reset 间隔任何一路识别出
+                    # 类别时，不伪造一个——直接丢弃这个桶，保留组里其它能识别的。
+                    continue
+                res_windows[category] = {
+                    "remainingFraction": rem_frac,
+                    "resetAt": reset_time,
+                    "windowDurationMins": duration_mins or (10080 if category == "week" else 300),
+                }
             if res_windows:
                 ordered_windows = {}
                 for k in ("session", "day", "week", "month"):
@@ -189,6 +206,61 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
                     }
 
     raise LimitContractError("limit_schema_invalid", "Antigravity payload must include limits or windows")
+
+
+def _classify_bucket_window(
+    bucket: Dict[str, Any],
+    *,
+    reset_time: Any,
+    duration_mins: Any,
+    observed_at: str,
+) -> str | None:
+    """把一个 quota bucket 归类成 "week" 或 "session"，识别不出就返回 None（不猜）。
+
+    三路依次尝试，任意一路命中即返回：
+    1. 关键词——文本字段（window / bucketId / displayName / description）里出现
+       week/weekly 或 5h/hour/session。
+    2. 时长——windowDurationMins 落在 ~7 天或 ~5 小时的范围内。
+    3. reset 间隔——观测时刻到 resetTime 的间隔落在同样的范围内（有些真实响应
+       不带 window 标识也不带时长字段，只有 resetTime）。
+    """
+    text_parts: List[str] = []
+    for key in ("window", "bucketId", "bucket_id", "displayName", "display_name", "description"):
+        value = bucket.get(key)
+        if isinstance(value, str):
+            text_parts.append(value.lower())
+    text = " ".join(text_parts)
+    if "week" in text:
+        return "week"
+    if "5h" in text or "hour" in text or "session" in text:
+        return "session"
+
+    if isinstance(duration_mins, (int, float)) and not isinstance(duration_mins, bool):
+        if _WEEK_DURATION_RANGE_MINUTES[0] <= duration_mins <= _WEEK_DURATION_RANGE_MINUTES[1]:
+            return "week"
+        if _SESSION_DURATION_RANGE_MINUTES[0] <= duration_mins <= _SESSION_DURATION_RANGE_MINUTES[1]:
+            return "session"
+
+    if isinstance(reset_time, str) and reset_time.strip() and observed_at:
+        delta_minutes = _minutes_between(observed_at, reset_time)
+        if delta_minutes is not None:
+            if _WEEK_DURATION_RANGE_MINUTES[0] <= delta_minutes <= _WEEK_DURATION_RANGE_MINUTES[1]:
+                return "week"
+            if _SESSION_DURATION_RANGE_MINUTES[0] <= delta_minutes <= _SESSION_DURATION_RANGE_MINUTES[1]:
+                return "session"
+
+    return None
+
+
+def _minutes_between(start: str, end: str) -> float | None:
+    try:
+        start_time = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_time = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if (start_time.tzinfo is None) != (end_time.tzinfo is None):
+        return None
+    return (end_time - start_time).total_seconds() / 60.0
 
 
 def _window_items(container: Any) -> List[tuple[str, Dict[str, Any]]]:

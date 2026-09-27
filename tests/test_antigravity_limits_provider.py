@@ -169,6 +169,117 @@ class TestAntigravityLimitsProvider(unittest.TestCase):
         self.assertEqual(week_w.status, "ok")
         self.assertTrue(week_w.is_official)
 
+    def test_quota_summary_infers_window_category_from_duration_when_keywords_missing(self) -> None:
+        # #182：假设之一——TZ 上真实返回的 bucket 用不带 week/session 关键词的
+        # 标识（例如纯 UUID 式的 bucketId），当前只靠字符串关键词匹配会把整组
+        # 都判成未识别，从而让 provider.collect() 整体抛异常、被上层兜底成
+        # window=unknown。补一条按 windowDurationMins 推断的兜底：无法从文本
+        # 识别时，用时长（~7 天 / ~5 小时）推断 week / session。
+        payload = {
+            "observed_at": "2026-09-24T10:00:00+08:00",
+            "groups": [
+                {
+                    "displayName": "Gemini Models",
+                    "buckets": [
+                        {
+                            "bucketId": "b_8f1a2c3d",
+                            "remainingPercent": 16.0,
+                            "resetTime": "2026-09-24T12:00:00Z",
+                            "windowDurationMins": 300,
+                        },
+                        {
+                            "bucketId": "b_9e2b3d4f",
+                            "remainingPercent": 80.0,
+                            "resetTime": "2026-09-30T12:00:00Z",
+                            "windowDurationMins": 10080,
+                        },
+                    ],
+                }
+            ],
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertEqual([w.window for w in windows], ["session", "week"])
+        self.assertEqual(windows[0].remaining_percent, 16.0)
+        self.assertEqual(windows[1].remaining_percent, 80.0)
+
+    def test_quota_summary_infers_window_category_from_reset_interval_when_no_duration(self) -> None:
+        # 同一假设的另一半：既没有关键词也没有 windowDurationMins 字段时，
+        # 用 observed_at -> resetTime 的间隔（约 5 小时 / 约 7 天）推断窗口类别。
+        payload = {
+            "observed_at": "2026-09-24T10:00:00+08:00",
+            "groups": [
+                {
+                    "displayName": "Gemini Models",
+                    "buckets": [
+                        {
+                            "bucketId": "opaque-1",
+                            "remainingPercent": 50.0,
+                            "resetTime": "2026-09-24T15:00:00+08:00",
+                        },
+                        {
+                            "bucketId": "opaque-2",
+                            "remainingPercent": 90.0,
+                            "resetTime": "2026-10-01T10:00:00+08:00",
+                        },
+                    ],
+                }
+            ],
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertEqual([w.window for w in windows], ["session", "week"])
+
+    def test_unrecognizable_bucket_is_dropped_not_guessed(self) -> None:
+        # 无法用关键词/时长/间隔识别的桶必须被丢弃，而不是伪造一个类别——
+        # 「无法识别仍为 unknown（不猜）」。与它同组的可识别桶必须仍然正常产出。
+        payload = {
+            "observed_at": "2026-09-24T10:00:00+08:00",
+            "groups": [
+                {
+                    "displayName": "Gemini Models",
+                    "buckets": [
+                        {
+                            "bucketId": "opaque-mystery",
+                            "remainingPercent": 33.0,
+                            "resetTime": "2026-09-24T10:30:00+08:00",
+                        },
+                        {
+                            "bucketId": "opaque-week",
+                            "remainingPercent": 80.0,
+                            "resetTime": "2026-10-01T10:00:00+08:00",
+                        },
+                    ],
+                }
+            ],
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertEqual([w.window for w in windows], ["week"])
+
+    def test_one_malformed_window_does_not_poison_the_others(self) -> None:
+        # 直接 limits 字典路径：一个窗口缺 reset_at 不该让整批解析全部炸掉——
+        # 之前任何一个字段缺失都会让 _parse_window 抛异常并冒泡到 collect()，
+        # 被 limits_runtime 兜底成单条 window=unknown/provider_failed，
+        # 即便另一个窗口的数据是完整、可信的。
+        payload = {
+            "observed_at": "2026-09-24T10:00:00+08:00",
+            "user_status": {
+                "limits": {
+                    "session": {
+                        "remainingFraction": 0.5,
+                        "resetsAt": "2026-09-24T15:00:00+08:00",
+                        "windowDurationMins": 300,
+                    },
+                    "week": {
+                        # 缺 reset_at：这一条应被跳过，不应污染 session。
+                        "remainingFraction": 0.8,
+                        "windowDurationMins": 10080,
+                    },
+                }
+            },
+        }
+        windows = parse_antigravity_user_status(payload)
+        self.assertEqual([w.window for w in windows], ["session"])
+        self.assertEqual(windows[0].remaining_percent, 50.0)
+
     def test_quota_summary_handles_direct_groups_and_percent_fields(self) -> None:
         payload = {
             "observed_at": "2026-09-24T10:00:00+08:00",
