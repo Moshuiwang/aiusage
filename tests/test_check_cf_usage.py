@@ -69,6 +69,28 @@ class TestParseD1RowsReadWritten(unittest.TestCase):
         self.assertIsNone(rows_written)
 
 
+    def test_group_missing_or_null_field_makes_that_metric_unknown(self):
+        # 部分数据：某个分组的字段缺失/为 null，不能当 0 加总，否则会把未知算成偏低的值。
+        cases = [
+            ({"rowsRead": None, "rowsWritten": 5_000}, (None, 15_000)),
+            ({"rowsWritten": 5_000}, (None, 15_000)),
+            ({"rowsRead": 500_000, "rowsWritten": None}, (1_500_000, None)),
+        ]
+        for partial, expected in cases:
+            with self.subTest(partial=partial):
+                response = d1_response([
+                    {"sum": {"rowsRead": 1_000_000, "rowsWritten": 10_000}},
+                    {"sum": partial},
+                ])
+                self.assertEqual(ccu.parse_d1_rows_read_written(response), expected)
+
+    def test_top_level_errors_with_partial_data_is_unknown(self):
+        # GraphQL 字段级错误时可能 data 与 errors 并存：数据不可确认，整体按未知处理。
+        response = d1_response([{"sum": {"rowsRead": 1_000, "rowsWritten": 10}}])
+        response["errors"] = [{"message": "field error"}]
+        self.assertEqual(ccu.parse_d1_rows_read_written(response), (None, None))
+
+
 class TestD1UsagePercentages(unittest.TestCase):
     def test_known_values_convert_against_free_limits(self):
         read_pct, write_pct = ccu.d1_usage_percentages(2_500_000, 50_000)

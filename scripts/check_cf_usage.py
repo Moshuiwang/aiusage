@@ -62,22 +62,27 @@ def parse_d1_rows_read_written(response_json):
     "用量是零"，进而误判成"安全"）。
 
     GraphQL 一个 database 24h 内可能被分成多条 adaptive group 记录（按时间桶），
-    要把它们的 sum 加总，不能只取第一条。
+    要把它们的 sum 加总，不能只取第一条。任一分组缺该字段（缺失或 null）则该指标整体
+    未知；响应带顶层 errors 时数据不可确认，两项都未知。
     """
     try:
+        if response_json.get("errors"):
+            return None, None
         accounts = response_json.get("data", {}).get("viewer", {}).get("accounts", [])
         if not accounts:
             return None, None
         groups = accounts[0].get("d1AnalyticsAdaptiveGroups", [])
         if not groups:
             return None, None
-        rows_read_total = 0
-        rows_written_total = 0
-        for group in groups:
-            summed = group.get("sum", {})
-            rows_read_total += int(summed.get("rowsRead", 0) or 0)
-            rows_written_total += int(summed.get("rowsWritten", 0) or 0)
-        return rows_read_total, rows_written_total
+        sums = [group.get("sum") or {} for group in groups]
+
+        def total(field):
+            values = [summed.get(field) for summed in sums]
+            if any(value is None for value in values):
+                return None
+            return sum(int(value) for value in values)
+
+        return total("rowsRead"), total("rowsWritten")
     except (AttributeError, TypeError, ValueError, KeyError):
         return None, None
 
