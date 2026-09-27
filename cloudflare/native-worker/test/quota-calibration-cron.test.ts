@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { acquireWorker } from "./golden/harness";
 import { fixedNow, timezone } from "./golden/paths";
-import { providerForToday, runQuotaCalibration } from "../src/quota-calibration-cron";
+import { fetchLimitObservations, providerForToday, runQuotaCalibration } from "../src/quota-calibration-cron";
 import { calibrate } from "../src/calibration";
 import type { HourlyFamilyFact, LimitObservation } from "../src/calibration";
 
@@ -126,6 +126,28 @@ describe("runQuotaCalibration", () => {
     expect(Number(actualOpus.sample_intervals)).toBe(expectedOpus.sample_intervals);
     expect(String(actualOpus.fitted_at)).toBe(NOW.toISOString());
     expect(String(actualOpus.formula_version)).toBe(expectedOpus.formula_version);
+  });
+
+  it("只用可信官方读数拟合：estimated / 非 ok / 本地估算来源的额度读数一律排除（Codex PR #189 审查 P1）", async () => {
+    const { db } = await acquireWorker({ AIUSAGE_NOW: fixedNow, AIUSAGE_TIMEZONE: timezone });
+    const rows: Array<[string, string, string, string]> = [
+      // [observed_at, source_type, confidence, status]
+      ["2026-06-08T01:00:00+08:00", "official_cli", "observed", "ok"],
+      ["2026-06-08T02:00:00+08:00", "official_cli", "estimated", "ok"],
+      ["2026-06-08T03:00:00+08:00", "official_cli", "observed", "provider_failed"],
+      ["2026-06-08T04:00:00+08:00", "local_history_estimate", "observed", "ok"],
+      ["2026-06-08T05:00:00+08:00", "active_limits_cache", "observed", "ok"],
+    ];
+    await db.batch(rows.map(([observedAt, sourceType, confidence, status]) => db.prepare(`
+      INSERT INTO limit_window_history (
+        source_id, provider, window, used_percent, remaining_percent, reset_at,
+        window_duration_minutes, source_type, confidence, status, observed_at, recorded_at
+      ) VALUES (?, 'claude', 'week', 10, 90, '2026-06-12T00:00:00+08:00', 10080, ?, ?, ?, ?, ?)
+    `).bind("trust-source", sourceType, confidence, status, observedAt, observedAt)));
+
+    const got = await fetchLimitObservations(db, "claude", "2026-06-01T00:00:00+08:00");
+    const mine = got.filter((r) => r.source_id === "trust-source");
+    expect(mine.map((r) => r.observed_at)).toEqual(["2026-06-08T01:00:00+08:00"]);
   });
 
   it("整表覆盖写：第二次跑会先删掉这个 provider 的旧行，不会残留上一次的族", async () => {

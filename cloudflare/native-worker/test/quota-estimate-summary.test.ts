@@ -56,13 +56,14 @@ async function seedCalibration(
   grade: string,
   fittedAt: string,
   coef = COEF,
+  formulaVersion = "v1",
 ): Promise<void> {
   await db.prepare(`
     INSERT INTO quota_calibration (
       provider, model_family, coef, effective_delta_u, backtest_max_err, grade,
       sample_intervals, fitted_at, formula_version
-    ) VALUES ('claude', ?, ?, 12.5, 0.2, ?, 10, ?, 'v1')
-  `).bind(family, coef, grade, fittedAt).run();
+    ) VALUES ('claude', ?, ?, 12.5, 0.2, ?, 10, ?, ?)
+  `).bind(family, coef, grade, fittedAt, formulaVersion).run();
 }
 
 // 手算常数，不复用被测代码路径上的 priceWeightedTokens：Claude output 权重是 5，
@@ -158,6 +159,22 @@ describe("quota_estimate on /api/summary", () => {
       const body = JSON.parse(response.body.toString());
       const opusBreakdown = body.items.flatMap((item: any) => item.model_breakdowns)
         .find((m: any) => m.model_name === "claude-opus-4-8");
+      expect("quota_estimate" in opusBreakdown).toBe(false);
+    });
+  });
+
+  it("系数的 formula_version 与当前公式不一致：不附加（避免新权重乘旧系数，Codex PR #189 审查 P2）", async () => {
+    const now = "2026-06-10T12:00:00+08:00";
+    await withWorker({ now }, async ({ fetchRaw, db }) => {
+      await seedIdentity(db, now);
+      await seedOpusFact(db, "fact-qe-fv", "2026-06-10T02:00:00+08:00", "2026-06-10T03:00:00+08:00", now);
+      await seedCalibration(db, "opus", "B", "2026-06-10T03:17:00+08:00", COEF, "v0-old");
+
+      const response = await fetchRaw({ method: "GET", path: "/api/summary?period=today", auth: true });
+      const body = JSON.parse(response.body.toString());
+      const opusBreakdown = body.items.flatMap((item: any) => item.model_breakdowns)
+        .find((m: any) => m.model_name === "claude-opus-4-8");
+      expect(opusBreakdown).toBeDefined();
       expect("quota_estimate" in opusBreakdown).toBe(false);
     });
   });

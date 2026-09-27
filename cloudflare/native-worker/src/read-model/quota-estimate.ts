@@ -6,7 +6,7 @@
  * 缺省而不是给 null：grade=none、系数过期（`isStale`）、模型族未知、或这个族在
  * `quota_calibration` 里压根没有一行——任何一种情况都不下发这个字段，不伪造一个数字。
  */
-import { familyForModel, priceWeightedTokens } from "../calibration/constants";
+import { FORMULA_VERSION, familyForModel, priceWeightedTokens } from "../calibration/constants";
 import type { Provider } from "../calibration/constants";
 import { isStale } from "../calibration/staleness";
 import { formatDate, parseDateOnly } from "./shared";
@@ -20,6 +20,7 @@ export interface QuotaCalibrationRow {
   coef: number;
   grade: string;
   fitted_at: string;
+  formula_version: string;
 }
 
 export interface ModelTokenTotals {
@@ -76,6 +77,8 @@ export function quotaEstimateForModel(
   const calibration = calibrationByKey.get(`${provider}:${family}`);
   if (!calibration) return undefined;
   if (calibration.grade === "none") return undefined;
+  // 公式版本不一致（例如价格权重升级后轮换尚未覆盖到该 provider）：旧系数不能乘新权重。
+  if (calibration.formula_version !== FORMULA_VERSION) return undefined;
   if (isStale(calibration.fitted_at, refTime)) return undefined;
 
   const rawPercent = calibration.coef * priceWeightedTokens(provider, tokens);

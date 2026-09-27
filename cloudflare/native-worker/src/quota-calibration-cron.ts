@@ -26,6 +26,7 @@
  * （轮换周期 3 天 < 过期门槛 4 天，正常情况下永远不会因为轮换节奏本身触发过期降级）。
  */
 import { calibrate, FORMULA_VERSION, UNATTRIBUTED_FAMILY } from "./calibration";
+import { localEstimateSourceTypes } from "./read-model/shared";
 import type { CalibrationResult, HourlyFamilyFact, LimitObservation } from "./calibration";
 import { familyForModel, KNOWN_FAMILIES } from "./calibration/constants";
 import type { Provider } from "./calibration/constants";
@@ -100,13 +101,19 @@ async function hasConflictingAccountFingerprint(db: D1Database, provider: Provid
   return Number(row?.c ?? 0) > 1;
 }
 
+// 只有可信官方读数（ok + observed + 非本地估算来源）参与校准，与 read-model 的 official 判定同口径。
+const LOCAL_ESTIMATE_TYPES = [...localEstimateSourceTypes];
+const LOCAL_ESTIMATE_PLACEHOLDERS = LOCAL_ESTIMATE_TYPES.map(() => "?").join(", ");
+
 async function fetchLimitObservations(db: D1Database, provider: Provider, windowStart: string): Promise<LimitObservation[]> {
   const rows = await db.prepare(`
     SELECT source_id, provider, observed_at, reset_at, used_percent, window_duration_minutes
     FROM limit_window_history
     WHERE provider = ? AND window = ? AND observed_at >= ?
+      AND status = 'ok' AND confidence = 'observed'
+      AND source_type NOT IN (${LOCAL_ESTIMATE_PLACEHOLDERS})
     ORDER BY observed_at ASC
-  `).bind(provider, CALIBRATION_LIMIT_WINDOW, windowStart).all<Record<string, unknown>>();
+  `).bind(provider, CALIBRATION_LIMIT_WINDOW, windowStart, ...LOCAL_ESTIMATE_TYPES).all<Record<string, unknown>>();
   return (rows.results ?? []).map((r) => ({
     source_id: String(r.source_id),
     provider,
@@ -229,4 +236,4 @@ async function writeQuotaCalibration(db: D1Database, provider: Provider, results
   await db.batch(statements);
 }
 
-export { fetchHourlyFamilyFacts, hasConflictingAccountFingerprint, providerForToday, shanghaiDayOrdinal };
+export { fetchHourlyFamilyFacts, fetchLimitObservations, hasConflictingAccountFingerprint, providerForToday, shanghaiDayOrdinal };

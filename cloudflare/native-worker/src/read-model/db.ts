@@ -301,7 +301,7 @@ async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[
 async function fetchQuotaCalibration(db: D1Database): Promise<QuotaCalibrationRow[]> {
   const rows = await all<Record<string, unknown>>(
     db,
-    "SELECT provider, model_family, coef, grade, fitted_at FROM quota_calibration",
+    "SELECT provider, model_family, coef, grade, fitted_at, formula_version FROM quota_calibration",
   );
   return rows.map((row) => ({
     provider: str(row.provider),
@@ -309,6 +309,7 @@ async function fetchQuotaCalibration(db: D1Database): Promise<QuotaCalibrationRo
     coef: Number(row.coef),
     grade: str(row.grade),
     fitted_at: str(row.fitted_at),
+    formula_version: str(row.formula_version),
   }));
 }
 
