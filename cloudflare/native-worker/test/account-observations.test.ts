@@ -118,4 +118,21 @@ describe("account_observations upsert", () => {
       .bind(sourceId).all<{ provider: string }>();
     expect(rows.results.map((r) => r.provider)).toEqual(["claude", "codex"]);
   });
+
+  it("部署前审查 Should 4：provider 落库前统一小写——上报 \"Claude\" 落库为 \"claude\"", async () => {
+    const { mf, db } = await acquireWorker({ AIUSAGE_NOW: fixedNow, AIUSAGE_TIMEZONE: timezone });
+    const t0 = "2026-06-05T00:00:00+08:00";
+    const response = await postIngest(mf, ingestPayload(
+      // provider 大写、指纹前缀仍然是小写 claude（跟采集端 account_fingerprint.py 的
+      // 固定格式一致）——validate.ts 对指纹前缀的比较本身就是大小写不敏感的，所以这条
+      // 记录能通过校验，落库前才需要这里的 trim().toLowerCase() 补一道。
+      [{ agent: "claude", provider: "Claude", account_fingerprint: "fp:claude:35f06f61d06d4aa38b8a3b94", observed_at: t0 }],
+      t0,
+    ));
+    expect(response.status).toBe(200);
+    const row = await db.prepare(
+      "SELECT provider FROM account_observations WHERE source_id = ? AND account_fingerprint = ?",
+    ).bind(sourceId, "fp:claude:35f06f61d06d4aa38b8a3b94").first<{ provider: string }>();
+    expect(row?.provider).toBe("claude");
+  });
 });

@@ -5,12 +5,18 @@
 import { describe, expect, it } from "vitest";
 import { acquireWorker } from "./golden/harness";
 import { fixedNow, timezone } from "./golden/paths";
-import { runQuotaCalibration } from "../src/quota-calibration-cron";
+import { providerForToday, runQuotaCalibration } from "../src/quota-calibration-cron";
 import { calibrate } from "../src/calibration";
 import type { HourlyFamilyFact, LimitObservation } from "../src/calibration";
 
-const NOW = new Date("2026-06-10T03:17:00+08:00");
+// 部署前审查 Must 1b：每次 cron 只算一个 provider，按 Asia/Shanghai 日历日轮换。
+// 2026-06-09T03:17:00+08:00 这一天轮到 claude（`providerForToday` 决定，不是硬编码猜的）。
+const NOW = new Date("2026-06-09T03:17:00+08:00");
 const sourceId = "cron-source";
+
+if (providerForToday(NOW) !== "claude") {
+  throw new Error("测试固定时间的轮换 provider 变了，日历算法可能改动过——先确认再改期望值");
+}
 
 async function seedIdentity(db: D1Database): Promise<void> {
   await db.batch([
@@ -163,5 +169,33 @@ describe("runQuotaCalibration", () => {
       expect(row.backtest_max_err).toBeNull();
       expect(Number(row.sample_intervals)).toBe(0);
     }
+  });
+
+  it("连续 3 天各只算一个 provider，三天下来三个 provider 都轮到过一次", async () => {
+    const { db } = await acquireWorker({ AIUSAGE_NOW: fixedNow, AIUSAGE_TIMEZONE: timezone });
+    await seedIdentity(db);
+    for (const provider of ["claude", "codex", "antigravity"]) {
+      await seedAccountObservation(db, provider, `fp:${provider}:cccccccccccccccccccccccc`, fixedNow);
+    }
+
+    const day0 = NOW; // claude
+    const day1 = new Date(day0.getTime() + 24 * 60 * 60 * 1000); // codex
+    const day2 = new Date(day1.getTime() + 24 * 60 * 60 * 1000); // antigravity
+    const providersTouched: string[][] = [];
+
+    for (const day of [day0, day1, day2]) {
+      await db.prepare("DELETE FROM quota_calibration").run(); // 每天开始前清空，只看这天写了谁
+      await runQuotaCalibration(db, day);
+      const rows = await db.prepare("SELECT DISTINCT provider FROM quota_calibration").all<{ provider: string }>();
+      providersTouched.push(rows.results.map((r) => r.provider).sort());
+    }
+
+    // 每天只写一个 provider 的行。
+    for (const touched of providersTouched) expect(touched).toHaveLength(1);
+    // 三天下来，三个 provider 都轮到过，且跟 providerForToday 算出来的顺序一致。
+    expect(providersTouched.flat()).toEqual([
+      providerForToday(day0), providerForToday(day1), providerForToday(day2),
+    ]);
+    expect(new Set(providersTouched.flat())).toEqual(new Set(["claude", "codex", "antigravity"]));
   });
 });

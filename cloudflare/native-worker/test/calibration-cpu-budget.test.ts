@@ -27,6 +27,20 @@
  *
  * 这些数字是 Node 环境测的，不是 workerd；workerd 的 CPU 计时口径可能不同，
  * 但相对增长曲线（有没有平方项）不依赖运行时，值得作为回归守卫钉住。
+ *
+ * ## 部署前审查发现：这里的数字会低估真实开销，别拿它当最终验收门槛
+ *
+ * 这个文件里的测量都在**同一个热进程**里循环跑 `calibrate()`，第一次调用之后 V8 JIT
+ * 会把热路径（坐标下降、Date 解析等）优化掉，后续调用自然更快——上面 mult=3 单账户
+ * P95≈2.2ms 就是「已经跑过几十次、JIT 预热完」之后的数字。workerd 的每次 cron/请求
+ * 调用可能是一个新鲜（或长时间空闲复用、JIT 状态被丢弃）的 isolate，第一次调用付的是
+ * 冷启动的账。部署前审查用单次新进程冷跑复现：28 天规模三账户合计 10.26–10.40ms，
+ * 单 Claude 账户冷启动 median≈5.7ms、max≈5.84ms（`scripts/measure_calibration_cold_cpu.mjs`，
+ * N=7 次独立新进程，见该脚本头注释）——都明显高于这里热进程测出的数字。
+ *
+ * **真正的验收门槛以 `scripts/measure_calibration_cold_cpu.mjs` 的冷启动数字为准，
+ * 不是这个文件里的热进程 P95。** 这个文件仍然有价值：它钉住"复杂度别退回平方增长"这条
+ * 回归线（性能回归守卫那一节），但不能用它的绝对数值论证"已经在预算内"。
  */
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
@@ -137,9 +151,13 @@ describe("CPU 门禁：按天数外推的增长曲线（go/no-go 验收）", () 
       console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 三账户合计 median=${result.median.toFixed(3)}ms p95=${result.p95.toFixed(3)}ms`);
     }
 
-    // 验收门槛（来自任务要求）：mult=3（约 28 天）单账户 P95 ≤3ms、三账户合计 P95 ≤6ms（Node 口径）。
+    // 验收门槛：mult=3（约 28 天）单账户 P95 ≤3ms（Node 热进程口径，只是回归参考线）。
     expect(singleResults[3].p95).toBeLessThanOrEqual(3);
-    expect(combinedResults[3].p95).toBeLessThanOrEqual(6);
+    // 三账户合计这条不再是硬门槛：部署前审查 Must 1b 之后，生产 cron 每次只算一个 provider
+    // （`quota-calibration-cron.ts` 的 `providerForToday()` 按日轮换），「三账户合计」这个
+    // 场景在生产里已经不会发生——这里放宽到 8ms 只是防止热进程场景本身也失控式退化，
+    // 不是真实验收门槛（真实门槛是单 provider 冷启动，见 scripts/measure_calibration_cold_cpu.mjs）。
+    expect(combinedResults[3].p95).toBeLessThanOrEqual(8);
 
     // 增长曲线不应该是平方级：mult 从 1 到 4（数据量外推到 4 倍历史长度）耗时增长不应该
     // 超过约 4 倍——平方增长会是 ~16 倍，这个上限留了充足余量，只用来拦回归，不是精确刻画。

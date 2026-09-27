@@ -13,16 +13,20 @@ describe("isStale", () => {
     expect(isStale("2026-09-25T00:00:00Z", NOW)).toBe(false);
   });
 
-  it("恰好 3 天前不算过期（边界是 >3 天，不是 ≥3 天）", () => {
-    expect(isStale("2026-09-24T00:00:00Z", NOW)).toBe(false);
+  it("3 天多 1 毫秒前不算过期（部署前审查 Must 1b：门槛从 3 天调到 4 天，给轮换节奏留缓冲）", () => {
+    expect(isStale("2026-09-23T23:59:59.999Z", NOW)).toBe(false);
   });
 
-  it("超过 3 天（3 天 1 毫秒前）算过期", () => {
-    expect(isStale("2026-09-23T23:59:59.999Z", NOW)).toBe(true);
+  it("恰好 4 天前不算过期（边界是 >4 天，不是 ≥4 天）", () => {
+    expect(isStale("2026-09-23T00:00:00Z", NOW)).toBe(false);
   });
 
-  it("4 天前算过期", () => {
-    expect(isStale("2026-09-23T00:00:00Z", NOW)).toBe(true);
+  it("超过 4 天（4 天 1 毫秒前）算过期", () => {
+    expect(isStale("2026-09-22T23:59:59.999Z", NOW)).toBe(true);
+  });
+
+  it("5 天前算过期", () => {
+    expect(isStale("2026-09-22T00:00:00Z", NOW)).toBe(true);
   });
 
   it("支持自定义过期门槛（接线时如果需要跟设计文档不同的口径）", () => {

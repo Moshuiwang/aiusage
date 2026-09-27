@@ -6,7 +6,6 @@
  */
 import { describe, expect, it } from "vitest";
 import { withWorker } from "./golden/harness";
-import { priceWeightedTokens } from "../src/calibration/constants";
 
 const sourceId = "qe-source";
 const machineId = "qe-host";
@@ -66,9 +65,11 @@ async function seedCalibration(
   `).bind(family, coef, grade, fittedAt).run();
 }
 
-const rawPercent = COEF * priceWeightedTokens("claude", {
-  input_tokens: opusInput, output_tokens: opusOutput, cache_creation_tokens: 0, cache_read_tokens: 0,
-});
+// 手算常数，不复用被测代码路径上的 priceWeightedTokens：Claude output 权重是 5，
+// input 权重是 1（cache_creation/cache_read 都是 0，本测试没喂那两种 token）。
+// 加权 token = 1000×1 + 2,000,000×5 = 1000 + 10,000,000 = 10,001,000。
+const opusWeightedTokens = opusInput * 1 + opusOutput * 5;
+const rawPercent = COEF * opusWeightedTokens; // 0.00001 × 10,001,000 = 100.01
 
 describe("quota_estimate on /api/summary", () => {
   it("grade=B 且系数未过期：items[].model_breakdowns[] 附加 quota_estimate（today 期，basis=week）", async () => {
@@ -91,7 +92,7 @@ describe("quota_estimate on /api/summary", () => {
     });
   });
 
-  it("同一份数据在 /api/mobile/summary 的 breakdown.by_source[].agents[].models[] 里也带着 quota_estimate", async () => {
+  it("同一份数据在 /api/mobile/summary 的 breakdown.by_source[]/by_machine[]/by_os_user[] 三处 agents[].models[] 都带着相同的 quota_estimate（#184 依赖 by_machine）", async () => {
     const now = "2026-06-10T12:00:00+08:00";
     await withWorker({ now }, async ({ fetchRaw, db }) => {
       await seedIdentity(db, now);
@@ -101,13 +102,31 @@ describe("quota_estimate on /api/summary", () => {
       const response = await fetchRaw({ method: "GET", path: "/api/mobile/summary?period=today", auth: true });
       expect(response.status).toBe(200);
       const body = JSON.parse(response.body.toString());
-      const models = body.breakdown.by_source.flatMap((s: any) => s.agents).flatMap((a: any) => a.models);
-      const opusModel = models.find((m: any) => m.id === "claude-opus-4-8");
-      expect(opusModel).toBeDefined();
-      expect(opusModel.status).toBe("available");
-      expect(opusModel.quota_estimate.grade).toBe("B");
-      expect(opusModel.quota_estimate.basis).toBe("week");
-      expect(opusModel.quota_estimate.percent).toBeCloseTo(rawPercent, 6);
+
+      function opusModelIn(groups: any[]): any {
+        const models = groups.flatMap((g: any) => g.agents).flatMap((a: any) => a.models);
+        return models.find((m: any) => m.id === "claude-opus-4-8");
+      }
+
+      // 结构下限：三处分组都必须真的有数据（不是空数组），否则下面找不到 opus 模型行
+      // 的断言对着一个恒为 undefined 的目标，测不出任何东西。
+      expect(body.breakdown.by_source.length).toBeGreaterThan(0);
+      expect(body.breakdown.by_machine.length).toBeGreaterThan(0);
+      expect(body.breakdown.by_os_user.length).toBeGreaterThan(0);
+
+      for (const [label, groups] of [
+        ["by_source", body.breakdown.by_source],
+        ["by_machine", body.breakdown.by_machine],
+        ["by_os_user", body.breakdown.by_os_user],
+      ] as const) {
+        const opusModel = opusModelIn(groups);
+        expect(opusModel, `${label} 里应该有 claude-opus-4-8 这一行`).toBeDefined();
+        expect(opusModel.status, label).toBe("available");
+        expect(opusModel.quota_estimate, label).toBeDefined();
+        expect(opusModel.quota_estimate.grade, label).toBe("B");
+        expect(opusModel.quota_estimate.basis, label).toBe("week");
+        expect(opusModel.quota_estimate.percent, label).toBeCloseTo(rawPercent, 6);
+      }
     });
   });
 
@@ -127,7 +146,7 @@ describe("quota_estimate on /api/summary", () => {
     });
   });
 
-  it("fitted_at 超过 3 天：不附加 quota_estimate（过期降级）", async () => {
+  it("fitted_at 超过 4 天：不附加 quota_estimate（过期降级）", async () => {
     const now = "2026-06-10T12:00:00+08:00";
     const staleFittedAt = "2026-06-06T00:00:00+08:00"; // 距 now 超过 4 天
     await withWorker({ now }, async ({ fetchRaw, db }) => {

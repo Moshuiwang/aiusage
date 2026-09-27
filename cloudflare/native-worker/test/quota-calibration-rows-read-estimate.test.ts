@@ -1,8 +1,8 @@
 /**
  * #183-b：每日 cron（`runQuotaCalibration`）D1 rows_read 上界估算。
  *
- * D1 免费计划预算是 500 万行/天（`.claude/rules/cloudflare.md`）。这个 cron 每天对
- * claude/codex/antigravity 三个 provider 各跑一次 `fetchLimitObservations` +
+ * D1 免费计划预算是 500 万行/天（`.claude/rules/cloudflare.md`）。部署前审查 Must 1b 之后，
+ * 这个 cron 每天只对**一个** provider（按日轮换）跑一次 `fetchLimitObservations` +
  * `fetchHourlyFamilyFacts`，SQL 侧 WHERE 过滤 + GROUP BY 聚合，但 D1 按扫描的基表行数计费
  * （`rows_read`），不是按返回的聚合行数——所以估算要用**基表行数**，不是聚合后的行数。
  *
@@ -33,37 +33,39 @@ const SCALE_FACTOR = CALIBRATION_WINDOW_DAYS / SAMPLED_WINDOW_DAYS;
 const D1_FREE_DAILY_ROWS_READ_BUDGET = 5_000_000;
 
 describe("quota calibration cron：D1 rows_read 上界估算（外推，非精确值）", () => {
-  it("三个 provider 合计每天一次的 rows_read 上界远低于 D1 免费计划预算", () => {
+  it("每天只算一个 provider，rows_read 上界远低于 D1 免费计划预算", () => {
     // usage_hourly_models 是 JOIN usage_hourly_facts 的驱动表，一次 JOIN 最多扫
     // (models 行数 + facts 行数)——D1 按基表行数计费，JOIN 本身不会让扫描行数翻倍
     // （对每条 model 行找它对应的 fact 行是索引查找，不是笛卡尔积）。
+    //
+    // 三个 provider 的用量分布不均（这份抽样几乎全是 Claude/Codex），按「三个 provider
+    // 合计基表行数」估算单 provider 上界——保守（多数情况下单 provider 远小于这个数）。
     const perProviderCronRowsReadUpperBound =
       SAMPLED_LIMIT_WINDOW_HISTORY_ROWS * SCALE_FACTOR
       + SAMPLED_USAGE_HOURLY_FACTS_ROWS * SCALE_FACTOR
       + SAMPLED_USAGE_HOURLY_MODELS_ROWS * SCALE_FACTOR;
 
-    // cron 对三个 provider 各查一次，WHERE provider = ? 用得上 #183-b 新增的
-    // idx_limit_window_history_provider 索引（领头列是 provider），理论上不需要
-    // 三次都扫全表——但没有索引统计信息时按「保守估计＝三次独立全量扫描」估算上界。
-    const dailyRowsReadUpperBound = perProviderCronRowsReadUpperBound * 3;
+    // 部署前审查 Must 1b 之后，每次 cron 只算 `providerForToday()` 选中的一个 provider——
+    // 不再是三个都查一次，rows_read 上界就是单 provider 那份，不用再乘 3。
+    const dailyRowsReadUpperBound = perProviderCronRowsReadUpperBound;
 
     // eslint-disable-next-line no-console
     console.log(
-      `[rows_read 估算] 单 provider 上界≈${perProviderCronRowsReadUpperBound.toFixed(0)} 行，`
-      + `三 provider 合计上界≈${dailyRowsReadUpperBound.toFixed(0)} 行/天，`
+      `[rows_read 估算] 每天只算一个 provider，上界≈${dailyRowsReadUpperBound.toFixed(0)} 行/天，`
       + `占 D1 免费日预算 ${((dailyRowsReadUpperBound / D1_FREE_DAILY_ROWS_READ_BUDGET) * 100).toFixed(4)}%`,
     );
 
-    expect(dailyRowsReadUpperBound).toBeLessThan(50_000);
+    expect(dailyRowsReadUpperBound).toBeLessThan(20_000);
     expect(dailyRowsReadUpperBound / D1_FREE_DAILY_ROWS_READ_BUDGET).toBeLessThan(0.01); // <1% 预算
   });
 
   it("account_observations 冲突检查（COUNT DISTINCT）与写回 quota_calibration 的行数都是常数级，不随窗口天数增长", () => {
     // account_observations 每个 provider 最多几个指纹（正常情况 1 个，冲突也就是几个）；
-    // quota_calibration 每个 provider 覆盖写的行数 = 已知族数（Claude 4 / Codex 3 / Antigravity 3），
-    // 三个 provider 合计写入 ≤十几行/天——跟设计文档 §3「quota_calibration ~十几行/天」一致。
+    // quota_calibration 每天只覆盖写「今天轮到的那个 provider」的行数 = 该 provider 的
+    // 已知族数——最多的是 Claude（4 个族），跟设计文档 §3「quota_calibration ~十几行/天」
+    // 比起来更保守（现在是个位数/天，不是十几行/天）。
     const knownFamilyCounts = { claude: 4, codex: 3, antigravity: 3 };
-    const dailyWriteRowsUpperBound = Object.values(knownFamilyCounts).reduce((s, n) => s + n, 0);
+    const dailyWriteRowsUpperBound = Math.max(...Object.values(knownFamilyCounts));
     expect(dailyWriteRowsUpperBound).toBeLessThanOrEqual(15);
   });
 });

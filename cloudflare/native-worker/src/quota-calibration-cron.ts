@@ -14,6 +14,16 @@
  *
  * 任何一个 provider 算失败都只 `console.error`，不能让一个账户的异常拖垮其它账户的
  * 计算，也不能影响 cron 里在它之前已经跑完的维护步骤（调用方负责 try/catch 包这个函数）。
+ *
+ * ## 部署前审查（Must 1）：每次 cron 只算一个 provider，按日轮换
+ *
+ * 冷启动（新 isolate，没有 JIT 预热）实测三账户合计一次算完是 10.26–10.40ms，超过
+ * Cloudflare Free 单次调用 10ms 的 CPU 预算（`calibration-cpu-budget.test.ts` 用同一个热
+ * 进程反复跑测出的 P95 2.2ms 会低估——workerd 每个请求/cron 调用都是新鲜（或至少长时间
+ * 空闲复用）的 isolate，JIT 没机会预热，`scripts/measure_calibration_cold_cpu.mjs` 用
+ * 单进程单次冷跑测的数字才是真门槛）。改成每次只算一个 provider：按 `scheduledTime` 在
+ * Asia/Shanghai 的日历日序号取模轮换，3 天一轮，跟 `isStale` 的 4 天过期门槛留出 1 天缓冲
+ * （轮换周期 3 天 < 过期门槛 4 天，正常情况下永远不会因为轮换节奏本身触发过期降级）。
  */
 import { calibrate, FORMULA_VERSION, UNATTRIBUTED_FAMILY } from "./calibration";
 import type { CalibrationResult, HourlyFamilyFact, LimitObservation } from "./calibration";
@@ -26,14 +36,28 @@ const WINDOW_DAYS = 28;
  * 噪音主导 ΔU，不参与拟合）。 */
 const CALIBRATION_LIMIT_WINDOW = "week";
 
+/** `scheduledTime` 在 Asia/Shanghai 的日历日序号（从 UNIX epoch 起的整数天数）。 */
+function shanghaiDayOrdinal(now: Date): number {
+  const shanghaiDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now); // "YYYY-MM-DD"
+  return Math.floor(Date.parse(`${shanghaiDate}T00:00:00Z`) / (24 * 60 * 60 * 1000));
+}
+
+/** 今天该轮到哪个 provider——3 天一轮，`PROVIDERS` 数组顺序即轮换顺序。 */
+function providerForToday(now: Date): Provider {
+  const ordinal = shanghaiDayOrdinal(now);
+  const index = ((ordinal % PROVIDERS.length) + PROVIDERS.length) % PROVIDERS.length;
+  return PROVIDERS[index];
+}
+
 export async function runQuotaCalibration(db: D1Database, now: Date): Promise<void> {
   const windowStart = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  for (const provider of PROVIDERS) {
-    try {
-      await calibrateProvider(db, provider, windowStart, now);
-    } catch (error) {
-      console.error(`quota calibration failed for provider=${provider}`, error);
-    }
+  const provider = providerForToday(now);
+  try {
+    await calibrateProvider(db, provider, windowStart, now);
+  } catch (error) {
+    console.error(`quota calibration failed for provider=${provider}`, error);
   }
 }
 
@@ -205,4 +229,4 @@ async function writeQuotaCalibration(db: D1Database, provider: Provider, results
   await db.batch(statements);
 }
 
-export { fetchHourlyFamilyFacts, hasConflictingAccountFingerprint };
+export { fetchHourlyFamilyFacts, hasConflictingAccountFingerprint, providerForToday, shanghaiDayOrdinal };

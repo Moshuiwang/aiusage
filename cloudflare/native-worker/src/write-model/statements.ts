@@ -79,6 +79,11 @@ function accountObservationStatements(
 ): D1PreparedStatement[] {
   return observations.map((observation) => {
     const observedAt = String(observation.observed_at);
+    // 部署前审查 Should 4：provider 落库前统一 trim().toLowerCase()——冲突检测
+    // （quota-calibration-cron.ts 的 `COUNT(DISTINCT account_fingerprint)`）跟 summary
+    // 的 quota_calibration 查找都用小写 provider 做 key，大小写不一致会让同一个 provider
+    // 被当成两行、或者匹配不上任何 quota_calibration 行。
+    const provider = String(observation.provider).trim().toLowerCase();
     return db.prepare(`
       INSERT INTO account_observations (source_id, provider, account_fingerprint, first_seen_at, last_seen_at)
       VALUES (?, ?, ?, ?, ?)
@@ -86,7 +91,7 @@ function accountObservationStatements(
         last_seen_at = excluded.last_seen_at
       WHERE julianday(excluded.last_seen_at) - julianday(account_observations.last_seen_at)
             >= ${ACCOUNT_OBSERVATION_MIN_REWRITE_GAP_DAYS}
-    `).bind(sourceId, String(observation.provider), String(observation.account_fingerprint), observedAt, observedAt);
+    `).bind(sourceId, provider, String(observation.account_fingerprint), observedAt, observedAt);
   });
 }
 
