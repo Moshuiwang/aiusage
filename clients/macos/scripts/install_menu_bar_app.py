@@ -61,7 +61,49 @@ class InstallPlan:
         )
 
 
+def read_short_version(package_dir: Path) -> str:
+    """VERSION 文件缺失时保留旧默认值，不让安装因此失败。"""
+    version_path = package_dir / "VERSION"
+    if not version_path.exists():
+        return "0.1.0"
+    text = version_path.read_text(encoding="utf-8").strip()
+    return text or "0.1.0"
+
+
+def git_build_number(repo_dir: Path) -> str:
+    """构建号 = 提交计数；git 不可用或不是仓库时回退 "0"，不阻塞安装。"""
+    try:
+        output = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=repo_dir, check=True, capture_output=True, text=True,
+        )
+        return str(int(output.stdout.strip()))
+    except Exception:
+        return "0"
+
+
+def git_short_commit(repo_dir: Path) -> str | None:
+    """短 commit sha；git 不可用时返回 None（省略 Info.plist 里的自定义键）。"""
+    try:
+        output = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=repo_dir, check=True, capture_output=True, text=True,
+        )
+        sha = output.stdout.strip()
+        return sha or None
+    except Exception:
+        return None
+
+
 def render_info_plist(plan: InstallPlan) -> str:
+    short_version = read_short_version(plan.package_dir)
+    build_number = git_build_number(plan.repo_dir)
+    commit_sha = git_short_commit(plan.repo_dir)
+    commit_key = (
+        f"  <key>AIUsageGitCommit</key>\n  <string>{commit_sha}</string>\n"
+        if commit_sha
+        else ""
+    )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -79,10 +121,10 @@ def render_info_plist(plan: InstallPlan) -> str:
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>{short_version}</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
-  <key>LSMinimumSystemVersion</key>
+  <string>{build_number}</string>
+{commit_key}  <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>LSUIElement</key>
   <true/>
