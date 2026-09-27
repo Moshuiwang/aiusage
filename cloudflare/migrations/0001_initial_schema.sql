@@ -307,6 +307,10 @@ CREATE TABLE IF NOT EXISTS usage_hourly_rollups (
   event_count INTEGER NOT NULL,
   session_count INTEGER NOT NULL,
   fact_count INTEGER NOT NULL,
+  -- Backfilled from 0014: sum(total_cost) per bucket, so summary can read item-level
+  -- cost straight off the rollup it already fetched instead of a second facts scan.
+  -- Must stay last: ALTER TABLE ADD COLUMN can only append.
+  total_cost REAL,
   PRIMARY KEY (bucket_start, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
 );
 
@@ -332,6 +336,8 @@ CREATE TABLE IF NOT EXISTS usage_daily_rollups (
   event_count INTEGER NOT NULL,
   session_count INTEGER NOT NULL,
   fact_count INTEGER NOT NULL,
+  -- Backfilled from 0014: same rationale as usage_hourly_rollups.total_cost above.
+  total_cost REAL,
   PRIMARY KEY (date, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance)
 );
 
@@ -340,6 +346,18 @@ CREATE INDEX IF NOT EXISTS idx_usage_hourly_rollups_bucket
 
 CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_date
   ON usage_daily_rollups(date);
+
+-- Backfilled from 0014: julianday() range predicates on window_start/bucket_start
+-- (read-model/db.ts periodWhere) can't use a plain column index once the column is
+-- wrapped in julianday(); these expression indexes match that exact predicate shape.
+CREATE INDEX IF NOT EXISTS idx_usage_hourly_facts_window_julianday
+  ON usage_hourly_facts(julianday(window_start));
+
+CREATE INDEX IF NOT EXISTS idx_usage_hourly_rollups_bucket_julianday
+  ON usage_hourly_rollups(julianday(bucket_start));
+
+CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_bucket_julianday
+  ON usage_daily_rollups(julianday(bucket_start));
 
 CREATE INDEX IF NOT EXISTS idx_source_accuracy_status
   ON source_accuracy(accuracy_status, source_id, agent);
