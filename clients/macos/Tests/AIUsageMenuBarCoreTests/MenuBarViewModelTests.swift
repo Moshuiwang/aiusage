@@ -9,7 +9,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary,
             selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(state.statusTitle, "5.0K")
         XCTAssertEqual(state.periodLabel, "本周")
@@ -39,6 +40,30 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.trendBars.last?.ratio, 1.0)
     }
 
+    /// #186：本机时区（America/Los_Angeles）与 summary.timezone（Asia/Shanghai）当前 UTC 偏移
+    /// 不同时——时刻类（headerUpdatedText）按本机时区显示，期间标题追加「（北京时间）」；
+    /// 日界类（periodID/dateRangeText/所选周的起止日期）保持 summary 时区，不受影响。
+    func testDeviceTimezoneDiffersFromSummaryAnnotatesPeriodTitleAndShowsClockInDeviceTime() throws {
+        let summary = try loadFixture()
+        let losAngeles = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+
+        let state = MenuBarViewModel.build(
+            from: summary,
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T11:00:00+08:00"),
+            deviceTimeZone: losAngeles
+        )
+
+        // 期间标题追加标注；日界类字段（起止日期）逐字不变。
+        XCTAssertEqual(state.periodLabel, "本周（北京时间）")
+        XCTAssertEqual(state.dateRangeText, "2026-05-27 ～ 2026-06-02")
+
+        // headerUpdatedText 是「时刻类」——fixture 最新 lastObservedAt "2026-06-02T10:40:00+08:00"
+        // 换算到洛杉矶是 "2026-06-01T19:40:00-07:00"，与 now 换算后的洛杉矶日历日同一天（06-01），
+        // 按本机时区显示为 "19:40 更新"（不是北京时间的 "10:40 更新"）。
+        XCTAssertEqual(state.headerUpdatedText, "19:40 更新")
+    }
+
     // #177 Opus 审查：headerUpdatedText 锁「HH:mm 更新」（同日）与「MM-dd HH:mm 更新」（跨天）两个分支的具体值。
     func testHeaderUpdatedTextLocksClockFormatSameDayAndCrossDay() throws {
         let summary = try loadFixture()
@@ -46,13 +71,15 @@ final class MenuBarViewModelTests: XCTestCase {
         let sameDayState = MenuBarViewModel.build(
             from: summary, selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertEqual(sameDayState.headerUpdatedText, "10:40 更新")
 
         let crossDayState = MenuBarViewModel.build(
             from: summary, selectedPeriodID: "week",
             now: try date("2026-06-03T09:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertEqual(crossDayState.headerUpdatedText, "06-02 10:40 更新")
     }
 
@@ -77,7 +104,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "week",
             now: try date("2026-06-02T22:00:00+08:00"),
             additionalSources: [newerSource]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertEqual(state.headerUpdatedText, "21:12 更新")
     }
 
@@ -104,7 +132,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "week",
             now: try date("2026-09-27T19:00:00+08:00"),
             additionalSources: [utcSource, localSource]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertEqual(state.headerUpdatedText, "18:31 更新")
     }
 
@@ -180,7 +209,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: sharedMachineSummary,
             selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         // #177：旧 state.sources 已删除，等价覆盖迁移到 serverCards——
         // 一台机器被 3 个不同 os_user 的 source 共享时必须仍是一张卡，不按 source 拆分。
@@ -226,7 +256,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: today,
             selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         // #177 真机反馈：hour 粒度横轴标签改为「N点」，与 tooltip 的 "HH:mm" 分开——
         // tooltip 仍用于图例联动展示，标签只用于横轴刻度。
@@ -237,7 +268,56 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertTrue(state.trendBars[1].label.isEmpty)
         XCTAssertEqual(state.trendBars[1].tooltipTitle, "01:00")
 
+        // #186：本机时区（America/Los_Angeles）与 summary.timezone（Asia/Shanghai）当前 UTC
+        // 偏移不同时，hour 粒度横轴标签必须加「北京 」前缀说明——小时数字本身仍是 summary 时区
+        // 的小时（bucket 不变），只是多了一层标注,不影响 tooltipTitle（仍是 "HH:mm"，未改动）。
+        let laState = MenuBarViewModel.build(
+            from: today,
+            selectedPeriodID: "today",
+            now: try date("2026-06-02T11:00:00+08:00"),
+            deviceTimeZone: try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        )
+        XCTAssertEqual(laState.trendBars[0].label, "北京 0点")
+        XCTAssertEqual(laState.trendBars[12].label, "北京 12点")
+        XCTAssertEqual(laState.trendBars[23].label, "北京 23点")
+        XCTAssertEqual(laState.trendBars[1].tooltipTitle, "01:00", "tooltip 不受本机时区标注影响")
+
         let weeklyTrend = MobileTrend(
+            period: "week",
+            granularity: "day",
+            startDate: "2026-06-01",
+            endDate: "2026-06-02",
+            points: [
+                MobileTrendPoint(bucket: "2026-06-01", label: "2026-06-01", tokens: 10, inputTokens: 0, outputTokens: 0, cacheTokens: 0, cacheRatio: 0),
+                MobileTrendPoint(bucket: "2026-06-02", label: "2026-06-02", tokens: 20, inputTokens: 0, outputTokens: 0, cacheTokens: 0, cacheRatio: 0),
+            ]
+        )
+        let dayBoundaryToday = MobileSummary(
+            schemaVersion: summary.schemaVersion,
+            client: summary.client,
+            generatedAt: summary.generatedAt,
+            timezone: summary.timezone, // "Asia/Shanghai"
+            period: summary.period,
+            trend: weeklyTrend,
+            sources: summary.sources,
+            breakdown: summary.breakdown,
+            limits: summary.limits
+        )
+        // #186：未来时段判定（isFutureBucket）是「日界类」——必须保持 summary.timezone，
+        // 不能悄悄换成本机时区。now = 北京时间 2026-06-02T03:00:00+08:00：
+        // 北京日历日是 06-02（bucket "2026-06-02" 是「今天」，不是未来）；换算到本机
+        // America/Los_Angeles 是 2026-06-01T12:00:00-07:00，日历日是 06-01——如果误用
+        // 本机时区判定，bucket "2026-06-02" 会被错误标记成未来（06-02 > 06-01）。
+        let dayBoundaryState = MenuBarViewModel.build(
+            from: dayBoundaryToday,
+            selectedPeriodID: "week",
+            now: try date("2026-06-02T03:00:00+08:00"),
+            deviceTimeZone: try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        )
+        XCTAssertFalse(dayBoundaryState.trendBars[1].isFuture, "「今天」的 bucket 不能因为本机时区落后就被判成未来")
+        XCTAssertEqual(dayBoundaryState.trendBars[1].valueText, "20", "非未来 bucket 必须正常显示 tokens，不能因误判未来而清空")
+
+        let weeklyTrend2 = MobileTrend(
             period: "week",
             granularity: "day",
             startDate: "2026-05-28",
@@ -260,7 +340,7 @@ final class MenuBarViewModelTests: XCTestCase {
             generatedAt: summary.generatedAt,
             timezone: summary.timezone,
             period: summary.period,
-            trend: weeklyTrend,
+            trend: weeklyTrend2,
             sources: summary.sources,
             breakdown: summary.breakdown,
             limits: summary.limits
@@ -269,7 +349,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: week,
             selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertEqual(weekState.trendBars.map(\.label), ["05-28", "", "", "05-31", "", "", "06-03"])
     }
 
@@ -309,7 +390,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let bar = try XCTUnwrap(state.trendBars.first)
         // #176: 段顺序自底向上 claude → codex → antigravity → unknown（Claude 在底）。
@@ -389,7 +471,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let bar = try XCTUnwrap(state.trendBars.first)
         XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .antigravity, .unknown])
@@ -423,7 +506,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let bar = try XCTUnwrap(state.trendBars.first)
         XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .antigravity, .unknown])
         XCTAssertEqual(bar.segments.map(\.tokens), [500, 300, 150, 50])
@@ -459,7 +543,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let bar = try XCTUnwrap(state.trendBars.first)
         XCTAssertEqual(bar.segments.map(\.provider), [.claude, .codex, .antigravity])
         XCTAssertEqual(bar.segments.map(\.tokens), [416, 333, 251])
@@ -488,7 +573,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "week",
             now: try date("2026-06-24T09:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let bars = state.trendBars
         XCTAssertEqual(bars.map(\.isFuture), [false, false, false, true, true, true, true])
         for bar in bars where bar.isFuture {
@@ -509,7 +595,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "week",
             now: try date("2026-06-24T09:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertFalse(pastOnly.trendRefCeilingText.isEmpty)
         XCTAssertEqual(state.trendRefCeilingText, pastOnly.trendRefCeilingText)
         XCTAssertEqual(state.trendCeilingFraction, pastOnly.trendCeilingFraction, accuracy: 0.0001)
@@ -551,7 +638,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         // 独立复算：claude=200+100=300, codex=100, antigravity=150, unknown=50, total=600。
         XCTAssertEqual(state.trendLegendTotals.map(\.provider), [.claude, .codex, .antigravity, .unknown])
         XCTAssertEqual(state.trendLegendTotals.map(\.tokens), [300, 100, 150, 50])
@@ -565,7 +653,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary,
             selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertFalse(state.trendBars.isEmpty)
         for bar in state.trendBars {
@@ -662,7 +751,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-19T09:00:00+00:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "96%")
@@ -745,7 +835,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-06-24T15:31:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
@@ -805,7 +896,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-07-18T10:30:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerLabel, "5h")
@@ -843,7 +935,8 @@ final class MenuBarViewModelTests: XCTestCase {
                 providerSlots: [claudeSlot]
             ),
             selectedPeriodID: "today", now: try date("2026-07-18T12:30:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
@@ -888,7 +981,8 @@ final class MenuBarViewModelTests: XCTestCase {
                 providerSlots: [claudeSlot]
             ),
             selectedPeriodID: "today", now: try date("2026-07-18T10:30:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
@@ -951,7 +1045,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "week", selectedOffset: -1, now: now,
             quotaSlots: quotaSlots
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let monthState = MenuBarViewModel.build(
             from: MobileSummary(
                 schemaVersion: summary.schemaVersion, client: summary.client,
@@ -962,7 +1057,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "month", selectedOffset: -2, now: now,
             quotaSlots: quotaSlots
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(weekState.quotaRings, monthState.quotaRings)
         let claude = try XCTUnwrap(weekState.quotaRings.first { $0.id == "claude" })
@@ -981,7 +1077,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00"),
             quotaSlots: quotaSlots
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         let antigravity = try XCTUnwrap(state.quotaRings.first { $0.id == "antigravity" })
@@ -1024,10 +1121,12 @@ final class MenuBarViewModelTests: XCTestCase {
         let now = try date("2026-07-18T10:00:00+08:00")
         let fromToday = MenuBarViewModel.build(
             from: todaySummary, selectedPeriodID: "today", now: now, quotaSlots: quotaSlots
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let fromHistory = MenuBarViewModel.build(
             from: historicalSummary, selectedPeriodID: "week", selectedOffset: -1, now: now, quotaSlots: quotaSlots
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let todayRing = try XCTUnwrap(fromToday.quotaRings.first { $0.id == "claude" })
         let historyRing = try XCTUnwrap(fromHistory.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(todayRing.updatedText, "09:00 更新")
@@ -1044,7 +1143,8 @@ final class MenuBarViewModelTests: XCTestCase {
                 from: summary, selectedPeriodID: "today",
                 now: try date("2026-07-18T10:00:00+08:00"),
                 quotaSlots: [slot]
-            )
+            ,
+            deviceTimeZone: shanghaiTZForTests)
             return try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         }
 
@@ -1142,7 +1242,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-07-18T10:00:00+08:00"),
             quotaSlots: [slot]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.primaryPctText, "26%")
         // #177 Opus 审查：primaryPctNumberText 不带 %，视图自己拼一次单独字号的 %，
@@ -1175,7 +1276,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-07-18T10:00:00+08:00"),
             quotaSlots: [slot]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
         XCTAssertTrue(codex.isAvailable)
         XCTAssertEqual(codex.hoverRows.count, 1, "got: \(codex.hoverRows)")
@@ -1209,7 +1311,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-07-18T10:00:00+08:00"),
             quotaSlots: [slot]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.hoverRows.count, 2)
         let sessionRow = try XCTUnwrap(claude.hoverRows.first { $0.valueText.contains("40%") })
@@ -1239,7 +1342,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-07-18T10:00:00+08:00"),
             quotaSlots: [slot]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         let sessionRow = try XCTUnwrap(claude.hoverRows.first)
         XCTAssertTrue(sessionRow.valueText.contains("明天 09:00"), "got: \(sessionRow.valueText)")
@@ -1268,47 +1372,37 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(boundaryText, "即将重置")
     }
 
-    /// #177 第四轮 Opus 审查防回归：时区必须来自 summary.timezone，不能悄悄退回本机时区
-    /// （Calendar.current / TimeZone.current）或 UTC——否则「今天/明天」判断和具体 HH:mm
-    /// 都会算错。用与本机大概率不同的 America/Los_Angeles 时区反证：resetAt 在洛杉矶时间是
-    /// 「明天 02:00」，但换算到 Asia/Shanghai 或 UTC 都会变成「今天」的另一个钟点。
-    func testQuotaRingHoverRowsUseSummaryTimezoneNotSystemTimezone() throws {
-        let summary = try loadFixture()
-        let laSummary = MobileSummary(
-            schemaVersion: summary.schemaVersion,
-            client: summary.client,
-            generatedAt: summary.generatedAt,
-            timezone: "America/Los_Angeles",
-            period: summary.period,
-            trend: summary.trend,
-            sources: summary.sources,
-            breakdown: summary.breakdown,
-            limits: summary.limits,
-            providerSlots: summary.providerSlots,
-            providerUsageCoverage: summary.providerUsageCoverage
-        )
+    /// #186：决策变更——额度悬停浮层的重置时刻是「时刻类」，改为按**本机时区**（deviceTimeZone）
+    /// 显示，不再按 summary.timezone。构造 now/resetAt 使二者按北京时间跨天（→ 旧实现会判「明天」），
+    /// 但按洛杉矶（本机）时区落在同一天（→ 新实现须判「今天」）：
+    /// - now = 2026-07-18T23:00:00+08:00 = 2026-07-18T08:00:00-07:00（北京 7/18 23:00，洛杉矶 7/18 08:00）
+    /// - resetAt = 2026-07-18T13:00:00-07:00 = 2026-07-19T04:00:00+08:00（北京 7/19 04:00——跨天，
+    ///   旧实现按 summary 时区会显示「明天 04:00」；洛杉矶同为 7/18——新实现须显示「今天 13:00」）。
+    /// （#177 时代的同名测试断言方向相反——那是变更前的旧行为，已随本 Issue 决策翻转。）
+    func testQuotaRingHoverRowsUseDeviceTimezoneNotSummaryTimezoneForResetMoment() throws {
+        let summary = try loadFixture() // fixture timezone 固定 "Asia/Shanghai"。
+        let losAngeles = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
         let slot = providerSlot(
             provider: "claude",
             windows: [
                 MobileLimitWindow(
                     sourceID: "s", provider: "claude", window: "session",
                     usedPercent: 40, remainingPercent: 60,
-                    // 洛杉矶时间明天凌晨 2 点（UTC 2026-07-18T09:00:00Z）。
-                    resetAt: "2026-07-18T02:00:00-07:00",
-                    windowDurationMinutes: 300, observedAt: "2026-07-17T19:00:00-07:00",
+                    resetAt: "2026-07-18T13:00:00-07:00",
+                    windowDurationMinutes: 300, observedAt: "2026-07-18T07:30:00-07:00",
                     sourceType: "official_cli", confidence: "observed", status: "ok", official: true
                 )
             ]
         )
         let state = MenuBarViewModel.build(
-            from: laSummary, selectedPeriodID: "today",
-            // 洛杉矶时间今天晚上 8 点（UTC 2026-07-18T03:00:00Z）。
-            now: try date("2026-07-17T20:00:00-07:00"),
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-07-18T23:00:00+08:00"),
             quotaSlots: [slot]
-        )
+        ,
+            deviceTimeZone: losAngeles)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         let row = try XCTUnwrap(claude.hoverRows.first)
-        XCTAssertTrue(row.valueText.contains("明天 02:00"), "got: \(row.valueText)")
+        XCTAssertTrue(row.valueText.contains("今天 13:00"), "got: \(row.valueText)")
     }
 
     /// #177 第四轮 Opus 审查防回归：跨午夜——now 是北京时间 23:30，resetAt 是次日 00:30，
@@ -1331,7 +1425,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-07-18T23:30:00+08:00"),
             quotaSlots: [slot]
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         let row = try XCTUnwrap(claude.hoverRows.first)
         XCTAssertTrue(row.valueText.contains("明天 00:30"), "got: \(row.valueText)")
@@ -1343,7 +1438,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary, selectedPeriodID: "today",
             now: try date("2026-06-02T11:00:00+08:00"),
             quotaSlots: []
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertEqual(state.quotaRings.count, 3)
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
     }
@@ -1384,7 +1480,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-09-27T19:05:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.innerPctText, "42%")
     }
@@ -1433,7 +1530,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-09-27T19:05:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.updatedText, "18:59 更新")
     }
@@ -1465,7 +1563,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-09-27T16:05:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let row = try XCTUnwrap(state.limitRows.first)
         XCTAssertTrue(row.value.hasSuffix("已过"), "got: \(row.value)")
     }
@@ -1493,7 +1592,8 @@ final class MenuBarViewModelTests: XCTestCase {
             ),
             selectedPeriodID: "today",
             now: try date("2026-09-27T00:30:00-07:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let row = try XCTUnwrap(state.limitRows.first)
         XCTAssertTrue(row.value.hasSuffix("重置"), "got: \(row.value)")
     }
@@ -1504,7 +1604,8 @@ final class MenuBarViewModelTests: XCTestCase {
             from: summary,
             selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(
             MenuTrendSelection.nearestBar(in: state.trendBars, xLocation: 1, width: 200)?.id,

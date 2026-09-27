@@ -284,11 +284,12 @@ public enum MenuBarViewModel {
         return formatter
     }()
 
-    /// compactDateTime 用：时区固定 Asia/Shanghai，只有 dateFormat（HH:mm / MM-dd HH:mm）随调用变化。
+    /// #186：compactDateTime 用——时区不再固定 Asia/Shanghai，而是随每次调用传入的
+    /// deviceTimeZone 赋值（这些都是「时刻类」显示：标题栏更新时间、Server 同步时间、
+    /// 额度行重置时刻），dateFormat（HH:mm / MM-dd HH:mm）同样随调用变化。
     private static let compactTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: "Asia/Shanghai")!
         return formatter
     }()
 
@@ -315,9 +316,19 @@ public enum MenuBarViewModel {
         now: Date = Date(),
         machineAliases: [String: String]? = nil,
         quotaSlots: [MobileProviderSlot]? = nil,
-        additionalSources: [MobileSource] = []
+        additionalSources: [MobileSource] = [],
+        // #186：本机时区——默认真实设备时区，测试注入固定时区，绝不依赖运行测试的机器时区。
+        // 「时刻类」（悬停重置时刻、标题栏/Server 更新时间）按它显示；「日界类」（今天/本周/本月、
+        // 未来时段判定、重置已过判断）仍按 summary.timezone，不受它影响。
+        deviceTimeZone: TimeZone = .current
     ) -> MenuBarState {
         let tokenText = TokenFormat.compact(summary.period.totalTokens)
+        let summaryTimeZone = summary.timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+        // #186：仅当本机时区与 summary.timezone 的当前 UTC 偏移不同时才标注——国内使用时
+        // （本机时区 == 服务时区）界面必须与现状逐字一致，不能无条件加标注。
+        let tzDiffers = deviceTimeZone.secondsFromGMT(for: now) != summaryTimeZone.secondsFromGMT(for: now)
+        let periodTitleSuffix = tzDiffers ? timezoneAnnotation(summaryTimeZone) : ""
+        let hourAxisPrefix = tzDiffers ? timezoneAxisPrefix(summaryTimeZone) : nil
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
         let displaySlots = fixedProviderSlots(summary.providerSlots)
@@ -351,30 +362,41 @@ public enum MenuBarViewModel {
             sources: summary.sources,
             period: summary.period,
             now: now,
-            machineAliases: machineAliases
+            machineAliases: machineAliases,
+            deviceTimeZone: deviceTimeZone
         )
 
-        let bars = trendBars(summary.trend, futureFlags: futureFlags, maxTokens: maxTokens)
+        let bars = trendBars(
+            summary.trend, futureFlags: futureFlags, maxTokens: maxTokens, hourAxisPrefix: hourAxisPrefix
+        )
+
+        let basePeriodLabel = selectedOffset == 0
+            ? periodLabel(selectedPeriodID)
+            : (selectedPeriodID == "today" ? "历史日期" : selectedPeriodID == "week" ? "历史周" : "历史月")
 
         return MenuBarState(
             statusTitle: tokenText,
-            periodLabel: selectedOffset == 0 ? periodLabel(selectedPeriodID) : (selectedPeriodID == "today" ? "历史日期" : selectedPeriodID == "week" ? "历史周" : "历史月"),
+            periodLabel: basePeriodLabel + periodTitleSuffix,
             dateRangeText: dateRangeText(summary.period),
             heroTotalText: tokenText,
             tokenBreakdownText: tokenBreakdownText(summary.period),
             healthText: healthText(okCount: okCount, total: summary.sources.count, problemCount: problemCount),
             primaryLimitText: primaryLimitText(primaryLimit),
-            headerUpdatedText: headerUpdatedText(summary.sources + additionalSources, fallback: summary.generatedAt, now: now),
+            headerUpdatedText: headerUpdatedText(
+                summary.sources + additionalSources, fallback: summary.generatedAt, now: now, deviceTimeZone: deviceTimeZone
+            ),
             trendBars: bars,
             trendLegendTotals: aggregatedSegments(nonFuturePoints),
             trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
-            limitRows: sortedLimits(limitWindows).map { limitRow($0, generatedAt: summary.generatedAt, timezone: summary.timezone) },
+            limitRows: sortedLimits(limitWindows).map {
+                limitRow($0, generatedAt: summary.generatedAt, timezone: summary.timezone, deviceTimeZone: deviceTimeZone)
+            },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(
                 from: quotaSlotsWithWindows,
                 now: now,
-                timezone: summary.timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+                deviceTimeZone: deviceTimeZone
             ),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage),
             serverCards: cards,
@@ -430,10 +452,25 @@ public enum MenuBarViewModel {
     }
 
     /// #177：标题栏副标题用的钟表时间「HH:mm 更新」（同日）或「MM-dd HH:mm 更新」（跨天）。
-    private static func headerUpdatedText(_ sources: [MobileSource], fallback: String?, now: Date) -> String {
+    /// #186：时刻类——按本机时区显示，不再固定 Asia/Shanghai。
+    private static func headerUpdatedText(
+        _ sources: [MobileSource], fallback: String?, now: Date, deviceTimeZone: TimeZone
+    ) -> String {
         let latest = latestISOString(sources.compactMap { $0.lastObservedAt })
         let nowRef = isoFormatterBasic.string(from: now)
-        return compactDateTime(latest ?? fallback, reference: nowRef, suffix: "更新") ?? "--"
+        return compactDateTime(latest ?? fallback, reference: nowRef, suffix: "更新", timezone: deviceTimeZone) ?? "--"
+    }
+
+    /// #186：summary.timezone 为 Asia/Shanghai 时用「北京时间」，其余时区没有一个通用的
+    /// 中文简称，用「服务时区」——不编一个可能误导的地名。
+    private static func timezoneAnnotation(_ summaryTimeZone: TimeZone) -> String {
+        summaryTimeZone.identifier == "Asia/Shanghai" ? "（北京时间）" : "（服务时区）"
+    }
+
+    /// #186：小时横轴标注前缀，与 timezoneAnnotation 用同一套判断——Asia/Shanghai 用「北京 」，
+    /// 其余时区用「服务区 」。
+    private static func timezoneAxisPrefix(_ summaryTimeZone: TimeZone) -> String {
+        summaryTimeZone.identifier == "Asia/Shanghai" ? "北京 " : "服务区 "
     }
 
     /// #177：用量区总量下方的分项文案，缓存段用命中率百分比而不是原始 token 数。
@@ -453,7 +490,11 @@ public enum MenuBarViewModel {
     ///   - futureFlags: 每个 point 对应的 isFuture，须与 trend.points 等长且同序——由调用方
     ///     一次性算好传入，避免这里再重新扫描一遍 points。
     ///   - maxTokens: 非未来 points 的 token 最大值（未做 floor(1)），调用方已经算过一次。
-    static func trendBars(_ trend: MobileTrend, futureFlags: [Bool], maxTokens: Int) -> [MenuTrendBar] {
+    ///   - hourAxisPrefix: #186 本机时区与 summary.timezone 当前 UTC 偏移不同时，hour 粒度横轴
+    ///     标签的前缀（如 "北京 "）；nil 表示不标注（偏移相同，保持现状）。
+    static func trendBars(
+        _ trend: MobileTrend, futureFlags: [Bool], maxTokens: Int, hourAxisPrefix: String? = nil
+    ) -> [MenuTrendBar] {
         let denominator = max(maxTokens, 1)
         return trend.points.enumerated().map { index, point in
             let isFuture = index < futureFlags.count ? futureFlags[index] : false
@@ -463,7 +504,8 @@ public enum MenuBarViewModel {
                     for: point,
                     index: index,
                     count: trend.points.count,
-                    granularity: trend.granularity
+                    granularity: trend.granularity,
+                    hourAxisPrefix: hourAxisPrefix
                 ),
                 tooltipTitle: shortBucket(point.bucket, granularity: trend.granularity),
                 valueText: isFuture ? "" : TokenFormat.compact(point.tokens),
@@ -549,24 +591,29 @@ public enum MenuBarViewModel {
         }
     }
 
-    private static func axisLabel(for point: MobileTrendPoint, index: Int, count: Int, granularity: String?) -> String {
+    private static func axisLabel(
+        for point: MobileTrendPoint, index: Int, count: Int, granularity: String?, hourAxisPrefix: String? = nil
+    ) -> String {
         guard shouldShowAxisLabel(index: index, count: count) else {
             return ""
         }
         // #177 真机反馈：hour 粒度的横轴刻度改用「N点」（如 "0点"/"12点"/"23点"），
         // 与仍用 "HH:mm" 的 tooltip/图例联动展示分开——day 粒度保持现状（MM-dd）。
         if granularity == "hour" {
-            return hourAxisLabel(point.bucket) ?? shortBucket(point.bucket, granularity: granularity)
+            return hourAxisLabel(point.bucket, prefix: hourAxisPrefix) ?? shortBucket(point.bucket, granularity: granularity)
         }
         return shortBucket(point.bucket, granularity: granularity)
     }
 
-    private static func hourAxisLabel(_ bucket: String) -> String? {
+    /// - Parameter prefix: #186 本机时区与 summary.timezone 当前 UTC 偏移不同时传入的标注
+    ///   （如 "北京 "），拼在小时数字前——bucket 本身仍是 summary 时区的小时（isFutureBucket/
+    ///   trendSegments 等日界判断不受影响，这里只是给已算好的小时数字加一个说明性前缀）。
+    private static func hourAxisLabel(_ bucket: String, prefix: String? = nil) -> String? {
         guard bucket.count >= 13, bucket.dropFirst(10).first == "T" else { return nil }
         let hourStart = bucket.index(bucket.startIndex, offsetBy: 11)
         let hourEnd = bucket.index(bucket.startIndex, offsetBy: 13)
         guard let hour = Int(bucket[hourStart..<hourEnd]) else { return nil }
-        return "\(hour)点"
+        return "\(prefix ?? "")\(hour)点"
     }
 
     private static func shouldShowAxisLabel(index: Int, count: Int) -> Bool {
@@ -619,7 +666,8 @@ public enum MenuBarViewModel {
         sources: [MobileSource],
         period: MobilePeriod,
         now: Date,
-        machineAliases: [String: String]?
+        machineAliases: [String: String]?,
+        deviceTimeZone: TimeZone
     ) -> [MenuServerCard] {
         let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
         let hasModelDetail = !breakdown.byMachine.isEmpty
@@ -640,7 +688,7 @@ public enum MenuBarViewModel {
                 userText = "未知用户"
             }
             let latestTime = latestISOString(matchedSources.compactMap { $0.lastPushedAt ?? $0.lastObservedAt })
-            let timeText = compactDateTime(latestTime, reference: nowReference, suffix: "同步") ?? "未同步"
+            let timeText = compactDateTime(latestTime, reference: nowReference, suffix: "同步", timezone: deviceTimeZone) ?? "未同步"
             let platform = matchedSources.compactMap(\.platform).first
 
             // aliases 的 key 是机器原名（row.id，如上报用的 hostname），不是 breakdown 已经美化过的 label；
@@ -859,7 +907,7 @@ public enum MenuBarViewModel {
     private static func quotaRings(
         from slotsWithWindows: [(MobileProviderSlot, [MobileLimitWindow])],
         now: Date,
-        timezone: TimeZone
+        deviceTimeZone: TimeZone
     ) -> [QuotaRingData] {
         // 额度与所选时间段无关：更新时间以「现在」为参照，不参照所选 summary 的 generatedAt。
         let reference = isoFormatterBasic.string(from: now)
@@ -899,7 +947,7 @@ public enum MenuBarViewModel {
                 }
                 .min { $0.1 < $1.1 }?.0
             let availabilityTextValue = quotaAvailabilityText(slot.quota, hasVisibleWindow: hasVisibleWindow)
-            let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: "更新") ?? "未更新"
+            let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: "更新", timezone: deviceTimeZone) ?? "未更新"
             // #177：浮层不得泄露「最近成功值」残留的旧百分比——isAvailable=false 时只给状态说明 + 更新时间，
             // 不能沿用 outerPctText/innerPctText（它们对 isHistorical 的 quota 仍可能带着旧窗口的百分比）。
             // #177 真机反馈：只显示确实有数据的窗口行——某个 Agent 只有 7d/week 窗口时
@@ -912,7 +960,7 @@ public enum MenuBarViewModel {
                             label: windowLabel(window),
                             valueText: [
                                 "\(Int(window.usedPercent.rounded()))%",
-                                resetMomentText(window.resetAt, timezone: timezone, now: now) ?? "--",
+                                resetMomentText(window.resetAt, timezone: deviceTimeZone, now: now) ?? "--",
                             ].joined(separator: " · ")
                         )
                     },
@@ -921,7 +969,7 @@ public enum MenuBarViewModel {
                             label: windowLabel(window),
                             valueText: [
                                 "\(Int(window.usedPercent.rounded()))%",
-                                resetMomentText(window.resetAt, timezone: timezone, now: now) ?? "--",
+                                resetMomentText(window.resetAt, timezone: deviceTimeZone, now: now) ?? "--",
                             ].joined(separator: " · ")
                         )
                     },
@@ -1103,14 +1151,16 @@ public enum MenuBarViewModel {
         return "\(ceiling)"
     }
 
-    private static func limitRow(_ window: MobileLimitWindow, generatedAt: String?, timezone: String?) -> MenuDisplayRow {
+    private static func limitRow(
+        _ window: MobileLimitWindow, generatedAt: String?, timezone: String?, deviceTimeZone: TimeZone
+    ) -> MenuDisplayRow {
         let availability = window.isOfficialObserved ? "\(Int(window.remainingPercent.rounded()))% 可用" : "未观测"
         let used = "\(Int(window.usedPercent.rounded()))% 已用"
         return MenuDisplayRow(
             id: window.id,
             title: "\(providerName(window.provider)) \(window.window)",
             subtitle: "\(used) · \(availability) · \(window.confidence)",
-            value: compactResetTime(window.resetAt, generatedAt: generatedAt, timezone: timezone) ?? "--",
+            value: compactResetTime(window.resetAt, generatedAt: generatedAt, timezone: timezone, deviceTimeZone: deviceTimeZone) ?? "--",
             status: window.status
         )
     }
@@ -1159,19 +1209,26 @@ public enum MenuBarViewModel {
         return "\(count) 个来源"
     }
 
-    private static func compactDateTime(_ iso: String?, reference: String?, suffix: String) -> String? {
+    /// #186：timezone 参数不再固定 Asia/Shanghai——调用方传入 deviceTimeZone（这些都是「时刻类」
+    /// 显示：标题栏/Server 更新时间、额度行重置时刻），同日/跨日判断与实际渲染的钟点统一按它来。
+    private static func compactDateTime(_ iso: String?, reference: String?, suffix: String, timezone: TimeZone) -> String? {
         guard let date = parseDate(iso) else { return nil }
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        calendar.timeZone = timezone
         let isSameDay = reference.flatMap(parseDate).map {
             calendar.isDate(date, inSameDayAs: $0)
         } ?? false
+        compactTimeFormatter.timeZone = timezone
         compactTimeFormatter.dateFormat = isSameDay ? "HH:mm" : "MM-dd HH:mm"
         let text = compactTimeFormatter.string(from: date)
         return "\(text) \(suffix)"
     }
 
-    private static func compactResetTime(_ resetAt: String?, generatedAt: String?, timezone: String?) -> String? {
+    /// #186：「已过/重置」的日历日判断属于「日界类」——继续按 summary.timezone（timezone 参数），
+    /// 不受本机时区影响；实际渲染的钟点属于「时刻类」——改用 deviceTimeZone。
+    private static func compactResetTime(
+        _ resetAt: String?, generatedAt: String?, timezone: String?, deviceTimeZone: TimeZone
+    ) -> String? {
         guard let resetAt else { return nil }
         // 真机 bug 同类修复：resetAt / generatedAt 各自带不同时区 offset 时，日期部分的原始
         // 字符串前缀可能相同或反直觉地大小颠倒（同一 UTC 时刻换算成北京时间可能已经跨天），
@@ -1184,7 +1241,7 @@ public enum MenuBarViewModel {
         } else {
             suffix = "重置"
         }
-        return compactDateTime(resetAt, reference: generatedAt, suffix: suffix)
+        return compactDateTime(resetAt, reference: generatedAt, suffix: suffix, timezone: deviceTimeZone)
     }
 }
 

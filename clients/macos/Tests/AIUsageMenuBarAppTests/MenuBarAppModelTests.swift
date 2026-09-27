@@ -284,7 +284,8 @@ final class MenuBarAppModelTests: XCTestCase {
         let state = MenuBarViewModel.build(
             from: try summary(periodID: "today", totalTokens: 366_442_154),
             selectedPeriodID: "today"
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(MenuBarStatusItemPresentation.title(for: state), "366.4M")
         XCTAssertEqual(MenuBarStatusItemPresentation.tooltip(for: state), "AI Usage · 今天 366.4M")

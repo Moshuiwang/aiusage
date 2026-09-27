@@ -33,7 +33,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: summary,
             selectedPeriodID: "week",
             now: try date("2026-06-02T11:00:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         XCTAssertTrue(state.quotaRings.allSatisfy { ring in
@@ -50,7 +51,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record, providerSlots: [claude]),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
         let codex = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
@@ -72,7 +74,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record, coverage: coverage),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         XCTAssertTrue(state.providerUsageCoverageText?.contains("归属") == true)
     }
 
@@ -82,7 +85,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.innerPctText, "78%")
@@ -101,7 +105,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
@@ -119,7 +124,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.innerPctText, "78%")
@@ -132,7 +138,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
         XCTAssertEqual(claude.outerPctText, "--")
@@ -149,7 +156,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record),
             selectedPeriodID: "week",
             now: try date("2026-06-03T11:10:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
 
         XCTAssertEqual(record.coverage.status, "partial")
         XCTAssertTrue(state.providerUsageCoverageText?.contains("归属不完整") == true)
@@ -214,7 +222,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
                 from: try summary(for: record, providerSlots: slots),
                 selectedPeriodID: "today",
                 now: try date("2026-06-03T11:10:00+08:00")
-            )
+            ,
+            deviceTimeZone: shanghaiTZForTests)
             let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
             XCTAssertEqual(ring.innerPctText, "--", "mutation: \(mutation)")
             XCTAssertEqual(ring.innerTimeText, "--", "mutation: \(mutation)")
@@ -251,7 +260,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
                 from: try summary(for: record, providerSlots: [slot]),
                 selectedPeriodID: "today",
                 now: try date("2026-06-03T11:10:00+08:00")
-            )
+            ,
+            deviceTimeZone: shanghaiTZForTests)
             let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
             XCTAssertEqual(ring.outerPctText, "--", "status: \(degradedCase.status)")
             XCTAssertEqual(ring.innerPctText, "78%", "status: \(degradedCase.status)")
@@ -293,7 +303,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
             from: try summary(for: record, providerSlots: [slot]),
             selectedPeriodID: "today",
             now: try date("2026-06-03T11:30:00+08:00")
-        )
+        ,
+            deviceTimeZone: shanghaiTZForTests)
         let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
 
         XCTAssertEqual(ring.outerPctText, "--")
@@ -310,7 +321,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
                 from: try summary(for: record),
                 selectedPeriodID: "today",
                 now: try date("2026-06-03T12:00:00+08:00")
-            )
+            ,
+            deviceTimeZone: shanghaiTZForTests)
             XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"], record.name)
 
             for slot in record.providerSlots {
