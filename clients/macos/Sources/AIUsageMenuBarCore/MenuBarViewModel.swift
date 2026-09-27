@@ -287,6 +287,22 @@ public enum MenuBarViewModel {
         return formatter
     }()
 
+    /// #177 第四轮真机反馈：额度悬停浮层的具体重置时刻用「HH:mm」，时区随 summary（resetMomentText 每次赋值）。
+    private static let resetMomentTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm"
+        return formatter
+    }()
+
+    /// resetMomentText 用：「M月d日」，时区随 summary。
+    private static let resetMomentDayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
+
     public static func build(
         from summary: MobileSummary,
         selectedPeriodID: String,
@@ -350,7 +366,11 @@ public enum MenuBarViewModel {
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
             limitRows: sortedLimits(limitWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
             breakdownSections: breakdownSections(summary.breakdown),
-            quotaRings: quotaRings(from: quotaSlotsWithWindows, now: now),
+            quotaRings: quotaRings(
+                from: quotaSlotsWithWindows,
+                now: now,
+                timezone: summary.timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+            ),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage),
             serverCards: cards,
             onlineServerCount: cards.filter(\.isOnline).count,
@@ -799,7 +819,8 @@ public enum MenuBarViewModel {
     ///   （build）一次性算好传入，避免每个 slot 在这里重新触发一遍 trustedProviderWindows。
     private static func quotaRings(
         from slotsWithWindows: [(MobileProviderSlot, [MobileLimitWindow])],
-        now: Date
+        now: Date,
+        timezone: TimeZone
     ) -> [QuotaRingData] {
         // 额度与所选时间段无关：更新时间以「现在」为参照，不参照所选 summary 的 generatedAt。
         let reference = isoFormatterBasic.string(from: now)
@@ -852,7 +873,7 @@ public enum MenuBarViewModel {
                             label: windowLabel(window),
                             valueText: [
                                 "\(Int(window.usedPercent.rounded()))%",
-                                timeRemainingText(window.resetAt, now: now) ?? "--",
+                                resetMomentText(window.resetAt, timezone: timezone, now: now) ?? "--",
                             ].joined(separator: " · ")
                         )
                     },
@@ -861,7 +882,7 @@ public enum MenuBarViewModel {
                             label: windowLabel(window),
                             valueText: [
                                 "\(Int(window.usedPercent.rounded()))%",
-                                timeRemainingText(window.resetAt, now: now) ?? "--",
+                                resetMomentText(window.resetAt, timezone: timezone, now: now) ?? "--",
                             ].joined(separator: " · ")
                         )
                     },
@@ -958,6 +979,46 @@ public enum MenuBarViewModel {
             return true
         }
         return window.windowDurationMinutes >= 7 * 24 * 60
+    }
+
+    /// #177 第四轮真机反馈：额度悬停浮层的重置时刻改用具体时间点（按 summary 时区，缺省
+    /// Asia/Shanghai），不再是倒计时——圆环旁的 resetCountdownText 不受影响，仍用 timeRemainingText。
+    /// 同一天简写「今天 HH:mm」，次日「明天 HH:mm」，其余「M月d日 周X HH:mm」。
+    /// internal（非 private）：与 trendBars/isFutureBucket 等同款惯例——供单测直接调用，
+    /// 不必绕开 build() 里 trustedProviderWindows 的过期过滤才能测到边界分支。
+    static func resetMomentText(_ resetAt: String?, timezone: TimeZone, now: Date) -> String? {
+        guard let date = parseDate(resetAt) else { return nil }
+        // #177 第四轮 Opus 审查：与圆环旁 timeRemainingText 的 secs<=0 分支保持一致——
+        // resetAt 已经过去（或恰好等于 now）时必须显示「即将重置」，不能显示一个已经过去的
+        // 具体钟点让人误以为它还没重置。
+        guard date > now else { return "即将重置" }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timezone
+        let dayDiff = calendar.dateComponents(
+            [.day],
+            from: calendar.startOfDay(for: now),
+            to: calendar.startOfDay(for: date)
+        ).day ?? 0
+
+        resetMomentTimeFormatter.timeZone = timezone
+        let timeText = resetMomentTimeFormatter.string(from: date)
+        switch dayDiff {
+        case 0:
+            return "今天 \(timeText)"
+        case 1:
+            return "明天 \(timeText)"
+        default:
+            resetMomentDayFormatter.timeZone = timezone
+            let weekday = calendar.component(.weekday, from: date)
+            return "\(resetMomentDayFormatter.string(from: date)) \(weekdayShortName(weekday)) \(timeText)"
+        }
+    }
+
+    /// Calendar.component(.weekday) 返回 1=周日...7=周六。
+    private static func weekdayShortName(_ weekday: Int) -> String {
+        let names = ["", "周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+        guard weekday >= 1, weekday <= 7 else { return "" }
+        return names[weekday]
     }
 
     private static func timeRemainingText(_ resetAt: String?, now: Date) -> String? {

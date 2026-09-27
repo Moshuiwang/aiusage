@@ -1155,6 +1155,161 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertFalse(codex.hoverRows.contains { $0.valueText.contains("--") && $0.valueText.contains("—") })
     }
 
+    /// #177 第四轮真机反馈：悬停浮层的 7d/5h 两行改成具体北京时间重置时刻（而不是倒计时），
+    /// 格式「今天/明天 HH:mm」或「M月d日 周X HH:mm」；圆环旁的倒计时（resetCountdownText）保持不变。
+    func testQuotaRingHoverRowsShowAbsoluteResetMomentInsteadOfCountdown() throws {
+        let summary = try loadFixture()
+        let slot = providerSlot(
+            provider: "claude",
+            windows: [
+                // 同一天：session 窗口今天 18:00 重置
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "session",
+                    usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-18T18:00:00+08:00",
+                    windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                ),
+                // 2026-07-20 是周一，距 now（2026-07-18 周六）相差 2 天，不是「明天」。
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "week",
+                    usedPercent: 26, remainingPercent: 74, resetAt: "2026-07-20T00:00:00+08:00",
+                    windowDurationMinutes: 10080, observedAt: "2026-07-18T09:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                ),
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-07-18T10:00:00+08:00"),
+            quotaSlots: [slot]
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.hoverRows.count, 2)
+        let sessionRow = try XCTUnwrap(claude.hoverRows.first { $0.valueText.contains("40%") })
+        XCTAssertTrue(sessionRow.valueText.contains("今天 18:00"), "got: \(sessionRow.valueText)")
+        // 圆环旁的倒计时保持原有格式不变（不受本次改动影响）。
+        XCTAssertEqual(claude.resetCountdownText, "8h 0min")
+
+        let weekRow = try XCTUnwrap(claude.hoverRows.first { $0.valueText.contains("26%") })
+        XCTAssertTrue(weekRow.valueText.contains("7月20日 周一 00:00"), "got: \(weekRow.valueText)")
+    }
+
+    /// 明天重置：resetAt 落在「明天」时格式为「明天 HH:mm」。
+    func testQuotaRingHoverRowsShowTomorrowForNextDayReset() throws {
+        let summary = try loadFixture()
+        let slot = providerSlot(
+            provider: "claude",
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "session",
+                    usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-19T09:00:00+08:00",
+                    windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-07-18T10:00:00+08:00"),
+            quotaSlots: [slot]
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        let sessionRow = try XCTUnwrap(claude.hoverRows.first)
+        XCTAssertTrue(sessionRow.valueText.contains("明天 09:00"), "got: \(sessionRow.valueText)")
+    }
+
+    /// #177 第四轮 Opus 审查：resetAt 已经过去（<= now）时必须显示「即将重置」，与圆环旁的倒计时
+    /// （timeRemainingText 对 secs<=0 的处理）保持一致——不能显示一个已经过去的具体钟点让人
+    /// 误以为它还没重置。直接调用 resetMomentText（internal，与 trendBars/isFutureBucket 同款
+    /// 惯例）——通过完整 build() 管线测不到这个分支：trustedProviderWindows 对 status=="available"
+    /// 的窗口本来就会把 resetAt<=now 的窗口过滤掉，走不到 isAvailable=true 的百分比+时刻这一支。
+    func testQuotaRingHoverRowsShowAboutToResetWhenResetAtIsInThePast() throws {
+        let shanghai = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
+        let now = try date("2026-07-18T10:00:00+08:00")
+
+        XCTAssertNil(MenuBarViewModel.resetMomentText(nil, timezone: shanghai, now: now))
+
+        let pastText = MenuBarViewModel.resetMomentText(
+            "2026-07-18T09:00:00+08:00", timezone: shanghai, now: now
+        )
+        XCTAssertEqual(pastText, "即将重置")
+
+        // 边界相等（resetAt == now）也算「已过去」，与 timeRemainingText 的 secs<=0 一致。
+        let boundaryText = MenuBarViewModel.resetMomentText(
+            "2026-07-18T10:00:00+08:00", timezone: shanghai, now: now
+        )
+        XCTAssertEqual(boundaryText, "即将重置")
+    }
+
+    /// #177 第四轮 Opus 审查防回归：时区必须来自 summary.timezone，不能悄悄退回本机时区
+    /// （Calendar.current / TimeZone.current）或 UTC——否则「今天/明天」判断和具体 HH:mm
+    /// 都会算错。用与本机大概率不同的 America/Los_Angeles 时区反证：resetAt 在洛杉矶时间是
+    /// 「明天 02:00」，但换算到 Asia/Shanghai 或 UTC 都会变成「今天」的另一个钟点。
+    func testQuotaRingHoverRowsUseSummaryTimezoneNotSystemTimezone() throws {
+        let summary = try loadFixture()
+        let laSummary = MobileSummary(
+            schemaVersion: summary.schemaVersion,
+            client: summary.client,
+            generatedAt: summary.generatedAt,
+            timezone: "America/Los_Angeles",
+            period: summary.period,
+            trend: summary.trend,
+            sources: summary.sources,
+            breakdown: summary.breakdown,
+            limits: summary.limits,
+            providerSlots: summary.providerSlots,
+            providerUsageCoverage: summary.providerUsageCoverage
+        )
+        let slot = providerSlot(
+            provider: "claude",
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "session",
+                    usedPercent: 40, remainingPercent: 60,
+                    // 洛杉矶时间明天凌晨 2 点（UTC 2026-07-18T09:00:00Z）。
+                    resetAt: "2026-07-18T02:00:00-07:00",
+                    windowDurationMinutes: 300, observedAt: "2026-07-17T19:00:00-07:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: laSummary, selectedPeriodID: "today",
+            // 洛杉矶时间今天晚上 8 点（UTC 2026-07-18T03:00:00Z）。
+            now: try date("2026-07-17T20:00:00-07:00"),
+            quotaSlots: [slot]
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        let row = try XCTUnwrap(claude.hoverRows.first)
+        XCTAssertTrue(row.valueText.contains("明天 02:00"), "got: \(row.valueText)")
+    }
+
+    /// #177 第四轮 Opus 审查防回归：跨午夜——now 是北京时间 23:30，resetAt 是次日 00:30，
+    /// 必须判定为「明天」。用 UTC 反证：同一对时刻换算到 UTC 是同一个 UTC 日（15:30 → 16:30），
+    /// 不会跨天，如果实现误用 UTC 计算日期差就会错误显示「今天」。
+    func testQuotaRingHoverRowsHandleCrossMidnightInShanghaiTimezone() throws {
+        let summary = try loadFixture()
+        let slot = providerSlot(
+            provider: "claude",
+            windows: [
+                MobileLimitWindow(
+                    sourceID: "s", provider: "claude", window: "session",
+                    usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-19T00:30:00+08:00",
+                    windowDurationMinutes: 300, observedAt: "2026-07-18T23:00:00+08:00",
+                    sourceType: "official_cli", confidence: "observed", status: "ok", official: true
+                )
+            ]
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "today",
+            now: try date("2026-07-18T23:30:00+08:00"),
+            quotaSlots: [slot]
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        let row = try XCTUnwrap(claude.hoverRows.first)
+        XCTAssertTrue(row.valueText.contains("明天 00:30"), "got: \(row.valueText)")
+    }
+
     func testQuotaRingsStructuralFloorAlwaysHasThreeFixedProvidersInOrder() throws {
         let summary = try loadFixture()
         let state = MenuBarViewModel.build(

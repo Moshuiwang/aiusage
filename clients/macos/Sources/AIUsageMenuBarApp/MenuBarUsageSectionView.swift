@@ -36,7 +36,7 @@ struct MenuBarUsageSectionView: View {
                     .padding(.trailing, 10)
                     .padding(.vertical, 5)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverHighlight(Capsule()))
                 .focusable(false)
                 .background(
                     Capsule()
@@ -123,37 +123,29 @@ struct MenuBarUsageSectionView: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 7)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.hoverHighlight(RoundedRectangle(cornerRadius: 10, style: .continuous)))
             .focusable(false)
         }
         .padding(8)
         .frame(width: 300)
     }
 
+    // #177 第四轮真机反馈：改用原生 Picker(.segmented)——系统级命中与手感，不必自绘按钮再补
+    // contentShape/hover。切分段只换列表（cachedMenuRows），不切当前所选期间，语义不变。
     private var segmentedModePicker: some View {
-        HStack(spacing: 2) {
+        Picker("", selection: Binding(
+            get: { menuMode },
+            set: { newValue in
+                menuMode = newValue
+                cachedMenuRows = model.periodMenuRows(for: menuMode)
+            }
+        )) {
             ForEach(MenuPeriodSelection.periodIDs, id: \.self) { id in
-                let isSelected = menuMode == id
-                Button {
-                    menuMode = id
-                    cachedMenuRows = model.periodMenuRows(for: menuMode)
-                } label: {
-                    Text(segmentLabel(id))
-                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-                .focusable(false)
-                .background(
-                    Capsule()
-                        .fill(isSelected ? Color(nsColor: .controlBackgroundColor) : Color.clear)
-                        .shadow(color: .black.opacity(isSelected ? 0.10 : 0), radius: 2, x: 0, y: 1)
-                )
+                Text(segmentLabel(id)).tag(id)
             }
         }
-        .padding(3)
-        .background(Capsule().fill(Color.primary.opacity(0.06)))
+        .pickerStyle(.segmented)
+        .labelsHidden()
         .padding(.bottom, 4)
     }
 
@@ -216,7 +208,7 @@ struct MenuBarUsageSectionView: View {
             )
             .foregroundStyle(row.isSelected ? selectedRowTextColor : Color.primary)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverHighlight(RoundedRectangle(cornerRadius: 10, style: .continuous)))
         .focusable(false)
     }
 
@@ -232,9 +224,10 @@ struct MenuBarUsageSectionView: View {
                 } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 24, height: 24)
                 }
                 .accessibilityLabel("返回")
-                .buttonStyle(.plain)
+                .buttonStyle(.hoverHighlight(Circle()))
                 .focusable(false)
                 Text("选择其他日期").font(.system(size: 13, weight: .semibold))
                 Spacer()

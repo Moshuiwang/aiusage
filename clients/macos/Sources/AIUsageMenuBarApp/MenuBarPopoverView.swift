@@ -87,7 +87,7 @@ struct MenuBarPopoverView: View {
                 .animation(isBusy ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: isBusy)
                 .frame(width: 28, height: 28)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.hoverHighlight(Circle()))
         .focusable(false)
         .disabled(isBusy && systemName == "arrow.clockwise")
         .background(
