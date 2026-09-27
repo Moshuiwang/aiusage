@@ -8,7 +8,6 @@ struct MenuBarPopoverView: View {
     var onMore: (() -> Void)?
     @State private var periodMenuOpen = false
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorSchemeContrast) private var contrast
 
     init(
         model: MenuBarAppModel,
@@ -45,7 +44,6 @@ struct MenuBarPopoverView: View {
             }
         }
         .frame(width: MenuBarPopoverLayout.width)
-        .modifier(PopoverGlassSurface(reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased))
     }
 
     // MARK: – Header
@@ -162,46 +160,6 @@ struct MenuBarPopoverView: View {
 
     private var secondaryTextColor: Color {
         Color(nsColor: .secondaryLabelColor)
-    }
-}
-
-struct PopoverGlassSurface: ViewModifier {
-    let reduceTransparency: Bool
-    let increasedContrast: Bool
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if reduceTransparency || increasedContrast {
-            content.background(Color(nsColor: .windowBackgroundColor))
-        } else {
-            // SwiftUI 7 ships the Glass API; runtime availability alone cannot
-            // make that symbol compile against an older macOS SDK.
-            #if canImport(SwiftUI, _version: 7.0)
-            if #available(macOS 26.0, *) {
-                content.glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-            } else {
-                content.background(MacOSGlassBackground())
-            }
-            #else
-            content.background(MacOSGlassBackground())
-            #endif
-        }
-    }
-}
-
-private struct MacOSGlassBackground: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .popover
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
-        nsView.material = .popover
-        nsView.blendingMode = .behindWindow
-        nsView.state = .active
     }
 }
 
