@@ -708,6 +708,10 @@ class TestD1SchemaMigration(unittest.TestCase):
 
     def test_projection_recovery_upgrade_matches_schema_and_tracks_only_usage_changes(self) -> None:
         migration = (MIGRATIONS_DIR / "0011_reconciliation_and_projection_recovery.sql").read_text(encoding="utf-8")
+        # 0011 建的 usage_rollup_dirty_update 触发器后来被 0014 P1 用 DROP+CREATE 改过一次
+        # WHEN 条件（补 total_cost），所以"0011 单独重放"不再等于 0001 的最终形状——必须
+        # 把 0014 也接着重放一遍，才是这张表在真实部署库上真正会经历的完整升级链。
+        rollup_cost_migration = (MIGRATIONS_DIR / "0014_rollup_cost_and_range_indexes.sql").read_text(encoding="utf-8")
         trigger_names = ["usage_rollup_dirty_insert", "usage_rollup_dirty_update", "usage_rollup_dirty_delete"]
         with sqlite3.connect(":memory:") as conn:
             conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
@@ -735,6 +739,7 @@ class TestD1SchemaMigration(unittest.TestCase):
                         '2026-07-18T01:04:00Z', '2026-07-18T01:04:00Z', '2026-07-18T01:04:00Z')
             """)
             conn.executescript(migration)
+            conn.executescript(rollup_cost_migration)
             for table in ("usage_rollup_dirty_days", "usage_reconciliation_ranges"):
                 self.assertEqual(_table_columns(conn, table), FRESH_INSTALL_TABLE_COLUMNS[table])
             self.assertEqual(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall(), expected_triggers)

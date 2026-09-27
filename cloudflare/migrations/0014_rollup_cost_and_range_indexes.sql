@@ -140,3 +140,30 @@ CREATE INDEX IF NOT EXISTS idx_usage_hourly_rollups_bucket_julianday
 
 CREATE INDEX IF NOT EXISTS idx_usage_daily_rollups_bucket_julianday
   ON usage_daily_rollups(julianday(bucket_start));
+
+-- 3) P1（Codex 审查发现）：usage_rollup_dirty_update 的 WHEN 条件没有 total_cost。
+--    上面两张 rollup 表刚补上 total_cost（回填历史值），但后续任何"只改某条 fact 的
+--    total_cost、其它列不变"的 ingest（UPSERT 命中 ON CONFLICT DO UPDATE，只有
+--    total_cost 这一列变化）都不会让当天进入 usage_rollup_dirty_days——触发器判定
+--    "什么都没变"，refreshDisplayRollups 永远不会重算这一天，rollup 的 sum(total_cost)
+--    从此和 facts 表的真实值脱钩，summary 里的费用停留在第一次 ingest 时的旧值。
+--    NULL 一律用 IS NOT 比较（同一份 WHEN 里其它列的既有写法），避免 NULL <> NULL
+--    在 SQL 里恒为 NULL（既不是 true 也不是 false）导致该触发但没触发。
+--    只是 DROP 再 CREATE 同一个触发器，不改表结构，不影响上面两个 INSERT 的行为。
+DROP TRIGGER IF EXISTS usage_rollup_dirty_update;
+CREATE TRIGGER usage_rollup_dirty_update
+AFTER UPDATE ON usage_hourly_facts
+WHEN OLD.source_id IS NOT NEW.source_id OR OLD.machine_id IS NOT NEW.machine_id
+  OR OLD.os_user IS NOT NEW.os_user OR OLD.ai_provider IS NOT NEW.ai_provider
+  OR OLD.ai_account_id IS NOT NEW.ai_account_id OR OLD.agent IS NOT NEW.agent
+  OR OLD.client IS NOT NEW.client OR OLD.window_start IS NOT NEW.window_start
+  OR OLD.window_end IS NOT NEW.window_end OR OLD.attribution_confidence IS NOT NEW.attribution_confidence
+  OR OLD.provenance IS NOT NEW.provenance OR OLD.input_tokens IS NOT NEW.input_tokens
+  OR OLD.output_tokens IS NOT NEW.output_tokens OR OLD.cache_creation_tokens IS NOT NEW.cache_creation_tokens
+  OR OLD.cache_read_tokens IS NOT NEW.cache_read_tokens OR OLD.reasoning_output_tokens IS NOT NEW.reasoning_output_tokens
+  OR OLD.total_tokens IS NOT NEW.total_tokens OR OLD.total_cost IS NOT NEW.total_cost
+  OR OLD.event_count IS NOT NEW.event_count OR OLD.session_count IS NOT NEW.session_count
+BEGIN
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+END;
