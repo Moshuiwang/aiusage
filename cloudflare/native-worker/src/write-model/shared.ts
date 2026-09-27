@@ -29,10 +29,10 @@ type IngestRequest = {
   antigravity_hourly_status?: AnyRecord;
   usage_hourly_facts?: AnyRecord[];
   usage_ledger_runs?: AnyRecord[];
-  // #181：{agent, provider, account_fingerprint, observed_at} 顶层账户观察记录——不逐条
+  // #181/#183-b：{agent, provider, account_fingerprint, observed_at} 顶层账户观察记录——不逐条
   // 焊死在某个 usage_hourly_fact 上（会把切换账户前的历史小时错误改标），只是「某时刻观察
-  // 到某 provider 登录的是这个账户」。声明 + 解析但**不落库**：source→account 的时间段对应
-  // 是 #183 要做的事，这里先把 wire contract 定下来，避免字段被当未知字段静默丢弃。
+  // 到某 provider 登录的是这个账户」。upsert 进 account_observations（handlers.ts），
+  // 6 小时内的重复观察不重写（见 statements.ts）；每日 cron 用它判断账户冲突。
   account_observations?: AnyRecord[];
   collector_release: AnyRecord | null;
   collection_status: string;

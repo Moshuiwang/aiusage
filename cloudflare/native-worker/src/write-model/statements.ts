@@ -66,6 +66,30 @@ function limitWriteStatements(db: D1Database, windows: LimitWindow[], seenAt: st
   return windows.flatMap((window) => limitWindowStatements(db, window, seenAt));
 }
 
+// #183-b：account_observations 只是「发现冲突」用的观察记录，不是逐条焊死用量归属的表。
+// 每次上报都无条件重写 last_seen_at 会让这张小表跟着 ingest 频率线性增长写入次数——
+// 6 小时内的重复观察对「同一 provider 是否出现过 >1 个指纹」这个判断没有增量信息，
+// 用 ON CONFLICT ... WHERE 条件让它在窗口内直接空转（D1 返回 changes=0，不占写入配额）。
+const ACCOUNT_OBSERVATION_MIN_REWRITE_GAP_DAYS = 0.25; // 6 小时
+
+function accountObservationStatements(
+  db: D1Database,
+  sourceId: string,
+  observations: AnyRecord[],
+): D1PreparedStatement[] {
+  return observations.map((observation) => {
+    const observedAt = String(observation.observed_at);
+    return db.prepare(`
+      INSERT INTO account_observations (source_id, provider, account_fingerprint, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(source_id, provider, account_fingerprint) DO UPDATE SET
+        last_seen_at = excluded.last_seen_at
+      WHERE julianday(excluded.last_seen_at) - julianday(account_observations.last_seen_at)
+            >= ${ACCOUNT_OBSERVATION_MIN_REWRITE_GAP_DAYS}
+    `).bind(sourceId, String(observation.provider), String(observation.account_fingerprint), observedAt, observedAt);
+  });
+}
+
 function sourceIdentityStatement(db: D1Database, identity: AnyRecord, seenAt: string): D1PreparedStatement {
   return db.prepare(`
     INSERT INTO source_identities (source_id, host, machine, os_user, platform, first_seen_at, last_seen_at)
@@ -424,6 +448,7 @@ function factParams(fact: UsageHourlyFact): unknown[] {
 }
 
 export {
+  accountObservationStatements,
   aiAccountStatement,
   collectionReportStatements,
   factParams,

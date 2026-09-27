@@ -1,4 +1,5 @@
 import { buildMobile, buildSummary } from "./read-model";
+import { runQuotaCalibration } from "./quota-calibration-cron";
 import { hasPendingRollups } from "./read-model/db";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
 import { STATIC_ASSETS } from "./static-assets";
@@ -155,6 +156,13 @@ export default {
       return;
     }
     await pruneAuditTables(env.AIUSAGE_DB, scheduledTime);
+    try {
+      await runQuotaCalibration(env.AIUSAGE_DB, scheduledTime);
+    } catch (error) {
+      // #183-b：额度校准失败绝不能拖垮它之前已经跑完的审计清理，也不能让其它维护步骤
+      // （Supabase 同步等）跟着不跑——只记录，不 throw。
+      console.error("Quota calibration failed", error);
+    }
     if (env.AIUSAGE_SUPABASE_URL && env.AIUSAGE_SUPABASE_SECRET_KEY) {
       try {
         await syncDailyRollupsToSupabase({
