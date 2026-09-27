@@ -4,8 +4,8 @@
 
 当前合同边界：
 
-- Web dashboard 使用 `/api/summary`。
-- iPhone / Android / Widget / 轻量桌面入口优先使用 `/api/mobile/summary`。
+- macOS 菜单栏与 iPhone 使用 `/api/mobile/summary`。
+- `/api/summary` 原为 Web dashboard 使用；网页已随 #199 删除，该接口暂留作测试对照，无客户端调用，是否删除另议。
 - 客户端不直接读取 SQLite，也不重新聚合 usage / limits。
 
 后续新增字段顺序：

@@ -5,10 +5,9 @@
 当前落地状态：
 
 - `ios/`：目标落点是 iPhone App 和 iOS Widget；现有实现暂时仍在 `mobile/ios` 和 `mobile/ios-xcode`，迁移前不要直接移动，避免破坏 SwiftPM / Xcode 路径。
-- `android/`：目标落点是 Android App 和 Android Widget，复用 `/api/mobile/summary`，不重新定义 usage / limits 口径。
 - `macos/`：目标落点是菜单栏或轻量桌面入口，不再把 macOS Widget 作为新产品主线。
-- `windows/`：目标落点是托盘或轻量桌面入口，完整体验优先打开 Web dashboard。
-- `web/`：目标落点是 Web dashboard；现有生产静态资源在 `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管）。
+- `windows/`、`android/`：按 2026-09-27 产品决定暂缓（当前只支持 macOS 菜单栏与 iPhone）。
+- Web dashboard：已随 #199 废弃并删除，不再有网页入口。
 
 迁移规则：
 

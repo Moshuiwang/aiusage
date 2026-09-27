@@ -53,6 +53,8 @@ curl -sS --max-time 12 -D - -o /dev/null \
 认证路径需由运维 Agent 使用可用的安全 token 验证，但不要在输出中展示 token：
 
 - 带 token 的 `/api/mobile/summary` 返回 200。
+- 带 token 的 `/api/summary` 返回 200 且 JSON 可解析（接口保留期间单独验证、单独回报）。
+- 未带 token 访问 `/` 返回 404（网页已废弃）。
 - `/ingest` 或 `/ingest-limits` 完成一次真实 POST smoke。
 
 ## 回报格式
@@ -63,6 +65,8 @@ Route 读回：
 Native Worker：
 D1：
 /api/mobile/summary smoke：
+/api/summary smoke：
+/ 返回 404：
 /ingest 或 /ingest-limits smoke：
 阻塞点：
 ```

@@ -39,7 +39,7 @@ packages/
 - iOS Swift Package / Xcode 工程暂时仍在 `mobile/ios` 和 `mobile/ios-xcode`。
 - legacy macOS Widget 暂时仍在 `widget/macos` 和 `widget/macos-xcode`，只作历史兼容。
 
-不要为了“目录好看”直接移动现有 iOS 或 Web 文件；迁移必须单独开任务包，先补构建或路由验证。
+不要为了“目录好看”直接移动现有 iOS 文件；迁移必须单独开任务包，先补构建或路由验证。
 
 ## 数据源
 
