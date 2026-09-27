@@ -50,6 +50,8 @@ import type { HourlyFamilyFact, LimitObservation } from "../src/calibration/type
 const FIXTURE_PATH = new URL("./calibration_fixture.json", import.meta.url);
 const BASE_NOW = new Date("2026-09-27T10:00:00Z");
 const RUNS = 20;
+/** 比值测量的预热轮数：先让 V8 把各规模的热路径都 JIT 掉，避免第一个被测规模独自背冷启动的账。 */
+const WARMUP_RUNS = 5;
 
 async function loadFixture(): Promise<{ limit_observations: LimitObservation[]; hourly_family_facts: HourlyFamilyFact[] }> {
   const raw = await readFile(FIXTURE_PATH, "utf8");
@@ -99,6 +101,50 @@ function measure(fn: () => void, runs = RUNS): { median: number; p95: number } {
   return { median: percentile(durations, 50), p95: percentile(durations, 95) };
 }
 
+interface Timing {
+  median: number;
+  p95: number;
+  /** 最小耗时：比值断言只用它。 */
+  min: number;
+}
+
+/**
+ * 给「同进程内比较不同规模耗时比值」用的测量：先整体预热，再把各规模**交替轮流**各跑
+ * `runs` 次，每个规模取最小值。
+ *
+ * 为什么这样测（CI run 36324474678 两条比值断言因噪声误报 3.59 / 4.16，本机 16 次里也红过 3 次）：
+ * - 计时噪声（GC 停顿、被调度走、CPU 降频）只会让单次耗时**变长**，不会变短，所以最小值
+ *   最接近算法的真实成本；中位数在 runner 繁忙时会被整体抬高，而且抬高的幅度两侧不对称。
+ * - 原来是先连续跑完 mult=1 的 20 次再跑 mult=3 的 20 次，中间机器负载一变（邻居进程、
+ *   降频），两侧就在不同条件下测量；交替轮流让每一轮里各规模面对同一时刻的机器状态。
+ * - 预热让各规模都在 JIT 完成后比较，不会让先测的那个规模独自承担首次编译。
+ *
+ * 这不削弱守卫：真实的复杂度退化（如退回平方增长）让**每一次**大规模运行都变慢，最小值
+ * 同样会涨上去；它只过滤掉偶发的、一侧独有的变慢。
+ */
+function measureInterleaved<K extends string | number>(
+  fns: Record<K, () => void>,
+  runs = RUNS,
+  warmup = WARMUP_RUNS,
+): Record<K, Timing> {
+  const keys = Object.keys(fns) as K[];
+  for (let i = 0; i < warmup; i++) for (const k of keys) fns[k]();
+  const durations = Object.fromEntries(keys.map((k) => [k, [] as number[]])) as unknown as Record<K, number[]>;
+  for (let i = 0; i < runs; i++) {
+    for (const k of keys) {
+      const t0 = performance.now();
+      fns[k]();
+      durations[k].push(performance.now() - t0);
+    }
+  }
+  const out = {} as Record<K, Timing>;
+  for (const k of keys) {
+    const sorted = durations[k].sort((a, b) => a - b);
+    out[k] = { median: percentile(sorted, 50), p95: percentile(sorted, 95), min: sorted[0] };
+  }
+  return out;
+}
+
 describe("CPU 门禁：当前真实数据量", () => {
   it("单账户（Claude）与三账户合计 calibrate() 耗时的中位数与 P95", async () => {
     const { limit_observations, hourly_family_facts } = await loadFixture();
@@ -125,46 +171,56 @@ describe("CPU 门禁：按天数外推的增长曲线（go/no-go 验收）", () 
     const { limit_observations, hourly_family_facts } = await loadFixture();
     const claudeObs = limit_observations.filter((r) => r.provider === "claude");
 
-    const singleResults: Record<number, { median: number; p95: number }> = {};
-    for (const mult of [1, 2, 3, 4]) {
+    const MULTS = [1, 2, 3, 4] as const;
+    const singleFns = {} as Record<(typeof MULTS)[number], () => void>;
+    for (const mult of MULTS) {
       const obsS = scaleObservations(claudeObs, mult);
       const factsS = scaleFacts(hourly_family_facts, mult);
       const now = new Date(shiftIso(BASE_NOW.toISOString(), (Math.ceil(mult) - 1) * 10));
-      const result = measure(() => calibrate("claude", obsS, factsS, { now }));
-      singleResults[mult] = result;
+      singleFns[mult] = () => calibrate("claude", obsS, factsS, { now });
+    }
+    const singleResults = measureInterleaved(singleFns);
+    for (const mult of MULTS) {
+      const r = singleResults[mult];
       // eslint-disable-next-line no-console
-      console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 单账户 obs=${obsS.length} facts=${factsS.length} median=${result.median.toFixed(3)}ms p95=${result.p95.toFixed(3)}ms`);
+      console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 单账户 min=${r.min.toFixed(3)}ms median=${r.median.toFixed(3)}ms p95=${r.p95.toFixed(3)}ms`);
     }
 
-    const combinedResults: Record<number, { median: number; p95: number }> = {};
-    for (const mult of [1, 2, 3, 4]) {
+    const combinedFns = {} as Record<(typeof MULTS)[number], () => void>;
+    for (const mult of MULTS) {
       const obsAllS = scaleObservations(limit_observations, mult);
       const factsAllS = scaleFacts(hourly_family_facts, mult);
       const now = new Date(shiftIso(BASE_NOW.toISOString(), (Math.ceil(mult) - 1) * 10));
-      const result = measure(() =>
+      combinedFns[mult] = () =>
         (["claude", "codex", "antigravity"] as const).forEach((provider) =>
           calibrate(provider, obsAllS.filter((r) => r.provider === provider), factsAllS, { now }),
-        ),
-      );
-      combinedResults[mult] = result;
-      // eslint-disable-next-line no-console
-      console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 三账户合计 median=${result.median.toFixed(3)}ms p95=${result.p95.toFixed(3)}ms`);
+        );
     }
+    const combinedResults = measureInterleaved(combinedFns);
+    for (const mult of MULTS) {
+      const r = combinedResults[mult];
+      // eslint-disable-next-line no-console
+      console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 三账户合计 min=${r.min.toFixed(3)}ms median=${r.median.toFixed(3)}ms p95=${r.p95.toFixed(3)}ms`);
+    }
+    const singleRatio = singleResults[3].min / singleResults[1].min;
+    const combinedRatio = combinedResults[3].min / combinedResults[1].min;
+    // eslint-disable-next-line no-console
+    console.log(`[CPU 门禁] mult=3/mult=1 min 比值：单账户=${singleRatio.toFixed(2)} 三账户合计=${combinedRatio.toFixed(2)}（门槛 3.5）`);
 
     // 验收门槛：mult=3（约 28 天）单账户 P95 ≤3ms（Node 热进程口径，只是回归参考线）。
     // 绝对毫秒与运行机器相关（CI runner 比本机慢 2–3 倍，曾测得 7.2ms），不在跨机器测试里断言；
     // 真实验收以冷启动脚本 scripts/measure_calibration_cold_cpu.mjs 为准。这里只守增长形状：
-    // 线性算法 mult 1→3 约 2 倍，原双循环约 6.5 倍。
-    expect(singleResults[3].median / singleResults[1].median).toBeLessThanOrEqual(3.5);
+    // 线性算法 mult 1→3 约 3 倍（数据 3 倍；预热后取 min 实测约 2.9），原双循环约 6.5 倍。
+    expect(singleRatio).toBeLessThanOrEqual(3.5);
     // 三账户合计这条不再是硬门槛：部署前审查 Must 1b 之后，生产 cron 每次只算一个 provider
     // （`quota-calibration-cron.ts` 的 `providerForToday()` 按日轮换），「三账户合计」这个
     // 场景在生产里已经不会发生——这里放宽到 8ms 只是防止热进程场景本身也失控式退化，
     // 不是真实验收门槛（真实门槛是单 provider 冷启动，见 scripts/measure_calibration_cold_cpu.mjs）。
-    expect(combinedResults[3].median / combinedResults[1].median).toBeLessThanOrEqual(3.5);
+    expect(combinedRatio).toBeLessThanOrEqual(3.5);
 
     // 增长曲线不应该是平方级：mult 从 1 到 4（数据量外推到 4 倍历史长度）耗时增长不应该
     // 超过约 4 倍——平方增长会是 ~16 倍，这个上限留了充足余量，只用来拦回归，不是精确刻画。
-    expect(singleResults[4].median).toBeLessThan(singleResults[1].median * 10 + 5);
+    expect(singleResults[4].min).toBeLessThan(singleResults[1].min * 10 + 5);
   });
 });
 
@@ -186,12 +242,15 @@ describe("性能回归守卫：mult=3 规模下单账户耗时上限", () => {
 
     const obs1 = scaleObservations(claudeObs, 1);
     const facts1 = scaleFacts(hourly_family_facts, 1);
-    const base = measure(() => calibrate("claude", obs1, facts1, { now: BASE_NOW }));
-    const result = measure(() => calibrate("claude", obsS, factsS, { now }));
-    const ratio = result.median / base.median;
+    const { 1: base, 3: result } = measureInterleaved({
+      1: () => calibrate("claude", obs1, facts1, { now: BASE_NOW }),
+      3: () => calibrate("claude", obsS, factsS, { now }),
+    });
+    const ratio = result.min / base.min;
     // eslint-disable-next-line no-console
-    console.log(`[性能回归守卫] mult=3/mult=1 median 比值=${ratio.toFixed(2)}（门槛 3.5；线性约 2，原双循环约 6.5）`);
-    // 用同一进程内的相对比值，避免不同机器绝对毫秒差异造成误报（CI runner 比本机慢 2–3 倍）。
+    console.log(`[性能回归守卫] mult=3/mult=1 min 比值=${ratio.toFixed(2)}（门槛 3.5；线性约 3，预热后实测约 2.9；原双循环约 6.5）`);
+    // 用同一进程内的相对比值，避免不同机器绝对毫秒差异造成误报（CI runner 比本机慢 2–3 倍）；
+    // 预热 + 交替轮流 + 取最小值的理由见 measureInterleaved()。
     expect(ratio).toBeLessThanOrEqual(3.5);
   });
 });
