@@ -9,15 +9,15 @@
 - **Device push pipeline**：每台设备在自己的账户上下文运行本机 Python pusher，读取本机 Codex / Claude / `ccusage` 结构化用量并主动 push。
 - **Usage Ledger**：本机只上传去敏后的小时用量事实，不上传 `.codex` / `.claude` 原始日志、prompt、response、tool output 或原始路径；服务端负责去重、入账和聚合。
 - **Canonical store**：生产 canonical store 是 Cloudflare D1（SQLite-compatible serverless SQL）。#74 起服务端没有本地 SQLite；采集端唯一的本地库是 outbox 缓冲（`collector_store.py`）。
-- **Web presentation**：Web dashboard 是当前完整查看入口；CLI report 只读派生快照。
-- **Client direction**：后续客户端按 `clients/` 分层，iPhone/iOS Widget 是已落地方向，macOS 走菜单栏或轻量桌面入口，Windows 走托盘或轻量桌面入口，Android 复用移动端摘要合同。
+- **Web presentation**：Web dashboard 目前仍在代码中，但**已决定整体废弃**（用户 2026-09-27，#199，尚未实施）；CLI report 只读派生快照。
+- **Client direction（#199 决定，2026-09-27）**：产品只支持 macOS 菜单栏 popover 和 iPhone 端；Apple Watch 不急，Android / Windows 方向搁置，不是当前工作目标。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
+- **模型周额度校准**：每日 cron 按官方额度自动拟合系数（epic #180），菜单栏显示「≈x.x%」。
 
 ## 当前边界
 
-- 先完成产品文档和任务包。
-- 文档收敛前不开发代码。
 - 后续开发遵守 TDD：先写失败测试，再实现最小代码。
+- 任务真值在 GitHub Issue，不在本文件维护第二份进度表。
 
 ## 目录结构
 
