@@ -19,15 +19,12 @@
 
 当前用户入口和业务路径：
 
-- `/`
-- `/dashboard`
-- `/login`
-- `/static/*`
 - `/api/*`
 - `/ingest`
 - `/ingest-limits`
 
-Dashboard 页面由 Native Worker 直接提供。旧 `aiusage-dashboard` Pages 项目已删除。
+网页看板（`/`、`/dashboard`、登录页、`/static/*`）已随 #199 整体废弃，只保留 macOS 菜单栏
+与 iPhone 端消费的 `/api/*`。旧 `aiusage-dashboard` Pages 项目已删除。
 
 ## 应用侧部署命令
 
@@ -62,16 +59,8 @@ curl -sS --max-time 12 -H "Authorization: Bearer <token>" \
   "https://aiusage.chunbai.com/api/mobile/summary?period=all"
 ```
 
-Web 入口验收：
-
-```bash
-curl -sS --max-time 12 -D - -o /dev/null \
-  "https://aiusage.chunbai.com/"
-curl -sS --max-time 12 -D - -o /dev/null \
-  "https://aiusage.chunbai.com/static/dashboard.js"
-```
-
-未登录 `/static/*` 预期可以是 401。登录后带 session cookie 请求 `/static/dashboard.css` 和 `/static/dashboard.js` 必须是 200。
+网页看板已随 #199 整体废弃：`/`、`/dashboard`、`/login`、`/static/*` 现在与其它未知路径一样
+返回标准 404，不再有专门的入口验收步骤。
 
 ## 安全边界
 

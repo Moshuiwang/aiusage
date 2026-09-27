@@ -1,4 +1,3 @@
-import { createHmac } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { Miniflare } from "miniflare";
@@ -7,10 +6,6 @@ import { acquireWorker, applySchema, bundleWorker } from "./golden/harness";
 import { apiContractGoldenPath, fixedNow, repoRoot, token } from "./golden/paths";
 import { refreshDisplayRollups } from "../src/write-model/handlers";
 
-const staticRoot = path.join(repoRoot, "cloudflare/native-worker/static");
-// 仅属于登录 Cookie 行为测试，不是 golden 合同的共享输入。
-const sessionSecret = "cutover-session-secret";
-
 describe.sequential("native TS Worker web surface", () => {
   let mf: Miniflare;
 
@@ -18,7 +13,6 @@ describe.sequential("native TS Worker web surface", () => {
     mf = await acquire({
       AIUSAGE_TOKEN: token,
       AIUSAGE_TOKEN_SPECS: "second:second-contract-test-token",
-      AIUSAGE_SESSION_SECRET: sessionSecret,
       AIUSAGE_NOW: fixedNow,
       AIUSAGE_BACKEND_MODE: "native_d1_production",
     });
@@ -27,81 +21,35 @@ describe.sequential("native TS Worker web surface", () => {
     await seedHealthRows(db);
   });
 
-  it("issues the stable session cookie value inherited from the Python cutover era on login", async () => {
-    const expectedValue = await expectedSessionCookieValue(sessionSecret);
-    const response = await mf.dispatchFetch("http://native.test/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ token }).toString(),
-      redirect: "manual",
-    });
-
-    expect(response.status).toBe(303);
-    expect(response.headers.get("Location")).toBe("/dashboard");
-    expect(response.headers.get("Set-Cookie")).toBe(
-      `ai_usage_session=${expectedValue}; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`,
-    );
-  });
-
-  it("rejects invalid login and renders the Python-style error page", async () => {
-    const response = await mf.dispatchFetch("http://native.test/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token: "wrong-token" }),
-    });
-
-    expect(response.status).toBe(401);
-    expect(response.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
-    expect(await response.text()).toContain('<p class="error">Invalid token</p>');
-  });
-
-  it("serves login page before auth and dashboard HTML after cookie auth", async () => {
-    const expectedLogin = (await readStatic("login.html")).replace("{{ERROR_BLOCK}}", "");
-    const expectedDashboard = await readStatic("index.html");
-    const cookie = await sessionCookieHeader();
-
-    const publicRoot = await mf.dispatchFetch("http://native.test/");
-    const publicDashboard = await mf.dispatchFetch("http://native.test/dashboard");
-    const authenticatedRoot = await mf.dispatchFetch("http://native.test/", {
-      headers: { Cookie: cookie },
-    });
-    const authenticatedDashboard = await mf.dispatchFetch("http://native.test/dashboard", {
-      headers: { Cookie: cookie },
-    });
-
-    expect(publicRoot.status).toBe(200);
-    expect(publicRoot.headers.get("Content-Type")).toBe("text/html; charset=utf-8");
-    expect(await publicRoot.text()).toBe(expectedLogin);
-    expect(await publicDashboard.text()).toBe(expectedLogin);
-    expect(authenticatedRoot.status).toBe(200);
-    expect(authenticatedRoot.headers.get("Cache-Control")).toBe("no-cache");
-    expect(await authenticatedRoot.text()).toBe(expectedDashboard);
-    expect(await authenticatedDashboard.text()).toBe(expectedDashboard);
-  });
-
-  it("serves static assets byte-for-byte from cloudflare/native-worker/static behind session auth", async () => {
-    const cookie = await sessionCookieHeader();
-
-    for (const asset of ["dashboard.css", "dashboard.js", "index.html", "login.html"]) {
-      const unauthenticated = await mf.dispatchFetch(`http://native.test/static/${asset}`);
-      expect(unauthenticated.status).toBe(401);
-
-      const response = await mf.dispatchFetch(`http://native.test/static/${asset}`, {
-        headers: { Cookie: cookie },
+  // #199：网页看板本身（"/"、"/dashboard"、登录页、静态资源）整体废弃；
+  // `/api/summary`、`/api/mobile/summary` 是否删除另议，本条只覆盖页面路由本身。
+  // 一律落到与其它未知路径相同的 404 合同，不再有专门的登录页 / 静态资源响应。
+  it("no longer serves the web dashboard: '/', '/dashboard', '/login', '/static/*' fall through to the standard not-found envelope", async () => {
+    const requests: Array<[string, RequestInit?]> = [
+      ["/"],
+      ["/dashboard"],
+      ["/login"],
+      ["/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: `token=${token}` }],
+      ["/static/dashboard.css"],
+      ["/static/dashboard.js"],
+    ];
+    for (const [requestPath, init] of requests) {
+      const response = await mf.dispatchFetch(`http://native.test${requestPath}`, init);
+      expect(response.status, requestPath).toBe(404);
+      expect(await response.json(), requestPath).toEqual({
+        status: "error",
+        error_type: "not_found",
+        message: "Endpoint not found",
       });
-
-      expect(response.status).toBe(200);
-      expect(response.headers.get("Cache-Control")).toBe("no-cache");
-      expect(await response.text()).toBe(await readStatic(asset));
     }
   });
 
-  it("protects health with the same session cookie and keeps the M0 response shape", async () => {
+  it("protects health with a bearer token and keeps the M0 response shape", async () => {
     const unauthenticated = await mf.dispatchFetch("http://native.test/api/health");
     expect(unauthenticated.status).toBe(401);
 
     const response = await mf.dispatchFetch("http://native.test/api/health", {
-      headers: { Cookie: await sessionCookieHeader() },
+      headers: { Authorization: `Bearer ${token}` },
     });
     const payload = await response.json<Record<string, unknown>>();
 
@@ -161,7 +109,7 @@ describe.sequential("native TS Worker web surface", () => {
     ]);
 
     const response = await mf.dispatchFetch("http://native.test/api/health", {
-      headers: { Cookie: await sessionCookieHeader() },
+      headers: { Authorization: `Bearer ${token}` },
     });
     const payload = await response.json<Record<string, any>>();
 
@@ -214,7 +162,7 @@ describe.sequential("native TS Worker web surface", () => {
     ]);
 
     const response = await mf.dispatchFetch("http://native.test/api/health", {
-      headers: { Cookie: await sessionCookieHeader() },
+      headers: { Authorization: `Bearer ${token}` },
     });
     const payload = await response.json<Record<string, any>>();
 
@@ -222,9 +170,9 @@ describe.sequential("native TS Worker web surface", () => {
   });
 
   it("does not read archived legacy usage tables for the health database-size proxy", async () => {
-    const cookie = await sessionCookieHeader();
+    const authHeaders = { Authorization: `Bearer ${token}` };
     const beforeResponse = await mf.dispatchFetch("http://native.test/api/health", {
-      headers: { Cookie: cookie },
+      headers: authHeaders,
     });
     const before = await beforeResponse.json() as Record<string, any>;
     const db = await mf.getD1Database("AIUSAGE_DB");
@@ -250,7 +198,7 @@ describe.sequential("native TS Worker web surface", () => {
     ]);
 
     const afterResponse = await mf.dispatchFetch("http://native.test/api/health", {
-      headers: { Cookie: cookie },
+      headers: authHeaders,
     });
     const after = await afterResponse.json() as Record<string, any>;
 
@@ -262,7 +210,7 @@ describe.sequential("native TS Worker web surface", () => {
     await seedLimitRows(db);
 
     const response = await mf.dispatchFetch("http://native.test/api/health", {
-      headers: { Cookie: await sessionCookieHeader() },
+      headers: { Authorization: `Bearer ${token}` },
     });
     const payload = await response.json<Record<string, unknown>>();
 
@@ -355,7 +303,6 @@ describe.sequential("native TS Worker web surface", () => {
   it("fails closed when deployment identity is missing", async () => {
     mf = await acquire({
       AIUSAGE_TOKEN: token,
-      AIUSAGE_SESSION_SECRET: sessionSecret,
       AIUSAGE_NOW: fixedNow,
       AIUSAGE_BACKEND_MODE: "",
     });
@@ -429,12 +376,12 @@ describe.sequential("native TS Worker web surface", () => {
       `).bind("stale-source", "2026-06-03T09:00:00+08:00", "daily", "HTTP Ingest", "ok", null, null, null, null, null),
     ]);
 
-    const cookie = await sessionCookieHeader();
+    const authHeaders = { Authorization: `Bearer ${token}` };
     const dashboardResponse = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03&period=today", {
-      headers: { Cookie: cookie },
+      headers: authHeaders,
     });
     const mobileResponse = await mf.dispatchFetch("http://native.test/api/mobile/summary?date=2026-06-03&period=today", {
-      headers: { Cookie: cookie },
+      headers: authHeaders,
     });
     const dashboard = await dashboardResponse.json() as Record<string, unknown>;
     const mobile = await mobileResponse.json() as Record<string, unknown>;
@@ -470,23 +417,9 @@ describe.sequential("native TS Worker web surface", () => {
     });
   });
 
-  it("accepts the session cookie on read APIs", async () => {
-    const rejected = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03");
-    expect(rejected.status).toBe(401);
-
-    const response = await mf.dispatchFetch("http://native.test/api/summary?date=2026-06-03", {
-      headers: { Cookie: await sessionCookieHeader() },
-    });
-    const payload = await response.json<Record<string, unknown>>();
-
-    expect(response.status).toBe(200);
-    expect(payload.summary).toMatchObject({ total_tokens: 300 });
-  });
-
-  // #101：下面两条用例测的是 summary cache 语义本身。池化实例强制关缓存
-  // （session cookie 是确定值，共享实例 + 活缓存会把上个用例的响应喂给下个用例），
-  // 所以这两条各自起专属实例、用完即销毁——是全套件仅剩的按用例建实例的地方。
-  it("caches successful summary reads for one authenticated session without sharing query variants", async () => {
+  // #101：下面这条用例测的是 summary cache 语义本身。池化实例强制关缓存，
+  // 所以它自起专属实例、用完即销毁——是全套件仅剩的按用例建实例的地方。
+  it("caches successful summary reads for one authenticated credential without sharing query variants", async () => {
     mf = await createLiveCacheMiniflare();
     try {
       const setupDb = await mf.getD1Database("AIUSAGE_DB");
@@ -496,10 +429,10 @@ describe.sequential("native TS Worker web surface", () => {
       // Cache eligibility requires a fully materialized read projection.
       await refreshDisplayRollups(setupDb);
       expect(await setupDb.prepare("SELECT count(*) AS n FROM usage_rollup_dirty_days").first("n")).toBe(0);
-      const cookie = await sessionCookieHeader();
+      const authHeaders = { Authorization: `Bearer ${token}` };
       const todayUrl = "http://native.test/api/summary?date=2026-06-03&period=today";
 
-      const first = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
+      const first = await mf.dispatchFetch(todayUrl, { headers: authHeaders });
       expect(first.status).toBe(200);
       expect(first.headers.get("X-AIUsage-Cache")).toBe("MISS");
       expect((await first.json() as Record<string, any>).summary.total_tokens).toBe(300);
@@ -509,13 +442,13 @@ describe.sequential("native TS Worker web surface", () => {
         .bind("mac-local", "2026-06-03", "codex")
         .run();
 
-      const cached = await mf.dispatchFetch(todayUrl, { headers: { Cookie: cookie } });
+      const cached = await mf.dispatchFetch(todayUrl, { headers: authHeaders });
       expect(cached.headers.get("X-AIUsage-Cache")).toBe("HIT");
       expect((await cached.json() as Record<string, any>).summary.total_tokens).toBe(300);
 
       const distinctQuery = await mf.dispatchFetch(
         "http://native.test/api/summary?date=2026-06-03&period=week",
-        { headers: { Cookie: cookie } },
+        { headers: authHeaders },
       );
       expect(distinctQuery.headers.get("X-AIUsage-Cache")).toBe("MISS");
       expect((await distinctQuery.json() as Record<string, any>).summary.total_tokens).toBe(300);
@@ -624,19 +557,6 @@ describe.sequential("native TS Worker empty-database read surface", () => {
   });
 });
 
-async function sessionCookieHeader(): Promise<string> {
-  return `ai_usage_session=${await expectedSessionCookieValue(sessionSecret)}`;
-}
-
-// #74 之前这里 shell 出 Python，从 server.py 的 `_session_cookie_value()` 现算参考值
-// （「Worker 必须接受 Python 服务端签发的 cookie」的切换期合同）。Python 服务端已删除，
-// 但算法本身仍是合同：它决定既有浏览器会话在 Worker 部署间是否存活。所以在测试里
-// **独立**钉死同一算法（HMAC-SHA256(secret, "ai-usage-dashboard-session-v1") 的 hex），
-// 与 index.ts 的实现互为对照——服务端换算法会当场红，而不是让全部用户被静默登出。
-async function expectedSessionCookieValue(secret: string): Promise<string> {
-  return createHmac("sha256", secret).update("ai-usage-dashboard-session-v1").digest("hex");
-}
-
 function currentDateIn(timezone: string): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -646,10 +566,6 @@ function currentDateIn(timezone: string): string {
   }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
-}
-
-async function readStatic(asset: string): Promise<string> {
-  return readFile(path.join(staticRoot, asset), "utf8");
 }
 
 /**
@@ -706,7 +622,7 @@ async function acquire(extraBindings: Record<string, string> = {}): Promise<Mini
 }
 
 /**
- * 两条缓存用例的专属实例：summary cache 保持活性（池里的实例强制关缓存），
+ * 缓存用例的专属实例：summary cache 保持活性（池里的实例强制关缓存），
  * bundle 走 harness 的进程级缓存，schema 由调用方自己 apply，用完必须 dispose。
  */
 async function createLiveCacheMiniflare(): Promise<Miniflare> {
@@ -721,7 +637,6 @@ async function createLiveCacheMiniflare(): Promise<Miniflare> {
       AIUSAGE_TOKEN: token,
       AIUSAGE_TIMEZONE: "Asia/Shanghai",
       AIUSAGE_TOKEN_SPECS: "second:second-contract-test-token",
-      AIUSAGE_SESSION_SECRET: sessionSecret,
       AIUSAGE_NOW: fixedNow,
       AIUSAGE_BACKEND_MODE: "native_d1_production",
       AIUSAGE_CACHE_NAMESPACE: crypto.randomUUID(),

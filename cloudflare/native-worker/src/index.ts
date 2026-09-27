@@ -2,19 +2,17 @@ import { buildMobile, buildSummary } from "./read-model";
 import { runQuotaCalibration } from "./quota-calibration-cron";
 import { hasPendingRollups } from "./read-model/db";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
-import { STATIC_ASSETS } from "./static-assets";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
-import { authTokens, handleLogin, isAuthenticated, loginPage } from "./auth";
+import { authTokens, isAuthenticated } from "./auth";
 import { AUDIT_RETENTION_DAYS, backendMode, buildHealthResponse, referenceTime } from "./health";
-import { json, securityHeaders, text } from "./http";
+import { json } from "./http";
 
 export interface Env {
   AIUSAGE_DB: D1Database;
   AIUSAGE_BACKUPS?: R2Bucket;
   AIUSAGE_TOKEN?: string;
   AIUSAGE_TOKEN_SPECS?: string;
-  AIUSAGE_SESSION_SECRET?: string;
   AIUSAGE_TIMEZONE?: string;
   AIUSAGE_NOW?: string;
   AIUSAGE_CACHE_NAMESPACE?: string;
@@ -24,11 +22,6 @@ export interface Env {
   AIUSAGE_SUPABASE_SECRET_KEY?: string;
 }
 
-const STATIC_CONTENT_TYPES: Record<string, string> = {
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-};
 const HOURLY_ROLLUP_RETENTION_DAYS = 30;
 const SUMMARY_CACHE_TTL_SECONDS = 60;
 
@@ -42,11 +35,6 @@ export default {
       }, 503);
     }
     const url = new URL(request.url);
-    if (url.pathname === "/login") {
-      if (request.method === "GET") return loginPage();
-      if (request.method === "POST") return handleLogin(request, env);
-      return json({ status: "error", error_type: "method_not_allowed", message: "Method not allowed" }, 405);
-    }
     if (url.pathname === "/ingest" || url.pathname === "/ingest-limits") {
       if (request.method !== "POST") {
         return json({ status: "error", error_type: "method_not_allowed", message: "Method not allowed" }, 405);
@@ -76,16 +64,6 @@ export default {
         }
         return json({ status: "error", error_type: "write_failed", message: "Failed to save data" }, 500);
       }
-    }
-    if (url.pathname === "/" || url.pathname === "/dashboard") {
-      if (!(await isAuthenticated(request, env))) return loginPage();
-      return staticAssetResponse("index.html");
-    }
-    if (url.pathname.startsWith("/static/")) {
-      if (!(await isAuthenticated(request, env))) {
-        return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, 401);
-      }
-      return staticAssetResponse(url.pathname.replace(/^\/static\//, ""));
     }
     if (url.pathname === "/api/health") {
       if (!(await isAuthenticated(request, env))) {
@@ -265,29 +243,6 @@ function cacheResponse(cached: Response, status: "HIT"): Response {
   headers.set("X-AIUsage-Cache", status);
   headers.set("Cache-Control", "private, no-store");
   return new Response(cached.body, { status: cached.status, headers });
-}
-
-function staticAssetResponse(assetName: string): Response {
-  const normalized = normalizeAssetName(assetName);
-  if (!normalized) return json({ status: "error", error_type: "not_found", message: "Static asset not found" }, 404);
-  const payload = STATIC_ASSETS[normalized];
-  if (payload === undefined) return text("Static asset not found", 404);
-  const extension = normalized.includes(".") ? normalized.slice(normalized.lastIndexOf(".")) : "";
-  return new Response(payload, {
-    status: 200,
-    headers: {
-      "Content-Type": STATIC_CONTENT_TYPES[extension] ?? "application/octet-stream",
-      "Cache-Control": "no-cache",
-      ...securityHeaders(),
-    },
-  });
-}
-
-function normalizeAssetName(assetName: string): string | null {
-  if (!assetName || assetName.startsWith("/") || assetName.includes("\\") || assetName.split("/").includes("..")) {
-    return null;
-  }
-  return assetName;
 }
 
 function dateInTimezone(date: Date, timezone: string): string {

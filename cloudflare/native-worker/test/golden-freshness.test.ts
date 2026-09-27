@@ -352,12 +352,14 @@ describe.sequential("golden 防陈旧守卫", () => {
     const committed = JSON.parse(await readFile(apiContractGoldenPath, "utf8")) as ContractRecord[];
     const byName = new Map(committed.map((record) => [record.name, record]));
 
-    // 未认证面：三个读端点 + 写端点 + 静态资源都必须有「不给看」的记录。
+    // 未认证面：三个读端点 + 写端点都必须有「不给看」的记录。
+    // #199：网页看板本身（`/`、`/dashboard`、登录页、静态资源）已删除，
+    // 这几条场景现在落到标准 404，不再是认证面的一部分；`/api/summary` 是否随之
+    // 删除另议，本条只覆盖页面路由本身。
     for (const name of [
       "summary-requires-auth",
       "mobile-summary-requires-auth",
       "health-requires-auth",
-      "static-css-requires-auth",
       "ingest-limits-requires-auth",
     ]) {
       expect(byName.get(name)?.response.status, `${name} 必须记录 401`).toBe(401);
@@ -365,7 +367,9 @@ describe.sequential("golden 防陈旧守卫", () => {
     expect(byName.get("ingest-auth-failed")?.response.status, "带错误 token 的写入必须 401").toBe(401);
     expect(byName.get("ingest-schema-invalid")?.response.status, "非法 payload 必须 400").toBe(400);
     expect(byName.get("ingest-limits-schema-invalid")?.response.status, "非法额度 payload 必须 400").toBe(400);
-    expect(byName.get("login-valid-redirect")?.response.status, "登录成功必须是重定向").toBe(303);
+    for (const name of ["root-login-page", "login-page", "static-css-requires-auth", "static-css-authorized", "static-missing-authorized", "login-invalid-token", "login-valid-redirect"]) {
+      expect(byName.get(name)?.response.status, `${name}：网页看板已删除，必须落到标准 404`).toBe(404);
+    }
 
     // 读端点不能是「什么都没有」——空结构下这份 shape golden 守不住任何字段。
     const summaryWeek = fieldsOf(byName.get("summary-week-missing-limits"));

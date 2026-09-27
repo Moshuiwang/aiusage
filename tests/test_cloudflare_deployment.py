@@ -35,14 +35,14 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("aiusage.chunbai.com/*", readme)
         self.assertIn("Cloudflare Native Worker + D1", readme)
         self.assertIn("VPN2 旧 AI Usage 后端", readme)
-        self.assertIn("Dashboard 页面由 Native Worker 直接提供", readme)
         self.assertNotIn("cf:pages:deploy", package_json)
         self.assertIn("生产入口已经切到 Cloudflare Worker + D1", root_readme)
         self.assertIn("VPN2 旧后端不再承载 AI Usage 读写链路", root_readme)
         self.assertIn("不要用 `curl -I`", readme)
         self.assertIn("--resolve aiusage.chunbai.com:443:<Cloudflare IP>", readme)
-        for asset in ["index.html", "dashboard.css", "dashboard.js", "login.html"]:
-            self.assertTrue((ROOT / "cloudflare" / "native-worker" / "static" / asset).exists())
+        # #199：网页看板本身（`/`、`/dashboard`、登录页、静态资源）整体废弃，
+        # 不再落地为 static/ 目录下的文件；`/api/summary` 是否删除另议。
+        self.assertFalse((ROOT / "cloudflare" / "native-worker" / "static").exists())
 
     def test_operations_handoff_points_to_actual_ops_workspace(self) -> None:
         handoff = (ROOT / "cloudflare" / "OPERATIONS_HANDOFF.md").read_text(encoding="utf-8")
@@ -53,8 +53,11 @@ class CloudflareDeploymentContracts(unittest.TestCase):
         self.assertIn("不要读取或输出 `.env`", handoff)
         self.assertIn("不要用 `curl -I`", handoff)
         self.assertIn("curl -D - -o /dev/null", handoff)
-        self.assertIn("未登录 /static/* 预期可以是 401", handoff)
-        self.assertIn("带 session cookie 后 /static/dashboard.js 和 /static/dashboard.css 必须是 200", handoff)
+        # #199：网页看板本身（`/`、`/dashboard`、登录页、`/static/*`）整体废弃，
+        # smoke 清单不再有专门的静态资源 / session cookie 步骤。
+        self.assertIn("网页看板", handoff)
+        self.assertNotIn("session cookie", handoff)
+        self.assertNotIn("dashboard.js", handoff)
 
 if __name__ == "__main__":
     unittest.main()

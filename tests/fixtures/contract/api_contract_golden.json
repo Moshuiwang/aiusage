@@ -8,46 +8,12 @@
     },
     "response": {
       "body": {
-        "kind": "html",
-        "present": true
-      },
-      "content_type": "text/html",
-      "location": null,
-      "status": 200
-    }
-  },
-  {
-    "name": "login-page",
-    "request": {
-      "auth": false,
-      "method": "GET",
-      "path": "/login"
-    },
-    "response": {
-      "body": {
-        "kind": "html",
-        "present": true
-      },
-      "content_type": "text/html",
-      "location": null,
-      "status": 200
-    }
-  },
-  {
-    "name": "static-css-requires-auth",
-    "request": {
-      "auth": false,
-      "method": "GET",
-      "path": "/static/dashboard.css"
-    },
-    "response": {
-      "body": {
         "kind": "json",
         "shape": {
           "fields": {
             "error_type": {
               "type": "str",
-              "value": "auth_required"
+              "value": "not_found"
             },
             "message": {
               "type": "str"
@@ -67,7 +33,81 @@
       },
       "content_type": "application/json",
       "location": null,
-      "status": 401
+      "status": 404
+    }
+  },
+  {
+    "name": "login-page",
+    "request": {
+      "auth": false,
+      "method": "GET",
+      "path": "/login"
+    },
+    "response": {
+      "body": {
+        "kind": "json",
+        "shape": {
+          "fields": {
+            "error_type": {
+              "type": "str",
+              "value": "not_found"
+            },
+            "message": {
+              "type": "str"
+            },
+            "status": {
+              "type": "str",
+              "value": "error"
+            }
+          },
+          "keys": [
+            "error_type",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
+      },
+      "content_type": "application/json",
+      "location": null,
+      "status": 404
+    }
+  },
+  {
+    "name": "static-css-requires-auth",
+    "request": {
+      "auth": false,
+      "method": "GET",
+      "path": "/static/dashboard.css"
+    },
+    "response": {
+      "body": {
+        "kind": "json",
+        "shape": {
+          "fields": {
+            "error_type": {
+              "type": "str",
+              "value": "not_found"
+            },
+            "message": {
+              "type": "str"
+            },
+            "status": {
+              "type": "str",
+              "value": "error"
+            }
+          },
+          "keys": [
+            "error_type",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
+      },
+      "content_type": "application/json",
+      "location": null,
+      "status": 404
     }
   },
   {
@@ -79,12 +119,32 @@
     },
     "response": {
       "body": {
-        "kind": "text",
-        "present": true
+        "kind": "json",
+        "shape": {
+          "fields": {
+            "error_type": {
+              "type": "str",
+              "value": "not_found"
+            },
+            "message": {
+              "type": "str"
+            },
+            "status": {
+              "type": "str",
+              "value": "error"
+            }
+          },
+          "keys": [
+            "error_type",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
       },
-      "content_type": "text/css",
+      "content_type": "application/json",
       "location": null,
-      "status": 200
+      "status": 404
     }
   },
   {
@@ -96,10 +156,30 @@
     },
     "response": {
       "body": {
-        "kind": "text",
-        "present": true
+        "kind": "json",
+        "shape": {
+          "fields": {
+            "error_type": {
+              "type": "str",
+              "value": "not_found"
+            },
+            "message": {
+              "type": "str"
+            },
+            "status": {
+              "type": "str",
+              "value": "error"
+            }
+          },
+          "keys": [
+            "error_type",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
       },
-      "content_type": "text/plain",
+      "content_type": "application/json",
       "location": null,
       "status": 404
     }
@@ -113,12 +193,32 @@
     },
     "response": {
       "body": {
-        "kind": "html",
-        "present": true
+        "kind": "json",
+        "shape": {
+          "fields": {
+            "error_type": {
+              "type": "str",
+              "value": "not_found"
+            },
+            "message": {
+              "type": "str"
+            },
+            "status": {
+              "type": "str",
+              "value": "error"
+            }
+          },
+          "keys": [
+            "error_type",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
       },
-      "content_type": "text/html",
+      "content_type": "application/json",
       "location": null,
-      "status": 401
+      "status": 404
     }
   },
   {
@@ -130,12 +230,32 @@
     },
     "response": {
       "body": {
-        "kind": "empty",
-        "present": false
+        "kind": "json",
+        "shape": {
+          "fields": {
+            "error_type": {
+              "type": "str",
+              "value": "not_found"
+            },
+            "message": {
+              "type": "str"
+            },
+            "status": {
+              "type": "str",
+              "value": "error"
+            }
+          },
+          "keys": [
+            "error_type",
+            "message",
+            "status"
+          ],
+          "type": "object"
+        }
       },
-      "content_type": "",
-      "location": "/dashboard",
-      "status": 303
+      "content_type": "application/json",
+      "location": null,
+      "status": 404
     }
   },
   {

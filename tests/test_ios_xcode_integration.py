@@ -229,8 +229,8 @@ class IOSXcodeIntegrationTests(unittest.TestCase):
         self.assertGreater(mac_icon.stat().st_size, 10_000)
 
     def test_brand_surfaces_do_not_use_placeholder_chart_icon(self) -> None:
+        # #199：网页看板整体废弃，static/index.html 已删除，不再是品牌一致性核对面。
         surfaces = {
-            "web": ROOT / "cloudflare" / "native-worker" / "static" / "index.html",
             "ios": ROOT / "mobile" / "ios" / "Sources" / "AIUsageMobileCore" / "AIUsageMobileRootView.swift",
             "widget": (
                 ROOT
