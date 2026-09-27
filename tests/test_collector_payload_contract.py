@@ -414,6 +414,14 @@ OK_CONFIG = DeviceConfig(
         }
     },
     release_channel="stable",
+    # #181 P1-1（Codex review #185）：同时配置 claude + codex 两个 provider 的指纹来源，
+    # 让 fixture 真实覆盖 payload 顶层 account_observations 这条新形状——两个 provider
+    # 各出一条观察记录，跟上面 ai_accounts 只声明 codex（account_confirmed vs
+    # unconfirmed_local_source）是两件正交的事：指纹来源与归属配置互不依赖。
+    account_fingerprint_sources={
+        "codex": str(REPO_ROOT / "tests" / "fixtures" / "codex_account_auth_sample.json"),
+        "claude": str(REPO_ROOT / "tests" / "fixtures" / "claude_account_config_sample.json"),
+    },
 )
 
 PARTIAL_CONFIG = DeviceConfig(
@@ -601,6 +609,10 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
             with self.subTest(scenario=record["name"]):
                 for field in VOLATILE_TOP_LEVEL_FIELDS:
                     self.assertEqual(record["payload"].get(field), MASK)
+                observations = record["payload"].get("account_observations")
+                if observations:
+                    for item in observations:
+                        self.assertEqual(item.get("observed_at"), MASK)
 
     # --- 生成逻辑自检（不依赖 fixture 文件是否存在）--------------------------
 
@@ -818,6 +830,18 @@ class TestCollectorPayloadContractFixture(unittest.TestCase):
         self.assertEqual(release["build_sha"], OK_ENV["AI_USAGE_BUILD_SHA"])
         self.assertEqual(release["last_upgrade"]["status"], "succeeded")
         self.assertEqual(release["release_channel"], "stable")
+
+        # #181 P1-1：account_fingerprint_sources 配置了 claude + codex 两个 provider，
+        # 顶层必须各出一条账户观察记录——且指纹绝不出现在任何一条 usage_hourly_facts
+        # 的 ai_account 里（正是这条修复要拦住的回潮）。
+        observations = {item["agent"]: item for item in payload["account_observations"]}
+        self.assertEqual(sorted(observations), ["claude", "codex"])
+        for agent, item in observations.items():
+            self.assertEqual(item["provider"], agent)
+            self.assertTrue(item["account_fingerprint"].startswith(f"fp:{agent}:"))
+            self.assertEqual(item["observed_at"], MASK)
+        for fact in payload["usage_hourly_facts"]:
+            self.assertNotIn("account_fingerprint", fact["ai_account"])
 
     def test_error_payload_reports_the_failure_and_never_fakes_usage(self) -> None:
         """采集失败时必须如实上报失败，且不许伪造任何用量。"""
@@ -1059,15 +1083,24 @@ def _push_once(
 
 
 def _mask_volatile(payload: dict[str, Any]) -> dict[str, Any]:
-    """只抹顶层的运行时刻字段。
+    """只抹顶层的运行时刻字段，以及 ``account_observations[*].observed_at``。
 
     刻意不做递归按名抹除：``account_evidence.observed_at`` 同名，但它来自报告里的
     固定 ``generated_at``，是真实数据，抹掉等于让 fixture 停止守护它。
+    ``account_observations[*].observed_at`` 不一样——#181 P1-1 里它就是 ``_build_payload``
+    读取时刻（``datetime.now()``）本身，跟顶层 ``observed_at`` 同源、同样易变，只是
+    嵌在一个列表里，所以单独按路径（不是按字段名全局递归）显式抹掉这一处。
     """
     masked = dict(payload)
     for field in VOLATILE_TOP_LEVEL_FIELDS:
         if field in masked:
             masked[field] = MASK
+    observations = masked.get("account_observations")
+    if isinstance(observations, list):
+        masked["account_observations"] = [
+            {**item, "observed_at": MASK} if isinstance(item, dict) and "observed_at" in item else item
+            for item in observations
+        ]
     return masked
 
 

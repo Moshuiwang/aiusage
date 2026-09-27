@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Miniflare } from "miniflare";
 import { beforeEach, describe, expect, it } from "vitest";
 import { acquireWorker, applySqlText } from "./golden/harness";
+import { validateIngestPayload } from "../src/write-model/validate";
 
 type ContractRecord = {
   name: string;
@@ -600,6 +601,103 @@ describe.sequential("native TS Worker write API parity", () => {
     expect(await ingestResponse.json()).toMatchObject({ status: "error", error_type: "http_schema_invalid" });
     expect(limitsResponse.status).toBe(400);
     expect(await limitsResponse.json()).toMatchObject({ status: "error", error_type: "limit_schema_invalid" });
+  });
+
+  it("#181 accepts a well-formed account_observations array without storing it (declared but unconsumed, persistence is #183)", async () => {
+    const response = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...fixture.ingest_payloads[0],
+        account_observations: [
+          { agent: "claude", provider: "claude", account_fingerprint: "fp:claude:35f06f61d06d4aa38b8a3b94", observed_at: "2026-06-05T09:00:00+08:00" },
+          { agent: "codex", provider: "codex", account_fingerprint: "fp:codex:ad5d4ce6324ab7e5a0909ba8", observed_at: "2026-06-05T09:00:00+08:00" },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "accepted" });
+  });
+
+  it("#181 rejects a non-array account_observations at the whole-payload level", async () => {
+    // 只有"顶层形状不是数组"这一种情况才 400——这个字段整体错到不像 account_observations，
+    // 跟其它顶层数组字段（usage_hourly_facts / usage_ledger_runs）目前的"非数组即拒收"口径
+    // 一致。数组内部单项的问题走下面那条测试的"静默丢弃"路径，不在这里。
+    const response = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...fixture.ingest_payloads[0], account_observations: "not-a-list" }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ status: "error", error_type: "http_schema_invalid" });
+  });
+
+  it("#181 silently drops malformed account_observations items instead of dead-lettering the whole usage payload", async () => {
+    // 关键不变量：daily token baseline 优先。account_observations 是本次修复才加的附加
+    // 字段，它任何一项格式错误都不能让 usage_hourly_facts 那份真实用量也上不去——否则
+    // 采集端的 collector_store 会把 400 当 TERMINAL 直接 dead_letter，每轮重试都复现同一个
+    // 格式错误，等于用量持续中断。这里验证：一份混着 5 种畸形单项 + 1 个合规单项的
+    // account_observations，整包依然 200，且 usage_hourly_facts 照常写入 D1（数量跟不带
+    // account_observations 时完全一样——结构下限：不是"没报错"就算过，要证明用量真的落库了）。
+    const validEntry = { agent: "codex", provider: "codex", account_fingerprint: "fp:codex:ad5d4ce6324ab7e5a0909ba8", observed_at: "2026-06-05T09:00:00+08:00" };
+    const malformedItems: unknown[] = [
+      "not-an-object",
+      { ...validEntry, agent: undefined },
+      { ...validEntry, provider: "" },
+      { ...validEntry, account_fingerprint: "not-a-fingerprint" },
+      { ...validEntry, observed_at: "not-a-date" },
+    ];
+    expect(malformedItems.length, "绕过形状清单不能只覆盖单一维度").toBeGreaterThan(1);
+
+    const response = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...fixture.ingest_payloads[0],
+        account_observations: [...malformedItems, validEntry],
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: "accepted" });
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    // fixture.ingest_payloads[0] 的 source_id 是 "mac-local"，本身带 2 条 usage_hourly_facts；
+    // 这条断言证明它们真的落库了，不是靠"响应 200"就推断用量没受影响。
+    expect(await factCount(db, "mac-local")).toBe(2);
+  });
+
+  it("#181 validateIngestPayload drops each malformed account_observations item individually, keeping the valid ones (unit-level, observable parsed output)", () => {
+    // 上面两条是黑盒集成测试（真实 dispatchFetch）；这条直接调用 validateIngestPayload
+    // （已有先例：ingest-reliability.test.ts 同样这么导入），核对"哪些项被丢、哪些项被留"
+    // 这个集成测试里不可观测的细节——account_observations 本身不落库，没有 D1 行能看。
+    const validCodex = { agent: "codex", provider: "codex", account_fingerprint: "fp:codex:ad5d4ce6324ab7e5a0909ba8", observed_at: "2026-06-05T09:00:00+08:00" };
+    const validClaude = { agent: "claude", provider: "claude", account_fingerprint: "fp:claude:35f06f61d06d4aa38b8a3b94", observed_at: "2026-06-05T09:00:00+08:00" };
+    const basePayload = {
+      schema_version: 1,
+      source_id: "unit-test-source",
+      host: "unit-test-host",
+      os_user: "tester",
+      timezone: "Asia/Shanghai",
+      observed_at: "2026-06-05T09:00:00+08:00",
+      usage_daily: [],
+      account_observations: [
+        validCodex,
+        "not-an-object",
+        { ...validClaude, agent: undefined },
+        { ...validClaude, provider: "" },
+        { ...validClaude, account_fingerprint: "not-a-fingerprint" },
+        { ...validClaude, account_fingerprint: "fp:CLAUDE:35f06f61d06d4aa38b8a3b94" },
+        { ...validClaude, observed_at: 12345 },
+        { ...validClaude, observed_at: "not-a-date" },
+      ],
+    };
+
+    // 不该抛错——静默丢弃发生在解析内部，不是异常路径。
+    const parsed = validateIngestPayload(basePayload);
+
+    expect(parsed.account_observations).toEqual([validCodex]);
   });
 
   it("rejects cached or expired limits pretending to be current", async () => {
@@ -1431,6 +1529,15 @@ async function readCollectorPayloads(): Promise<CollectorPayloadRecord[]> {
   return records.map((record) => {
     const payload = { ...record.payload };
     if (payload.observed_at === maskedValue) payload.observed_at = collectorObservedAt;
+    // #181 P1-1：account_observations[*].observed_at 跟顶层 observed_at 同源、同样被掩码，
+    // 同样需要显式换成固定合法时间戳才能发给 Worker。
+    if (Array.isArray(payload.account_observations)) {
+      payload.account_observations = payload.account_observations.map((item) =>
+        item && typeof item === "object" && (item as Record<string, unknown>).observed_at === maskedValue
+          ? { ...item, observed_at: collectorObservedAt }
+          : item,
+      );
+    }
     // fixture 将来多掩码一个字段时，必须在这里显式处理，不能带着 "<masked>" 发给 Worker。
     expect(
       maskedFieldPaths(payload),

@@ -476,6 +476,9 @@ class DevicePusher:
             "usage_daily": ccusage.usage_daily,
             COLLECTOR_RELEASE_FIELD: _local_collector_release(self.config),
         }
+        account_observations = _account_observations(self.config, observed_at)
+        if account_observations:
+            payload["account_observations"] = account_observations
         if ccusage.daily_available:
             payload["ccusage_daily_report"] = ccusage.data
         if ccusage.session_report is not None:
@@ -840,12 +843,12 @@ def _usage_hourly_facts_from_mswusage(
     default_agent: str = "codex",
     default_client: str = "codex",
 ) -> list[dict[str, Any]]:
-    # #181：account_fingerprint 是独立于 account_id/fact_id 的一个补充字段——
-    # 只用于"同账户跨机器核对"，绝不参与 fact_id 计算。fact_id 仍然完全由下面
-    # 已有的 account_id/confidence/provenance 决定，跟指纹是否可用、指纹取到
-    # 什么值都无关，这样才不会因为某天多了一份可读的本机凭据文件，就让已经写进
-    # D1 的历史 fact_id 集体变化、在 upsert 去重上多算一遍。
-    account_fp = _resolve_account_fingerprint(config, provider_key)
+    # #181 P1-1（Codex review）：account_fingerprint 绝不写进每条 fact 的 ai_account。
+    # 这条 fact 列表可能覆盖 full-rescan 产出的大量历史小时——如果把"当前登录账户"
+    # 的指纹逐条写进每一条历史 fact，账户切换后就会把旧账户期间的历史 token 全部
+    # 错误标成新账户。指纹只在 `_build_payload` 里作为顶层一条"账户观察"记录写一次
+    # （observed_at 是本次读取时刻），不参与这里任何一条 fact 的字段，也不参与
+    # fact_id 计算——fact_id 完全由下面已有的 account_id/confidence/provenance 决定。
     accounts = config.ai_accounts or {}
     account = accounts.get(provider_key)
     account_confirmed = isinstance(account, dict)
@@ -894,7 +897,6 @@ def _usage_hourly_facts_from_mswusage(
                 "label": label,
                 "display_name": account.get("display_name"),
                 "subscription": account.get("subscription"),
-                **({"account_fingerprint": account_fp} if account_fp else {}),
             },
             "usage": {
                 "input_tokens": int(row.get("input_tokens") or 0),
@@ -953,6 +955,31 @@ def _resolve_account_fingerprint(config: DeviceConfig, provider_key: str) -> str
         # 双重保险：即便某个 reader 未来被改坏到会抛异常，也不能让一次账户指纹
         # 计算失败拖垮整次采集上报。
         return None
+
+
+def _account_observations(config: DeviceConfig, observed_at: str) -> list[dict[str, Any]]:
+    """#181 P1-1：把本次读取到的账户指纹算成 payload 顶层一条一条「账户观察」记录。
+
+    语义是"在 ``observed_at`` 这一时刻，观察到某个 provider 的本机登录账户是这个
+    指纹"——跟哪个小时的 usage fact 完全无关，服务端（#183）按时间段建立
+    source_id -> account 的对应关系，而不是把指纹焊死在某条历史 fact 上。
+    只覆盖 ``config.account_fingerprint_sources`` 里显式配置了路径、且读取/解析
+    成功的 provider；没配置或读不出的 provider 完全不出现在返回列表里。
+    """
+    observations: list[dict[str, Any]] = []
+    for provider_key in _ACCOUNT_FINGERPRINT_READERS:
+        account_fp = _resolve_account_fingerprint(config, provider_key)
+        if not account_fp:
+            continue
+        observations.append(
+            {
+                "agent": provider_key,
+                "provider": provider_key,
+                "account_fingerprint": account_fp,
+                "observed_at": observed_at,
+            }
+        )
+    return observations
 
 
 def _local_collector_release(config: DeviceConfig) -> dict[str, Any]:

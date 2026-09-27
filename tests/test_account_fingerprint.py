@@ -79,6 +79,19 @@ class TestComputeAccountFingerprint(unittest.TestCase):
         fp = compute_account_fingerprint("codex", raw_id)
         self.assertNotIn(raw_id, fp)
 
+    def test_provider_is_case_normalized_to_lowercase(self) -> None:
+        """provider 大小写不参与"是否同一账户"的判断——调用方（pusher.py/cli.py）现在只传
+        小写字面量，但指纹格式（``fp:<provider>:...``）和 Worker 侧的正则
+        （``^fp:[a-z0-9_-]+:...``）都要求小写前缀，这里在算指纹之前显式规整，不依赖
+        调用方永远传对大小写。golden 值本就是小写，这条测试不改变现有 golden。
+        """
+        fp_lower = compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333")
+        fp_upper = compute_account_fingerprint("CODEX", "33333333-3333-3333-3333-333333333333")
+        fp_mixed = compute_account_fingerprint("CoDeX", "33333333-3333-3333-3333-333333333333")
+        self.assertEqual(fp_lower, fp_upper)
+        self.assertEqual(fp_lower, fp_mixed)
+        self.assertTrue(fp_lower.startswith("fp:codex:"))
+
     def test_rejects_empty_inputs(self) -> None:
         with self.assertRaises(ValueError):
             compute_account_fingerprint("", "acct-123")
@@ -91,9 +104,11 @@ class TestReadClaudeStableAccountId(unittest.TestCase):
         config = {"oauthAccount": {"accountUuid": "abc-123", "emailAddress": "x@example.com"}}
         self.assertEqual(read_claude_stable_account_id(config), "abc-123")
 
-    def test_falls_back_to_top_level_account_uuid(self) -> None:
+    def test_returns_none_for_top_level_account_uuid_without_oauth_account(self) -> None:
+        """#181 P1-2：只认 ``oauthAccount.accountUuid``，顶层 ``accountUuid`` 不是约定字段，
+        不做兼容 fallback（AGENTS.md：不新增旧格式兼容层）。"""
         config = {"accountUuid": "top-level-uuid"}
-        self.assertEqual(read_claude_stable_account_id(config), "top-level-uuid")
+        self.assertIsNone(read_claude_stable_account_id(config))
 
     def test_returns_none_when_not_a_dict(self) -> None:
         self.assertIsNone(read_claude_stable_account_id(None))
@@ -113,13 +128,21 @@ class TestReadCodexStableAccountId(unittest.TestCase):
         auth = {"tokens": {"access_token": "x", "account_id": "acct-999"}}
         self.assertEqual(read_codex_stable_account_id(auth), "acct-999")
 
-    def test_falls_back_to_top_level_account_id(self) -> None:
+    def test_returns_none_for_top_level_account_id_without_tokens(self) -> None:
+        """#181 P1-2：只认 ``tokens.account_id``，顶层 ``account_id`` 不是约定字段。"""
         auth = {"account_id": "top-level-acct"}
-        self.assertEqual(read_codex_stable_account_id(auth), "top-level-acct")
+        self.assertIsNone(read_codex_stable_account_id(auth))
 
-    def test_falls_back_to_nested_account_object(self) -> None:
+    def test_returns_none_for_nested_account_object(self) -> None:
+        """#181 P1-2：``account.id`` 不是约定字段，即便 ``tokens`` 缺失也不兜底读它。"""
         auth = {"account": {"id": "nested-acct"}}
-        self.assertEqual(read_codex_stable_account_id(auth), "nested-acct")
+        self.assertIsNone(read_codex_stable_account_id(auth))
+
+    def test_returns_none_for_camel_case_account_id_under_tokens(self) -> None:
+        """#181 P1-2：约定字段名固定为 ``account_id``（snake_case），``accountId`` 不是
+        约定字段，即便它出现在 ``tokens`` 下也不认。"""
+        auth = {"tokens": {"accountId": "camel-case-acct"}}
+        self.assertIsNone(read_codex_stable_account_id(auth))
 
     def test_returns_none_when_missing(self) -> None:
         self.assertIsNone(read_codex_stable_account_id({"tokens": {"access_token": "x"}}))

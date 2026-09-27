@@ -46,7 +46,7 @@ def compute_account_fingerprint(provider: str, stable_account_id: str) -> str:
     换一个账户或换一个 provider，指纹几乎必然不同。该哈希不可逆——拿到指纹
     推不出 ``stable_account_id`` 原文。
     """
-    provider_clean = (provider or "").strip()
+    provider_clean = (provider or "").strip().lower()
     stable_clean = (stable_account_id or "").strip()
     if not provider_clean or not stable_clean:
         raise ValueError("compute_account_fingerprint requires non-empty provider and stable_account_id")
@@ -64,39 +64,29 @@ def _clean_string(value: Any) -> str | None:
 def read_claude_stable_account_id(config: Any) -> str | None:
     """从 Claude Code 本地配置对象（``~/.claude.json`` 反序列化结果）里取账户稳定 ID。
 
-    只认 ``oauthAccount.accountUuid``（顶层 ``accountUuid`` 作为兜底）——这是账户
-    UUID，不是邮箱或 token。配置形状不对、字段缺失或为空字符串都返回 ``None``。
+    只认 ``oauthAccount.accountUuid`` 这一个约定字段——这是账户 UUID，不是邮箱或
+    token。#181 P1-2：不兜底读顶层 ``accountUuid`` 或任何其它字段（AGENTS.md：不新增
+    兼容 fallback）。配置形状不对、约定字段缺失或为空字符串都返回 ``None``。
     """
     if not isinstance(config, dict):
         return None
     oauth_account = config.get("oauthAccount")
     if isinstance(oauth_account, dict):
-        value = _clean_string(oauth_account.get("accountUuid"))
-        if value:
-            return value
-    return _clean_string(config.get("accountUuid"))
+        return _clean_string(oauth_account.get("accountUuid"))
+    return None
 
 
 def read_codex_stable_account_id(auth: Any) -> str | None:
-    """从 Codex CLI ``auth.json`` 反序列化结果里取账户稳定 ID（``tokens.account_id`` 等）。"""
+    """从 Codex CLI ``auth.json`` 反序列化结果里取账户稳定 ID。
+
+    只认 ``tokens.account_id`` 这一个约定字段。#181 P1-2：不兜底读 ``accountId``、
+    顶层 ``account_id`` / ``accountId``，或 ``account.id`` 等任何其它字段。
+    """
     if not isinstance(auth, dict):
         return None
     tokens = auth.get("tokens")
     if isinstance(tokens, dict):
-        for key in ("account_id", "accountId"):
-            value = _clean_string(tokens.get(key))
-            if value:
-                return value
-    for key in ("account_id", "accountId"):
-        value = _clean_string(auth.get(key))
-        if value:
-            return value
-    account = auth.get("account")
-    if isinstance(account, dict):
-        for key in ("account_id", "accountId", "id"):
-            value = _clean_string(account.get(key))
-            if value:
-                return value
+        return _clean_string(tokens.get("account_id"))
     return None
 
 

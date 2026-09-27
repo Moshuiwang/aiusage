@@ -2,6 +2,20 @@
   {
     "name": "ok-full-collection",
     "payload": {
+      "account_observations": [
+        {
+          "account_fingerprint": "fp:claude:35f06f61d06d4aa38b8a3b94",
+          "agent": "claude",
+          "observed_at": "<masked>",
+          "provider": "claude"
+        },
+        {
+          "account_fingerprint": "fp:codex:ad5d4ce6324ab7e5a0909ba8",
+          "agent": "codex",
+          "observed_at": "<masked>",
+          "provider": "codex"
+        }
+      ],
       "ccusage_daily_report": {
         "daily": [
           {

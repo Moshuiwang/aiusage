@@ -3,6 +3,10 @@ import { COLLECTOR_RELEASE_FIELD, VersionContractError, normalizeCollectorReleas
 import { WriteValidationError, intField, isRecord, optionalFloat } from "./shared";
 import type { AnyRecord, IngestRequest, LimitWindow } from "./shared";
 
+//: #181：account_fingerprint 的固定格式，跟采集端 account_fingerprint.py 的
+//: `fp:<provider>:<24 位十六进制>`（sha256 摘要前 24 位）一致。
+const ACCOUNT_FINGERPRINT_PATTERN = /^fp:[a-z0-9_-]+:[0-9a-f]{24}$/;
+
 function validateIngestPayload(payload: unknown): IngestRequest {
   if (!isRecord(payload)) throw new WriteValidationError(400, "http_schema_invalid", "Payload must be a JSON object");
   const jsonBytes = new TextEncoder().encode(JSON.stringify(payload)).length;
@@ -40,6 +44,31 @@ function validateIngestPayload(payload: unknown): IngestRequest {
       }
     });
   }
+  // #181 关键不变量：daily token baseline 优先。account_observations 是附加字段，不能让它
+  // 任何一项格式错误就把整包（包括真实的 usage_hourly_facts）当成 400 打进采集端死信——
+  // 那样每轮上报都会复现同一个格式错误，等于用量持续中断。所以这里跟 usage_hourly_facts /
+  // usage_ledger_runs 的"单项不合规即整包 400"不同口径：只有顶层形状不是数组才 400
+  // （这个字段整体错到不像 account_observations），数组内部单项不合规静默丢弃，不影响
+  // 该请求里其它任何字段的处理。
+  const accountObservations = payload.account_observations;
+  let validAccountObservations: AnyRecord[] | undefined;
+  if (accountObservations !== undefined) {
+    if (!Array.isArray(accountObservations)) {
+      throw new WriteValidationError(400, "http_schema_invalid", "account_observations must be a list");
+    }
+    validAccountObservations = accountObservations.filter((item): item is AnyRecord => {
+      if (!isRecord(item)) return false;
+      for (const key of ["agent", "provider", "account_fingerprint", "observed_at"]) {
+        if (!(key in item)) return false;
+      }
+      if (typeof item.agent !== "string" || !item.agent.trim()) return false;
+      if (typeof item.provider !== "string" || !item.provider.trim()) return false;
+      if (typeof item.account_fingerprint !== "string" || !ACCOUNT_FINGERPRINT_PATTERN.test(item.account_fingerprint)) return false;
+      const observedAtValue = item.observed_at;
+      if (typeof observedAtValue !== "string" || Number.isNaN(new Date(observedAtValue).getTime())) return false;
+      return true;
+    });
+  }
   for (const key of ["ccusage_daily_report", "ccusage_session_report", "mswusage_codex_hourly_report", "codex_hourly_status", "mswusage_antigravity_hourly_report", "antigravity_hourly_status"]) {
     if (payload[key] !== undefined && !isRecord(payload[key])) {
       throw new WriteValidationError(400, "http_schema_invalid", `${key} must be an object`);
@@ -75,6 +104,7 @@ function validateIngestPayload(payload: unknown): IngestRequest {
     antigravity_hourly_status: isRecord(payload.antigravity_hourly_status) ? payload.antigravity_hourly_status : undefined,
     usage_hourly_facts: Array.isArray(usageHourlyFacts) ? usageHourlyFacts.filter(isRecord) : undefined,
     usage_ledger_runs: Array.isArray(usageLedgerRuns) ? usageLedgerRuns.filter(isRecord) : undefined,
+    account_observations: validAccountObservations,
     collector_release: collectorRelease,
     collection_status: String(payload.collection_status || "ok"),
     error_type: payload.error_type ? String(payload.error_type) : null,
