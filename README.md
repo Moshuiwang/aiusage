@@ -9,8 +9,8 @@
 - **Device push pipeline**：每台设备在自己的账户上下文运行本机 Python pusher，读取本机 Codex / Claude / `ccusage` 结构化用量并主动 push。
 - **Usage Ledger**：本机只上传去敏后的小时用量事实，不上传 `.codex` / `.claude` 原始日志、prompt、response、tool output 或原始路径；服务端负责去重、入账和聚合。
 - **Canonical store**：生产 canonical store 是 Cloudflare D1（SQLite-compatible serverless SQL）。#74 起服务端没有本地 SQLite；采集端唯一的本地库是 outbox 缓冲（`collector_store.py`）。
-- **Web presentation**：Web dashboard 目前仍在代码中，但**已决定整体废弃**（用户 2026-09-27，#199，尚未实施）；CLI report 只读派生快照。
-- **Client direction（#199 决定，2026-09-27）**：产品只支持 macOS 菜单栏 popover 和 iPhone 端；Apple Watch 不急，Android / Windows 方向搁置，不是当前工作目标。
+- **Client scope**：产品只支持 macOS 菜单栏 popover 和 iPhone 端；网页看板已随 #199 整体废弃。CLI report 只读派生快照。
+- **Client direction（2026-09-27 决定）**：Apple Watch 不急，Android / Windows 方向搁置，不是当前工作目标。
 - **Optional limits source**：quota/reset 只作为可插拔 limits 能力；没有可信来源时不展示为强结论。
 - **模型周额度校准**：每日 cron 按官方额度自动拟合系数（epic #180），菜单栏显示「≈x.x%」。
 
@@ -29,7 +29,6 @@ clients/
   android/   # Android App + Android Widget 目标落点
   macos/     # macOS 菜单栏 / 轻量桌面入口目标落点
   windows/   # Windows 托盘 / 轻量桌面入口目标落点
-  web/       # Web dashboard 目标落点
 packages/
   client-contracts/ # 跨端展示数据合同
   design-tokens/    # 跨端视觉 token 和状态语义
@@ -38,10 +37,9 @@ packages/
 迁移期保留现有实现路径：
 
 - iOS Swift Package / Xcode 工程暂时仍在 `mobile/ios` 和 `mobile/ios-xcode`。
-- Web dashboard 静态资源在 `cloudflare/native-worker/static`（#74/PM-1 起归 Worker 管）。
 - legacy macOS Widget 暂时仍在 `widget/macos` 和 `widget/macos-xcode`，只作历史兼容。
 
-不要为了“目录好看”直接移动现有 iOS 或 Web 文件；迁移必须单独开任务包，先补构建或路由验证。
+不要为了“目录好看”直接移动现有 iOS 文件；迁移必须单独开任务包，先补构建或路由验证。
 
 ## 数据源
 

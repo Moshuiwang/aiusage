@@ -39,26 +39,22 @@ codex exec --cd /Users/wangzhipeng/Documents/ops --skip-git-repo-check "<Cloudfl
 
 - 默认 `curl -D - -o /dev/null`，只看状态码和关键 header。
 - 如果本机 DNS、代理或 VPN 行为可疑，临时加 `--resolve aiusage.chunbai.com:443:<Cloudflare IP>` 对比。
-- 业务 token 和 session cookie 只从运维目录安全读取，不输出。
+- 业务 token 只从运维目录安全读取，不输出。
 
-未登录 /static/* 预期可以是 401；这不代表 Worker route 失败。带 session cookie 后 /static/dashboard.js 和 /static/dashboard.css 必须是 200。
+网页看板（`/`、`/dashboard`、登录页、`/static/*`）已随 #199 整体废弃，一律落到标准 404，
+不再有专门的 smoke 步骤；`/api/summary` 是否随之删除另议，仍需和 `/api/mobile/summary`
+一起验证。
 
 ```bash
-curl -sS --max-time 12 -D - -o /dev/null \
-  "https://aiusage.chunbai.com/"
-curl -sS --max-time 12 -D - -o /dev/null \
-  "https://aiusage.chunbai.com/static/dashboard.js"
-curl -sS --max-time 12 -D - -o /dev/null \
-  "https://aiusage.chunbai.com/static/dashboard.css"
 curl -sS --max-time 12 -D - -o /dev/null \
   "https://aiusage.chunbai.com/api/mobile/summary?period=all"
 ```
 
 认证路径需由运维 Agent 使用可用的安全 token 验证，但不要在输出中展示 token：
 
-- `/login` 能写入 session cookie 并跳到 `/dashboard`。
-- 登录后 `/api/summary` 返回 dashboard 数据。
-- 带 session cookie 后 `/static/dashboard.js` 和 `/static/dashboard.css` 返回 200。
+- 带 token 的 `/api/mobile/summary` 返回 200。
+- 带 token 的 `/api/summary` 返回 200 且 JSON 可解析（接口保留期间单独验证、单独回报）。
+- 未带 token 访问 `/` 返回 404（网页已废弃）。
 - `/ingest` 或 `/ingest-limits` 完成一次真实 POST smoke。
 
 ## 回报格式
@@ -68,10 +64,9 @@ Worker 部署：
 Route 读回：
 Native Worker：
 D1：
-/ smoke：
-/static smoke：
-/login smoke：
 /api/mobile/summary smoke：
+/api/summary smoke：
+/ 返回 404：
 /ingest 或 /ingest-limits smoke：
 阻塞点：
 ```
