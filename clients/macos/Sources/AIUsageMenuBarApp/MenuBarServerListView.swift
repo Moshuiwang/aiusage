@@ -130,6 +130,7 @@ private struct MenuBarServerCardView: View {
                             .frame(width: 92, alignment: .trailing)
                     }
                     .font(.system(size: 12))
+                    .help(model.quotaHelpText)
                 }
             }
         }

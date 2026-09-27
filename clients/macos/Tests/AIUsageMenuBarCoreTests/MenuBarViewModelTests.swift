@@ -81,6 +81,33 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.headerUpdatedText, "21:12 更新")
     }
 
+    // 真机 bug：headerUpdatedText 取所有 source 最新同步时间时按 ISO **字符串**比大小，不同来源
+    // 带不同时区 offset（+00:00 / +08:00）时字符串比较会选错——必须解析成 Date 再比较真实时间。
+    func testHeaderUpdatedTextComparesActualTimeNotStringAcrossDifferentTimezoneOffsets() throws {
+        let summary = try loadFixture()
+        // 10:31:37+00:00 = 18:31:37 北京时间，晚于 16:47:12+08:00；但字符串
+        // "2026-09-27T16:47:12+08:00" 在字典序上大于 "2026-09-27T10:31:37+00:00"，
+        // 旧实现的 .max() 会误选后者（更早的 16:47）。
+        let utcSource = MobileSource(
+            sourceID: "utc-src", machine: "utc-machine", osUser: "wang", platform: "linux",
+            displayName: nil, status: "ok",
+            lastObservedAt: "2026-09-27T10:31:37+00:00", lastPushedAt: "2026-09-27T10:31:37+00:00",
+            errorMessage: nil
+        )
+        let localSource = MobileSource(
+            sourceID: "local-src", machine: "mac", osUser: "wang", platform: "macos",
+            displayName: nil, status: "ok",
+            lastObservedAt: "2026-09-27T16:47:12+08:00", lastPushedAt: "2026-09-27T16:47:12+08:00",
+            errorMessage: nil
+        )
+        let state = MenuBarViewModel.build(
+            from: summary, selectedPeriodID: "week",
+            now: try date("2026-09-27T19:00:00+08:00"),
+            additionalSources: [utcSource, localSource]
+        )
+        XCTAssertEqual(state.headerUpdatedText, "18:31 更新")
+    }
+
     func testLegacySharedMachineKeepsServerAggregateWithoutSplittingContributions() throws {
         let summary = try loadFixture()
         let sharedSources = [
@@ -1319,6 +1346,156 @@ final class MenuBarViewModelTests: XCTestCase {
         )
         XCTAssertEqual(state.quotaRings.count, 3)
         XCTAssertEqual(state.quotaRings.map(\.id), ["claude", "codex", "antigravity"])
+    }
+
+    // MARK: - 真机 bug 同类修复 #2：isBetterLimitWindow 在 sourceType 质量相同时按
+    // observedAt **字符串**比大小选「更新的窗口」，不同时区 offset 会选错。
+
+    func testBestWindowPerTypePicksActuallyLatestObservedWindowAcrossTimezonesWhenSourceQualityTies() throws {
+        let summary = try loadFixture()
+        // 两条 window="week"、sourceType 相同（quality 打平），只有 observedAt 的时区 offset
+        // 不同：existing "18:40+08:00"（真实更早），candidate "10:59:00+00:00" = 18:59 北京时间
+        // （真实更晚，仅晚 19 分钟——两条都在 now 前 120 分钟新鲜窗口内，不会被 isStale 提前
+        // 过滤掉，确保真正走到 tie-break 分支）。字符串比较会因为 "10" < "18" 误判 candidate
+        // 更旧，保留 existing(10%)；正确实现应解析成真实时间，candidate(42%) 胜出。
+        let windows = [
+            MobileLimitWindow(
+                sourceID: "claude-main", provider: "claude", window: "week",
+                usedPercent: 10, remainingPercent: 90,
+                resetAt: "2026-10-01T00:00:00+08:00", windowDurationMinutes: 10080,
+                observedAt: "2026-09-27T18:40:00+08:00", sourceType: "official_cli",
+                confidence: "observed", status: "ok", official: true
+            ),
+            MobileLimitWindow(
+                sourceID: "claude-main", provider: "claude", window: "week",
+                usedPercent: 42, remainingPercent: 58,
+                resetAt: "2026-10-01T00:00:00+08:00", windowDurationMinutes: 10080,
+                observedAt: "2026-09-27T10:59:00+00:00", sourceType: "official_cli",
+                confidence: "observed", status: "ok", official: true
+            ),
+        ]
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [providerSlot(provider: "claude", windows: windows)]
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-09-27T19:05:00+08:00")
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.innerPctText, "42%")
+    }
+
+    // MARK: - 真机 bug 同类修复 #3：额度环 updatedText 回退到 observedAt 时按字符串 .max()
+
+    func testQuotaRingUpdatedTextFallsBackToActualLatestObservedAtAcrossTimezonesWhenNotVerified() throws {
+        let summary = try loadFixture()
+        // 同样两条都要落在 now 前 120 分钟新鲜窗口内（否则较早那条会被 isStale 提前过滤掉，
+        // 根本走不到 .max() 比较）：session 18:40+08:00（真实更早），week 10:59:00+00:00 =
+        // 18:59 北京时间（真实更晚）。字符串 .max() 会因为 "18:40:00+08:00" 字典序更大而
+        // 误选它，回退文案就会显示错误的更新时间。
+        let windows = [
+            MobileLimitWindow(
+                sourceID: "claude-main", provider: "claude", window: "session",
+                usedPercent: 50, remainingPercent: 50,
+                resetAt: "2026-09-28T00:00:00+08:00", windowDurationMinutes: 300,
+                observedAt: "2026-09-27T18:40:00+08:00", sourceType: "official_cli",
+                confidence: "observed", status: "ok", official: true
+            ),
+            MobileLimitWindow(
+                sourceID: "claude-main", provider: "claude", window: "week",
+                usedPercent: 30, remainingPercent: 70,
+                resetAt: "2026-10-01T00:00:00+08:00", windowDurationMinutes: 10080,
+                observedAt: "2026-09-27T10:59:00+00:00", sourceType: "official_cli",
+                confidence: "observed", status: "ok", official: true
+            ),
+        ]
+        // 直接构造 slot，不经 providerSlot() 测试 helper——helper 自己对 lastVerifiedAt 的默认值
+        // 也是 windows.observedAt 的字符串 .max()，会掩盖被测的生产代码回退路径。
+        let slot = MobileProviderSlot(
+            provider: "claude",
+            usage: .missing,
+            quota: MobileProviderQuota(
+                status: "available", reason: nil, lastVerifiedAt: nil,
+                sourceID: "claude-main", sourceType: "official_cli", windows: windows
+            )
+        )
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: summary.generatedAt, timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [slot]
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-09-27T19:05:00+08:00")
+        )
+        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
+        XCTAssertEqual(claude.updatedText, "18:59 更新")
+    }
+
+    // MARK: - 真机 bug 同类修复 #4：compactResetTime 用 resetAt/generatedAt 的日期**前缀字符串**
+    // 判断「已过/重置」，同一天的 UTC 时间戳换算成北京时间后可能已经跨天，前缀字符串却相同。
+
+    func testLimitRowResetSuffixComparesBeijingCalendarDayNotRawDatePrefix() throws {
+        let summary = try loadFixture()
+        // resetAt 是北京时间 09-27 23:00（真实日历日 09-27）；generatedAt 是 UTC 09-27 16:00，
+        // 换算成北京时间是 09-28 00:00（真实日历日 09-28）——两者日期前缀字符串都是 "2026-09-27"，
+        // 但真实北京日历日不同：09-27 < 09-28，reset 应判「已过」。旧实现比较前缀字符串「相等」
+        // 会走 else 分支判「重置」，是错的。
+        let window = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "week",
+            usedPercent: 40, remainingPercent: 60,
+            resetAt: "2026-09-27T23:00:00+08:00", windowDurationMinutes: 10080,
+            observedAt: "2026-09-27T16:00:00+08:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let slot = providerSlot(provider: "claude", windows: [window])
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: "2026-09-27T16:00:00+00:00", timezone: summary.timezone,
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [slot]
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-09-27T16:05:00+08:00")
+        )
+        let row = try XCTUnwrap(state.limitRows.first)
+        XCTAssertTrue(row.value.hasSuffix("已过"), "got: \(row.value)")
+    }
+
+    func testLimitRowResetSuffixUsesSummaryTimezoneCalendarDay() throws {
+        // Codex PR #194 审查 P2：按 summary.timezone 的日历日判断，而不是写死上海。
+        // 洛杉矶同为 09-27：resetAt 01:00-07:00（上海 09-27 16:00），generatedAt 10:00-07:00（上海 09-28 01:00）。
+        // 按上海会误判「已过」，按洛杉矶应为「重置」。
+        let summary = try loadFixture()
+        let window = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "week",
+            usedPercent: 40, remainingPercent: 60,
+            resetAt: "2026-09-27T01:00:00-07:00", windowDurationMinutes: 10080,
+            observedAt: "2026-09-27T00:00:00-07:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let slot = providerSlot(provider: "claude", windows: [window])
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: "2026-09-27T10:00:00-07:00", timezone: "America/Los_Angeles",
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [slot]
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-09-27T00:30:00-07:00")
+        )
+        let row = try XCTUnwrap(state.limitRows.first)
+        XCTAssertTrue(row.value.hasSuffix("重置"), "got: \(row.value)")
     }
 
     func testTrendSelectionFollowsMouseLocation() throws {
