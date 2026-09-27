@@ -21,7 +21,8 @@ import { FORMULA_VERSION, KNOWN_FAMILIES } from "./constants";
 import type { Provider } from "./constants";
 import { splitCycles, withResetAnchors } from "./cycles";
 import { buildIntervals } from "./intervals";
-import { grade, intervalToRow, leaveOneDayOutMaxError } from "./backtest";
+import { grade, intervalToRow, leaveOneDayOutMaxError, toSamples } from "./backtest";
+import type { Sample } from "./backtest";
 import { nonNegativeLeastSquares, predictRow } from "./nnls";
 import type { CalibrateOptions, CalibrationOutput, CalibrationResult, HourlyFamilyFact, Interval, LimitObservation } from "./types";
 
@@ -107,6 +108,8 @@ export function calibrate(
   const keys = KNOWN_FAMILIES[provider];
   const weightOf = (i: Interval) => recencyWeight(i, now, halfLifeDays);
 
+  const fittedAt = now.toISOString();
+
   if (intervals.length === 0) {
     return {
       unattributedDroppedIntervals: built.droppedForUnattributed,
@@ -119,23 +122,29 @@ export function calibrate(
         grade: "none",
         sample_intervals: 0,
         formula_version: FORMULA_VERSION,
+        fitted_at: fittedAt,
       })),
     };
   }
 
   const { training } = detectMutationAndSelectTrainingSet(intervals, keys, weightOf);
 
+  // Sample 只算一次：特征向量、近期加权、dayKey 都不随「留出哪一天」变化，
+  // 逐日留出回测（backtest.ts）复用同一批 Sample，只重新跑 NNLS。
+  const samples: Sample[] = toSamples(training, keys, weightOf);
+
   const finalCoef = fit(
-    training.map((i) => intervalToRow(i, keys)),
-    training.map((i) => i.deltaU),
-    training.map(weightOf),
+    samples.map((s) => s.row),
+    samples.map((s) => s.deltaU),
+    samples.map((s) => s.weight),
   );
 
-  const backtestMaxErr = leaveOneDayOutMaxError(training, keys, fit, weightOf);
+  const backtestMaxErr = leaveOneDayOutMaxError(samples, fit);
 
   const results: CalibrationResult[] = keys.map((family, idx) => {
     const coef = finalCoef[idx];
-    const effectiveDeltaU = training.reduce((sum, i) => sum + coef * (i.familyPricedTokens[family] ?? 0), 0);
+    let effectiveDeltaU = 0;
+    for (const s of samples) effectiveDeltaU += coef * s.row[idx];
     return {
       provider,
       model_family: family,
@@ -145,6 +154,7 @@ export function calibrate(
       grade: grade(effectiveDeltaU, backtestMaxErr),
       sample_intervals: training.length,
       formula_version: FORMULA_VERSION,
+      fitted_at: fittedAt,
     };
   });
 
@@ -154,3 +164,4 @@ export function calibrate(
 export { predictRow };
 export type { CalibrationOutput, CalibrationResult, HourlyFamilyFact, Interval, LimitObservation } from "./types";
 export { FORMULA_VERSION, UNATTRIBUTED_FAMILY, UNATTRIBUTED_DROP_RATIO } from "./constants";
+export { isStale } from "./staleness";

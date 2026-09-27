@@ -1,6 +1,6 @@
 /** #183-a：精度分级门槛（grade）与逐日留出回测的基本行为。 */
 import { describe, expect, it } from "vitest";
-import { grade, leaveOneDayOutMaxError } from "../src/calibration/backtest";
+import { grade, leaveOneDayOutMaxError, toSamples } from "../src/calibration/backtest";
 import { nonNegativeLeastSquares } from "../src/calibration/nnls";
 import type { Interval } from "../src/calibration/types";
 
@@ -53,6 +53,7 @@ function iv(t0: string, deltaU: number, feature: number): Interval {
 describe("leaveOneDayOutMaxError", () => {
   const fit = (rows: number[][], targets: number[], weights: number[]) => nonNegativeLeastSquares(rows, targets, weights);
   const w = () => 1;
+  const samplesOf = (intervals: Interval[]) => toSamples(intervals, ["a"], w);
 
   it("完美线性数据（y=2x，跨多天）留出回测误差应接近 0", () => {
     const intervals = [
@@ -61,7 +62,7 @@ describe("leaveOneDayOutMaxError", () => {
       iv("2026-09-03T00:00:00Z", 60, 30),
       iv("2026-09-04T00:00:00Z", 80, 40),
     ];
-    const err = leaveOneDayOutMaxError(intervals, ["a"], fit, w);
+    const err = leaveOneDayOutMaxError(samplesOf(intervals), fit);
     expect(err).not.toBeNull();
     expect(Math.abs(err as number)).toBeLessThan(0.05);
   });
@@ -72,7 +73,7 @@ describe("leaveOneDayOutMaxError", () => {
       iv("2026-09-02T00:00:00Z", 20, 10),
       iv("2026-09-03T00:00:00Z", 1, 0.5), // 当天 ΔU=1 <3，应被跳过
     ];
-    const err = leaveOneDayOutMaxError(intervals, ["a"], fit, w);
+    const err = leaveOneDayOutMaxError(samplesOf(intervals), fit);
     // 只有两天参与（09-01、09-02），线性完美拟合，误差应接近 0；09-03 被跳过不会拉高误差。
     expect(err).not.toBeNull();
     expect(Math.abs(err as number)).toBeLessThan(0.05);
@@ -80,6 +81,17 @@ describe("leaveOneDayOutMaxError", () => {
 
   it("没有任何一天的 ΔU 达到门槛时返回 null", () => {
     const intervals = [iv("2026-09-01T00:00:00Z", 1, 0.5), iv("2026-09-02T00:00:00Z", 2, 1)];
-    expect(leaveOneDayOutMaxError(intervals, ["a"], fit, w)).toBeNull();
+    expect(leaveOneDayOutMaxError(samplesOf(intervals), fit)).toBeNull();
+  });
+});
+
+describe("toSamples", () => {
+  it("独立复算：dayKey 是 t0 的日期部分，row 是 keys 顺序对应的 familyPricedTokens，weight 来自 weightOf", () => {
+    const interval = iv("2026-09-05T12:34:56Z", 7, 3);
+    const [sample] = toSamples([interval], ["a", "b"], () => 0.5);
+    expect(sample.dayKey).toBe("2026-09-05");
+    expect(sample.row).toEqual([3, 0]); // "a" 有 feature=3，"b" 没出现在 familyPricedTokens 里 → 0
+    expect(sample.weight).toBe(0.5);
+    expect(sample.deltaU).toBe(7);
   });
 });

@@ -1,10 +1,32 @@
 /**
- * #183-a：CPU 门禁（go/no-go）。
+ * #183-a：CPU 门禁（go/no-go）+ 性能回归守卫。
  *
  * Cloudflare Free 计划每次调用 CPU 时间预算约 10ms（#183 设计 v1 §4）。这里用真实
- * fixture 全量（三个 provider）跑完整计算，测量多次取中位数与 P95，估算「28 天、3 个账户」
- * 规模下单次 cron 调用是否会超标。这不是拟合正确性测试，是性能护栏——数字本身就是产物，
- * 写进收口报告里给 #183-b 做 cron 接线方式的依据（一次算三个账户 vs 分账户轮转）。
+ * fixture 全量（三个 provider）跑完整计算，测量多次取中位数与 P95，并把数据按天数外推
+ * 复制，估算账户积累到设计要求的 28 天训练窗口时是否还在预算内。
+ *
+ * ## 背景：早期实现在这里查出过近似平方增长
+ *
+ * `intervals.ts` 早期实现对每个区间都重新遍历一次全部 facts（还在循环体里反复
+ * `Date.parse` 同一批 facts），实测：
+ * ```
+ * mult=1(~10天)  单账户 median=4.2ms
+ * mult=2(~20天)  单账户 median=13.2ms   ← 已超 10ms 预算
+ * mult=3(~28天)  单账户 median=27.2ms   ← 远超
+ * ```
+ * 改成双指针扫描 + `backtest.ts` 的 Sample 预计算（见两个文件头注释）之后，实测：
+ * ```
+ * mult=1(~10天)  单账户 median=0.807ms p95=1.459ms | 三账户合计 median=1.912ms p95=2.505ms
+ * mult=2(~20天)  单账户 median=1.453ms p95=2.068ms | 三账户合计 median=3.697ms p95=4.063ms
+ * mult=3(~30天)  单账户 median=1.839ms p95=2.103ms | 三账户合计 median=5.230ms p95=5.559ms
+ * mult=4(~40天)  单账户 median=1.979ms p95=2.209ms | 三账户合计 median=5.650ms p95=6.053ms
+ * ```
+ * 增长曲线从近似平方变成近似线性后趋于平台（`windowDays=28` 本身就是个滚动窗口，
+ * 数据总量超过 28 天之后窗口内数据量不再无限增长）。mult=3（约 28 天）验收：
+ * 单账户 P95 ≤3ms、三账户合计 P95 ≤6ms——上面的数字都满足。
+ *
+ * 这些数字是 Node 环境测的，不是 workerd；workerd 的 CPU 计时口径可能不同，
+ * 但相对增长曲线（有没有平方项）不依赖运行时，值得作为回归守卫钉住。
  */
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
@@ -12,12 +34,39 @@ import { calibrate } from "../src/calibration/index";
 import type { HourlyFamilyFact, LimitObservation } from "../src/calibration/types";
 
 const FIXTURE_PATH = new URL("./calibration_fixture.json", import.meta.url);
-const NOW = new Date("2026-09-27T10:00:00Z");
-const RUNS = 30;
+const BASE_NOW = new Date("2026-09-27T10:00:00Z");
+const RUNS = 20;
 
 async function loadFixture(): Promise<{ limit_observations: LimitObservation[]; hourly_family_facts: HourlyFamilyFact[] }> {
   const raw = await readFile(FIXTURE_PATH, "utf8");
   return JSON.parse(raw);
+}
+
+function shiftIso(iso: string, days: number): string {
+  return new Date(Date.parse(iso) + days * 86400000).toISOString();
+}
+
+/**
+ * 把真实数据按 `shiftDaysPerCopy` 天为间隔平移复制 `multiplier` 份，拼成一段更长的历史，
+ * 粗估账户数据量随天数增长的 CPU 曲线。这是外推模拟，不是真实数据——真实数据只有账户
+ * 起步以来（约 10 天）这么多，还没长到 28 天。
+ */
+function scaleObservations(rows: LimitObservation[], multiplier: number, shiftDaysPerCopy = 10): LimitObservation[] {
+  const out: LimitObservation[] = [];
+  for (let c = 0; c < Math.ceil(multiplier); c++) {
+    const shiftDays = c * shiftDaysPerCopy;
+    for (const r of rows) out.push({ ...r, observed_at: shiftIso(r.observed_at, shiftDays), reset_at: shiftIso(r.reset_at, shiftDays) });
+  }
+  return out;
+}
+
+function scaleFacts(rows: HourlyFamilyFact[], multiplier: number, shiftDaysPerCopy = 10): HourlyFamilyFact[] {
+  const out: HourlyFamilyFact[] = [];
+  for (let c = 0; c < Math.ceil(multiplier); c++) {
+    const shiftDays = c * shiftDaysPerCopy;
+    for (const f of rows) out.push({ ...f, window_start: shiftIso(f.window_start, shiftDays), window_end: shiftIso(f.window_end, shiftDays) });
+  }
+  return out;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -25,40 +74,98 @@ function percentile(sorted: number[], p: number): number {
   return sorted[Math.max(0, idx)];
 }
 
-describe("CPU 门禁", () => {
-  it("单账户（Claude，本 fixture 里数据量最大的账户）单次 calibrate() 耗时的中位数与 P95", async () => {
+function measure(fn: () => void, runs = RUNS): { median: number; p95: number } {
+  const durations: number[] = [];
+  for (let i = 0; i < runs; i++) {
+    const t0 = performance.now();
+    fn();
+    durations.push(performance.now() - t0);
+  }
+  durations.sort((a, b) => a - b);
+  return { median: percentile(durations, 50), p95: percentile(durations, 95) };
+}
+
+describe("CPU 门禁：当前真实数据量", () => {
+  it("单账户（Claude）与三账户合计 calibrate() 耗时的中位数与 P95", async () => {
     const { limit_observations, hourly_family_facts } = await loadFixture();
     const claudeObs = limit_observations.filter((r) => r.provider === "claude");
-    const durations: number[] = [];
-    for (let i = 0; i < RUNS; i++) {
-      const t0 = performance.now();
-      calibrate("claude", claudeObs, hourly_family_facts, { now: NOW });
-      durations.push(performance.now() - t0);
-    }
-    durations.sort((a, b) => a - b);
-    const median = percentile(durations, 50);
-    const p95 = percentile(durations, 95);
-    // eslint-disable-next-line no-console
-    console.log(`[CPU 门禁] Claude 单账户 calibrate()：median=${median.toFixed(3)}ms p95=${p95.toFixed(3)}ms (n=${RUNS})`);
-    // 记录数字本身就是交付物；这里只做一个宽松的健全性上限（10 秒），真正的判断在收口报告里手动写。
-    expect(median).toBeLessThan(10_000);
-  });
 
-  it("三个 provider 各跑一次 calibrate()（模拟单次 cron 调用同时算三个账户）的总耗时", async () => {
-    const { limit_observations, hourly_family_facts } = await loadFixture();
-    const durations: number[] = [];
-    for (let i = 0; i < RUNS; i++) {
-      const t0 = performance.now();
-      for (const provider of ["claude", "codex", "antigravity"] as const) {
-        calibrate(provider, limit_observations.filter((r) => r.provider === provider), hourly_family_facts, { now: NOW });
-      }
-      durations.push(performance.now() - t0);
-    }
-    durations.sort((a, b) => a - b);
-    const median = percentile(durations, 50);
-    const p95 = percentile(durations, 95);
+    const single = measure(() => calibrate("claude", claudeObs, hourly_family_facts, { now: BASE_NOW }));
     // eslint-disable-next-line no-console
-    console.log(`[CPU 门禁] 三账户合计 calibrate()：median=${median.toFixed(3)}ms p95=${p95.toFixed(3)}ms (n=${RUNS})`);
-    expect(median).toBeLessThan(10_000);
+    console.log(`[CPU 门禁] Claude 单账户：median=${single.median.toFixed(3)}ms p95=${single.p95.toFixed(3)}ms`);
+    expect(single.median).toBeLessThan(10_000);
+
+    const combined = measure(() => {
+      for (const provider of ["claude", "codex", "antigravity"] as const) {
+        calibrate(provider, limit_observations.filter((r) => r.provider === provider), hourly_family_facts, { now: BASE_NOW });
+      }
+    });
+    // eslint-disable-next-line no-console
+    console.log(`[CPU 门禁] 三账户合计：median=${combined.median.toFixed(3)}ms p95=${combined.p95.toFixed(3)}ms`);
+    expect(combined.median).toBeLessThan(10_000);
+  });
+});
+
+describe("CPU 门禁：按天数外推的增长曲线（go/no-go 验收）", () => {
+  it("mult=1..4（约10/20/30/40天）单账户与三账户合计的 median/P95，mult=3 需满足验收门槛", async () => {
+    const { limit_observations, hourly_family_facts } = await loadFixture();
+    const claudeObs = limit_observations.filter((r) => r.provider === "claude");
+
+    const singleResults: Record<number, { median: number; p95: number }> = {};
+    for (const mult of [1, 2, 3, 4]) {
+      const obsS = scaleObservations(claudeObs, mult);
+      const factsS = scaleFacts(hourly_family_facts, mult);
+      const now = new Date(shiftIso(BASE_NOW.toISOString(), (Math.ceil(mult) - 1) * 10));
+      const result = measure(() => calibrate("claude", obsS, factsS, { now }));
+      singleResults[mult] = result;
+      // eslint-disable-next-line no-console
+      console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 单账户 obs=${obsS.length} facts=${factsS.length} median=${result.median.toFixed(3)}ms p95=${result.p95.toFixed(3)}ms`);
+    }
+
+    const combinedResults: Record<number, { median: number; p95: number }> = {};
+    for (const mult of [1, 2, 3, 4]) {
+      const obsAllS = scaleObservations(limit_observations, mult);
+      const factsAllS = scaleFacts(hourly_family_facts, mult);
+      const now = new Date(shiftIso(BASE_NOW.toISOString(), (Math.ceil(mult) - 1) * 10));
+      const result = measure(() =>
+        (["claude", "codex", "antigravity"] as const).forEach((provider) =>
+          calibrate(provider, obsAllS.filter((r) => r.provider === provider), factsAllS, { now }),
+        ),
+      );
+      combinedResults[mult] = result;
+      // eslint-disable-next-line no-console
+      console.log(`[CPU 门禁] mult=${mult}(~${mult * 10}天) 三账户合计 median=${result.median.toFixed(3)}ms p95=${result.p95.toFixed(3)}ms`);
+    }
+
+    // 验收门槛（来自任务要求）：mult=3（约 28 天）单账户 P95 ≤3ms、三账户合计 P95 ≤6ms（Node 口径）。
+    expect(singleResults[3].p95).toBeLessThanOrEqual(3);
+    expect(combinedResults[3].p95).toBeLessThanOrEqual(6);
+
+    // 增长曲线不应该是平方级：mult 从 1 到 4（数据量外推到 4 倍历史长度）耗时增长不应该
+    // 超过约 4 倍——平方增长会是 ~16 倍，这个上限留了充足余量，只用来拦回归，不是精确刻画。
+    expect(singleResults[4].median).toBeLessThan(singleResults[1].median * 10 + 5);
+  });
+});
+
+describe("性能回归守卫：mult=3 规模下单账户耗时上限", () => {
+  /**
+   * 门槛取「实测 P95 的 3 倍」，理由：这是防回归的护栏，不是精确性能断言——CI 机器比本机慢、
+   * 抖动更大，3 倍留了充分余量避免误报；但如果哪天真的退回 O(intervals×facts) 的双循环，
+   * mult=3 规模下耗时会从 ~2ms 变成 ~27ms（见文件头注释的历史数字），远超这个门槛，
+   * 守卫依然能抓到。
+   */
+  const GUARD_MULTIPLIER = 3;
+
+  it(`mult=3（约30天）单账户 calibrate() median 耗时 < 实测 P95(~2.1ms) 的 ${GUARD_MULTIPLIER} 倍`, async () => {
+    const { limit_observations, hourly_family_facts } = await loadFixture();
+    const claudeObs = limit_observations.filter((r) => r.provider === "claude");
+    const obsS = scaleObservations(claudeObs, 3);
+    const factsS = scaleFacts(hourly_family_facts, 3);
+    const now = new Date(shiftIso(BASE_NOW.toISOString(), 20));
+
+    const result = measure(() => calibrate("claude", obsS, factsS, { now }));
+    // eslint-disable-next-line no-console
+    console.log(`[性能回归守卫] mult=3 单账户 median=${result.median.toFixed(3)}ms（门槛 ${(2.1 * GUARD_MULTIPLIER).toFixed(1)}ms）`);
+    expect(result.median).toBeLessThan(2.1 * GUARD_MULTIPLIER);
   });
 });

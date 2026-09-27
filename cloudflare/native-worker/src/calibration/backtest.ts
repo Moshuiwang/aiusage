@@ -11,53 +11,70 @@
  * 回测误差是账户级的（同一账户下所有族共用同一份系数联合预测当天 ΔU 之和），因为原始官方
  * 读数本身就是账户整体的额度百分比，没有「这一分钟是哪个族涨的」的真值可供拆分验证。
  * 分级门槛按族分别应用在 effectiveDeltaU 上，但 backtestMaxErr 对同一账户下所有族相同。
+ *
+ * ## 性能：Sample 预计算一次，逐日留出只重做 NNLS
+ *
+ * 早期实现在每一天的留出循环里都重新对 `Interval[]` 做 `t0.slice(0,10)`、重新跑一遍
+ * `intervalToRow`（特征向量）、重新调用 `weightOf`（内含 `Date.parse`）——这些值在不同的
+ * 留出折里根本不会变，等于把「构造样本」的成本乘了「天数」倍。`toSamples()` 把这些只算
+ * 一次，`leaveOneDayOutMaxError` 只在每天的循环体里做真正必须重做的事：按 `dayKey` 过滤、
+ * 重新调 `fit()`（NNLS）。
  */
 import { predictRow } from "./nnls";
 import type { Grade, Interval } from "./types";
 
 const MIN_DAILY_ACTUAL_DELTA_U = 3;
 
-/** 把区间按 `t0` 的日期（UTC）分组，返回排序后的日期键与对应区间。 */
-function groupByDay(intervals: Interval[]): Map<string, Interval[]> {
-  const groups = new Map<string, Interval[]>();
-  for (const interval of intervals) {
-    const day = interval.t0.slice(0, 10);
-    const list = groups.get(day) ?? [];
-    list.push(interval);
-    groups.set(day, list);
-  }
-  return groups;
+/** 一个区间预计算出的、逐日留出回测只需要的最小数据——不再持有整条 Interval。 */
+export interface Sample {
+  dayKey: string;
+  row: number[];
+  weight: number;
+  deltaU: number;
 }
 
 export function intervalToRow(interval: Interval, keys: string[]): number[] {
   return keys.map((k) => interval.familyPricedTokens[k] ?? 0);
 }
 
+/** 把区间数组转换成回测/拟合都能直接复用的 Sample 数组，每个区间只算一次。 */
+export function toSamples(intervals: Interval[], keys: string[], weightOf: (interval: Interval) => number): Sample[] {
+  return intervals.map((interval) => ({
+    dayKey: interval.t0.slice(0, 10),
+    row: intervalToRow(interval, keys),
+    weight: weightOf(interval),
+    deltaU: interval.deltaU,
+  }));
+}
+
 /**
- * 逐日留出回测：对每一天，用其余所有天的区间重新拟合，预测这一天各区间 ΔU 之和，
+ * 逐日留出回测：对每一天，用其余所有天的样本重新拟合，预测这一天各区间 ΔU 之和，
  * 跟这一天区间的实际 ΔU 之和比较相对误差。返回所有天里绝对值最大的相对误差；
  * 没有任何一天满足最小 ΔU 门槛（数据太稀疏）时返回 null（意味着无法给出回测证据）。
  */
 export function leaveOneDayOutMaxError(
-  intervals: Interval[],
-  keys: string[],
+  samples: Sample[],
   fit: (rows: number[][], targets: number[], weights: number[]) => number[],
-  weightOf: (interval: Interval) => number,
 ): number | null {
-  const byDay = groupByDay(intervals);
+  const byDay = new Map<string, Sample[]>();
+  for (const s of samples) {
+    const list = byDay.get(s.dayKey);
+    if (list) list.push(s);
+    else byDay.set(s.dayKey, [s]);
+  }
   const days = [...byDay.keys()].sort();
   let maxErr: number | null = null;
   for (const day of days) {
     const test = byDay.get(day)!;
-    const train = intervals.filter((i) => i.t0.slice(0, 10) !== day);
-    const actualSum = test.reduce((s, i) => s + i.deltaU, 0);
+    const train = samples.filter((s) => s.dayKey !== day);
+    const actualSum = test.reduce((s, x) => s + x.deltaU, 0);
     if (actualSum < MIN_DAILY_ACTUAL_DELTA_U || train.length === 0) continue;
     const coef = fit(
-      train.map((i) => intervalToRow(i, keys)),
-      train.map((i) => i.deltaU),
-      train.map(weightOf),
+      train.map((s) => s.row),
+      train.map((s) => s.deltaU),
+      train.map((s) => s.weight),
     );
-    const predictedSum = test.reduce((s, i) => s + predictRow(intervalToRow(i, keys), coef), 0);
+    const predictedSum = test.reduce((s, x) => s + predictRow(x.row, coef), 0);
     const relErr = (predictedSum - actualSum) / actualSum;
     if (maxErr === null || Math.abs(relErr) > Math.abs(maxErr)) maxErr = relErr;
   }

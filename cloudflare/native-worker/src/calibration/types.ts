@@ -52,6 +52,8 @@ export interface CalibrationResult {
   grade: Grade;
   sample_intervals: number;
   formula_version: string;
+  /** 这批系数的计算时刻（= `CalibrateOptions.now`），供接线时用 `isStale()` 判断是否过期。 */
+  fitted_at: string;
 }
 
 /** `calibrate()` 的整体返回：每族一条系数结果，外加数据完整性剔除统计。 */

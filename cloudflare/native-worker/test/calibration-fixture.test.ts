@@ -70,6 +70,7 @@ describe("calibration fixture：Claude 定级（逐族）", () => {
       expect(Math.abs(byFamily[family].backtest_max_err as number)).toBeLessThanOrEqual(0.25);
       expect(byFamily[family].coef).toBeGreaterThan(0);
       expect(byFamily[family].formula_version).toBe("v1");
+      expect(byFamily[family].fitted_at).toBe(NOW.toISOString());
     }
     expect(byFamily.haiku.grade).toBe("none");
     expect(byFamily.haiku.effective_delta_u).toBe(0);
