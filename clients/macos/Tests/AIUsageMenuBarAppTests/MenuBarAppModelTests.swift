@@ -1408,6 +1408,149 @@ final class MenuBarAppModelTests: XCTestCase {
         await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 10))
         await loader.complete(period: "month", summary: try summary(periodID: "month", totalTokens: 20))
     }
+
+    // PR #191 Codex 审查 P1：syncNow() 对非 today 的当前选中期无条件 force refresh，
+    // 如果面板停在 week/month（offset 0）不动，定时器每轮调用 syncNow() 会绕过 #190 刚加的
+    // prefetchMinimumInterval 节流——即使 prefetchCommonPeriods() 本身跳过了，syncNow() 那一路
+    // 还是照样发。定时器必须改用 timerTick()，让「当前选中的 week/month」并入同一节流。
+    func testTimerTickThrottlesSelectedNonTodayPeriodAcrossTicks() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T08:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "week"),
+            now: { clock },
+            loadSummary: loader.load
+        )
+        XCTAssertEqual(model.selectedPeriodID, "week", "前提：面板停在 week，不是 today")
+
+        var issuedSoFar = 0
+        for tick in 1...6 {
+            clock = clock.addingTimeInterval(600)
+            model.timerTick()
+
+            // today（refreshToday 驱动菜单栏数字）每轮必发；week 是当前选中期，
+            // 首轮无缓存会连同 month 一起由 prefetchCommonPeriods 发起，之后 5 轮都应跳过。
+            issuedSoFar += 1
+            if tick == 1 { issuedSoFar += 2 }
+            try await loader.waitForTotalRequestCount(issuedSoFar)
+
+            await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: tick))
+            if tick == 1 {
+                await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 700))
+                await loader.complete(period: "month", summary: try summary(periodID: "month", totalTokens: 3000))
+            }
+            await yieldToMainActor()
+        }
+
+        let total = await loader.totalRequestCount()
+        XCTAssertEqual(
+            total, 8,
+            "6 轮 today + 首轮 week/month = 8；即使面板停在 week，timerTick() 也不应绕过预取节流重复请求"
+        )
+    }
+
+    // 超过 prefetchMinimumInterval（60 分钟）后，当前选中的 week（走 prefetchCommonPeriods
+    // 同一节流）必须重新请求；30 分钟内不应请求。today 因为 refreshToday 无条件强刷，
+    // 每次 timerTick 都会请求，与节流无关。
+    func testTimerTickRefetchesSelectedWeekAfterMinimumIntervalElapses() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T08:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "week"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 1), fetchedAt: clock),
+                "week": CachedMenuSummary(summary: try summary(periodID: "week", totalTokens: 700), fetchedAt: clock),
+                "month": CachedMenuSummary(summary: try summary(periodID: "month", totalTokens: 3000), fetchedAt: clock),
+            ],
+            now: { clock },
+            loadSummary: loader.load
+        )
+
+        clock = clock.addingTimeInterval(1800) // 30 分钟，week/month 仍新鲜
+        model.timerTick()
+        try await loader.waitForTotalRequestCount(1) // 仅 today
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 2))
+        await yieldToMainActor()
+        let afterHalfHour = await loader.totalRequestCount()
+        XCTAssertEqual(afterHalfHour, 1, "week/month 缓存仍新鲜，30 分钟内不应重新请求")
+
+        clock = clock.addingTimeInterval(1900) // 累计 3700s，超过 60 分钟最小间隔
+        model.timerTick()
+        try await loader.waitForTotalRequestCount(4) // +today +week +month
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 3))
+        await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 800))
+        await loader.complete(period: "month", summary: try summary(periodID: "month", totalTokens: 3100))
+        await yieldToMainActor()
+        let afterInterval = await loader.totalRequestCount()
+        XCTAssertEqual(afterInterval, 4, "超过 60 分钟最小间隔后，当前选中的 week 与 month 都应各重新请求一次")
+    }
+
+    // PR #191 Codex 审查 P2：prefetchCommonPeriods 的请求发起时刻与响应落地时刻之间如果跨了
+    // 服务日（上海时区午夜），这份响应描述的是「跨日前」的本周/本月，必须丢弃、不写入缓存，
+    // 否则新的一天里会展示过期统计，还会因为 fetchedAt 是新写入的时间戳而被误判成新鲜，
+    // 挡住下一次本该立即重新请求的预取。
+    func testPrefetchCommonPeriodsDiscardsResponseThatCrossedServiceDay() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T23:59:50+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(),
+            now: { clock },
+            loadSummary: loader.load
+        )
+
+        model.prefetchCommonPeriods()
+        try await loader.waitForTotalRequestCount(2) // week + month 发起时仍是 06-25
+
+        clock = try date("2026-06-26T00:00:10+08:00") // 响应到达时已经跨了服务日
+        await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 700))
+        await loader.complete(period: "month", summary: try summary(periodID: "month", totalTokens: 3000))
+        await yieldToMainActor()
+
+        // 跨日响应应被丢弃：下一次预取因为「缓存缺失」重新请求 week 和 month，
+        // 而不是被刚才那份（其实来自上一天）写入的缓存挡住。
+        model.prefetchCommonPeriods()
+        try await loader.waitForTotalRequestCount(4)
+        let total = await loader.totalRequestCount()
+        XCTAssertEqual(total, 4, "跨服务日的预取响应必须被丢弃，下一次预取应立即重新请求 week 和 month")
+    }
+
+    // reviewer 在 #191 P1/P2 收口前发现：coveredByPrefetch 的选中期完全交给
+    // prefetchCommonPeriods() 处理后，它的 store() 只写 cachedSummaries，不更新
+    // self.summary（只有 refresh() 的成功回调会更新 self.summary）。面板停在 week/month
+    // 不动时，定时器刷新到了新数据，但界面上一直显示旧数字，直到面板关闭重开。
+    func testTimerTickUpdatesVisibleSummaryWhenPrefetchRefreshesTheSelectedPeriod() async throws {
+        let loader = ControlledSummaryLoader()
+        var clock = try date("2026-06-25T08:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(),
+            config: testConfig(defaultPeriod: "week"),
+            cachedSummaries: [
+                "today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 1), fetchedAt: clock),
+                "week": CachedMenuSummary(summary: try summary(periodID: "week", totalTokens: 700), fetchedAt: clock),
+                "month": CachedMenuSummary(summary: try summary(periodID: "month", totalTokens: 3000), fetchedAt: clock),
+            ],
+            now: { clock },
+            loadSummary: loader.load
+        )
+        XCTAssertEqual(model.summary.period.totalTokens, 700, "前提：面板当前展示的是 week 的旧缓存值")
+
+        clock = clock.addingTimeInterval(3700) // 超过 60 分钟最小间隔，week/month 都会重新预取
+        model.timerTick()
+        try await loader.waitForTotalRequestCount(3) // today + week + month
+        await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 2))
+        await loader.complete(period: "week", summary: try summary(periodID: "week", totalTokens: 999))
+        await loader.complete(period: "month", summary: try summary(periodID: "month", totalTokens: 3100))
+        await yieldToMainActor()
+
+        XCTAssertEqual(
+            model.summary.period.totalTokens, 999,
+            "面板停在 week 时，靠 prefetchCommonPeriods 刷新出来的新 week 结果必须同步反映到当前展示的" +
+            "summary，不能只更新缓存、等面板关闭重开才看到"
+        )
+    }
 }
 
 private actor ControlledSummaryLoader {

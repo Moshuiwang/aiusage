@@ -145,8 +145,10 @@ final class StatusBarController: NSObject {
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
-                self.model.syncNow()
-                self.model.prefetchCommonPeriods()
+                // #191（PR #191 Codex 审查 P1）：syncNow() 对非 today 的当前选中期无条件强刷，
+                // 面板停在 week/month 会绕过 #190 的预取节流；定时器改用 timerTick()，手动
+                // 「立即同步」按钮/菜单仍用 syncNow()，行为不变。
+                self.model.timerTick()
             }
         }
     }
