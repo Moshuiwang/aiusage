@@ -104,6 +104,11 @@ class DeviceConfig:
     token_env: Optional[str] = None
     ai_accounts: Optional[Dict[str, Dict[str, Any]]] = None
     release_channel: str = DEFAULT_RELEASE_CHANNEL
+    #: #181：{provider_key: 本机稳定标识文件路径}，例如
+    #: {"codex": "/Users/x/.codex/auth.json", "claude": "/Users/x/.claude.json"}。
+    #: 完全可选、显式配置——本模块不猜测任何默认路径，缺省即 ``None``（零配置行为不变，
+    #: 也不会在没人要求的情况下去碰这台机器的真实账户配置文件）。
+    account_fingerprint_sources: Optional[Dict[str, str]] = None
     #: 本地 outbox（#73）。``None`` = 这台设备从未启用过，走原来的直推路径，行为零变化。
     #: 存在但 ``enabled=False`` = 已回退到直推，pusher 会先确认磁盘上没有未排空的数据。
     outbox: Optional[OutboxConfig] = None
@@ -150,6 +155,11 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
         token_env=data.get("token_env"),
         ai_accounts=data.get("ai_accounts") if isinstance(data.get("ai_accounts"), dict) else None,
         release_channel=release_channel,
+        account_fingerprint_sources=(
+            data.get("account_fingerprint_sources")
+            if isinstance(data.get("account_fingerprint_sources"), dict)
+            else None
+        ),
         outbox=_parse_outbox(data.get("outbox")),
     )
 

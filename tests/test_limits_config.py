@@ -60,6 +60,35 @@ class TestLimitsConfig(unittest.TestCase):
         self.assertEqual(config.enabled_providers[0].env, {})
         self.assertEqual(config.enabled_providers[1].env, {"CLAUDE_CONFIG_DIR": "/Users/wangzhipeng/.claudew"})
 
+    def test_parse_limits_config_passes_through_claude_account_config_path(self) -> None:
+        """#181：claude 的 account_config_path 是全新的可选字段，用来算账户指纹，
+        跟已有的 auth_file（token 用）是两份独立文件——不能混用同一份就假设够了。
+        """
+        config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [
+                    {
+                        "provider": "claude",
+                        "cli": True,
+                        "account_config_path": "/tmp/claude-account-config.json",
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(config.enabled_providers[0].account_config_path, "/tmp/claude-account-config.json")
+
+    def test_parse_limits_config_claude_account_config_path_defaults_to_none(self) -> None:
+        config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [{"provider": "claude", "cli": True}],
+            }
+        )
+
+        self.assertIsNone(config.enabled_providers[0].account_config_path)
+
     def test_rejects_inline_secret_fields(self) -> None:
         with self.assertRaises(ConfigError):
             parse_limits_config(

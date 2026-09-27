@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from . import account_fingerprint
 from .collector_store import (
     DELIVERED,
     KIND_USAGE,
@@ -839,6 +840,12 @@ def _usage_hourly_facts_from_mswusage(
     default_agent: str = "codex",
     default_client: str = "codex",
 ) -> list[dict[str, Any]]:
+    # #181：account_fingerprint 是独立于 account_id/fact_id 的一个补充字段——
+    # 只用于"同账户跨机器核对"，绝不参与 fact_id 计算。fact_id 仍然完全由下面
+    # 已有的 account_id/confidence/provenance 决定，跟指纹是否可用、指纹取到
+    # 什么值都无关，这样才不会因为某天多了一份可读的本机凭据文件，就让已经写进
+    # D1 的历史 fact_id 集体变化、在 upsert 去重上多算一遍。
+    account_fp = _resolve_account_fingerprint(config, provider_key)
     accounts = config.ai_accounts or {}
     account = accounts.get(provider_key)
     account_confirmed = isinstance(account, dict)
@@ -887,6 +894,7 @@ def _usage_hourly_facts_from_mswusage(
                 "label": label,
                 "display_name": account.get("display_name"),
                 "subscription": account.get("subscription"),
+                **({"account_fingerprint": account_fp} if account_fp else {}),
             },
             "usage": {
                 "input_tokens": int(row.get("input_tokens") or 0),
@@ -913,6 +921,38 @@ def _usage_hourly_facts_from_mswusage(
             fact["model_breakdowns"] = row["model_breakdowns"]
         facts.append(fact)
     return facts
+
+
+#: provider_key -> 读取该 provider 本机稳定标识文件并算指纹的函数。
+#: 只覆盖有静态本机配置文件可读的 provider（Claude / Codex）；Antigravity 没有
+#: 这样的静态文件，只能靠已经在跑的 language server RPC 现读现算，这次没接（#181
+#: 报告里的已知缺口，留给额度采集那条链路的后续任务）。
+_ACCOUNT_FINGERPRINT_READERS: dict[str, Any] = {
+    "claude": account_fingerprint.claude_account_fingerprint,
+    "codex": account_fingerprint.codex_account_fingerprint,
+}
+
+
+def _resolve_account_fingerprint(config: DeviceConfig, provider_key: str) -> str | None:
+    """按配置里 ``account_fingerprint_sources[provider_key]`` 指向的路径算一次指纹。
+
+    完全显式配置——没配置这一项就直接返回 ``None``，不猜测任何默认路径，
+    也就不会在没人要求的情况下去碰这台机器上的真实账户配置文件。读取/解析失败
+    同样降级为 ``None``（`account_fingerprint` 模块内部已经保证不抛异常）。
+    """
+    sources = config.account_fingerprint_sources or {}
+    path = sources.get(provider_key)
+    if not path:
+        return None
+    reader = _ACCOUNT_FINGERPRINT_READERS.get(provider_key)
+    if reader is None:
+        return None
+    try:
+        return reader(path)
+    except Exception:
+        # 双重保险：即便某个 reader 未来被改坏到会抛异常，也不能让一次账户指纹
+        # 计算失败拖垮整次采集上报。
+        return None
 
 
 def _local_collector_release(config: DeviceConfig) -> dict[str, Any]:

@@ -127,3 +127,40 @@ class TestDeviceConfigReleaseChannel(unittest.TestCase):
             validate_device_config(data)
 
         self.assertIn("release_channel", str(context.exception))
+
+
+class TestDeviceConfigAccountFingerprintSources(unittest.TestCase):
+    """#181：account_fingerprint_sources 是全新的可选字段，缺省必须是 None（零配置不变行为）。"""
+
+    def setUp(self) -> None:
+        path = os.path.join(FIXTURES_DIR, "device_config_linux.json")
+        with open(path, "r", encoding="utf-8") as handle:
+            self.data = json.load(handle)
+
+    def test_defaults_to_none_when_absent(self) -> None:
+        cfg = validate_device_config(dict(self.data))
+
+        self.assertIsNone(cfg.account_fingerprint_sources)
+
+    def test_passes_through_configured_paths(self) -> None:
+        data = dict(self.data)
+        data["account_fingerprint_sources"] = {
+            "codex": "/Users/tester/.codex/auth.json",
+            "claude": "/Users/tester/.claude.json",
+        }
+
+        cfg = validate_device_config(data)
+
+        self.assertEqual(
+            cfg.account_fingerprint_sources,
+            {"codex": "/Users/tester/.codex/auth.json", "claude": "/Users/tester/.claude.json"},
+        )
+
+    def test_ignores_non_dict_value_instead_of_crashing(self) -> None:
+        """跟现有 ai_accounts 字段一样宽松：形状不对就当没配置，而不是让整次采集报错中断。"""
+        data = dict(self.data)
+        data["account_fingerprint_sources"] = "not-a-dict"
+
+        cfg = validate_device_config(data)
+
+        self.assertIsNone(cfg.account_fingerprint_sources)

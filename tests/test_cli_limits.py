@@ -11,8 +11,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ai_usage_widget import cli
+from ai_usage_widget.account_fingerprint import compute_account_fingerprint
 from ai_usage_widget.limits import parse_limit_window
 from ai_usage_widget.limits_config import parse_limits_config
+from ai_usage_widget.limits_runtime import FixtureLimitsProvider
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -402,6 +404,83 @@ class TestCliLimits(unittest.TestCase):
         self.assertEqual(calls[0][0], "https://example.test/ingest-limits")
         self.assertEqual(calls[0][1], "secret-token")
         self.assertEqual({row["source_id"] for row in calls[0][2]["windows"]}, {"claude", "codex"})
+        # #181：--provider-fixture 走的是离线 fixture，没有任何本机账户配置文件可读，
+        # 指纹字段必须完全不出现——不能猜、不能补一个空字符串。
+        for row in calls[0][2]["windows"]:
+            self.assertNotIn("account_fingerprint", row)
+
+    def test_push_limits_end_to_end_attaches_account_fingerprint_via_limits_config(self) -> None:
+        """#181 code review 补漏：之前只单测了两个辅助函数，`_run_push_limits` 里
+        真正接线的那一行（`_windows_payload_with_account_fingerprints` 的调用点）
+        完全没有端到端覆盖——如果有人手滑改回 ``window.to_snapshot_dict()``，
+        之前的测试集一条都不会红。这里用 ``--limits-config`` 真正走一遍
+        ``_run_push_limits``，只是把 provider 的 ``collect()`` 换成离线 fixture，
+        避免真的打 Codex WHAM 网络请求。
+        """
+        limits_config_payload = {
+            "timezone": "Asia/Shanghai",
+            "providers": [
+                {
+                    "provider": "codex",
+                    "source_id": "codex",
+                    "auth_file": str(FIXTURES / "codex_account_auth_sample.json"),
+                    "rpc": True,
+                },
+            ],
+        }
+        fake_providers = {
+            "codex": FixtureLimitsProvider(
+                "codex",
+                [
+                    {
+                        "provider": "codex",
+                        "window": "session",
+                        "reset_at": "2026-06-08T00:00:00+08:00",
+                        "observed_at": "2026-06-07T00:00:00+08:00",
+                        "window_duration_minutes": 300,
+                        "source_type": "runtime_api",
+                        "confidence": "observed",
+                        "status": "ok",
+                    }
+                ],
+            )
+        }
+        calls = []
+
+        def fake_push_limits(url, token, payload, timeout=10.0):
+            calls.append(payload)
+            return {"success": True, "windows_written": len(payload["windows"])}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "limits-config.json"
+            config_path.write_text(json.dumps(limits_config_payload), encoding="utf-8")
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with patch.object(cli, "_providers_from_limits_config", return_value=fake_providers), \
+                    patch.object(cli, "push_limits_payload", fake_push_limits), \
+                    patch.dict(os.environ, {"AI_USAGE_TEST_PUSH_TOKEN_FP": "secret-token"}), \
+                    redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli.main([
+                    "push-limits",
+                    "--limits-config",
+                    str(config_path),
+                    "--url",
+                    "https://example.test/ingest-limits",
+                    "--token-env",
+                    "AI_USAGE_TEST_PUSH_TOKEN_FP",
+                ])
+
+        self.assertEqual(code, 0, stderr.getvalue())
+        self.assertEqual(len(calls), 1)
+        windows = calls[0]["windows"]
+        self.assertEqual(len(windows), 1)
+        expected_fp = compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333")
+        self.assertEqual(windows[0]["account_fingerprint"], expected_fp)
+        # fixture 里带着的凭据原文绝不能出现在真正会被 POST 出去的 payload 里。
+        payload_text = json.dumps(calls[0], ensure_ascii=False)
+        self.assertNotIn("codex-fixture-refresh-token-secret", payload_text)
+        self.assertNotIn("codex-fixture-access-token", payload_text)
 
     def test_push_limits_dry_run_does_not_post(self) -> None:
         stdout = io.StringIO()
@@ -511,6 +590,94 @@ class TestCliLimits(unittest.TestCase):
             ])
 
         self.assertEqual(code, 1)
+
+
+class TestAccountFingerprintsForLimitsWindows(unittest.TestCase):
+    """#181：额度窗口上报里附加 account_fingerprint 的两个纯函数——不经过任何真实
+    provider.collect()，所以不会碰网络，也不会碰真实的 ~/.claude、~/.codex。
+    """
+
+    def test_fingerprints_are_keyed_by_runtime_id_from_limits_config(self) -> None:
+        limits_config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [
+                    {
+                        "provider": "codex",
+                        "source_id": "codex-main",
+                        "auth_file": str(FIXTURES.parent / "fixtures" / "codex_account_auth_sample.json"),
+                        "rpc": True,
+                    },
+                    {
+                        "provider": "claude",
+                        "source_id": "claude-main",
+                        "cli": True,
+                        "account_config_path": str(FIXTURES.parent / "fixtures" / "claude_account_config_sample.json"),
+                    },
+                ],
+            }
+        )
+
+        fingerprints = cli._account_fingerprints_from_limits_config(limits_config)
+
+        self.assertEqual(
+            fingerprints["codex-main"],
+            compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333"),
+        )
+        self.assertEqual(
+            fingerprints["claude-main"],
+            compute_account_fingerprint("claude", "11111111-1111-1111-1111-111111111111"),
+        )
+
+    def test_fingerprints_are_empty_when_no_limits_config(self) -> None:
+        self.assertEqual(cli._account_fingerprints_from_limits_config(None), {})
+
+    def test_fingerprints_omit_providers_without_a_configured_source_path(self) -> None:
+        limits_config = parse_limits_config(
+            {
+                "timezone": "Asia/Shanghai",
+                "providers": [{"provider": "codex", "source_id": "codex-no-file", "rpc": True}],
+            }
+        )
+
+        fingerprints = cli._account_fingerprints_from_limits_config(limits_config)
+
+        self.assertNotIn("codex-no-file", fingerprints)
+
+    def test_windows_payload_attaches_fingerprint_by_source_id(self) -> None:
+        window = parse_limit_window(
+            {
+                "provider": "codex",
+                "source_id": "codex-main",
+                "window": "session",
+                "reset_at": "2026-06-08T00:00:00+08:00",
+                "observed_at": "2026-06-07T00:00:00+08:00",
+                "window_duration_minutes": 300,
+            }
+        )
+
+        payload = cli._windows_payload_with_account_fingerprints(
+            [window], {"codex-main": "fp:codex:deadbeefdeadbeefdeadbeef"}
+        )
+
+        self.assertEqual(payload[0]["account_fingerprint"], "fp:codex:deadbeefdeadbeefdeadbeef")
+        self.assertEqual(payload[0]["source_id"], "codex-main")
+
+    def test_windows_payload_omits_fingerprint_key_when_not_available(self) -> None:
+        window = parse_limit_window(
+            {
+                "provider": "codex",
+                "source_id": "codex-unknown",
+                "window": "session",
+                "reset_at": "2026-06-08T00:00:00+08:00",
+                "observed_at": "2026-06-07T00:00:00+08:00",
+                "window_duration_minutes": 300,
+            }
+        )
+
+        payload = cli._windows_payload_with_account_fingerprints([window], {})
+
+        self.assertNotIn("account_fingerprint", payload[0])
 
 
 if __name__ == "__main__":

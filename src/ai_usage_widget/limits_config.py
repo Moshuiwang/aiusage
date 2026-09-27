@@ -24,6 +24,11 @@ class LimitsProviderConfig:
     codex_rpc_sock: str | None = None
     claude_cli: bool = False
     env: dict[str, str] | None = None
+    #: #181：Claude 本机账户配置文件路径（例如 ``~/.claude.json`` 那种带
+    #: ``oauthAccount.accountUuid`` 的文件），只用来算 account_fingerprint。
+    #: 跟上面 ``auth_file``（登录 token 用）是两份不同文件，不能假设复用同一份。
+    #: 完全可选——不给就不算指纹，直推路径行为不变。
+    account_config_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +139,7 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
         has_oauth_pair = bool(auth_file and usage_url)
         if enabled and not has_oauth_pair and not claude_cli:
             raise ConfigError("claude limits provider requires auth_file+usage_url or cli=true")
+        account_config_path = _string(payload, "account_config_path", required=False)
         return LimitsProviderConfig(
             provider=provider,
             enabled=enabled,
@@ -142,6 +148,7 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
             usage_url=usage_url,
             claude_cli=claude_cli,
             env=env,
+            account_config_path=account_config_path,
         )
 
     if provider == "antigravity":

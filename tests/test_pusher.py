@@ -10,7 +10,10 @@ from typing import Any, Dict
 
 from dataclasses import replace
 
+from pathlib import Path
+
 from ai_usage_widget import version_contract
+from ai_usage_widget.account_fingerprint import compute_account_fingerprint
 from ai_usage_widget.config import DeviceConfig
 from ai_usage_widget.models import CommandResult
 from ai_usage_widget.pusher import (
@@ -19,6 +22,8 @@ from ai_usage_widget.pusher import (
     _facts_digest,
     _usage_hourly_facts_from_mswusage,
 )
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class FakeExecutor:
@@ -237,6 +242,108 @@ class TestDevicePusherFakeHTTP(unittest.TestCase):
         self.assertEqual(facts[0]["ai_account"]["label"], "start@example.com")
         self.assertEqual(facts[0]["usage"]["total_tokens"], 155)
         self.assertEqual(facts[0]["window_end"], "2026-06-11T14:00:00+08:00")
+
+    def test_pusher_attaches_account_fingerprint_when_source_path_configured(self) -> None:
+        """#181：配置了 account_fingerprint_sources.codex 之后，fact 里要带上指纹。"""
+        self.config.account_fingerprint_sources = {
+            "codex": str(FIXTURES / "codex_account_auth_sample.json"),
+        }
+        daily_stdout = '{"daily": [{"period": "2026-06-11", "agent": "codex", "totalTokens": 155}]}'
+        mswusage_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [{"date": "2026-06-11", "agent": "codex", "total_tokens": 155}],
+            "hourly": [
+                {
+                    "hour": "2026-06-11T13:00:00+08:00",
+                    "total_tokens": 155,
+                    "event_count": 2,
+                    "session_count": 1,
+                }
+            ],
+            "sessions": [],
+        })
+        executor = FakeExecutor([
+            CommandResult(stdout=daily_stdout, exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout=mswusage_stdout, exit_code=0),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertTrue(result["success"])
+        facts = http_client.last_json["usage_hourly_facts"]
+        self.assertEqual(len(facts), 1)
+        expected_fp = compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333")
+        self.assertEqual(facts[0]["ai_account"]["account_fingerprint"], expected_fp)
+        # fixture 里带着的 refresh token 原文绝不能出现在上报 payload 里的任何地方。
+        payload_text = json.dumps(http_client.last_json, ensure_ascii=False)
+        self.assertNotIn("codex-fixture-refresh-token-secret", payload_text)
+        self.assertNotIn("codex-fixture-access-token", payload_text)
+
+    def test_pusher_account_fingerprint_key_is_absent_when_source_not_configured(self) -> None:
+        """没配置 account_fingerprint_sources 时必须降级为「完全不写这个 key」，不猜、不报错、
+        不中断采集——跟 limits 那条路径（`_windows_payload_with_account_fingerprints`）的口径
+        统一：没有指纹就不出现这个字段，不写 ``null``。写 ``null`` 会让服务端以后没法区分
+        「这条 fact 就是没有指纹」和「这条 fact 的指纹值恰好是 null」两种意思。
+        """
+        daily_stdout = '{"daily": [{"period": "2026-06-11", "agent": "codex", "totalTokens": 10}]}'
+        mswusage_stdout = json.dumps({
+            "schema_version": 1,
+            "source": "mswusage_codex",
+            "timezone": "Asia/Shanghai",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "provenance": "mswusage_codex_token_count",
+            "daily": [{"date": "2026-06-11", "agent": "codex", "total_tokens": 10}],
+            "hourly": [{"hour": "2026-06-11T13:00:00+08:00", "total_tokens": 10, "event_count": 1, "session_count": 1}],
+            "sessions": [],
+        })
+        executor = FakeExecutor([
+            CommandResult(stdout=daily_stdout, exit_code=0),
+            CommandResult(stdout='{"session": []}', exit_code=0),
+            CommandResult(stdout=mswusage_stdout, exit_code=0),
+        ])
+        http_client = FakeHTTPClient(status_code=200, response_data={"status": "accepted"})
+
+        result = DevicePusher(self.config, executor=executor, http_client=http_client).push()
+
+        self.assertTrue(result["success"])
+        facts = http_client.last_json["usage_hourly_facts"]
+        self.assertNotIn("account_fingerprint", facts[0]["ai_account"])
+
+    def test_pusher_account_fingerprint_does_not_change_fact_id(self) -> None:
+        """#181 关键不变量：account_fingerprint 绝不能影响 fact_id，否则同一账户换一次
+        指纹来源（甚至同账户换机器时读到不同表示）就会在 D1 里长出一条新的 fact_id，
+        变成重复计数。这里同一份 usage 报告分别在“无指纹来源”和“配置了指纹来源”两种
+        情况下各生成一次 fact，断言两次的 fact_id 完全相同——从产物（fact_id 字符串）
+        直接比较，不依赖任何内部实现细节。
+        """
+        report = {
+            "provenance": "mswusage_codex_token_count",
+            "generated_at": "2026-06-11T14:00:00+08:00",
+            "collector": {"mode": "incremental", "coverage": {"start": None, "end": None}},
+            "hourly": [
+                {"hour": "2026-06-11T13:00:00+08:00", "total_tokens": 10, "event_count": 1, "session_count": 1},
+            ],
+        }
+
+        facts_without_fingerprint = _usage_hourly_facts_from_mswusage(self.config, report)
+
+        self.config.account_fingerprint_sources = {
+            "codex": str(FIXTURES / "codex_account_auth_sample.json"),
+        }
+        facts_with_fingerprint = _usage_hourly_facts_from_mswusage(self.config, report)
+
+        self.assertEqual(facts_without_fingerprint[0]["fact_id"], facts_with_fingerprint[0]["fact_id"])
+        # 双重确认这条守卫真的测到了「指纹确实不同」这件事，不是恒真断言：没配置来源时
+        # key 完全不出现；配置了来源时 key 出现且有一个非空指纹值。
+        self.assertNotIn("account_fingerprint", facts_without_fingerprint[0]["ai_account"])
+        self.assertIn("account_fingerprint", facts_with_fingerprint[0]["ai_account"])
+        self.assertIsNotNone(facts_with_fingerprint[0]["ai_account"]["account_fingerprint"])
 
     def test_pusher_sends_usage_ledger_facts_with_unconfirmed_attribution_without_ai_accounts(self) -> None:
         daily_stdout = '{"daily": []}'
