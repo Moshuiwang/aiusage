@@ -210,7 +210,7 @@ describe("CPU 门禁：按天数外推的增长曲线（go/no-go 验收）", () 
     // 验收门槛：mult=3（约 28 天）单账户 P95 ≤3ms（Node 热进程口径，只是回归参考线）。
     // 绝对毫秒与运行机器相关（CI runner 比本机慢 2–3 倍，曾测得 7.2ms），不在跨机器测试里断言；
     // 真实验收以冷启动脚本 scripts/measure_calibration_cold_cpu.mjs 为准。这里只守增长形状：
-    // 线性算法 mult 1→3 约 2 倍，原双循环约 6.5 倍。
+    // 线性算法 mult 1→3 约 3 倍（数据 3 倍；预热后取 min 实测约 2.9），原双循环约 6.5 倍。
     expect(singleRatio).toBeLessThanOrEqual(3.5);
     // 三账户合计这条不再是硬门槛：部署前审查 Must 1b 之后，生产 cron 每次只算一个 provider
     // （`quota-calibration-cron.ts` 的 `providerForToday()` 按日轮换），「三账户合计」这个
@@ -248,7 +248,7 @@ describe("性能回归守卫：mult=3 规模下单账户耗时上限", () => {
     });
     const ratio = result.min / base.min;
     // eslint-disable-next-line no-console
-    console.log(`[性能回归守卫] mult=3/mult=1 min 比值=${ratio.toFixed(2)}（门槛 3.5；线性约 2，原双循环约 6.5）`);
+    console.log(`[性能回归守卫] mult=3/mult=1 min 比值=${ratio.toFixed(2)}（门槛 3.5；线性约 3，预热后实测约 2.9；原双循环约 6.5）`);
     // 用同一进程内的相对比值，避免不同机器绝对毫秒差异造成误报（CI runner 比本机慢 2–3 倍）；
     // 预热 + 交替轮流 + 取最小值的理由见 measureInterleaved()。
     expect(ratio).toBeLessThanOrEqual(3.5);
