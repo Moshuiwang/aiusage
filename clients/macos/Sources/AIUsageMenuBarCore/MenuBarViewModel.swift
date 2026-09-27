@@ -369,7 +369,7 @@ public enum MenuBarViewModel {
             trendLegendTotals: aggregatedSegments(nonFuturePoints),
             trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
-            limitRows: sortedLimits(limitWindows).map { limitRow($0, generatedAt: summary.generatedAt) },
+            limitRows: sortedLimits(limitWindows).map { limitRow($0, generatedAt: summary.generatedAt, timezone: summary.timezone) },
             breakdownSections: breakdownSections(summary.breakdown),
             quotaRings: quotaRings(
                 from: quotaSlotsWithWindows,
@@ -1103,14 +1103,14 @@ public enum MenuBarViewModel {
         return "\(ceiling)"
     }
 
-    private static func limitRow(_ window: MobileLimitWindow, generatedAt: String?) -> MenuDisplayRow {
+    private static func limitRow(_ window: MobileLimitWindow, generatedAt: String?, timezone: String?) -> MenuDisplayRow {
         let availability = window.isOfficialObserved ? "\(Int(window.remainingPercent.rounded()))% 可用" : "未观测"
         let used = "\(Int(window.usedPercent.rounded()))% 已用"
         return MenuDisplayRow(
             id: window.id,
             title: "\(providerName(window.provider)) \(window.window)",
             subtitle: "\(used) · \(availability) · \(window.confidence)",
-            value: compactResetTime(window.resetAt, generatedAt: generatedAt) ?? "--",
+            value: compactResetTime(window.resetAt, generatedAt: generatedAt, timezone: timezone) ?? "--",
             status: window.status
         )
     }
@@ -1171,7 +1171,7 @@ public enum MenuBarViewModel {
         return "\(text) \(suffix)"
     }
 
-    private static func compactResetTime(_ resetAt: String?, generatedAt: String?) -> String? {
+    private static func compactResetTime(_ resetAt: String?, generatedAt: String?, timezone: String?) -> String? {
         guard let resetAt else { return nil }
         // 真机 bug 同类修复：resetAt / generatedAt 各自带不同时区 offset 时，日期部分的原始
         // 字符串前缀可能相同或反直觉地大小颠倒（同一 UTC 时刻换算成北京时间可能已经跨天），
@@ -1179,7 +1179,7 @@ public enum MenuBarViewModel {
         let suffix: String
         if let resetDate = parseDate(resetAt), let generatedAt, let generatedDate = parseDate(generatedAt) {
             var calendar = Calendar(identifier: .gregorian)
-            calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+            calendar.timeZone = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
             suffix = calendar.startOfDay(for: resetDate) < calendar.startOfDay(for: generatedDate) ? "已过" : "重置"
         } else {
             suffix = "重置"

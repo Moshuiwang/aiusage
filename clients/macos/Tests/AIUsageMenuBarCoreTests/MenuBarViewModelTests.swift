@@ -1470,6 +1470,34 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertTrue(row.value.hasSuffix("已过"), "got: \(row.value)")
     }
 
+    func testLimitRowResetSuffixUsesSummaryTimezoneCalendarDay() throws {
+        // Codex PR #194 审查 P2：按 summary.timezone 的日历日判断，而不是写死上海。
+        // 洛杉矶同为 09-27：resetAt 01:00-07:00（上海 09-27 16:00），generatedAt 10:00-07:00（上海 09-28 01:00）。
+        // 按上海会误判「已过」，按洛杉矶应为「重置」。
+        let summary = try loadFixture()
+        let window = MobileLimitWindow(
+            sourceID: "claude-main", provider: "claude", window: "week",
+            usedPercent: 40, remainingPercent: 60,
+            resetAt: "2026-09-27T01:00:00-07:00", windowDurationMinutes: 10080,
+            observedAt: "2026-09-27T00:00:00-07:00", sourceType: "official_cli",
+            confidence: "observed", status: "ok", official: true
+        )
+        let slot = providerSlot(provider: "claude", windows: [window])
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client,
+                generatedAt: "2026-09-27T10:00:00-07:00", timezone: "America/Los_Angeles",
+                period: summary.period, trend: summary.trend, sources: summary.sources,
+                breakdown: summary.breakdown, limits: summary.limits,
+                providerSlots: [slot]
+            ),
+            selectedPeriodID: "today",
+            now: try date("2026-09-27T00:30:00-07:00")
+        )
+        let row = try XCTUnwrap(state.limitRows.first)
+        XCTAssertTrue(row.value.hasSuffix("重置"), "got: \(row.value)")
+    }
+
     func testTrendSelectionFollowsMouseLocation() throws {
         let summary = try loadFixture()
         let state = MenuBarViewModel.build(
