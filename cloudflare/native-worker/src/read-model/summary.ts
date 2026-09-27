@@ -4,10 +4,11 @@ import { buildVersionHealth } from "../version-contract";
 import { accountHourlyRowsToDailyRows, accountHourlyRowsToHourlyRows, accountHourlySummary } from "./account-hourly";
 import {
   all, factCostsByItem, fetchAccountHourlyRows, fetchAiAccounts, fetchFactRows,
-  fetchHourlyModelRows, fetchLimitWindows, fetchSourceIdentities,
+  fetchHourlyModelRows, fetchLimitWindows, fetchQuotaCalibration, fetchSourceIdentities,
 } from "./db";
 import { buildLimitStatus, effectiveLimitWindow } from "./limits-select";
 import { accumulateProviderUsage, buildProviderSlots, buildProviderUsageCoverage, providerTokensByItem } from "./provider-slots";
+import { indexQuotaCalibration, quotaEstimateForModel } from "./quota-estimate";
 import { buildSourceStatus } from "./source-status";
 import { capTodayHourlyToPeriodTotals, codexHourlyContext, fillTodayHourlyResidual, hourlyTrend } from "./trend";
 import {
@@ -48,9 +49,10 @@ async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
   const allLimits = await fetchLimitWindows(db, null);
   const accountHourlyRows = await fetchAccountHourlyRows(db, startDate, endDate, request.timezone);
   const aiAccounts = await fetchAiAccounts(db);
+  const quotaCalibrationByKey = indexQuotaCalibration(await fetchQuotaCalibration(db));
   return {
     refTime, periodId, startDate, endDate, hourAxisValues, identities,
-    statusRows, accuracyRows, limits, allLimits, accountHourlyRows, aiAccounts,
+    statusRows, accuracyRows, limits, allLimits, accountHourlyRows, aiAccounts, quotaCalibrationByKey,
   };
 }
 
@@ -58,7 +60,7 @@ type SummaryInputs = Awaited<ReturnType<typeof loadSummaryInputs>>;
 
 /** 阶段 2：过滤与投影——把账户小时行派生成日行/时行/模型分解等视图输入。 */
 async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: SummaryInputs) {
-  const { periodId, startDate, endDate, accountHourlyRows } = inputs;
+  const { periodId, startDate, endDate, accountHourlyRows, refTime, quotaCalibrationByKey } = inputs;
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
@@ -95,15 +97,24 @@ async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: 
   const modelsByItem = new Map<string, Record<string, unknown>[]>();
   for (const row of allowedModelRows) {
     const key = itemKey(row.source_id, row.date, row.agent);
-    const breakdown = {
-      model_name: row.model_name,
+    const tokens = {
       input_tokens: int(row.input_tokens),
       output_tokens: int(row.output_tokens),
       cache_creation_tokens: int(row.cache_creation_tokens),
       cache_read_tokens: int(row.cache_read_tokens),
+    };
+    const breakdown: Record<string, unknown> = {
+      model_name: row.model_name,
+      ...tokens,
       total_tokens: int(row.total_tokens),
       cost: row.cost,
     };
+    // #183-b：quota_estimate 缺省而不是给 null——grade=none/系数过期/模型族未知/该族
+    // 在 quota_calibration 里没有行，任何一种情况都不下发这个字段。
+    const quotaEstimate = quotaEstimateForModel(
+      str(row.agent), str(row.model_name), tokens, periodId, startDate, endDate, refTime, quotaCalibrationByKey,
+    );
+    if (quotaEstimate) breakdown.quota_estimate = quotaEstimate;
     const list = modelsByItem.get(key) ?? [];
     list.push(breakdown);
     modelsByItem.set(key, list);

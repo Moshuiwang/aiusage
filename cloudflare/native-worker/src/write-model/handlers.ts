@@ -3,7 +3,7 @@ import type { Env } from "../index";
 import { UNSUPPORTED_ERROR_TYPE, evaluateCollectorRelease, publicVersionView, unsupportedMessage } from "../version-contract";
 import { buildAccuracyPlans, accuracyWriteStatements } from "./accuracy";
 import { filterFactsByLedgerCoverage, normalizeFacts } from "./normalize";
-import { collectionReportStatements, factRevisionStatement, factWriteStatements, limitWriteStatements, sourceIdentityStatement } from "./statements";
+import { accountObservationStatements, collectionReportStatements, factRevisionStatement, factWriteStatements, limitWriteStatements, sourceIdentityStatement } from "./statements";
 import { latestSourceReportState, sourceHasNewerReport, upsertHourlyFact, upsertIfChanged } from "./upsert";
 import { rejectSensitiveLimitKeys, scanIngestSensitive, validateIngestPayload, validateLimitsPayload } from "./validate";
 import { WriteValidationError, acceptedAtFromEnv } from "./shared";
@@ -36,6 +36,11 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
   const revisionStatements = hourlyFacts.map((fact) => factRevisionStatement(env.AIUSAGE_DB, fact, acceptedAt));
   const factStatements = factWriteStatements(env.AIUSAGE_DB, hourlyFacts, acceptedAt);
   const accuracyStatements = superseded ? [] : accuracyWriteStatements(env.AIUSAGE_DB, accuracyPlans, hourlyFacts, acceptedAt, req.source_id);
+  // #183-b：账户指纹观察跟"这条心跳是否被更晚的心跳超越"无关——它只是"某时刻某来源看到
+  // 某 provider 登录的是这个指纹"，不依附于任何用量事实，所以不受 superseded 影响。
+  const accountObservationWriteStatements = req.account_observations?.length
+    ? accountObservationStatements(env.AIUSAGE_DB, req.source_id, req.account_observations)
+    : [];
 
   const collectorVersion = versionState.collector_version as string | null;
   const report = sourceReport(req, hourlyFacts, collectorVersion);
@@ -49,7 +54,10 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
     collectorVersion,
   );
   const shouldWriteReport = !superseded && (!reportState.hasExisting || reportState.changed);
-  const writeStatements = [...identityStatements, ...revisionStatements, ...factStatements, ...accuracyStatements];
+  const writeStatements = [
+    ...identityStatements, ...revisionStatements, ...factStatements, ...accuracyStatements,
+    ...accountObservationWriteStatements,
+  ];
   if (shouldWriteReport) {
     writeStatements.push(...reportStatements);
   }

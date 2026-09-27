@@ -414,3 +414,29 @@ CREATE TABLE IF NOT EXISTS limit_window_history (
 
 CREATE INDEX IF NOT EXISTS idx_limit_window_history_lookup
   ON limit_window_history (source_id, provider, window, observed_at DESC);
+
+-- Backfilled from 0013: #183-b 官方额度持续校准的存储层（账户指纹观察 + 每日系数结果）。
+CREATE TABLE IF NOT EXISTS account_observations (
+  source_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  account_fingerprint TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  PRIMARY KEY (source_id, provider, account_fingerprint)
+);
+
+CREATE TABLE IF NOT EXISTS quota_calibration (
+  provider TEXT NOT NULL,
+  model_family TEXT NOT NULL,
+  coef REAL NOT NULL,
+  effective_delta_u REAL NOT NULL,
+  backtest_max_err REAL,
+  grade TEXT NOT NULL,
+  sample_intervals INTEGER NOT NULL,
+  fitted_at TEXT NOT NULL,
+  formula_version TEXT NOT NULL,
+  PRIMARY KEY (provider, model_family)
+);
+
+CREATE INDEX IF NOT EXISTS idx_limit_window_history_provider
+  ON limit_window_history (provider, window, observed_at DESC);

@@ -5,6 +5,7 @@ import {
   localDateFromWindowStart, localEstimateSourceTypes, parseDateOnly, periodWindowBounds, str,
 } from "./shared";
 import type { LimitRow, ModelRow, SourceIdentity } from "./shared";
+import type { QuotaCalibrationRow } from "./quota-estimate";
 
 async function all<T>(db: D1Database, sql: string, params: unknown[] = []): Promise<T[]> {
   const result = await db.prepare(sql).bind(...params).all<T>();
@@ -296,6 +297,22 @@ async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[
   }));
 }
 
+/** #183-b：quota_calibration 是每日 cron 覆盖写的十几行，summary 每次请求整表读一遍。 */
+async function fetchQuotaCalibration(db: D1Database): Promise<QuotaCalibrationRow[]> {
+  const rows = await all<Record<string, unknown>>(
+    db,
+    "SELECT provider, model_family, coef, grade, fitted_at, formula_version FROM quota_calibration",
+  );
+  return rows.map((row) => ({
+    provider: str(row.provider),
+    model_family: str(row.model_family),
+    coef: Number(row.coef),
+    grade: str(row.grade),
+    fitted_at: str(row.fitted_at),
+    formula_version: str(row.formula_version),
+  }));
+}
+
 export {
   all,
   factCostsByItem,
@@ -305,6 +322,7 @@ export {
   fetchFactRows,
   fetchHourlyModelRows,
   fetchLimitWindows,
+  fetchQuotaCalibration,
   fetchSourceIdentities,
   preferHistoricalDailyFallbackRows,
   preferLegacyHourlyBackfillRows,

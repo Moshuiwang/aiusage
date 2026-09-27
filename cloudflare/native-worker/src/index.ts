@@ -1,4 +1,5 @@
 import { buildMobile, buildSummary } from "./read-model";
+import { runQuotaCalibration } from "./quota-calibration-cron";
 import { hasPendingRollups } from "./read-model/db";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
 import { STATIC_ASSETS } from "./static-assets";
@@ -166,6 +167,16 @@ export default {
       } catch (error) {
         console.error("Supabase daily rollup sync failed", error);
       }
+    }
+    // #183-b 部署前审查（Must 1a）：额度校准挪到每日分支最后——冷启动 CPU 实测三账户
+    // 合计能到 10ms+ 量级（预热测法低估，见 quota-calibration-cron.ts / calibration-cpu-
+    // budget.test.ts 头注释），排在最后可以保证它之前的维护步骤（审计清理、Supabase 同步）
+    // 不会因为它超时/异常而不跑。
+    try {
+      await runQuotaCalibration(env.AIUSAGE_DB, scheduledTime);
+    } catch (error) {
+      // 额度校准失败绝不能拖垮它之前已经跑完的维护步骤——只记录，不 throw。
+      console.error("Quota calibration failed", error);
     }
   },
 };
