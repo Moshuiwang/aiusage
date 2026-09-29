@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code 云端环境 setup script 用：安装本包，并把 Stop hook 幂等写入 ~/.claude/settings.json。
+# Claude Code 云端环境 setup script 用：安装本包，并把 Stop 与 SessionEnd hook 幂等写入 ~/.claude/settings.json。
 # 可重复执行；已有的其它 hook 与设置项保留。任何一步失败都不阻断云端环境启动（始终退出 0）。
 #
 # 安装源：

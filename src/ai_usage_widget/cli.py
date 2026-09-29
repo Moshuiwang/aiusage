@@ -63,10 +63,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     cloud_push_parser = subparsers.add_parser(
         "cloud-push",
-        help="Claude Code 云端会话 Stop hook 入口：读 stdin 的 session_id，推送本会话用量（默认每次 Stop 都推；AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES 可选开启节流；永远退出 0）",
+        help="Claude Code 云端会话 Stop hook 入口：读 stdin 的 session_id，推送本会话用量（默认 15 分钟节流，AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES 可覆盖，0 = 不节流；永远退出 0）",
     )
-    cloud_push_parser.add_argument("--state-file", default=None, help="状态文件，用于计算回看窗口与可选节流（默认 ~/.ai-usage/cloud-push-state.json）")
-    cloud_push_parser.add_argument("--install-hook", action="store_true", help="把 Stop hook 幂等合并进用户级 settings.json")
+    cloud_push_parser.add_argument("--state-file", default=None, help="状态文件，用于计算回看窗口与节流（默认 ~/.ai-usage/cloud-push-state.json）")
+    cloud_push_parser.add_argument("--install-hook", action="store_true", help="把 Stop 与 SessionEnd（cloud-push --final）hook 幂等合并进用户级 settings.json")
+    cloud_push_parser.add_argument("--final", action="store_true", help="绕过节流推送一次（SessionEnd 补推尾段）")
     cloud_push_parser.add_argument("--settings", default=None, help="--install-hook 的目标（默认 ~/.claude/settings.json）")
 
     doctor_parser = subparsers.add_parser(

@@ -27,8 +27,10 @@ SOURCE_ID_PREFIX = "claude-cloud-"
 CLOUD_MACHINE = "claude-cloud"
 CLOUD_OS_USER = "claude-cloud"
 DEFAULT_TIMEZONE = "Asia/Shanghai"
-#: 默认每次 Stop 都推送（0 = 不节流）：节流会挡掉最容易丢的最后一轮；量级见 README。
-DEFAULT_INTERVAL_MINUTES = 0.0
+#: 默认 15 分钟节流（环境变量 0 = 不节流）：Worker 每次 ingest 都会删除并重写当天全部来源的汇总，
+#: 每次推送约写 150-350 行 D1，逐轮推送会逼近 Cloudflare Free 每日 10 万行写入（#213）。
+#: 被节流挡掉的尾段由 SessionEnd hook 的 ``cloud-push --final`` 补推。
+DEFAULT_INTERVAL_MINUTES = 15.0
 MAX_LOOKBACK_HOURS = 6.0
 #: 容器内稳定的云端会话号，优先级最高；hook（有 stdin）与手动运行（无 stdin）必须落到同一 source_id。
 REMOTE_SESSION_ID_ENV = "CLAUDE_CODE_REMOTE_SESSION_ID"
@@ -139,16 +141,17 @@ def run(
     pusher_factory: Callable[..., Any] = DevicePusher,
     interval_minutes: float | None = None,
     home: Path | None = None,
+    final: bool = False,
 ) -> int:
-    """执行一次云端推送。无论发生什么都返回 0。"""
+    """执行一次云端推送。无论发生什么都返回 0。``final=True`` 绕过节流（SessionEnd 补推尾段）。"""
     try:
-        return _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, home)
+        return _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, home, final)
     except Exception as exc:  # noqa: BLE001 - hook 边界：任何异常都不得阻断会话
         print(f"cloud-push: skipped ({type(exc).__name__})", file=sys.stderr)
         return 0
 
 
-def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, home=None) -> int:
+def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, home=None, final=False) -> int:
     server_url = env.get(URL_ENV, "").strip()
     if not env.get(TOKEN_ENV) or not server_url:
         return 0
@@ -160,7 +163,7 @@ def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, hom
     source_id = derive_source_id(session_id)
 
     last_success = _read_last_success(state_path, source_id)
-    if last_success is not None:
+    if last_success is not None and not final:
         elapsed_minutes = (now - last_success).total_seconds() / 60.0
         if 0 <= elapsed_minutes < _interval_minutes(env, interval_minutes):
             return 0
@@ -185,8 +188,22 @@ def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, hom
     return 0
 
 
-def install_stop_hook(settings_path: Path, command: str) -> None:
-    """把 Stop hook 合并进用户级 settings.json：保留其它键和其它 hook，重复执行幂等。"""
+def _install_event_hook(settings: dict, event: str, command: str) -> None:
+    groups = settings.setdefault("hooks", {}).setdefault(event, [])
+    ours = {"type": "command", "command": command, "timeout": 60}
+    replaced = False
+    for group in groups:
+        for index, hook in enumerate(group.get("hooks", [])):
+            if HOOK_MARKER in str(hook.get("command", "")) and "ai-usage-widget" in str(hook.get("command", "")):
+                group["hooks"][index] = ours
+                replaced = True
+    if not replaced:
+        groups.append({"hooks": [ours]})
+
+
+def install_hooks(settings_path: Path, command: str) -> None:
+    """把 Stop（``command``）与 SessionEnd（``command --final``）hook 合并进用户级 settings.json：
+    保留其它键和其它 hook，已有我们的条目原地更新，重复执行幂等。"""
     settings_path = Path(settings_path)
     if settings_path.exists() and settings_path.read_text(encoding="utf-8").strip():
         try:
@@ -197,17 +214,8 @@ def install_stop_hook(settings_path: Path, command: str) -> None:
             raise ValueError(f"{settings_path} 顶层不是对象，拒绝覆盖")
     else:
         settings = {}
-    hooks = settings.setdefault("hooks", {})
-    groups = hooks.setdefault("Stop", [])
-    ours = {"type": "command", "command": command, "timeout": 60}
-    replaced = False
-    for group in groups:
-        for index, hook in enumerate(group.get("hooks", [])):
-            if HOOK_MARKER in str(hook.get("command", "")) and "ai-usage-widget" in str(hook.get("command", "")):
-                group["hooks"][index] = ours
-                replaced = True
-    if not replaced:
-        groups.append({"hooks": [ours]})
+    _install_event_hook(settings, "Stop", command)
+    _install_event_hook(settings, "SessionEnd", f"{command} --final")
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -222,11 +230,11 @@ def run_cli(args) -> int:
     if args.install_hook:
         settings = Path(args.settings).expanduser() if args.settings else Path.home() / ".claude" / "settings.json"
         try:
-            install_stop_hook(settings, default_hook_command())
+            install_hooks(settings, default_hook_command())
         except (OSError, ValueError) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
-        print(f"installed Stop hook into {settings}")
+        print(f"installed Stop + SessionEnd hooks into {settings}")
         return 0
     if not os.environ.get(TOKEN_ENV) or not os.environ.get(URL_ENV):
         return 0  # 没配置就不必读 stdin
@@ -235,4 +243,5 @@ def run_cli(args) -> int:
         stdin_text=stdin_text,
         env=os.environ,
         state_path=Path(args.state_file).expanduser() if args.state_file else None,
+        final=bool(getattr(args, "final", False)),
     )

@@ -95,4 +95,30 @@ describe("#210 云端会话来源合并", () => {
       expect(ids.filter((id) => id.startsWith("claude-cloud-"))).toEqual([]);
     }
   });
+  it("#214 by_machine / by_os_user 的显示名：云端条目为「云端」，id 不变，非云端不变", () => {
+    const mobile = build(snapshot);
+    const byMachine = mobile.breakdown.by_machine as any[];
+    const byUser = mobile.breakdown.by_os_user as any[];
+    // 结构下限：fixture 有 2 台机器（云端 + mac-air），账户 2 个（claude-cloud + wang）
+    expect(byMachine).toHaveLength(2);
+    expect(byUser).toHaveLength(2);
+    expect(byMachine.find((r) => r.id === "claude-cloud")!.label).toBe("云端");
+    expect(byMachine.find((r) => r.id === "mac-air")!.label).toBe("mac-air");
+    expect(byUser.find((r) => r.id === "claude-cloud")!.label).toBe("云端");
+    expect(byUser.find((r) => r.id === "wang")!.label).toBe("wang");
+    // 任何行的显示名都不再出现英文 claude-cloud
+    expect([...byMachine, ...byUser].filter((r) => r.label === "claude-cloud")).toEqual([]);
+  });
+  it("#214 机器名/用户名恰为 claude-cloud 但来源非云端：label 保持原文，不被误标「云端」", () => {
+    const local = { name: "claude-cloud", display_name: "claude-cloud", total_tokens: 50, source_ids: ["mac-local"],
+      users: [{ account: "claude-cloud", machine: "claude-cloud", total_tokens: 50, source_ids: ["mac-local"] }] };
+    const mobile = build({ ...snapshot, groups: { by_machine: [local] } });
+    const byMachine = mobile.breakdown.by_machine as any[];
+    const byUser = mobile.breakdown.by_os_user as any[];
+    // 结构下限：各恰好 1 行，且来源确为 mac-local
+    expect(byMachine).toHaveLength(1);
+    expect(byUser).toHaveLength(1);
+    expect(byMachine[0]).toMatchObject({ id: "claude-cloud", label: "claude-cloud", source_ids: ["mac-local"] });
+    expect(byUser[0]).toMatchObject({ id: "claude-cloud", label: "claude-cloud", source_ids: ["mac-local"] });
+  });
 });

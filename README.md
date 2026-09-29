@@ -88,12 +88,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## Claude Code 云端会话用量上报（#207 采集侧）
 
-云端会话是临时容器，会话结束日志即被回收，所以在会话内由 Stop hook 增量推送。你需要做两件事：
+云端会话是临时容器，会话结束日志即被回收，所以在会话内由 Stop hook 增量推送（并由 SessionEnd hook 补推尾段）。你需要做两件事：
 
 1. 在云端环境设置里添加两个环境变量（值只填在那里，不进仓库/聊天）：
    `AI_USAGE_INGEST_TOKEN`（ingest Bearer token）、`AI_USAGE_INGEST_URL`（完整 ingest 地址，含 `/ingest`）。
-   可选：`AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES`（节流分钟数，默认 0 = 每次 Stop 都推送）、`AI_USAGE_CLOUD_TIMEZONE`（默认 `Asia/Shanghai`）。
-2. 把下面这段粘进云端环境的 setup script（安装本包并把 Stop hook 合并进 `~/.claude/settings.json`，可重复执行）：
+   可选：`AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES`（节流分钟数，默认 15；0 = 不节流，每次 Stop 都推）、`AI_USAGE_CLOUD_TIMEZONE`（默认 `Asia/Shanghai`）。
+2. 把下面这段粘进云端环境的 setup script（安装本包并把 Stop 与 SessionEnd hook 合并进 `~/.claude/settings.json`，可重复执行）：
 
 ```bash
 # 仓库已 checkout 在环境里时：
@@ -108,9 +108,9 @@ bash scripts/install_cloud_push.sh
 与本机同一 Claude 账户得到相同 ID；文件缺失或无该字段时降级为不上报账户观察，不猜。
 
 行为：每个云端会话（容器）独立 `source_id=claude-cloud-<云端会话号>`（优先取 `CLAUDE_CODE_REMOTE_SESSION_ID`，缺失才用 stdin 的 `session_id`，hook 与手动运行因此同一 source），`machine`/`os_user` 固定为 `claude-cloud`；
-默认每次 Stop 都推送（每次一个批量请求、约 1-2 行 D1 写入）；设了节流间隔时，距上次成功推送不足间隔就跳过。回看窗口按上次成功时间收缩（最多 6 小时）；缺 token 或 URL 时静默退出；
+默认 15 分钟节流（#213：Worker 每次 ingest 都会重建当天全部来源的汇总，每次推送约写 150-350 行 D1，逐轮推送会逼近 Cloudflare Free 每日 10 万行写入）：距上次成功推送不足间隔的 Stop 直接跳过，可用环境变量覆盖。SessionEnd hook 执行 `cloud-push --final`，绕过节流补推一次尾段。回看窗口按上次成功时间收缩（最多 6 小时）；缺 token 或 URL 时静默退出；
 hook 永远返回 0，不阻断会话。手动入口：`ai-usage-widget cloud-push`（无 stdin 也能用，会话号取自环境变量）。
-仅在设了节流间隔时才会有尾段丢失：会话最后不足一个间隔的用量要等下一次 Stop 才会上报。
+缺口：若会话被直接回收（未正常结束、SessionEnd 未触发），最后不足 15 分钟的用量可能丢失。
 
 ## 常用命令
 
