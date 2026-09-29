@@ -6,7 +6,7 @@
  * 步骤对应 #183 设计 v1 §1-2：
  * 1. 整个 provider 账户的官方读数合并成一条时间线切周期、补重置锚点（cycles.ts）。
  * 2. 合并相邻读数成 ≥3 小时区间，剔除饱和起点，按重叠比例分摊小时事实（intervals.ts）。
- * 3. 近期加权（半衰期）+ 突变检测（重置后系数偏离 >2 倍时只用突变后数据）。
+ * 3. 近期加权（半衰期）+ 突变检测（周期边界前后系数偏离 >2 倍时只用变化点之后的全部数据）。
  * 4. 非负最小二乘拟合出最终系数（nnls.ts）。
  * 5. 逐日留出回测定级（backtest.ts）。
  *
@@ -30,10 +30,34 @@ const DEFAULT_WINDOW_DAYS = 28;
 const DEFAULT_HALF_LIFE_DAYS = 7;
 /** 突变检测的偏离倍数门槛：重置后系数比全量系数偏离超过这个倍数才触发「只用突变后数据」。 */
 const MUTATION_RATIO_THRESHOLD = 2;
-/** 判断系数是否「有意义」的下限，避免用接近 0 的系数算比值得出虚假的巨大倍数。 */
-const MEANINGFUL_COEF_EPSILON = 1e-6;
-/** 最近一个周期作为「突变后数据」参与判定所需的最少区间数。 */
-const MIN_RECENT_INTERVALS_FOR_MUTATION_CHECK = 3;
+/**
+ * 判断系数是否「有意义」的下限，避免用接近 0 的系数算比值得出虚假的巨大倍数。
+ * 系数单位是「额度点 / 每个价格加权 token」，真实值约 3e-8～1.6e-6；门槛必须远低于这个量级，
+ * 只用来排除 NNLS 压到 0 的族（#206：曾误设为 1e-6，所有族都被跳过，突变检测从未生效）。
+ */
+const MEANINGFUL_COEF_EPSILON = 1e-12;
+/** 突变检测时变化点前后两段各自至少需要的区间数，太少的段拟合不出可比的系数。 */
+const MIN_SEGMENT_INTERVALS_FOR_MUTATION_CHECK = 3;
+/** 只比较在前后两段里价格加权 token 占比都不低于这个比例的族；小占比族的系数本身不稳定。 */
+const MIN_FAMILY_SHARE_FOR_MUTATION_CHECK = 0.2;
+/**
+ * 切成两段后的加权残差平方和必须不超过「不切分、全量拟合」的这个比例才认定突变——切分本身
+ * 一定让残差下降，不和全量比较时，比值门槛一旦被噪音触发就必判突变（#206 评审：按小时重放
+ * 生产数据，Claude 有 19 个时刻被误判，B 级降成 none）。
+ */
+const MAX_SPLIT_SSE_RATIO = 0.5;
+/**
+ * 变化点前后两段各自至少需要的累计 ΔU（额度点）。官方读数是整数百分比，累计不足 10 点的段
+ * 光取整误差就 >10%，拟合出的系数比值不可信（#206：Antigravity 3 天 18 个碎周期里，一个
+ * 只有 3 点的前段被误判成突变，凑出了假的 B 级）。
+ */
+const MIN_SEGMENT_DELTA_U_FOR_MUTATION_CHECK = 10;
+/**
+ * 只检查最近这么多个合格边界，限制每次 cron 额外 NNLS 次数，守住 Free 计划单次 10ms CPU 预算。
+ * 周窗口账户 28 天内约 4–5 个自然边界，基本全覆盖；碎周期多的账户（如 Antigravity）更早的变化点
+ * 可能被略过，此时退化为混用新旧数据，只会让回测误差偏大、定级更保守，不会错误升级。
+ */
+const MAX_CHANGE_POINT_CANDIDATES = 4;
 
 function recencyWeight(interval: Interval, now: Date, halfLifeDays: number): number {
   const ageMs = now.getTime() - Date.parse(interval.t1);
@@ -59,35 +83,71 @@ function buildAllIntervals(
   return buildIntervals(provider, "combined", cycles, facts);
 }
 
-/** 最后一个周期的区间：突变检测里「重置后数据」的候选集合。 */
-function mostRecentCycleIntervals(intervals: Interval[]): Interval[] {
-  const maxCycle = intervals.reduce((max, i) => Math.max(max, i.cycleIndex), -1);
-  return intervals.filter((i) => i.cycleIndex === maxCycle);
+function familyShares(rows: number[][]): number[] {
+  const totals = rows[0].map((_, idx) => rows.reduce((sum, row) => sum + row[idx], 0));
+  const all = totals.reduce((sum, v) => sum + v, 0);
+  return totals.map((v) => (all > 0 ? v / all : 0));
 }
 
-function detectMutationAndSelectTrainingSet(
+function significantlyDifferent(a: number[], b: number[], sharesA: number[], sharesB: number[]): boolean {
+  for (let idx = 0; idx < a.length; idx++) {
+    if (sharesA[idx] < MIN_FAMILY_SHARE_FOR_MUTATION_CHECK || sharesB[idx] < MIN_FAMILY_SHARE_FOR_MUTATION_CHECK) continue;
+    if (a[idx] <= MEANINGFUL_COEF_EPSILON || b[idx] <= MEANINGFUL_COEF_EPSILON) continue;
+    const ratio = b[idx] / a[idx];
+    if (ratio > MUTATION_RATIO_THRESHOLD || ratio < 1 / MUTATION_RATIO_THRESHOLD) return true;
+  }
+  return false;
+}
+
+function weightedSse(rows: number[][], targets: number[], weights: number[], coef: number[]): number {
+  let sse = 0;
+  for (let n = 0; n < rows.length; n++) {
+    const residual = predictRow(rows[n], coef) - targets[n];
+    sse += weights[n] * residual * residual;
+  }
+  return sse;
+}
+
+/**
+ * 突变检测（#206）：在周期边界上找「规则变化点」。对每个候选边界 k，把区间分成 k 之前 / k 之后
+ * 两段各自拟合；两段都占足份额的族里有任一族系数偏离超过 MUTATION_RATIO_THRESHOLD 倍、且切分后
+ * 残差明显低于全量拟合，才算候选，候选中取两段加权残差平方和最小的那个边界。检测到时训练集 = 变化点之后的**全部**周期——不是只取
+ * 最近一个周期，否则每次周重置后训练集都缩回几条区间，新规则下的数据永远攒不过一周。
+ */
+export function detectMutationAndSelectTrainingSet(
   intervals: Interval[],
   keys: string[],
   weightOf: (i: Interval) => number,
 ): { training: Interval[]; mutationDetected: boolean } {
-  const recent = mostRecentCycleIntervals(intervals);
-  if (recent.length < MIN_RECENT_INTERVALS_FOR_MUTATION_CHECK || recent.length === intervals.length) {
-    return { training: intervals, mutationDetected: false };
+  const cycleIds = [...new Set(intervals.map((i) => i.cycleIndex))].sort((x, y) => x - y);
+  const sumDeltaU = (segment: Interval[]) => segment.reduce((sum, i) => sum + i.deltaU, 0);
+  const qualifies = (segment: Interval[]) =>
+    segment.length >= MIN_SEGMENT_INTERVALS_FOR_MUTATION_CHECK && sumDeltaU(segment) >= MIN_SEGMENT_DELTA_U_FOR_MUTATION_CHECK;
+  const candidates = cycleIds.slice(1)
+    .map((k) => ({ head: intervals.filter((i) => i.cycleIndex < k), tail: intervals.filter((i) => i.cycleIndex >= k) }))
+    .filter(({ head, tail }) => qualifies(head) && qualifies(tail))
+    .slice(-MAX_CHANGE_POINT_CANDIDATES);
+  if (candidates.length === 0) return { training: intervals, mutationDetected: false };
+  const allRows = intervals.map((i) => intervalToRow(i, keys));
+  const allTargets = intervals.map((i) => i.deltaU);
+  const allWeights = intervals.map(weightOf);
+  const sseFull = weightedSse(allRows, allTargets, allWeights, fit(allRows, allTargets, allWeights));
+  let best: { tail: Interval[]; sse: number } | null = null;
+  for (const { head, tail } of candidates) {
+    const headRows = head.map((i) => intervalToRow(i, keys));
+    const tailRows = tail.map((i) => intervalToRow(i, keys));
+    const headTargets = head.map((i) => i.deltaU);
+    const tailTargets = tail.map((i) => i.deltaU);
+    const headWeights = head.map(weightOf);
+    const tailWeights = tail.map(weightOf);
+    const headCoef = fit(headRows, headTargets, headWeights);
+    const tailCoef = fit(tailRows, tailTargets, tailWeights);
+    if (!significantlyDifferent(headCoef, tailCoef, familyShares(headRows), familyShares(tailRows))) continue;
+    const sse = weightedSse(headRows, headTargets, headWeights, headCoef) + weightedSse(tailRows, tailTargets, tailWeights, tailCoef);
+    if (sse > MAX_SPLIT_SSE_RATIO * sseFull) continue;
+    if (best === null || sse < best.sse) best = { tail, sse };
   }
-  const fullCoef = fit(intervals.map((i) => intervalToRow(i, keys)), intervals.map((i) => i.deltaU), intervals.map(weightOf));
-  const recentCoef = fit(recent.map((i) => intervalToRow(i, keys)), recent.map((i) => i.deltaU), recent.map(weightOf));
-  let mutationDetected = false;
-  for (let idx = 0; idx < keys.length; idx++) {
-    const full = fullCoef[idx];
-    const rec = recentCoef[idx];
-    if (full <= MEANINGFUL_COEF_EPSILON || rec <= MEANINGFUL_COEF_EPSILON) continue;
-    const ratio = rec / full;
-    if (ratio > MUTATION_RATIO_THRESHOLD || ratio < 1 / MUTATION_RATIO_THRESHOLD) {
-      mutationDetected = true;
-      break;
-    }
-  }
-  return { training: mutationDetected ? recent : intervals, mutationDetected };
+  return best ? { training: best.tail, mutationDetected: true } : { training: intervals, mutationDetected: false };
 }
 
 export function calibrate(
