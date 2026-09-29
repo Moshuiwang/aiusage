@@ -86,6 +86,26 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
   uv tool install / pip 的已安装包（版本可追溯）。
 - 自动升级暂不开启（#106/D7 决策）：升级 = 重跑一条 `uv tool install ...@新tag`。
 
+## Claude Code 云端会话用量上报（#207 采集侧）
+
+云端会话是临时容器，会话结束日志即被回收，所以在会话内由 Stop hook 增量推送。你需要做两件事：
+
+1. 在云端环境设置里添加两个环境变量（值只填在那里，不进仓库/聊天）：
+   `AI_USAGE_INGEST_TOKEN`（ingest Bearer token）、`AI_USAGE_INGEST_URL`（完整 ingest 地址，含 `/ingest`）。
+   可选：`AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES`（节流分钟数，默认 0 = 每次 Stop 都推送）、`AI_USAGE_CLOUD_TIMEZONE`（默认 `Asia/Shanghai`）。
+2. 把下面这段粘进云端环境的 setup script（安装本包并把 Stop hook 合并进 `~/.claude/settings.json`，可重复执行）：
+
+```bash
+# 仓库已 checkout 在环境里时：
+bash scripts/install_cloud_push.sh
+# 否则先设 AI_USAGE_PACKAGE_SPEC="git+https://<可访问的仓库地址>@<tag>" 再执行同一脚本
+```
+
+行为：每个云端会话独立 `source_id=claude-cloud-<session_id>`，`machine`/`os_user` 固定为 `claude-cloud`；
+默认每次 Stop 都推送（每次一个批量请求、约 1-2 行 D1 写入）；设了节流间隔时，距上次成功推送不足间隔就跳过。回看窗口按上次成功时间收缩（最多 6 小时）；缺 token 或 URL 时静默退出；
+hook 永远返回 0，不阻断会话。手动入口：`ai-usage-widget cloud-push`（读 stdin 的 `session_id`）。
+仅在设了节流间隔时才会有尾段丢失：会话最后不足一个间隔的用量要等下一次 Stop 才会上报。
+
 ## 常用命令
 
 验证（唯一入口，会按改动面自动裁剪：不动 `cloudflare/` 就不跑 Worker 测试）：
