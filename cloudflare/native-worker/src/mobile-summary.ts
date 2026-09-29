@@ -383,9 +383,11 @@ function staleLimitWindow(window: AnyRecord, generatedAt: Date | null): boolean 
   return generatedAt.getTime() - observedAt.getTime() > LIMIT_STALE_AFTER_MS;
 }
 
-// #214：机器/账户分组里 #207 固定的 claude-cloud 条目显示「云端」；id 保持原值。
-function cloudLabel(label: unknown): unknown {
-  return label === CLOUD_SOURCE_ID ? CLOUD_SOURCE_LABEL : label;
+// #214：按来源判断——分组的 source_ids（经 displaySourceId 归并）非空且全为云端才显示「云端」；
+// machine / os_user 是自由字符串，不能按文本判断。id 保持原值。
+function cloudLabel(label: unknown, sourceIds: Iterable<string>): unknown {
+  const ids = Array.from(sourceIds, (id) => displaySourceId(id));
+  return ids.length && ids.every((id) => id === CLOUD_SOURCE_ID) ? CLOUD_SOURCE_LABEL : label;
 }
 
 function groupRows(rows: AnyRecord[]): AnyRecord[] {
@@ -403,7 +405,7 @@ function groupRows(rows: AnyRecord[]): AnyRecord[] {
     if (!Object.keys(contributions).length) addContribution(contributions, list<unknown>(row.source_ids), totalTokens);
     result.push({
       id: row.name || label,
-      label: cloudLabel(label),
+      label: cloudLabel(label, sourceIds),
       tokens: totalTokens,
       source_ids: Array.from(sourceIds).sort(),
       contributions: contributionRows(contributions),
@@ -444,7 +446,7 @@ function osUserRows(machineRows: AnyRecord[], items: AnyRecord[]): AnyRecord[] {
   }
   return sortRows(Array.from(rows.values()).filter((row) => row.tokens > 0).map((row) => ({
     id: row.id,
-    label: cloudLabel(row.label),
+    label: cloudLabel(row.label, row.source_ids),
     tokens: row.tokens,
     source_ids: Array.from(row.source_ids).sort(),
     contributions: contributionRows(row.contributions),
