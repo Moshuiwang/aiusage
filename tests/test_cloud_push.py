@@ -48,7 +48,7 @@ class CloudPushCase(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.state = Path(self.tmp.name) / "state.json"
 
-    def run_hook(self, stdin='{"session_id": "abc-123"}', env=None, now=NOW, interval=None):
+    def run_hook(self, stdin='{"session_id": "abc-123"}', env=None, now=NOW, interval=None, final=False):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
             code = cloud_push.run(
@@ -58,6 +58,7 @@ class CloudPushCase(unittest.TestCase):
                 now=now,
                 pusher_factory=FakePusher,
                 interval_minutes=interval,
+                final=final,
             )
         return code, out.getvalue() + err.getvalue()
 
@@ -96,7 +97,7 @@ class TestSourceIdAndConfig(CloudPushCase):
 
     def test_hook_and_manual_runs_share_one_source_id_in_same_container(self) -> None:
         """线上 bug 形态：Stop hook（有 stdin）与手动 cloud-push（无 stdin）同容器必须同一 source_id。"""
-        env = {**ENV, "CLAUDE_CODE_REMOTE_SESSION_ID": "cse_013Qbc-test"}
+        env = {**ENV, "CLAUDE_CODE_REMOTE_SESSION_ID": "cse_013Qbc-test", "AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES": "0"}
         code_hook, _ = self.run_hook(stdin='{"session_id": "d1491a9c-fa03-cli"}', env=env)
         code_manual, _ = self.run_hook(stdin="", env=env)
         self.assertEqual((code_hook, code_manual), (0, 0))
@@ -193,12 +194,38 @@ class TestThrottleAndLookback(CloudPushCase):
         self.assertEqual(code, 0)
         self.assertEqual(len(FakePusher.instances), 1, "第二次应被节流，不构造 pusher")
 
-    def test_default_pushes_every_stop_even_one_minute_after_last_success(self) -> None:
+    def test_default_throttles_stop_to_15_minutes(self) -> None:
+        """未设环境变量：1 分钟后的 Stop 被跳过，16 分钟后放行（#213：每次推送触发整天汇总重建）。"""
+        self.assertEqual(cloud_push.DEFAULT_INTERVAL_MINUTES, 15.0)
         self.run_hook()
         self.run_hook(now=NOW + timedelta(minutes=1))
-        self.run_hook(now=NOW + timedelta(minutes=1, seconds=5))
-        self.assertEqual(len(FakePusher.instances), 3, "未设间隔时默认每次 Stop 都推送")
-        self.assertEqual(cloud_push.DEFAULT_INTERVAL_MINUTES, 0)
+        self.assertEqual(len(FakePusher.instances), 1, "默认 15 分钟内第二次 Stop 应被跳过")
+        self.run_hook(now=NOW + timedelta(minutes=16))
+        self.assertEqual(len(FakePusher.instances), 2, "超过 15 分钟应放行")
+
+    def test_env_zero_disables_throttle(self) -> None:
+        env = dict(ENV, AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES="0")
+        self.run_hook(env=env)
+        self.run_hook(env=env, now=NOW + timedelta(minutes=1))
+        self.run_hook(env=env, now=NOW + timedelta(minutes=1, seconds=5))
+        self.assertEqual(len(FakePusher.instances), 3, "环境变量 0 = 不节流，每次 Stop 都推")
+
+    def test_final_bypasses_throttle_and_records_state(self) -> None:
+        self.run_hook()
+        code, _ = self.run_hook(now=NOW + timedelta(minutes=1), final=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(FakePusher.instances), 2, "--final 一分钟后仍应推送")
+        self.assertTrue(FakePusher.instances[1].pushed)
+        self.assertEqual(
+            json.loads(self.state.read_text())["last_success_at"], (NOW + timedelta(minutes=1)).isoformat()
+        )
+
+    def test_final_still_requires_token_url_and_session(self) -> None:
+        for kwargs in ({"env": {"AI_USAGE_INGEST_URL": "https://example.invalid/ingest"}},
+                       {"env": {"AI_USAGE_INGEST_TOKEN": "x"}}, {"stdin": ""}):
+            code, output = self.run_hook(final=True, **kwargs)
+            self.assertEqual((code, output), (0, ""))
+        self.assertEqual(len(FakePusher.instances), 0)
 
     def test_push_after_interval_runs_again(self) -> None:
         self.run_hook(interval=10)
@@ -280,21 +307,23 @@ class TestSilentExit(CloudPushCase):
                     os.environ[key] = value
 
 
-class TestInstallStopHook(unittest.TestCase):
+class TestInstallHooks(unittest.TestCase):
     COMMAND = "/usr/local/bin/ai-usage-widget cloud-push"
+    FINAL = COMMAND + " --final"
 
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.settings = Path(self.tmp.name) / ".claude" / "settings.json"
 
-    def stop_commands(self) -> list[str]:
+    def commands(self, event: str) -> list[str]:
         data = json.loads(self.settings.read_text())
-        return [h["command"] for group in data["hooks"]["Stop"] for h in group["hooks"]]
+        return [h["command"] for group in data["hooks"][event] for h in group["hooks"]]
 
-    def test_creates_settings_when_missing(self) -> None:
-        cloud_push.install_stop_hook(self.settings, self.COMMAND)
-        self.assertEqual(self.stop_commands(), [self.COMMAND])
+    def test_creates_stop_and_session_end_when_missing(self) -> None:
+        cloud_push.install_hooks(self.settings, self.COMMAND)
+        self.assertEqual(self.commands("Stop"), [self.COMMAND])
+        self.assertEqual(self.commands("SessionEnd"), [self.FINAL])
 
     def test_merge_preserves_existing_hooks_and_other_keys(self) -> None:
         self.settings.parent.mkdir(parents=True)
@@ -302,44 +331,60 @@ class TestInstallStopHook(unittest.TestCase):
             "model": "sonnet",
             "hooks": {
                 "Stop": [{"hooks": [{"type": "command", "command": "echo mine"}]}],
+                "SessionEnd": [{"hooks": [{"type": "command", "command": "echo bye"}]}],
                 "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "echo pre"}]}],
             },
         }
         self.settings.write_text(json.dumps(existing))
-        cloud_push.install_stop_hook(self.settings, self.COMMAND)
+        cloud_push.install_hooks(self.settings, self.COMMAND)
         data = json.loads(self.settings.read_text())
         self.assertEqual(data["model"], "sonnet")
         self.assertEqual(data["hooks"]["PreToolUse"], existing["hooks"]["PreToolUse"])
-        self.assertEqual(self.stop_commands(), ["echo mine", self.COMMAND])
+        self.assertEqual(self.commands("Stop"), ["echo mine", self.COMMAND])
+        self.assertEqual(self.commands("SessionEnd"), ["echo bye", self.FINAL])
 
     def test_repeated_install_is_idempotent(self) -> None:
-        cloud_push.install_stop_hook(self.settings, self.COMMAND)
+        cloud_push.install_hooks(self.settings, self.COMMAND)
         first = self.settings.read_text()
-        cloud_push.install_stop_hook(self.settings, self.COMMAND)
-        cloud_push.install_stop_hook(self.settings, self.COMMAND)
+        cloud_push.install_hooks(self.settings, self.COMMAND)
+        cloud_push.install_hooks(self.settings, self.COMMAND)
         self.assertEqual(self.settings.read_text(), first)
-        self.assertEqual(self.stop_commands().count(self.COMMAND), 1)
+        self.assertEqual(self.commands("Stop").count(self.COMMAND), 1)
+        self.assertEqual(self.commands("SessionEnd").count(self.FINAL), 1)
 
     def test_reinstall_with_new_path_updates_instead_of_duplicating(self) -> None:
         self.settings.parent.mkdir(parents=True)
         self.settings.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo mine"}]}]}}))
-        cloud_push.install_stop_hook(self.settings, "/old/bin/ai-usage-widget cloud-push")
-        cloud_push.install_stop_hook(self.settings, self.COMMAND)
-        self.assertEqual(self.stop_commands(), ["echo mine", self.COMMAND])
+        cloud_push.install_hooks(self.settings, "/old/bin/ai-usage-widget cloud-push")
+        cloud_push.install_hooks(self.settings, self.COMMAND)
+        self.assertEqual(self.commands("Stop"), ["echo mine", self.COMMAND])
+        self.assertEqual(self.commands("SessionEnd"), [self.FINAL])
 
     def test_unparseable_settings_is_not_overwritten(self) -> None:
         self.settings.parent.mkdir(parents=True)
         self.settings.write_text("{not json")
         with self.assertRaises(ValueError):
-            cloud_push.install_stop_hook(self.settings, self.COMMAND)
+            cloud_push.install_hooks(self.settings, self.COMMAND)
         self.assertEqual(self.settings.read_text(), "{not json")
 
-    def test_cli_install_hook_writes_given_settings(self) -> None:
+    def test_cli_install_hook_writes_both_hooks(self) -> None:
         with redirect_stdout(io.StringIO()):
             code = cli.main(["cloud-push", "--install-hook", "--settings", str(self.settings)])
         self.assertEqual(code, 0)
-        self.assertEqual(len(self.stop_commands()), 1)
-        self.assertIn("cloud-push", self.stop_commands()[0])
+        self.assertEqual(len(self.commands("Stop")), 1)
+        self.assertEqual(len(self.commands("SessionEnd")), 1)
+        self.assertTrue(self.commands("Stop")[0].endswith("cloud-push"))
+        self.assertTrue(self.commands("SessionEnd")[0].endswith("cloud-push --final"))
+
+    def test_cli_final_flag_is_wired(self) -> None:
+        old = {k: os.environ.pop(k, None) for k in ENV}
+        try:
+            with redirect_stdout(io.StringIO()):
+                self.assertEqual(cli.main(["cloud-push", "--final"]), 0)
+        finally:
+            for key, value in old.items():
+                if value is not None:
+                    os.environ[key] = value
 
 
 if __name__ == "__main__":
