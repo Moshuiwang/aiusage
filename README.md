@@ -107,9 +107,9 @@ bash scripts/install_cloud_push.sh
 账户归属（#208）：hook 会显式读取容器内 `~/.claude.json` 的 `oauthAccount.accountUuid` 算账户指纹，
 与本机同一 Claude 账户得到相同 ID；文件缺失或无该字段时降级为不上报账户观察，不猜。
 
-行为：每个云端会话独立 `source_id=claude-cloud-<session_id>`，`machine`/`os_user` 固定为 `claude-cloud`；
+行为：每个云端会话（容器）独立 `source_id=claude-cloud-<云端会话号>`（优先取 `CLAUDE_CODE_REMOTE_SESSION_ID`，缺失才用 stdin 的 `session_id`，hook 与手动运行因此同一 source），`machine`/`os_user` 固定为 `claude-cloud`；
 默认每次 Stop 都推送（每次一个批量请求、约 1-2 行 D1 写入）；设了节流间隔时，距上次成功推送不足间隔就跳过。回看窗口按上次成功时间收缩（最多 6 小时）；缺 token 或 URL 时静默退出；
-hook 永远返回 0，不阻断会话。手动入口：`ai-usage-widget cloud-push`（读 stdin 的 `session_id`）。
+hook 永远返回 0，不阻断会话。手动入口：`ai-usage-widget cloud-push`（无 stdin 也能用，会话号取自环境变量）。
 仅在设了节流间隔时才会有尾段丢失：会话最后不足一个间隔的用量要等下一次 Stop 才会上报。
 
 ## 常用命令

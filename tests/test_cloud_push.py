@@ -72,17 +72,37 @@ class TestSourceIdAndConfig(CloudPushCase):
         self.assertRegex(derived, r"^claude-cloud-[A-Za-z0-9_-]+$")
         self.assertNotIn(".claude", derived)
 
-    def test_session_id_prefers_stdin_then_env_fallbacks(self) -> None:
-        self.assertEqual(
-            cloud_push.resolve_session_id('{"session_id": "from-stdin"}', {"CLAUDE_CODE_REMOTE_SESSION_ID": "env-1"}),
-            "from-stdin",
-        )
+    def test_session_id_falls_back_to_stdin_then_cli_env(self) -> None:
+        # 没有远程会话变量：stdin 兜底（覆盖 stdin 路径）
+        self.assertEqual(cloud_push.resolve_session_id('{"session_id": "from-stdin"}', {}), "from-stdin")
         self.assertEqual(
             cloud_push.resolve_session_id("", {"CLAUDE_CODE_REMOTE_SESSION_ID": "env-1", "CLAUDE_CODE_SESSION_ID": "env-2"}),
             "env-1",
         )
         self.assertEqual(cloud_push.resolve_session_id("not json", {"CLAUDE_CODE_SESSION_ID": "env-2"}), "env-2")
         self.assertIsNone(cloud_push.resolve_session_id("", {}))
+
+    def test_remote_session_env_wins_over_stdin_session_id(self) -> None:
+        remote = {"CLAUDE_CODE_REMOTE_SESSION_ID": "cse_remote-1"}
+        self.assertEqual(
+            cloud_push.resolve_session_id('{"session_id": "cli-uuid"}', {**remote, "CLAUDE_CODE_SESSION_ID": "env-2"}),
+            "cse_remote-1",
+        )
+        # 没有远程会话变量时 stdin 仍是兜底，且优先于 CLAUDE_CODE_SESSION_ID
+        self.assertEqual(
+            cloud_push.resolve_session_id('{"session_id": "cli-uuid"}', {"CLAUDE_CODE_SESSION_ID": "env-2"}),
+            "cli-uuid",
+        )
+
+    def test_hook_and_manual_runs_share_one_source_id_in_same_container(self) -> None:
+        """线上 bug 形态：Stop hook（有 stdin）与手动 cloud-push（无 stdin）同容器必须同一 source_id。"""
+        env = {**ENV, "CLAUDE_CODE_REMOTE_SESSION_ID": "cse_013Qbc-test"}
+        code_hook, _ = self.run_hook(stdin='{"session_id": "d1491a9c-fa03-cli"}', env=env)
+        code_manual, _ = self.run_hook(stdin="", env=env)
+        self.assertEqual((code_hook, code_manual), (0, 0))
+        self.assertEqual(len(FakePusher.instances), 2)  # 结构下限：两次都真的推送了
+        source_ids = [instance.config.source_id for instance in FakePusher.instances]
+        self.assertEqual(source_ids, ["claude-cloud-cse_013Qbc-test"] * 2)
 
     def test_pusher_gets_fixed_identity_and_session_source_id(self) -> None:
         code, _ = self.run_hook()

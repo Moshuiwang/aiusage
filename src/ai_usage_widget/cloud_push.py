@@ -1,6 +1,6 @@
 """Claude Code 云端会话（临时 Linux 容器）的用量推送入口，由 Stop hook 调用。
 
-每个云端会话一个独立 source_id（``claude-cloud-<会话标识>``），machine / os_user 固定，
+每个云端会话（容器）一个独立 source_id（``claude-cloud-<云端会话号>``），machine / os_user 固定，
 所以不会在展示侧刷出一堆随容器主机名变化的假机器。硬约束：hook 永远返回 0，
 推送失败、缺环境变量都不能阻断 Claude 会话；输出里不出现 token。
 """
@@ -30,8 +30,10 @@ DEFAULT_TIMEZONE = "Asia/Shanghai"
 #: 默认每次 Stop 都推送（0 = 不节流）：节流会挡掉最容易丢的最后一轮；量级见 README。
 DEFAULT_INTERVAL_MINUTES = 0.0
 MAX_LOOKBACK_HOURS = 6.0
-#: 容器内稳定的远程会话标识变量名，stdin 没给 session_id 时按顺序回退。
-SESSION_ID_ENV_FALLBACKS = ("CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_SESSION_ID")
+#: 容器内稳定的云端会话号，优先级最高；hook（有 stdin）与手动运行（无 stdin）必须落到同一 source_id。
+REMOTE_SESSION_ID_ENV = "CLAUDE_CODE_REMOTE_SESSION_ID"
+#: 没有云端会话号时的兜底：stdin 的 session_id 之后，再回退到此变量。
+SESSION_ID_ENV_FALLBACK = "CLAUDE_CODE_SESSION_ID"
 HOOK_MARKER = "cloud-push"
 _SAFE_ID = re.compile(r"[^A-Za-z0-9_-]+")
 _MAX_ID_LEN = 64
@@ -47,12 +49,19 @@ def derive_source_id(session_id: str) -> str:
 
 
 def resolve_session_id(stdin_text: str, env: Mapping[str, str]) -> str | None:
+    """source 对应「容器 / 云端会话」而非 CLI 会话：两者都上报整个容器的日志，
+    若 hook 用 CLI 会话 UUID、手动用云端会话号，同一批 token 会被计两次。
+    优先级：CLAUDE_CODE_REMOTE_SESSION_ID -> stdin session_id -> CLAUDE_CODE_SESSION_ID。
+    """
     try:
         data = json.loads(stdin_text) if stdin_text and stdin_text.strip() else {}
     except json.JSONDecodeError:
         data = {}
-    candidates = [data.get("session_id") if isinstance(data, dict) else None]
-    candidates += [env.get(name) for name in SESSION_ID_ENV_FALLBACKS]
+    candidates = [
+        env.get(REMOTE_SESSION_ID_ENV),
+        data.get("session_id") if isinstance(data, dict) else None,
+        env.get(SESSION_ID_ENV_FALLBACK),
+    ]
     for value in candidates:
         if isinstance(value, str) and _SAFE_ID.sub("", value):
             return value
