@@ -5,6 +5,8 @@
 # 安装源：
 #   AI_USAGE_PACKAGE_SPEC   pip 可识别的包规格，优先级最高（如 "git+https://<可访问的仓库地址>@<tag>"）
 #   否则若本脚本位于仓库 checkout 内，装 checkout 本身
+#   否则（其他仓库的会话，无 checkout）从公开仓库装：
+#     git+https://github.com/Moshuiwang/aiusage@${AI_USAGE_PACKAGE_REF:-main}
 # 需要在云端环境里另行配置两个环境变量（只写名字，值不进仓库）：
 #   AI_USAGE_INGEST_TOKEN   ingest Bearer token
 #   AI_USAGE_INGEST_URL     完整 ingest 地址（含 /ingest 路径）
@@ -16,8 +18,7 @@ if [ -z "$SPEC" ] && [ -f "$REPO_ROOT/pyproject.toml" ]; then
   SPEC="$REPO_ROOT"
 fi
 if [ -z "$SPEC" ]; then
-  echo "install_cloud_push: 未设置 AI_USAGE_PACKAGE_SPEC 且不在仓库内，跳过" >&2
-  exit 0
+  SPEC="git+https://github.com/Moshuiwang/aiusage@${AI_USAGE_PACKAGE_REF:-main}"
 fi
 
 python3 -m pip install --quiet --user "$SPEC" >&2 || { echo "install_cloud_push: pip install 失败，跳过" >&2; exit 0; }

@@ -59,7 +59,14 @@ def resolve_session_id(stdin_text: str, env: Mapping[str, str]) -> str | None:
     return None
 
 
-def build_device_config(session_id: str, server_url: str, timezone: str) -> dict[str, Any]:
+def build_device_config(
+    session_id: str, server_url: str, timezone: str, home: Path | None = None
+) -> dict[str, Any]:
+    """``home`` 仅供测试注入；容器内 ``~/.claude.json`` 显式声明为账户指纹来源（#208）。
+
+    文件缺失或没有 oauthAccount 时 pusher 侧降级为不上报账户观察，这里不猜。
+    """
+    claude_json = (Path(home) if home is not None else Path.home()) / ".claude.json"
     return {
         "schema_version": 1,
         "source_id": derive_source_id(session_id),
@@ -71,6 +78,7 @@ def build_device_config(session_id: str, server_url: str, timezone: str) -> dict
         "server_url": server_url,
         "timeout_seconds": 15,
         "token_env": TOKEN_ENV,
+        "account_fingerprint_sources": {"claude": str(claude_json)},
     }
 
 
@@ -121,16 +129,17 @@ def run(
     now: datetime | None = None,
     pusher_factory: Callable[..., Any] = DevicePusher,
     interval_minutes: float | None = None,
+    home: Path | None = None,
 ) -> int:
     """执行一次云端推送。无论发生什么都返回 0。"""
     try:
-        return _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes)
+        return _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, home)
     except Exception as exc:  # noqa: BLE001 - hook 边界：任何异常都不得阻断会话
         print(f"cloud-push: skipped ({type(exc).__name__})", file=sys.stderr)
         return 0
 
 
-def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes) -> int:
+def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes, home=None) -> int:
     server_url = env.get(URL_ENV, "").strip()
     if not env.get(TOKEN_ENV) or not server_url:
         return 0
@@ -149,7 +158,7 @@ def _run(stdin_text, env, state_path, now, pusher_factory, interval_minutes) -> 
 
     try:
         config = validate_device_config(
-            build_device_config(session_id, server_url, env.get(TIMEZONE_ENV) or DEFAULT_TIMEZONE)
+            build_device_config(session_id, server_url, env.get(TIMEZONE_ENV) or DEFAULT_TIMEZONE, home=home)
         )
     except ConfigError as exc:
         print(f"cloud-push: invalid config ({type(exc).__name__})", file=sys.stderr)

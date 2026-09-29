@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ai_usage_widget import cli, cloud_push
+from ai_usage_widget.account_fingerprint import compute_account_fingerprint
 from ai_usage_widget.config import validate_device_config
+from ai_usage_widget.pusher import _account_observations
 
 NOW = datetime(2026, 9, 29, 10, 0, 0, tzinfo=timezone.utc)
 ENV = {
@@ -102,6 +106,57 @@ class TestSourceIdAndConfig(CloudPushCase):
         self.assertEqual(config.machine, "claude-cloud")
         self.assertEqual(config.timezone, "Asia/Shanghai")
         self.assertNotIn("AI_USAGE_INGEST_TOKEN", json.dumps(raw).replace('"token_env": "AI_USAGE_INGEST_TOKEN"', ""))
+
+
+class TestCloudAccountFingerprint(CloudPushCase):
+    """#208：容器内 ~/.claude.json 的 accountUuid 必须让云端与本机得到同一账户指纹。"""
+
+    UUID = "11111111-2222-3333-4444-555555555555"
+
+    def make_home(self, claude_json) -> Path:
+        home = Path(self.tmp.name) / "home"
+        home.mkdir(exist_ok=True)
+        if claude_json is not None:
+            (home / ".claude.json").write_text(json.dumps(claude_json), encoding="utf-8")
+        return home
+
+    def cloud_observations(self, home: Path) -> list:
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(out):
+            cloud_push.run(
+                stdin_text='{"session_id": "abc-123"}', env=dict(ENV), state_path=self.state,
+                now=NOW, pusher_factory=FakePusher, home=home,
+            )
+        self.assertEqual(len(FakePusher.instances), 1)
+        return _account_observations(FakePusher.instances[0].config, NOW.isoformat())
+
+    def test_cloud_observation_matches_independently_computed_and_local_fingerprint(self) -> None:
+        home = self.make_home({"oauthAccount": {"accountUuid": self.UUID}})
+        observations = self.cloud_observations(home)
+        # 独立复算：不经 account_fingerprint 的读文件路径，直接按规格哈希。
+        expected = "fp:claude:" + hashlib.sha256(f"aiusage-account-v1:claude:{self.UUID}".encode()).hexdigest()[:24]
+        self.assertEqual(expected, compute_account_fingerprint("claude", self.UUID))
+        self.assertEqual(len(observations), 1)  # 结构下限：恰好一条 claude 观察
+        self.assertEqual(observations[0]["provider"], "claude")
+        self.assertEqual(observations[0]["account_fingerprint"], expected)
+        # 本机配置同样 uuid 显式给路径，推导结果一致。
+        local_cfg = replace(
+            validate_device_config(cloud_push.build_device_config("x", "https://example.invalid/ingest", "Asia/Shanghai")),
+            account_fingerprint_sources={"claude": str(home / ".claude.json")},
+        )
+        self.assertEqual(_account_observations(local_cfg, NOW.isoformat())[0]["account_fingerprint"], expected)
+        self.assertNotIn(self.UUID, json.dumps(observations))
+
+    def test_config_declares_claude_json_path_from_injected_home(self) -> None:
+        home = self.make_home(None)
+        raw = cloud_push.build_device_config("abc", "https://example.invalid/ingest", "Asia/Shanghai", home=home)
+        self.assertEqual(raw["account_fingerprint_sources"], {"claude": str(home / ".claude.json")})
+
+    def test_missing_file_degrades_to_no_observation(self) -> None:
+        self.assertEqual(self.cloud_observations(self.make_home(None)), [])
+
+    def test_file_without_oauth_account_degrades_to_no_observation(self) -> None:
+        self.assertEqual(self.cloud_observations(self.make_home({"theme": "dark"})), [])
 
 
 class TestThrottleAndLookback(CloudPushCase):

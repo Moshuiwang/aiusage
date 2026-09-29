@@ -98,8 +98,14 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```bash
 # 仓库已 checkout 在环境里时：
 bash scripts/install_cloud_push.sh
-# 否则先设 AI_USAGE_PACKAGE_SPEC="git+https://<可访问的仓库地址>@<tag>" 再执行同一脚本
+# 其他仓库的会话（无 checkout）：脚本直接从公开仓库 git+https://github.com/Moshuiwang/aiusage 安装，
+# 默认 main，可用 AI_USAGE_PACKAGE_REF 指定 tag/分支；不需要任何 GitHub token。
+# 需要自定义来源时设 AI_USAGE_PACKAGE_SPEC（优先级最高）。把脚本内容粘进 setup script 或
+# curl 取自 raw 地址均可；容器需能 git 访问 github.com（codeload.github.com 被拦不影响 git 安装）。
 ```
+
+账户归属（#208）：hook 会显式读取容器内 `~/.claude.json` 的 `oauthAccount.accountUuid` 算账户指纹，
+与本机同一 Claude 账户得到相同 ID；文件缺失或无该字段时降级为不上报账户观察，不猜。
 
 行为：每个云端会话独立 `source_id=claude-cloud-<session_id>`，`machine`/`os_user` 固定为 `claude-cloud`；
 默认每次 Stop 都推送（每次一个批量请求、约 1-2 行 D1 写入）；设了节流间隔时，距上次成功推送不足间隔就跳过。回看窗口按上次成功时间收缩（最多 6 小时）；缺 token 或 URL 时静默退出；

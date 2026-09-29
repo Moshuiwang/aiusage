@@ -1,5 +1,5 @@
 import type { SummarySnapshot } from "./read-model/shared";
-import { sourceAgents, sourceBreakdown } from "./source-breakdown";
+import { CLOUD_SOURCE_ID, CLOUD_SOURCE_LABEL, displaySourceId, sourceAgents, sourceBreakdown } from "./source-breakdown";
 
 type AnyRecord = Record<string, unknown>;
 const LIMIT_STALE_AFTER_MS = 120 * 60 * 1000;
@@ -45,9 +45,12 @@ export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
   // 单测用最小 fixture 直调本函数依赖这层宽容——#130 只加严编译期，不改运行时行为）。
   const summary = dict(snapshot.summary);
   const trend = dict(snapshot.trend);
-  const sourceStatus = list<AnyRecord>(snapshot.source_status);
-  const groups = dict(snapshot.groups);
-  const items = list<AnyRecord>(snapshot.items);
+  const sourceStatus = mergeCloudSourceStatus(list<AnyRecord>(snapshot.source_status));
+  const groups = mergeCloudGroups(dict(snapshot.groups));
+  const items = list<AnyRecord>(snapshot.items).map((item) => {
+    const id = displaySourceId(item.source_id);
+    return id === item.source_id ? item : { ...item, source_id: id };
+  });
   const limits = list<AnyRecord>(snapshot.limits);
   const limitProviders = mobileLimitProviders(list<AnyRecord>(snapshot.limit_status));
   const generatedAt = parseDate(str(snapshot.generated_at));
@@ -113,6 +116,38 @@ export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
     provider_slots: providerSlots(snapshot.provider_slots),
     provider_usage_coverage: providerUsageCoverage(snapshot.provider_usage_coverage),
     metadata: mobileMetadata(snapshot, windows, candidateWindows, generatedAt),
+  };
+}
+
+// #210：展示层把 claude-cloud-<session> 归并成一个「云端」来源。只做内存内映射，不增加任何 D1 读写。
+function mergeCloudSourceStatus(rows: AnyRecord[]): AnyRecord[] {
+  const result: AnyRecord[] = [];
+  let cloud: AnyRecord | null = null;
+  for (const row of rows) {
+    if (displaySourceId(row.source_id) !== CLOUD_SOURCE_ID) {
+      result.push(row);
+      continue;
+    }
+    // 代表行取最近一次上报（会话是临时容器，旧会话的状态没有独立展示价值）。
+    if (!cloud || str(row.observed_at) > str(cloud.observed_at)) cloud = row;
+  }
+  if (cloud) result.push({ ...cloud, source_id: CLOUD_SOURCE_ID, display_name: CLOUD_SOURCE_LABEL });
+  return result;
+}
+
+function mergeCloudSourceIds(ids: unknown): string[] {
+  return Array.from(new Set(list<unknown>(ids).map((id) => displaySourceId(id)))).sort();
+}
+
+function mergeCloudGroups(groups: AnyRecord): AnyRecord {
+  if (!Array.isArray(groups.by_machine)) return groups;
+  return {
+    ...groups,
+    by_machine: list<AnyRecord>(groups.by_machine).map((row) => ({
+      ...row,
+      source_ids: mergeCloudSourceIds(row.source_ids),
+      users: list<AnyRecord>(row.users).map((user) => ({ ...user, source_ids: mergeCloudSourceIds(user.source_ids) })),
+    })),
   };
 }
 

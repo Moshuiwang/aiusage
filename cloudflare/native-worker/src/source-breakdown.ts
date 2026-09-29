@@ -11,6 +11,16 @@ function quotaEstimateOf(model: Row): QuotaEstimate | undefined {
   return { percent, grade, basis };
 }
 
+/** #207 每个云端会话一个 `claude-cloud-<session_id>` 来源；展示层统一归并成这一个来源。 */
+export const CLOUD_SOURCE_ID = "claude-cloud";
+export const CLOUD_SOURCE_LABEL = "云端";
+const CLOUD_SOURCE_PREFIX = "claude-cloud-";
+
+export function displaySourceId(sourceId: unknown): string {
+  const id = String(sourceId ?? "");
+  return id === CLOUD_SOURCE_ID || id.startsWith(CLOUD_SOURCE_PREFIX) ? CLOUD_SOURCE_ID : id;
+}
+
 function tokens(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 }
@@ -75,17 +85,18 @@ export function sourceAgents(items: Row[]): Agent[] {
 export function sourceBreakdown(items: Row[], identities: Row[]): Row[] {
   const groups = new Map<string, Row[]>();
   for (const item of items) {
-    const id = String(item.source_id || "unknown");
+    const id = displaySourceId(item.source_id || "unknown");
     const rows = groups.get(id) ?? [];
     rows.push(item);
     groups.set(id, rows);
   }
   return [...groups].map(([id, rows]) => {
-    const identity = identities.find(row => row.source_id === id) ?? {};
+    const identity = identities.find(row => displaySourceId(row.source_id) === id) ?? {};
     const machine = String(identity.machine || identity.host || rows[0].machine || id);
     const osUser = String(identity.os_user || rows[0].account || "unknown");
     const total = rows.reduce((sum, row) => sum + tokens(row.total_tokens), 0);
-    return { id, label: `${osUser} / ${machine}`, machine, os_user: osUser,
+    const label = id === CLOUD_SOURCE_ID ? CLOUD_SOURCE_LABEL : `${osUser} / ${machine}`;
+    return { id, label, machine, os_user: osUser,
       tokens: total, source_ids: [id], contributions: [{ source_id: id, tokens: total }], agents: sourceAgents(rows) };
   }).sort((a, b) => Number(b.tokens) - Number(a.tokens) || String(a.id).localeCompare(String(b.id)));
 }
