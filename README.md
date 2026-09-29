@@ -86,6 +86,32 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
   uv tool install / pip 的已安装包（版本可追溯）。
 - 自动升级暂不开启（#106/D7 决策）：升级 = 重跑一条 `uv tool install ...@新tag`。
 
+## Claude Code 云端会话用量上报（#207 采集侧）
+
+云端会话是临时容器，会话结束日志即被回收，所以在会话内由 Stop hook 增量推送。你需要做两件事：
+
+1. 在云端环境设置里添加两个环境变量（值只填在那里，不进仓库/聊天）：
+   `AI_USAGE_INGEST_TOKEN`（ingest Bearer token）、`AI_USAGE_INGEST_URL`（完整 ingest 地址，含 `/ingest`）。
+   可选：`AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES`（节流分钟数，默认 0 = 每次 Stop 都推送）、`AI_USAGE_CLOUD_TIMEZONE`（默认 `Asia/Shanghai`）。
+2. 把下面这段粘进云端环境的 setup script（安装本包并把 Stop hook 合并进 `~/.claude/settings.json`，可重复执行）：
+
+```bash
+# 仓库已 checkout 在环境里时：
+bash scripts/install_cloud_push.sh
+# 其他仓库的会话（无 checkout）：脚本直接从公开仓库 git+https://github.com/Moshuiwang/aiusage 安装，
+# 默认 main，可用 AI_USAGE_PACKAGE_REF 指定 tag/分支；不需要任何 GitHub token。
+# 需要自定义来源时设 AI_USAGE_PACKAGE_SPEC（优先级最高）。把脚本内容粘进 setup script 或
+# curl 取自 raw 地址均可；容器需能 git 访问 github.com（codeload.github.com 被拦不影响 git 安装）。
+```
+
+账户归属（#208）：hook 会显式读取容器内 `~/.claude.json` 的 `oauthAccount.accountUuid` 算账户指纹，
+与本机同一 Claude 账户得到相同 ID；文件缺失或无该字段时降级为不上报账户观察，不猜。
+
+行为：每个云端会话（容器）独立 `source_id=claude-cloud-<云端会话号>`（优先取 `CLAUDE_CODE_REMOTE_SESSION_ID`，缺失才用 stdin 的 `session_id`，hook 与手动运行因此同一 source），`machine`/`os_user` 固定为 `claude-cloud`；
+默认每次 Stop 都推送（每次一个批量请求、约 1-2 行 D1 写入）；设了节流间隔时，距上次成功推送不足间隔就跳过。回看窗口按上次成功时间收缩（最多 6 小时）；缺 token 或 URL 时静默退出；
+hook 永远返回 0，不阻断会话。手动入口：`ai-usage-widget cloud-push`（无 stdin 也能用，会话号取自环境变量）。
+仅在设了节流间隔时才会有尾段丢失：会话最后不足一个间隔的用量要等下一次 Stop 才会上报。
+
 ## 常用命令
 
 验证（唯一入口，会按改动面自动裁剪：不动 `cloudflare/` 就不跑 Worker 测试）：

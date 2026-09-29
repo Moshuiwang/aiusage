@@ -79,15 +79,27 @@ struct MenuBarPopoverView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 12, weight: .medium))
-                .rotationEffect(isBusy ? .degrees(360) : .degrees(0))
-                .animation(isBusy ? .linear(duration: 0.9).repeatForever(autoreverses: false) : .default, value: isBusy)
-                .frame(width: 28, height: 28)
+            // #205：旋转只在同步中挂载，由 TimelineView 按时间直接算角度，不走 SwiftUI 动画事务；
+            // 同步结束该分支整体移除。禁止再用 .animation(repeatForever) 挂在常驻视图上——
+            // 它会把同一视图上后续的属性变化（如 disabled 变暗）卷进无限重复动画，空闲时持续闪烁。
+            Group {
+                if isBusy {
+                    TimelineView(.animation) { context in
+                        let t = context.date.timeIntervalSinceReferenceDate
+                        Image(systemName: systemName)
+                            .rotationEffect(.degrees(t.truncatingRemainder(dividingBy: 0.9) / 0.9 * 360))
+                    }
+                } else {
+                    Image(systemName: systemName)
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .frame(width: 28, height: 28)
         }
         .buttonStyle(.hoverHighlight(Circle()))
         .focusable(false)
-        .disabled(isBusy && systemName == "arrow.clockwise")
+        // 同步中防重复点击；不用 .disabled，避免按钮变暗（#205）。
+        .allowsHitTesting(!isBusy)
         .background(
             Circle()
                 .fill(Color(nsColor: .controlBackgroundColor).opacity(reduceTransparency ? 1 : 0.5))

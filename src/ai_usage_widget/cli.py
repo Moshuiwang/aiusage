@@ -36,6 +36,7 @@ from .mswusage_claude import build_report as build_mswusage_claude_report, read_
 from .mswusage_antigravity import build_report as build_mswusage_antigravity_report, read_local_antigravity_events
 from .antigravity_limits_provider import AntigravityLimitsProvider
 from .pusher import DevicePusher
+from .cloud_push import run_cli as run_cloud_push
 from .verify_cloud import register_parser as register_verify_cloud_parser, run as run_verify_cloud
 
 
@@ -59,6 +60,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Incremental Usage Ledger lookback window",
     )
     push_parser.add_argument("--ledger-coverage-start", default=None, help="Authoritative full-rescan coverage start")
+
+    cloud_push_parser = subparsers.add_parser(
+        "cloud-push",
+        help="Claude Code 云端会话 Stop hook 入口：读 stdin 的 session_id，推送本会话用量（默认每次 Stop 都推；AI_USAGE_CLOUD_PUSH_INTERVAL_MINUTES 可选开启节流；永远退出 0）",
+    )
+    cloud_push_parser.add_argument("--state-file", default=None, help="状态文件，用于计算回看窗口与可选节流（默认 ~/.ai-usage/cloud-push-state.json）")
+    cloud_push_parser.add_argument("--install-hook", action="store_true", help="把 Stop hook 幂等合并进用户级 settings.json")
+    cloud_push_parser.add_argument("--settings", default=None, help="--install-hook 的目标（默认 ~/.claude/settings.json）")
 
     doctor_parser = subparsers.add_parser(
         "doctor",
@@ -247,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     handler = {
         "verify-cloud": run_verify_cloud,
         "push": _run_push,
+        "cloud-push": run_cloud_push,
         "doctor": _run_doctor,
         "install-collector": _run_install_collector,
         "rollback-collector": _run_rollback_collector,
