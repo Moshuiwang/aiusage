@@ -383,6 +383,11 @@ function staleLimitWindow(window: AnyRecord, generatedAt: Date | null): boolean 
   return generatedAt.getTime() - observedAt.getTime() > LIMIT_STALE_AFTER_MS;
 }
 
+// #214：机器/账户分组里 #207 固定的 claude-cloud 条目显示「云端」；id 保持原值。
+function cloudLabel(label: unknown): unknown {
+  return label === CLOUD_SOURCE_ID ? CLOUD_SOURCE_LABEL : label;
+}
+
 function groupRows(rows: AnyRecord[]): AnyRecord[] {
   const result: AnyRecord[] = [];
   for (const row of rows) {
@@ -398,7 +403,7 @@ function groupRows(rows: AnyRecord[]): AnyRecord[] {
     if (!Object.keys(contributions).length) addContribution(contributions, list<unknown>(row.source_ids), totalTokens);
     result.push({
       id: row.name || label,
-      label,
+      label: cloudLabel(label),
       tokens: totalTokens,
       source_ids: Array.from(sourceIds).sort(),
       contributions: contributionRows(contributions),
@@ -439,7 +444,7 @@ function osUserRows(machineRows: AnyRecord[], items: AnyRecord[]): AnyRecord[] {
   }
   return sortRows(Array.from(rows.values()).filter((row) => row.tokens > 0).map((row) => ({
     id: row.id,
-    label: row.label,
+    label: cloudLabel(row.label),
     tokens: row.tokens,
     source_ids: Array.from(row.source_ids).sort(),
     contributions: contributionRows(row.contributions),

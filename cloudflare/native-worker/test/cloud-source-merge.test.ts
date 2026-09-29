@@ -95,4 +95,18 @@ describe("#210 云端会话来源合并", () => {
       expect(ids.filter((id) => id.startsWith("claude-cloud-"))).toEqual([]);
     }
   });
+  it("#214 by_machine / by_os_user 的显示名：云端条目为「云端」，id 不变，非云端不变", () => {
+    const mobile = build(snapshot);
+    const byMachine = mobile.breakdown.by_machine as any[];
+    const byUser = mobile.breakdown.by_os_user as any[];
+    // 结构下限：fixture 有 2 台机器（云端 + mac-air），账户 2 个（claude-cloud + wang）
+    expect(byMachine).toHaveLength(2);
+    expect(byUser).toHaveLength(2);
+    expect(byMachine.find((r) => r.id === "claude-cloud")!.label).toBe("云端");
+    expect(byMachine.find((r) => r.id === "mac-air")!.label).toBe("mac-air");
+    expect(byUser.find((r) => r.id === "claude-cloud")!.label).toBe("云端");
+    expect(byUser.find((r) => r.id === "wang")!.label).toBe("wang");
+    // 任何行的显示名都不再出现英文 claude-cloud
+    expect([...byMachine, ...byUser].filter((r) => r.label === "claude-cloud")).toEqual([]);
+  });
 });
