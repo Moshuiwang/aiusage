@@ -69,6 +69,13 @@ public enum PeriodMenuBuilder {
         }
     }
 
+    public static func matches(_ summary: MobileSummary, selection: MenuPeriodSelection, now: Date) -> Bool {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = summary.timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+        let bounds = periodBounds(periodID: selection.periodID, offset: selection.offset, today: calendar.startOfDay(for: now), calendar: calendar)
+        return isCacheValid(summary, periodID: selection.periodID, expectedStartDate: dayString(bounds.start, calendar: calendar))
+    }
+
     /// #177：「选择其他日期…」把用户在 DatePicker 里选的日期换算成当前粒度的 offset。
     /// 换算结果不做范围裁剪——调用方经 `MenuPeriodSelection(periodID:offset:)` 构造时会按既有规则自动裁剪
     /// （today: -6...0，week/month: ...0），与期间菜单近几期的 offset 限制保持同一套规则。
