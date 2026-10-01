@@ -959,6 +959,74 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertTrue(model.errorMessage?.hasPrefix("读取失败") == true)
     }
 
+    func testHistorySurvivesRestartAndRelativeOffsetChanges() throws {
+        let paths = try temporaryRuntimePaths()
+        let historical = try summaryWithDate(periodID: "today", date: "2026-06-24", startDate: "2026-06-24", totalTokens: 900)
+        try SummaryCache.save(historical, paths: paths, offset: 0)
+        let oldTime = try date("2026-06-24T20:00:00+08:00")
+        for url in try FileManager.default.contentsOfDirectory(at: paths.periodCacheDirectoryURL, includingPropertiesForKeys: nil) {
+            try FileManager.default.setAttributes([.modificationDate: oldTime], ofItemAtPath: url.path)
+        }
+        // 今天写入同一相对位置不能把前天的数据覆盖掉。
+        try SummaryCache.save(try summaryWithDate(periodID: "today", date: "2026-06-26", startDate: "2026-06-26", totalTokens: 100), paths: paths)
+        let now = try date("2026-06-26T08:00:00+08:00")
+        let caches = SummaryCache.loadSummaries(paths: paths, now: now)
+        XCTAssertEqual(caches["today"]?.summary.period.totalTokens, 100)
+        XCTAssertEqual(caches["today:-2"]?.summary.period.totalTokens, 900)
+        let model = MenuBarAppModel(paths: paths, config: testConfig(), cachedSummaries: caches, now: { now })
+        let rows = model.periodMenuRows(for: "today")
+        XCTAssertEqual(rows.count, 7)
+        XCTAssertEqual(rows[2].totalText, "900")
+        XCTAssertEqual(rows[0].totalText, "100")
+    }
+
+    func testRunningAppMovesDatedHistoryAtMidnightWithoutReloadingHistory() async throws {
+        let paths = try temporaryRuntimePaths()
+        let loader = ControlledSummaryLoader()
+        var now = try date("2026-06-25T23:59:00+08:00")
+        try SummaryCache.save(try summaryWithDate(periodID: "today", date: "2026-06-24", startDate: "2026-06-24", totalTokens: 900), paths: paths, offset: -1)
+        try SummaryCache.save(try summaryWithDate(periodID: "today", date: "2026-06-25", startDate: "2026-06-25", totalTokens: 100), paths: paths)
+        let model = MenuBarAppModel(paths: paths, config: testConfig(), cachedSummaries: SummaryCache.loadSummaries(paths: paths, now: now), now: { now }, loadSummary: loader.load)
+        XCTAssertEqual(model.periodMenuRows(for: "today")[1].totalText, "900")
+        now = now.addingTimeInterval(120)
+        model.refresh()
+        try await loader.waitForRequestCount(1)
+        let rows = model.periodMenuRows(for: "today")
+        XCTAssertEqual(rows.count, 7)
+        XCTAssertEqual(rows[1].totalText, "100")
+        XCTAssertEqual(rows[2].totalText, "900")
+        await loader.complete(period: "today", summary: try summaryWithDate(periodID: "today", date: "2026-06-26", startDate: "2026-06-26", totalTokens: 50))
+        await waitUntil { !model.isLoading }
+        let requests = await loader.totalRequestCount()
+        XCTAssertEqual(requests, 1, "跨天只请求新今天，已保存的历史不应重新下载")
+    }
+
+    func testOldDatedHistoryRemainsVisibleWhileRefreshingAndOnReopen() async throws {
+        let paths = try temporaryRuntimePaths()
+        let loader = ControlledSummaryLoader()
+        var now = try date("2026-06-26T08:00:00+08:00")
+        let historical = try summaryWithDate(periodID: "today", date: "2026-06-25", startDate: "2026-06-25", totalTokens: 900)
+        try SummaryCache.save(historical, paths: paths, offset: 0)
+        for url in try FileManager.default.contentsOfDirectory(at: paths.periodCacheDirectoryURL, includingPropertiesForKeys: nil) {
+            try FileManager.default.setAttributes([.modificationDate: try date("2026-06-25T20:00:00+08:00")], ofItemAtPath: url.path)
+        }
+        let caches = SummaryCache.loadSummaries(paths: paths, now: now)
+        XCTAssertEqual(caches["today:-1"]?.summary.period.totalTokens, 900)
+        let model = MenuBarAppModel(paths: paths, config: testConfig(), cachedSummaries: caches, now: { now }, loadSummary: loader.load)
+        model.refresh(offset: -1)
+        try await loader.waitForRequestCount(1)
+        XCTAssertTrue(model.hasLoadedUsableSummary)
+        XCTAssertEqual(model.summary.period.totalTokens, 900)
+        await loader.complete(period: "today:-1", summary: historical)
+        await waitUntil { !model.isLoading }
+        now = now.addingTimeInterval(600)
+        for _ in 0..<3 { model.refresh() }
+        await yieldToMainActor()
+        let count = await loader.totalRequestCount()
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(model.summary.period.totalTokens, 900)
+    }
+
     func testHistoryKeepsSeparateCacheAndTodaysMenuBarValue() async throws {
         let loader = ControlledSummaryLoader()
         let paths = try temporaryRuntimePaths()
