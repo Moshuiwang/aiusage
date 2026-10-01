@@ -4,6 +4,9 @@ import hashlib
 import json
 import os
 import sqlite3
+import shutil
+import tempfile
+from contextlib import contextmanager
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
@@ -113,9 +116,40 @@ def read_local_antigravity_events(
 
 
 def _extract_events_from_db(db_path: Path) -> list[dict]:
+    # 只在当前设备制作临时副本；SQLite 不打开或修改应用的源文件。
+    # WAL 必须一起复制，不能用 immutable=1 忽略尚未合并的最新记录。
+    with _database_snapshot(db_path) as snapshot_path:
+        return _extract_snapshot_events(db_path, snapshot_path)
+
+
+def _database_file_state(path: Path) -> tuple | None:
+    try:
+        st = path.stat()
+    except FileNotFoundError:
+        return None
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+@contextmanager
+def _database_snapshot(db_path: Path):
+    source_files = [db_path, Path(str(db_path) + "-wal"), Path(str(db_path) + "-journal")]
+    before = [_database_file_state(p) for p in source_files]
+    if before[0] is None:
+        raise FileNotFoundError("Antigravity database disappeared")
+    with tempfile.TemporaryDirectory(prefix="aiusage-antigravity-") as directory:
+        snapshot_path = Path(directory) / "session.db"
+        for source, state, suffix in zip(source_files, before, ["", "-wal", "-journal"]):
+            if state is not None:
+                shutil.copyfile(source, Path(str(snapshot_path) + suffix))
+        if before != [_database_file_state(p) for p in source_files]:
+            # 复制期间应用有写入，拒绝不一致副本；按 read_errors 降级，下一周期重采。
+            raise OSError("Antigravity database changed during snapshot")
+        yield snapshot_path
+
+
+def _extract_snapshot_events(db_path: Path, snapshot_path: Path) -> list[dict]:
     events: list[dict] = []
-    uri = f"file:{db_path.resolve()}?mode=ro"
-    conn = sqlite3.connect(uri, uri=True)
+    conn = sqlite3.connect(snapshot_path)
     try:
         cursor = conn.cursor()
         cursor.execute(

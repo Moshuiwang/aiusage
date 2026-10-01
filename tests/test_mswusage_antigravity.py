@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
+import hashlib
+import shutil
+import os
+from unittest.mock import patch
 import tempfile
 import unittest
 from datetime import datetime, timezone as dt_timezone
@@ -166,6 +170,63 @@ class TestMswusageAntigravity(unittest.TestCase):
         report = build_report(events, timezone="Asia/Shanghai")
         self.assertEqual(len(report["hourly"]), 0)
         self.assertEqual(len(report["daily"]), 0)
+
+    def test_wal_database_is_read_without_opening_or_mutating_source(self) -> None:
+        db_path = self.conv_dir / "wal-session.db"
+        self._create_sample_db(db_path, [(1, 1790212200, "gemini-3.1-pro", 100, 20, 30, 0)])
+        writer = sqlite3.connect(db_path)
+        self.addCleanup(writer.close)
+        self.assertEqual(writer.execute("PRAGMA journal_mode=WAL").fetchone()[0], "wal")
+        with writer:
+            writer.execute("INSERT INTO steps VALUES (2, 15, 3, ?)", (_build_step_metadata(1790212300),))
+            data = _build_gen_metadata("gemini-3.1-pro", 400, 50, 60, 0)
+            writer.execute("INSERT INTO gen_metadata VALUES (2, ?, ?)", (data, len(data)))
+        # 第二条记录只在 WAL 中；忽略 WAL 会读到不完整的用量。
+        tracked = [db_path, Path(str(db_path) + "-wal")]
+        before = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in tracked}
+        original_connect = sqlite3.connect
+
+        def connect_without_source_access(database, *args, **kwargs):
+            if str(db_path) in str(database):
+                raise sqlite3.OperationalError("unable to open database file")
+            return original_connect(database, *args, **kwargs)
+
+        with patch("ai_usage_widget.mswusage_antigravity.sqlite3.connect", side_effect=connect_without_source_access):
+            diagnostics = {}
+            events = read_local_antigravity_events(roots=[self.conv_dir], diagnostics=diagnostics)
+        self.assertEqual(diagnostics["read_errors"], 0)
+        self.assertEqual(len(events), 2)
+        self.assertEqual([e["total_tokens"] for e in events], [150, 510])
+        self.assertEqual(sum(e["total_tokens"] for e in events), 660)
+        self.assertEqual({p: hashlib.sha256(p.read_bytes()).hexdigest() for p in tracked}, before)
+
+    def test_source_change_during_snapshot_is_reported_as_read_error(self) -> None:
+        db_path = self.conv_dir / "changing-session.db"
+        self._create_sample_db(db_path, [(1, 1790212200, "gemini-3.1-pro", 100, 20, 30, 0)])
+        original_copy = shutil.copyfile
+
+        def copy_then_change_source(source, destination):
+            result = original_copy(source, destination)
+            st = source.stat()
+            os.utime(source, ns=(st.st_atime_ns, st.st_mtime_ns + 1000000))
+            return result
+
+        diagnostics = {}
+        with patch("ai_usage_widget.mswusage_antigravity.shutil.copyfile", side_effect=copy_then_change_source):
+            events = read_local_antigravity_events(roots=[self.conv_dir], diagnostics=diagnostics)
+        self.assertEqual(diagnostics["files_scanned"], 1)
+        self.assertEqual(diagnostics["read_errors"], 1)
+        self.assertEqual(events, [])
+
+    def test_database_filename_uri_characters_do_not_drop_usage(self) -> None:
+        db_path = self.conv_dir / "session#1?.db"
+        self._create_sample_db(db_path, [(1, 1790212200, "gemini-3.1-pro", 100, 20, 30, 0)])
+        diagnostics = {}
+        events = read_local_antigravity_events(roots=[self.conv_dir], diagnostics=diagnostics)
+        self.assertEqual(diagnostics, {"files_scanned": 1, "read_errors": 0})
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["total_tokens"], 150)
+        self.assertEqual(events[0]["session_id"], "session#1?")
 
     def test_since_filtering(self) -> None:
         db_path = self.conv_dir / "since-test.db"
