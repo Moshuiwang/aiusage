@@ -93,6 +93,25 @@ class UpgradeTests(unittest.TestCase):
             with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
                 self.assertFalse(mac_health(root, {'collector_version': '0.4.0'}, 0))
 
+    def test_mac_health_accepts_recent_owner_cache_without_forcing_another_read(self):
+        from ai_usage_widget.upgrade_apply import mac_health
+        from ai_usage_widget.mac_app_collector import write_status
+        import os, shutil, time
+        fixture = Path(__file__).parent / 'fixtures/verify_cloud/healthy/mobile_summary.json'
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'summaries').mkdir()
+            cache = root / 'summaries/today-offset0.json'
+            shutil.copyfile(fixture, cache)
+            started = time.time()
+            os.utime(cache, (started - 90, started - 90))
+            write_status(root, {'usage': {'success': True}, 'limits': {'success': True}})
+            with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
+                self.assertTrue(mac_health(root, {'collector_version': '0.4.0'}, started))
+            os.utime(cache, (started - 601, started - 601))
+            with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
+                self.assertFalse(mac_health(root, {'collector_version': '0.4.0'}, started))
+
     def test_mac_failed_health_restores_app_and_keeps_runtime_config(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)/'runtime';root.mkdir()

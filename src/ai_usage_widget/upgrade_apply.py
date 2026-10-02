@@ -161,7 +161,7 @@ def mac_health(root, manifest, started):
                 if status.get('collector_version')==manifest['collector_version']:
                     jobs=[status.get(name,{}) for name in ('usage','limits')]
                     if any(job.get('success') is False for job in jobs):return False
-                    if all(job.get('success') is True for job in jobs) and cache.stat().st_mtime>started:
+                    if all(job.get('success') is True for job in jobs) and 0 <= time.time() - cache.stat().st_mtime <= 600:
                         summary=json.loads(cache.read_text())
                         if isinstance(summary.get('sources'), list) and summary['sources']:return True
         except (OSError,ValueError):pass
