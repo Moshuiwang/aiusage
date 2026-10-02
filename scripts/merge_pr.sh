@@ -71,7 +71,7 @@ EOF
 # 结构下限：核对数必须正好是 4。REQUIRED_CHECKS 被清空时这里是 0/4，
 # 「什么都没核对」不许和「核对了且全绿」产生同一个出口。
 if [ "$CHECKED" -ne 4 ] || [ "$FAILED" -ne 0 ]; then
-  echo "【merge 门禁】拒绝合并 PR #$PR：核对通过 $CHECKED/4。等 CI 全绿后重试：scripts/merge_pr.sh $PR" >&2
+  echo "【merge 门禁】拒绝合并 PR #${PR}：核对通过 $CHECKED/4。等 CI 全绿后重试：scripts/merge_pr.sh $PR" >&2
   exit 2
 fi
 
