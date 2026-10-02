@@ -40,7 +40,7 @@ ai-usage-widget devices revoke --server https://aiusage.chunbai.com --request-id
 
 发布 owner 使用 `scripts/build_signed_release.py` 从干净提交构建并签名；签名私钥必须在仓库外、仅属于当前用户、权限为 `600`，不输出或进入 Git。工具生成公开的签名清单、公钥审核产物及平台包，不自动发布远端。
 
-Ed25519 的使用遵循 [cryptography 官方接口](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/)。客户端仅信任代码内固定的 `release_trust.RELEASE_PUBLIC_KEYS`，发布下载不能提供自己的信任根。签名公钥和默认清单地址未配置时安全关闭更新。
+Ed25519 的使用遵循 [cryptography 官方接口](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/)。客户端仅信任代码内固定的 `release_trust.RELEASE_PUBLIC_KEYS`，发布下载不能提供自己的信任根。当前版本已固定发布公钥及 GitHub Releases 的公开清单地址；签名私钥保存在发布 owner 的仓库外私有目录。
 
 ```sh
 # 签名发布 owner；先在源码中固定正式公钥，再从干净提交重建所有产物。
@@ -67,9 +67,9 @@ Mac 使用菜单“检查 App 更新…”；更新器运行于独立复制的 h
 
 1. 审核并应用 `0015_device_enrollment.sql`，配置独立 `AIUSAGE_DEVICE_ADMIN_TOKEN`，部署对应 Worker。旧共享 token **不具备管理员权限**。
 2. 在管理机器配置一次管理员凭据；逐设备验证注册、来源限制、读取权限与撤销，不替用户批量自动批准。
-3. 管理签名私钥、固定公开公钥和清单地址，重建正式 Linux 与 Mac 发布产物，按通道逐台发布。
+3. 发布 owner 保管签名私钥；公钥及公开清单地址已固定在源码。重建正式 Linux 与 Mac 发布产物，按通道逐台发布。
 4. 每台设备完成真实升级、上报、用户可见非空数据、健康失败回滚演练；保留既有设备配置和缓冲数据。
 5. 所有设备完成注册后可撤掉旧共享 token；只保留管理员凭据与设备凭据的生产模式仍禁止匿名访问。尚未迁移的旧设备需明确安排迁移，不能静默断供。
 6. 发布后执行 `scripts/check_cf_usage.py` 回源巡检（等级 7）。未做回源前不宣称生产升级完成。
 
-注册入口限定 4 KiB 请求、16 个待批申请、每小时 32 次新申请、64 个设备凭据记录；写入批量执行，过期申请与旧计数清理。客户端申请和确认均手动单次请求。达到限额时返回明确错误，不无限扩张存储。生产 Secret、签名信任根、真实部署与正式发布均需 Ops 的独立权限，本机不修改生产配置。
+注册入口限定 4 KiB 请求、16 个待批申请、每小时 32 次新申请、64 个设备凭据记录；写入批量执行，过期申请与旧计数清理。客户端申请和确认均手动单次请求。达到限额时返回明确错误，不无限扩张存储。生产 Secret 与 Worker 真实部署需 Ops 权限；发布 owner 可用本机发布签名密钥和 GitHub Contents 权限生成并发布签名产物。本机不修改生产配置。
