@@ -45,6 +45,7 @@ async function polluteTable(db: D1Database, table: string): Promise<void> {
   const placeholders = required.map(() => "?").join(", ");
   const values = required.map((col) => {
     if (isNumeric(col.type)) return 1;
+    if (col.name === "platform") return "linux";
     if (col.name === "date") return "2000-01-02";
     if (["window_start", "window_end", "bucket_start", "bucket_end"].includes(col.name)) return "2000-01-01T01:00:00+08:00";
     return "x";

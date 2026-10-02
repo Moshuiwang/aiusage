@@ -317,49 +317,49 @@
     "start_date": "2026-05-28"
   },
   "version_health": {
+    "server": {
+      "api_version": "1.0.0",
+      "read_model_version": "1.0.0",
+      "ingest_schema_version": 1,
+      "min_supported_collector_version": "0.1.0",
+      "target_collector_version": "0.4.0"
+    },
     "counts": {
       "current": 1,
-      "rollback_available": 0,
-      "unknown": 1,
+      "update_available": 0,
       "unsupported": 1,
-      "update_available": 0
+      "rollback_available": 0,
+      "unknown": 1
     },
     "needs_attention": [
       {
-        "build_sha": null,
-        "collector_version": "0.0.9",
-        "compatible": false,
+        "source_id": "mac-air-wang",
         "display_name": "mac-air · wangzhipeng",
         "machine": "mac-air",
-        "observed_at": "2026-06-03T07:10:00+08:00",
         "os_user": "wangzhipeng",
-        "reason": "collector_version_below_minimum",
-        "release_channel": null,
-        "source_id": "mac-air-wang",
+        "status": "stale",
+        "observed_at": "2026-06-03T07:10:00+08:00",
         "state": "unsupported",
-        "status": "stale"
+        "collector_version": "0.0.9",
+        "release_channel": null,
+        "build_sha": null,
+        "reason": "collector_version_below_minimum",
+        "compatible": false
       },
       {
-        "build_sha": null,
-        "collector_version": null,
-        "compatible": true,
+        "source_id": "win-box-wang",
         "display_name": "win-box · wang",
         "machine": "win-box",
-        "observed_at": null,
         "os_user": "wang",
-        "reason": "collector_release_missing",
-        "release_channel": null,
-        "source_id": "win-box-wang",
+        "status": "never_seen",
+        "observed_at": null,
         "state": "unknown",
-        "status": "never_seen"
+        "collector_version": null,
+        "release_channel": null,
+        "build_sha": null,
+        "reason": "collector_release_missing",
+        "compatible": true
       }
-    ],
-    "server": {
-      "api_version": "1.0.0",
-      "ingest_schema_version": 1,
-      "min_supported_collector_version": "0.1.0",
-      "read_model_version": "1.0.0",
-      "target_collector_version": "0.3.0"
-    }
+    ]
   }
 }

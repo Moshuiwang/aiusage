@@ -72,6 +72,27 @@ class UpgradeTests(unittest.TestCase):
             self.assertEqual(outbox.read_bytes(),b'persisted queue')
             self.assertGreaterEqual(len(commands),4)
 
+    def test_mac_health_reads_nonempty_mobile_owner_sources(self):
+        from ai_usage_widget.upgrade_apply import mac_health
+        from ai_usage_widget.mac_app_collector import write_status
+        import shutil
+        fixture = Path(__file__).parent / 'fixtures/verify_cloud/healthy/mobile_summary.json'
+        summary = json.loads(fixture.read_text())
+        self.assertGreater(len(summary['sources']), 0)
+        self.assertNotIn('source_status', summary)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'summaries').mkdir()
+            cache = root / 'summaries/today-offset0.json'
+            shutil.copyfile(fixture, cache)
+            write_status(root, {'usage': {'success': True}, 'limits': {'success': True}})
+            with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
+                self.assertTrue(mac_health(root, {'collector_version': '0.4.0'}, 0))
+            summary['sources'] = []
+            cache.write_text(json.dumps(summary))
+            with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
+                self.assertFalse(mac_health(root, {'collector_version': '0.4.0'}, 0))
+
     def test_mac_failed_health_restores_app_and_keeps_runtime_config(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder)/'runtime';root.mkdir()

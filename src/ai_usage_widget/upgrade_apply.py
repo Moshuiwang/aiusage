@@ -163,7 +163,7 @@ def mac_health(root, manifest, started):
                     if any(job.get('success') is False for job in jobs):return False
                     if all(job.get('success') is True for job in jobs) and cache.stat().st_mtime>started:
                         summary=json.loads(cache.read_text())
-                        if summary.get('source_status'):return True
+                        if isinstance(summary.get('sources'), list) and summary['sources']:return True
         except (OSError,ValueError):pass
         time.sleep(1)
     return False
