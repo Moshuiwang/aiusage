@@ -30,8 +30,11 @@ ALL_GREEN = (
 
 
 class MergeGateTestCase(unittest.TestCase):
-    def _run(self, args: list[str], rollup: str | None) -> subprocess.CompletedProcess[str]:
+    def _run(self, args: list[str], rollup: str | None, *, locale: str | None = None) -> subprocess.CompletedProcess[str]:
         env = {"PATH": "/usr/bin:/bin", "AIUSAGE_MERGE_GATE_DRYRUN": "1"}
+        if locale:
+            env["LANG"] = locale
+            env["LC_ALL"] = locale
         if rollup is not None:
             tmp = tempfile.NamedTemporaryFile(
                 "w", suffix=".tsv", delete=False, encoding="utf-8"
@@ -46,6 +49,19 @@ class MergeGateTestCase(unittest.TestCase):
 
 
 class TestMergeGateRefusals(MergeGateTestCase):
+    def test_utf8_locale_preserves_failed_and_absent_check_refusals(self) -> None:
+        cases = (
+            ALL_GREEN.replace("Python\tSUCCESS", "Python\tFAILURE"),
+            ALL_GREEN.replace("Python\tSUCCESS\n", ""),
+        )
+        for rollup in cases:
+            with self.subTest(rollup=rollup):
+                result = self._run(["7"], rollup, locale="en_US.UTF-8")
+                self.assertEqual(result.returncode, BLOCK, result.stderr)
+                self.assertIn("Python", result.stderr)
+                self.assertNotIn("MERGE-EXEC", result.stdout)
+                self.assertNotIn("unbound variable", result.stderr)
+
     def test_refuses_when_a_required_check_failed(self) -> None:
         rollup = ALL_GREEN.replace("Cloudflare Worker\tSUCCESS", "Cloudflare Worker\tFAILURE")
         result = self._run(["7"], rollup)
