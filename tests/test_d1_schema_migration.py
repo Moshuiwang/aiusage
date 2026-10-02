@@ -98,6 +98,22 @@ D1_ONLY_TABLE_COLUMNS = {
 # `usage_blocks` is absent on purpose: #91 stopped collection, no reader or
 # writer remains on either side, and 0008 drops the table from deployed D1.
 FRESH_INSTALL_TABLE_COLUMNS = {
+    "device_enrollment_requests": [
+        ('request_id','TEXT',0,None,1), ('user_code','TEXT',1,None,0),
+        ('request_secret_hash','TEXT',1,None,0), ('credential_hash','TEXT',1,None,0),
+        ('source_ids','TEXT',1,None,0), ('machine','TEXT',1,None,0),
+        ('os_user','TEXT',1,None,0), ('platform','TEXT',1,None,0),
+        ('read_requested','INTEGER',1,None,0), ('status','TEXT',1,"'pending'",0),
+        ('created_at','TEXT',1,None,0), ('expires_at','TEXT',1,None,0),
+    ],
+    "device_credentials": [
+        ('credential_hash','TEXT',0,None,1), ('request_id','TEXT',1,None,0),
+        ('source_ids','TEXT',1,None,0), ('read_allowed','INTEGER',1,None,0),
+        ('approved_at','TEXT',1,None,0), ('revoked_at','TEXT',0,None,0),
+    ],
+    "device_enrollment_budget": [
+        ('hour','TEXT',0,None,1), ('count','INTEGER',1,None,0),
+    ],
     "account_observations": [
         ('source_id', 'TEXT', 1, None, 1),
         ('provider', 'TEXT', 1, None, 2),
@@ -401,6 +417,9 @@ FRESH_INSTALL_TABLE_COLUMNS = {
 }
 
 FRESH_INSTALL_CREATED_INDEXES = {
+    "device_credentials": {},
+    "device_enrollment_budget": {},
+    "device_enrollment_requests": {"device_enrollment_expiry": (0, 0, ('expires_at',))},
     "account_observations": {
     },
     "ai_accounts": {

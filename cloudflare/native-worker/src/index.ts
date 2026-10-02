@@ -7,11 +7,13 @@ import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./wr
 import { authTokens, isAuthenticated } from "./auth";
 import { AUDIT_RETENTION_DAYS, backendMode, buildHealthResponse, referenceTime } from "./health";
 import { json } from "./http";
+import { deviceRoute, deviceIdentity, ownsPayload, canRead } from "./device-auth";
 
 export interface Env {
   AIUSAGE_DB: D1Database;
   AIUSAGE_BACKUPS?: R2Bucket;
   AIUSAGE_TOKEN?: string;
+  AIUSAGE_DEVICE_ADMIN_TOKEN?: string;
   AIUSAGE_TOKEN_SPECS?: string;
   AIUSAGE_TIMEZONE?: string;
   AIUSAGE_NOW?: string;
@@ -27,7 +29,7 @@ const SUMMARY_CACHE_TTL_SECONDS = 60;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (backendMode(env) === "native_d1_production" && !authTokens(env).length) {
+    if (backendMode(env) === "native_d1_production" && !authTokens(env).length && !env.AIUSAGE_DEVICE_ADMIN_TOKEN?.trim()) {
       return json({
         status: "error",
         error_type: "auth_unconfigured",
@@ -35,11 +37,15 @@ export default {
       }, 503);
     }
     const url = new URL(request.url);
+    const deviceResponse = await deviceRoute(request, env);
+    if (deviceResponse) return deviceResponse;
     if (url.pathname === "/ingest" || url.pathname === "/ingest-limits") {
       if (request.method !== "POST") {
         return json({ status: "error", error_type: "method_not_allowed", message: "Method not allowed" }, 405);
       }
-      if (!(await isAuthenticated(request, env))) {
+      const operatorAuthorized = await isAuthenticated(request, env);
+      const device = operatorAuthorized ? null : await deviceIdentity(request, env);
+      if (!operatorAuthorized && !device) {
         return json({ status: "error", error_type: "http_auth_failed", message: "Invalid or missing token" }, 401);
       }
       let payload: unknown;
@@ -47,6 +53,9 @@ export default {
         payload = await request.json();
       } catch (_exc) {
         return json({ status: "error", error_type: "http_schema_invalid", message: "Request body must be valid JSON" }, 400);
+      }
+      if (device && !ownsPayload(payload, device, url.pathname === "/ingest-limits")) {
+        return json({ status: "error", error_type: "device_source_forbidden" }, 403);
       }
       try {
         const result = url.pathname === "/ingest"
@@ -66,14 +75,14 @@ export default {
       }
     }
     if (url.pathname === "/api/health") {
-      if (!(await isAuthenticated(request, env))) {
-        return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, 401);
+      if (!(await canRead(request, env))) {
+        return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, await deviceIdentity(request, env) ? 403 : 401);
       }
       return json(await buildHealthResponse(env));
     }
     if (url.pathname === "/api/summary" || url.pathname === "/api/mobile/summary") {
-      if (!(await isAuthenticated(request, env))) {
-        return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, 401);
+      if (!(await canRead(request, env))) {
+        return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, await deviceIdentity(request, env) ? 403 : 401);
       }
       let cacheKey = request.method === "GET" && env.AIUSAGE_DISABLE_SUMMARY_CACHE !== "true"
         ? await summaryCacheKey(request, env)

@@ -544,6 +544,6 @@ final class MenuBarAppModel: ObservableObject {
                 return "HTTP \(code)"
             }
         }
-        return String(describing: error)
+        return SafeNetworkErrorMessage.message(error)
     }
 }

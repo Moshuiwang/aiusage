@@ -75,7 +75,7 @@ const token = "contract-test-token";
 // 常量一升，Python 的防陈旧测试和这里会一起红——正确动作是先重新生成 fixture：
 //     PYTHONPATH=src python3 scripts/gen_collector_payload_fixture.py
 // 再把这里的期望值改成新版本，而不是放宽断言。
-const fixtureCollectorVersion = "0.3.0";
+const fixtureCollectorVersion = "0.4.0";
 
 const volatileFields = new Set([
   "accepted_at",

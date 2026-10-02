@@ -8,6 +8,8 @@ import sys
 from datetime import datetime, timedelta, timezone as dt_timezone
 from pathlib import Path
 
+from . import upgrade
+from . import device_enrollment
 from . import account_fingerprint
 from .backup import backup_sqlite
 from .config import ConfigError, validate_device_config
@@ -42,6 +44,8 @@ from .verify_cloud import register_parser as register_verify_cloud_parser, run a
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="ai-usage-widget")
+    from .version_contract import COLLECTOR_VERSION
+    parser.add_argument("--version", action="version", version=COLLECTOR_VERSION)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     push_parser = subparsers.add_parser("push", help="Collect local ccusage daily report and push it to the ingest server")
@@ -246,6 +250,8 @@ def _build_parser() -> argparse.ArgumentParser:
     mswusage_antigravity_parser.add_argument("--lookback-hours", type=float, default=48.0)
     mswusage_antigravity_parser.add_argument("--coverage-start", default=None)
 
+    upgrade.register_parser(subparsers)
+    device_enrollment.register_parser(subparsers)
     register_verify_cloud_parser(subparsers)
 
     return parser
@@ -255,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     handler = {
+        "upgrade": upgrade.run,
+        "devices": device_enrollment.run,
         "verify-cloud": run_verify_cloud,
         "push": _run_push,
         "cloud-push": run_cloud_push,
@@ -279,6 +287,8 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _run_push(args) -> int:
+    from .upgrade_apply import populate_release_environment
+    populate_release_environment(args.config)
     try:
         with open(args.config, "r", encoding="utf-8") as handle:
             config_data = json.load(handle)

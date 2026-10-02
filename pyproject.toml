@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ai-usage-widget"
 description = "Local collector for AI coding agent usage summaries."
 requires-python = ">=3.9"
+dependencies = ["cryptography>=46,<47"]
 dynamic = ["version"]
 
 [project.scripts]

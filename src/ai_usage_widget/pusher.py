@@ -6,7 +6,6 @@ import os
 import shlex
 import sqlite3
 import subprocess
-import sys
 import time
 from datetime import datetime, timedelta, timezone as dt_timezone
 import urllib.request
@@ -26,6 +25,7 @@ from .collector_store import (
     OutboxNotDrained,
     classify_delivery,
 )
+from .collector_launch import cli_command
 from .config import DeviceConfig
 from .http_identity import PRODUCT_USER_AGENT
 from .models import CommandResult
@@ -364,17 +364,14 @@ class DevicePusher:
     def _collect_mswusage(self, ccusage_data: dict[str, Any]) -> _MswusageCollection:
         mswusage_codex_hourly_report = None
         codex_hourly_status = None
-        mswusage_argv = [
-            sys.executable,
-            "-m",
-            "ai_usage_widget.cli",
+        mswusage_argv = cli_command(
             "mswusage-codex",
             "--json",
             "--timezone",
             self.config.timezone,
             "--mode",
             self.ledger_mode,
-        ]
+        )
         if self.ledger_mode == "incremental":
             mswusage_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
         elif self.ledger_coverage_start:
@@ -400,17 +397,14 @@ class DevicePusher:
             }
 
         mswusage_claude_report = None
-        claude_argv = [
-            sys.executable,
-            "-m",
-            "ai_usage_widget.cli",
+        claude_argv = cli_command(
             "mswusage-claude",
             "--json",
             "--timezone",
             self.config.timezone,
             "--mode",
             self.ledger_mode,
-        ]
+        )
         if self.ledger_mode == "incremental":
             claude_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
         elif self.ledger_coverage_start:
@@ -425,17 +419,14 @@ class DevicePusher:
                 mswusage_claude_report = None
 
         mswusage_antigravity_report = None
-        antigravity_argv = [
-            sys.executable,
-            "-m",
-            "ai_usage_widget.cli",
+        antigravity_argv = cli_command(
             "mswusage-antigravity",
             "--json",
             "--timezone",
             self.config.timezone,
             "--mode",
             self.ledger_mode,
-        ]
+        )
         if self.ledger_mode == "incremental":
             antigravity_argv.extend(["--lookback-hours", f"{self.ledger_lookback_hours:g}"])
         elif self.ledger_coverage_start:

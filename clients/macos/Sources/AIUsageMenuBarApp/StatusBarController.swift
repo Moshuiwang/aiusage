@@ -57,11 +57,13 @@ final class StatusBarController: NSObject {
     private let quitApplication: () -> Void
     private var cancellables: Set<AnyCancellable> = []
     private var timer: Timer?
+    private let collector: CollectorController
     private var popoverHostingController: NSHostingController<MenuBarPopoverView>?
     private lazy var loginItemController = LoginItemController(manager: SMAppServiceLoginItemManager())
 
     init(paths: RuntimePaths, quitApplication: @escaping () -> Void = { NSApp.terminate(nil) }) {
         self.paths = paths
+        self.collector = CollectorController(root: paths.root)
         self.quitApplication = quitApplication
         let config = MenuBarRuntimeConfigLoader.load(paths: paths)
         let cachedSummaries = SummaryCache.loadSummaries(paths: paths)
@@ -75,6 +77,10 @@ final class StatusBarController: NSObject {
         model.refresh()
         if model.selection != MenuPeriodSelection(periodID: "today") { model.refreshToday() }
         model.prefetchCommonPeriods()
+        collector.start()
+        if config == nil {
+            DispatchQueue.main.async { [weak self] in self?.configureConnection() }
+        }
     }
 
     private func setupStatusItem() {
@@ -110,7 +116,21 @@ final class StatusBarController: NSObject {
     }
 
     func quitFromPopover() {
+        collector.stop()
         quitApplication()
+    }
+
+    func stopCollector() { collector.stop() }
+
+    func enableLoginItem() {
+        guard LoginItemSupport.isSupported(bundleURL: Bundle.main.bundleURL) else { return }
+        do {
+            if !loginItemController.isChecked { try loginItemController.toggle() }
+            AppRuntimeLog.append("loginItemRegistered approvalRequired=\(loginItemController.needsApproval)", paths: paths)
+            if loginItemController.needsApproval { SMAppService.openSystemSettingsLoginItems() }
+        } catch {
+            AppRuntimeLog.append("loginItem registration failed", paths: paths)
+        }
     }
 
     private func bindStatusTitle() {
@@ -164,11 +184,12 @@ final class StatusBarController: NSObject {
     // MARK: – 更多菜单（#178）
 
     private func showMoreMenu() {
-        let info = MoreMenuInfo.build(
+        var info = MoreMenuInfo.build(
             sources: model.summary.sources,
             cacheBytes: CacheDirectorySize.compute(at: paths.periodCacheDirectoryURL),
             versionText: currentVersionText()
         )
+        info.append(collector.statusText)
         let bundleURL = Bundle.main.bundleURL
         let isSupported = LoginItemSupport.isSupported(bundleURL: bundleURL)
         let menu = MoreMenuBuilder.build(
@@ -180,6 +201,28 @@ final class StatusBarController: NSObject {
             loginItemAction: #selector(toggleLoginItemFromMoreMenu),
             quitAction: #selector(quitFromMoreMenuAction)
         )
+        let updateItem = NSMenuItem(title: "检查 App 更新…", action: #selector(checkUpdates), keyEquivalent: "")
+        updateItem.target = self
+        menu.addItem(updateItem)
+        let devicesItem = NSMenuItem(title: "管理设备申请…", action: #selector(manageEnrollments), keyEquivalent: "")
+        devicesItem.target = self
+        menu.addItem(devicesItem)
+        let pairingItem = NSMenuItem(title: "检查本机授权", action: #selector(checkEnrollment), keyEquivalent: "")
+        pairingItem.target = self
+        pairingItem.isEnabled = FileManager.default.fileExists(atPath: collector.store.enrollmentURL.path)
+        menu.addItem(pairingItem)
+        let settingsItem = NSMenuItem(title: "连接设置…", action: #selector(configureConnection), keyEquivalent: "")
+        settingsItem.target = self
+        menu.insertItem(settingsItem, at: info.count + 2)
+        let collectItem = NSMenuItem(title: "立即采集本机", action: #selector(collectNow), keyEquivalent: "")
+        collectItem.target = self
+        collectItem.isEnabled = collector.store.isEnabled
+        menu.insertItem(collectItem, at: info.count + 3)
+        let toggleItem = NSMenuItem(title: "采集本机用量与额度", action: #selector(toggleCollection), keyEquivalent: "")
+        toggleItem.target = self
+        toggleItem.state = collector.store.isEnabled ? .on : .off
+        toggleItem.isEnabled = collector.store.sourceID != nil
+        menu.insertItem(toggleItem, at: info.count + 4)
         // 从「⋯」按钮所在位置弹出：popUp(in: nil) 把 at 当成屏幕坐标，用当前鼠标位置
         // （用户刚点了按钮）近似按钮位置——真实弹出坐标/视觉效果需回 Mac 侧截图确认。
         menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
@@ -196,6 +239,25 @@ final class StatusBarController: NSObject {
 
     @objc private func syncFromMoreMenu() {
         model.syncNow()
+    }
+
+    @objc private func checkUpdates() { collector.checkUpdates() }
+    @objc private func manageEnrollments() { collector.manageEnrollments() }
+    @objc private func checkEnrollment() {
+        collector.checkEnrollment { [weak self] in
+            self?.enableLoginItem()
+            self?.model.syncNow()
+        }
+    }
+    @objc private func collectNow() { collector.collectNow() }
+    @objc private func toggleCollection() { collector.toggle() }
+    @objc private func configureConnection() {
+        if collector.configure() {
+            if collector.wantsLoginItem { enableLoginItem() }
+            model.syncNow()
+            timer?.invalidate()
+            startRefreshTimer()
+        }
     }
 
     @objc private func toggleLoginItemFromMoreMenu() {
