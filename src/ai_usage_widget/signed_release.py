@@ -17,7 +17,9 @@ MAX_EXPANDED=512*1024*1024
 
 
 class UpgradeError(ValueError):
-    pass
+    def __init__(self, message, *, error_type='verification_failed'):
+        super().__init__(message)
+        self.error_type = error_type
 
 
 def version(value):
@@ -33,7 +35,7 @@ def public_url(value):
     return value
 
 
-def verify_manifest(raw, trusted_keys, channel, current_collector, *, current_app=None):
+def verify_manifest(raw, trusted_keys, channel, current_collector, *, current_app=None, check_only=False):
     try:
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         if len(raw)>32768:raise ValueError()
@@ -47,10 +49,12 @@ def verify_manifest(raw, trusted_keys, channel, current_collector, *, current_ap
         if set(manifest)!= {'schema_version','collector_version','app_version','channel','build_sha','published_at','min_collector_version','artifacts'}:raise ValueError()
         if manifest['schema_version']!=1 or manifest['channel']!=channel or channel not in ('stable','beta','dev'):raise ValueError()
         target=version(manifest['collector_version']); minimum=version(manifest['min_collector_version']); app=version(manifest['app_version']); current=version(current_collector)
-        if current<minimum or target<current or minimum>target:raise ValueError()
-        if current_app is None:
-            if target<=current:raise ValueError()
-        elif app<=version(current_app):raise ValueError()
+        if current<minimum or minimum>target:raise ValueError()
+        if not check_only:
+            if target<current:raise ValueError()
+            if current_app is None:
+                if target<=current:raise ValueError()
+            elif app<=version(current_app):raise ValueError()
         if not re.fullmatch(r'[a-f0-9]{40,64}',manifest['build_sha']):raise ValueError()
         published=datetime.fromisoformat(manifest['published_at'].replace('Z','+00:00'))
         if published.tzinfo is None or published>datetime.now(timezone.utc):raise ValueError()
@@ -79,7 +83,7 @@ def download(url, limit):
             if len(raw)>limit:raise UpgradeError('发布下载超过大小限制')
             return raw
     except UpgradeError:raise
-    except Exception:raise UpgradeError('无法下载发布产物；保持当前版本') from None
+    except Exception:raise UpgradeError('无法下载发布产物；保持当前版本', error_type='download_failed') from None
 
 
 def extract_artifact(raw, artifact, destination, *, allow_symlinks=False):

@@ -116,7 +116,7 @@ final class CollectorController {
         return false
     }
 
-    private func command(_ arguments: [String], helperOverride: URL? = nil, administrator: Bool = false, completion: @escaping ([String: Any]?) -> Void) {
+    private func command(_ arguments: [String], helperOverride: URL? = nil, administrator: Bool = false, acceptFailureOutput: Bool = false, completion: @escaping ([String: Any]?) -> Void) {
         let helper = helperOverride ?? Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/AIUsageCollector.app/Contents/MacOS/AIUsageCollector")
         var environment = ProcessInfo.processInfo.environment
         if administrator, let token = store.administratorToken {
@@ -136,7 +136,7 @@ final class CollectorController {
                     try child.run()
                     let bytes = output.fileHandleForReading.readDataToEndOfFile()
                     child.waitUntilExit()
-                    return child.terminationStatus == 0 ? bytes : nil
+                    return child.terminationStatus == 0 || acceptFailureOutput ? bytes : nil
                 } catch { return nil }
             }.value
             completion(data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })
@@ -215,10 +215,16 @@ final class CollectorController {
 
     func checkUpdates() {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
-        command(["upgrade", "check", "--app-version", version]) { [weak self] result in
+        command(["upgrade", "check", "--app-version", version], acceptFailureOutput: true) { [weak self] result in
             guard let self else { return }
+            if result?["status"] as? String == "up_to_date" {
+                let alert = NSAlert()
+                alert.messageText = UpgradeCheckMessage.text(status: "up_to_date", errorType: nil)
+                alert.runModal()
+                return
+            }
             guard result?["status"] as? String == "update_available", let target = result?["app_version"] as? String else {
-                self.showError("未发现可验证的新版本。请确认管理员已配置签名公钥和发布地址，且当前网络可用。")
+                self.showError(UpgradeCheckMessage.text(status: result?["status"] as? String, errorType: result?["error_type"] as? String))
                 return
             }
             let alert = NSAlert()

@@ -6,6 +6,9 @@ from pathlib import Path
 import tarfile
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from types import SimpleNamespace
+from unittest.mock import patch
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives import serialization
 
@@ -31,6 +34,66 @@ class SignedReleaseTests(unittest.TestCase):
         with self.assertRaises(UpgradeError):verify_manifest(json.dumps(altered).encode(),self.keys,'stable','0.3.0')
         for keys,channel,current in [({},'stable','0.3.0'),(self.keys,'beta','0.3.0'),(self.keys,'stable','0.4.0'),(self.keys,'stable','0.2.0')]:
             with self.assertRaises(UpgradeError):verify_manifest(self.envelope(),keys,channel,current)
+    def test_check_can_read_same_or_older_signed_release_without_allowing_install(self):
+        for collector, app in [('0.4.0', None), ('0.5.0', None), ('0.4.0', '2.1.0'), ('0.4.0', '2.2.0')]:
+            with self.subTest(collector=collector, app=app):
+                result = verify_manifest(self.envelope(), self.keys, 'stable', collector,
+                                         current_app=app, check_only=True)
+                self.assertEqual(result['app_version'], '2.1.0')
+                self.assertEqual(result['collector_version'], '0.4.0')
+                self.assertEqual(len(result['artifacts']), 1)
+                with self.assertRaises(UpgradeError):
+                    verify_manifest(self.envelope(), self.keys, 'stable', collector, current_app=app)
+
+    def test_check_only_still_requires_signature_schema_and_channel(self):
+        altered = json.loads(self.envelope())
+        altered['signature'] = base64.b64encode(b'bad signature').decode()
+        wrong_schema = dict(self.manifest, schema_version=2)
+        for raw, keys, channel in [(json.dumps(altered).encode(), self.keys, 'stable'),
+                                   (self.envelope(), {}, 'stable'),
+                                   (self.envelope(wrong_schema), self.keys, 'stable'),
+                                   (self.envelope(), self.keys, 'beta')]:
+            with self.assertRaises(UpgradeError):
+                verify_manifest(raw, keys, channel, '0.4.0', current_app='2.1.0', check_only=True)
+
+    def test_cli_check_reports_current_version_and_does_not_stage(self):
+        from ai_usage_widget.upgrade import discover, run
+        for app, status in [('2.0.0', 'update_available'), ('2.1.0', 'up_to_date'),
+                            ('2.2.0', 'up_to_date'), (None, 'up_to_date')]:
+            with self.subTest(app=app):
+                output = io.StringIO()
+                args = SimpleNamespace(manifest_url=None, channel='stable', app_version=app,
+                                       upgrade_action='check')
+                def signed_discover(url, **kwargs):
+                    return discover(url, trusted_keys=self.keys, fetch=lambda *args: self.envelope(), **kwargs)
+                with patch('ai_usage_widget.upgrade.discover', side_effect=signed_discover), \
+                     patch('ai_usage_widget.upgrade.stage_release') as stage, redirect_stdout(output):
+                    self.assertEqual(run(args), 0)
+                result = json.loads(output.getvalue())
+                self.assertEqual(result['status'], status)
+                self.assertEqual(result['app_version'], '2.1.0')
+                self.assertEqual(result['collector_version'], '0.4.0')
+                self.assertEqual(result['build_sha'], 'a' * 40)
+                stage.assert_not_called()
+
+    def test_cli_errors_are_classified_without_exposing_exception_details(self):
+        from ai_usage_widget.upgrade import run
+        cases = [('not_configured', UpgradeError('private-detail', error_type='not_configured')),
+                 ('download_failed', UpgradeError('private-detail', error_type='download_failed')),
+                 ('verification_failed', UpgradeError('private-detail')),
+                 ('unknown', RuntimeError('private-detail'))]
+        for expected, error in cases:
+            output = io.StringIO()
+            args = SimpleNamespace(manifest_url=None, channel='stable', app_version='2.1.0',
+                                   upgrade_action='check')
+            with patch('ai_usage_widget.upgrade.discover', side_effect=error), redirect_stdout(output):
+                self.assertEqual(run(args), 2)
+            result = json.loads(output.getvalue())
+            self.assertEqual(result['status'], 'error')
+            self.assertEqual(result['error_type'], expected)
+            self.assertTrue(result['message'])
+            self.assertNotIn('private-detail', output.getvalue())
+
     def archive(self,name='src/ai_usage_widget/version_contract.py',kind=None,link=None):
         raw=io.BytesIO()
         with tarfile.open(fileobj=raw,mode='w:gz') as archive:

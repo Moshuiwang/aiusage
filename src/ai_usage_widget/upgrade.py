@@ -11,15 +11,15 @@ import sys
 import tempfile
 
 from .release_trust import RELEASE_PUBLIC_KEYS, UPDATE_MANIFEST_URL
-from .signed_release import UpgradeError, download, extract_artifact, verify_manifest
+from .signed_release import UpgradeError, download, extract_artifact, verify_manifest, version
 from .version_contract import COLLECTOR_VERSION
 
 
-def discover(url=None, *, channel='stable', current_app=None, trusted_keys=None, fetch=download):
+def discover(url=None, *, channel='stable', current_app=None, trusted_keys=None, fetch=download, check_only=False):
     keys=RELEASE_PUBLIC_KEYS if trusted_keys is None else trusted_keys
     if not keys or not (url or UPDATE_MANIFEST_URL):
-        raise UpgradeError('更新服务尚未配置签名公钥与发布地址，请管理员先完成签名发布')
-    return verify_manifest(fetch(url or UPDATE_MANIFEST_URL,32768),keys,channel,COLLECTOR_VERSION,current_app=current_app)
+        raise UpgradeError('更新服务尚未配置签名公钥与发布地址，请管理员先完成签名发布', error_type='not_configured')
+    return verify_manifest(fetch(url or UPDATE_MANIFEST_URL,32768),keys,channel,COLLECTOR_VERSION,current_app=current_app,check_only=check_only)
 
 
 def preflight(stage, manifest, artifact_id, *, python=sys.executable, run=subprocess.run):
@@ -73,8 +73,13 @@ def register_parser(subparsers):
 
 def run(args):
     try:
-        manifest=discover(args.manifest_url,channel=args.channel,current_app=args.app_version)
+        checking=args.upgrade_action=='check'
+        manifest=discover(args.manifest_url,channel=args.channel,current_app=args.app_version,check_only=checking)
         result={'status':'update_available','collector_version':manifest['collector_version'],'app_version':manifest['app_version'],'build_sha':manifest['build_sha']}
+        if checking:
+            current = args.app_version or COLLECTOR_VERSION
+            target = manifest['app_version'] if args.app_version else manifest['collector_version']
+            if version(target) <= version(current): result['status']='up_to_date'
         if args.upgrade_action=='apply':
             if not args.root:raise UpgradeError('升级需要 --root')
             from .upgrade_apply import apply_linux, apply_mac
@@ -92,5 +97,11 @@ def run(args):
             artifact='linux-source' if platform.system()=='Linux' else 'darwin-'+platform.machine()+'-app'
             result=stage_release(manifest,artifact,Path(args.destination).expanduser())
         print(json.dumps(result,ensure_ascii=False));return 0 if result.get('success',True) else 1
+    except UpgradeError as exc:
+        messages={'not_configured':'更新服务尚未配置，请联系发布管理员',
+                  'download_failed':'无法获取正式发布清单或产物，请检查网络及正式 Release',
+                  'verification_failed':'发布清单或产物校验失败；保持当前版本'}
+        kind=exc.error_type if exc.error_type in messages else 'verification_failed'
+        print(json.dumps({'status':'error','error_type':kind,'message':messages[kind]},ensure_ascii=False));return 2
     except Exception:
-        print(json.dumps({'status':'error','message':'签名更新未就绪或校验失败；保持当前版本'},ensure_ascii=False));return 2
+        print(json.dumps({'status':'error','error_type':'unknown','message':'无法完成更新检查；保持当前版本'},ensure_ascii=False));return 2
