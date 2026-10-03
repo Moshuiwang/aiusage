@@ -38,6 +38,20 @@ ai-usage-widget devices revoke --server https://aiusage.chunbai.com --request-id
 
 ## 发布与升级
 
+### Release 管理规范
+
+GitHub Release 是设备升级产物的发布入口；Milestone 管交付范围，Issue 管任务与证据，三者互相链接。菜单栏升级仍由用户手动触发，不增加后台短轮询。仅修改工作区版本号、安装本机 App 或上传草稿，不算完成正式发布。
+
+1. **版本与标签**：Mac App 与 collector 分别使用 `MAJOR.MINOR.PATCH`，保持各自唯一版本来源（`clients/macos/VERSION` 与 `version_contract.COLLECTOR_VERSION`）。修复使用 PATCH，新增功能使用 MINOR；不兼容变化须单独评审，并遵守现有 API 合约。包含 Mac App 的联合发布标签为 `v<app_version>`；仅采集器发布为 `collector-v<collector_version>`。发布清单同时记录两个版本，不要求数字相同。正式发布过的版本不覆盖包、不移动标签，修复另发新版本。
+2. **源码与门禁**：正式产物必须来自干净、可追溯且已通过要求检查的提交，并按 `scripts/merge_pr.sh` 合并。草稿可绑定未合并候选 SHA，但发布前必须确认最终合并提交；提交或内容变化后重新生成并验签产物。不得用 Release 绕过 CI，也不得把本机安装版本当成默认分支已经交付。
+3. **平台产物**：复用 `scripts/build_signed_release.py`，一次生成签名清单和本次支持的平台包。平台、架构、App/collector 版本、构建 SHA、下载 URL、大小与 SHA-256 必须对应；不宣称未生成或未验收的平台可升级。签名私钥留在发布 owner 的仓库外私有目录，不上传 Release；公钥固定在客户端代码，不能从下载包取得新的信任根。
+4. **草稿与正式发布**：先建 draft Release、上传包与 `release-manifest.json`、写发布说明，再核对清单签名、全部附件大小/哈希、安全解包及候选预检。草稿和 prerelease 不作为 stable 可用更新。当前客户端固定读取 GitHub `releases/latest/download/release-manifest.json`，因此被选为 latest 的正式 Release 必须提供完整、有效且前向版本检查可接受的 stable 清单与所需平台包。仅采集器发布也必须验证现有 Mac 用户的检查行为；不适用的版本不能被误报为可升级。
+5. **发布说明**：写明用户变化、App/collector 版本、准确源码 SHA、支持平台、已知限制、服务端前置条件、回滚方式和关联 Issue/Milestone。测试、CI、部署、用户可见验证与回源证据分别记录，未知项明写未知。升级检查需区分已是最新版、网络/下载失败、清单校验失败与发布服务未配置；现有笼统提示作为 #223 的交付缺口跟踪。
+6. **服务依赖与验收**：注册接口、D1 迁移和管理员配置按下节 MBA Ops 顺序完成，发布 owner 按机器权限生成与发布产物。正式发布前完成离线候选预检与回滚验证；发布后逐平台完成真实升级、配置/outbox 保留、非空数据和失败恢复验证，并回源巡检 Cloudflare 水位。Milestone 只有相关 Issue 验收缺口补齐才关闭，不能仅因 Release 已发布关闭。
+7. **失败处理**：校验、预检或升级健康检查失败时保留或恢复旧版，不关闭安全校验，不静默降级为任意包安装。正式产物不可原位修改；严重发布缺陷先阻止有问题版本继续被当作 latest，核验旧版可用性，再发布修复版本，不能把旧版包装成新版本突破前向检查。
+
+GitHub 管理使用各机器规定的 App API 入口，不依赖浏览器个人登录；工作流权限、生产部署权限与 Release Contents 权限分别核验。
+
 发布 owner 使用 `scripts/build_signed_release.py` 从干净提交构建并签名；签名私钥必须在仓库外、仅属于当前用户、权限为 `600`，不输出或进入 Git。工具生成公开的签名清单、公钥审核产物及平台包，不自动发布远端。
 
 Ed25519 的使用遵循 [cryptography 官方接口](https://cryptography.io/en/latest/hazmat/primitives/asymmetric/ed25519/)。客户端仅信任代码内固定的 `release_trust.RELEASE_PUBLIC_KEYS`，发布下载不能提供自己的信任根。当前版本已固定发布公钥及 GitHub Releases 的公开清单地址；签名私钥保存在发布 owner 的仓库外私有目录。

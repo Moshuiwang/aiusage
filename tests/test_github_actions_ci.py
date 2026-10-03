@@ -11,6 +11,17 @@ VERIFY_SCRIPT = ROOT / "scripts" / "verify.sh"
 
 
 class TestGitHubActionsCI(unittest.TestCase):
+    def test_python_job_installs_declared_dependencies_before_running_tests(self) -> None:
+        content = WORKFLOW.read_text(encoding="utf-8")
+        python_job = re.search(r"(?ms)^  python:\n(.*?)(?=^  worker:)", content)
+        self.assertIsNotNone(python_job, "Python CI job must be present")
+        job = python_job.group(1)
+        install = "python3 -m pip install ."
+        suite = "PYTHONPATH=src python3 -m unittest discover -s tests -v"
+        self.assertEqual(job.count(install), 1, "Install project dependencies in the Python job")
+        self.assertEqual(job.count(suite), 1, "Run exactly one Python suite after installation")
+        self.assertLess(job.index(install), job.index(suite), "Dependencies must be installed before tests")
+
     def test_worker_source_typecheck_is_mandatory_locally_and_in_ci(self) -> None:
         scripts = json.loads(PACKAGE_JSON.read_text(encoding="utf-8"))["scripts"]
         self.assertEqual(
