@@ -50,6 +50,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       "13-third-party-provider-without-slot",
       "14-usage-without-canonical-provider",
       "15-two-accounts-one-provider",
+      "16-healthy-source-with-other-failure",
     ]);
     expect(golden.length, "每个场景两个端点").toBe(goldenScenarios.length * providerSlotsEndpoints.length);
     for (const record of golden) {
@@ -81,7 +82,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     const derived = macosOwnerFixtureFrom(golden);
 
     expect(derived.length, "mobile 半边必须与场景数一致").toBe(goldenScenarios.length);
-    expect(derived.length, "场景数变化必须显式改这里").toBe(15);
+    expect(derived.length, "场景数变化必须显式改这里").toBe(16);
     expect(derived.length, "派生结果不能为空").toBeGreaterThan(0);
     expect(committed.map((record) => record.name), "fixture 覆盖的场景必须与 golden 一致")
       .toEqual(derived.map((record) => record.name));
