@@ -126,7 +126,7 @@ if [ "$RUN_PYTHON" -eq 0 ]; then
   PY_CODE=0
   PY_OUT=""
 else
-echo "=== [1/2] Python 测试（stdlib unittest，无第三方依赖） ==="
+echo "=== [1/2] Python 测试（unittest，使用项目声明依赖） ==="
 PY_OUT="$(PYTHONPATH=src python3 -m unittest discover -s tests 2>&1)"
 PY_CODE=$?
 if [ "$PY_CODE" -eq 0 ]; then

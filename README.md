@@ -345,3 +345,5 @@ xcodebuild -project AIUsageWidget.xcodeproj \
 ```
 
 `latest.json` 现在只属于 legacy/local compatibility。当前 Web、iPhone、Watch 和 macOS 菜单栏优先读取 Cloudflare API 或派生摘要，不再把本地快照文件作为生产事实源。
+
+设备授权、Linux / Mac 签名发布与升级入口见 [设备授权与签名升级](docs/device-registration-and-upgrades.md)。新机器通过配对码申请自己的设备凭据，无需 SSH 写共享 token；Mac App 已包含本机采集与推送。正式更新已固定发布公钥和公开清单地址；生产设备接入需 Ops 配置独立设备管理员凭据。

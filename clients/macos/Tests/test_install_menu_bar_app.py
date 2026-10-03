@@ -83,6 +83,9 @@ class InstallMenuBarAppTests(unittest.TestCase):
             actual_dir.mkdir(parents=True)
             legacy.write_bytes(b"old version")
             (actual_dir / installer.EXECUTABLE_NAME).write_bytes(b"current built version")
+            frozen_dir = root / "frozen"
+            (frozen_dir / "Contents/MacOS").mkdir(parents=True)
+            (frozen_dir / "Contents/MacOS/AIUsageCollector").write_bytes(b"frozen collector")
             commands = []
 
             def run(command, **kwargs):
@@ -90,7 +93,7 @@ class InstallMenuBarAppTests(unittest.TestCase):
                 return SimpleNamespace(stdout=str(actual_dir) + "\n", returncode=0)
 
             with patch.object(installer.subprocess, "run", side_effect=run):
-                installer.install(plan, server_url=None, token=None, dashboard_url=None, dry_run=False)
+                installer.install(plan, server_url=None, token=None, dashboard_url=None, dry_run=False, collector_bundle=frozen_dir)
             self.assertEqual(plan.executable_path.read_bytes(), b"current built version")
             # #178：render_info_plist 现在读取 git 构建号/commit（各一次 subprocess），
             # 插在「构建产物」和「codesign」之间；fake run 对任何命令都返回同一 stdout，
@@ -167,6 +170,7 @@ class InstallMenuBarAppTests(unittest.TestCase):
                     [
                         "codesign",
                         "--force",
+                        "--deep",
                         "--sign",
                         "-",
                         "--identifier",
@@ -181,3 +185,49 @@ class InstallMenuBarAppTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class UnifiedBundleTests(unittest.TestCase):
+    def test_bundle_contains_frozen_collector_and_no_private_config(self):
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collector = root / 'frozen/AIUsageCollector'
+            (collector / 'Contents/MacOS').mkdir(parents=True)
+            (collector / 'Contents/MacOS/AIUsageCollector').write_bytes(b'frozen executable')
+            (collector / 'Contents/Frameworks').mkdir()
+            (collector / 'Contents/Frameworks/Python').write_bytes(b'embedded runtime')
+            bundle = root / 'App.app'
+            installer.embed_collector(bundle, collector)
+            embedded = bundle / 'Contents/Helpers/AIUsageCollector.app'
+            self.assertEqual((embedded / 'Contents/MacOS/AIUsageCollector').read_bytes(), b'frozen executable')
+            self.assertEqual((embedded / 'Contents/Frameworks/Python').read_bytes(), b'embedded runtime')
+            self.assertFalse((embedded / 'config.json').exists())
+
+    def test_missing_frozen_binary_refuses_install(self):
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(FileNotFoundError):
+                installer.embed_collector(root / 'App.app', root / 'absent')
+            self.assertFalse((root / 'App.app').exists())
+
+class SafeUpgradeTests(unittest.TestCase):
+    def test_signing_failure_keeps_existing_app(self):
+        installer = load_installer_module()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plan = installer.InstallPlan.default(repo_dir=root, home=root, install_dir=root/'Apps',runtime_dir=root/'runtime')
+            plan.executable_path.parent.mkdir(parents=True)
+            plan.executable_path.write_bytes(b'known good app')
+            actual = root/'build'; actual.mkdir()
+            (actual/installer.EXECUTABLE_NAME).write_bytes(b'new app')
+            frozen = root/'frozen'
+            (frozen/'Contents/MacOS').mkdir(parents=True)
+            (frozen/'Contents/MacOS/AIUsageCollector').write_bytes(b'collector')
+            def run(command, **kwargs):
+                if command[0]=='codesign': raise subprocess.CalledProcessError(1,command)
+                return SimpleNamespace(stdout=str(actual)+'\n', returncode=0)
+            with patch.object(installer.subprocess,'run',side_effect=run):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    installer.install(plan,server_url=None,token=None,dashboard_url=None,dry_run=False,collector_bundle=frozen)
+            self.assertEqual(plan.executable_path.read_bytes(),b'known good app')

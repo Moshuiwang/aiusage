@@ -2,14 +2,14 @@
 import type { Env } from "./index";
 
 async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
-  if (!authTokens(env).length) return true;
+  if (!authTokens(env).length) return !env.AIUSAGE_DEVICE_ADMIN_TOKEN?.trim() && env.AIUSAGE_BACKEND_MODE?.trim() !== "native_d1_production";
   const authHeader = request.headers.get("Authorization") ?? "";
   return authHeader.toLowerCase().startsWith("bearer ") && verifyToken(authHeader.slice(7).trim(), env);
 }
 
 function verifyToken(supplied: string | null | undefined, env: Env): boolean {
   const tokens = authTokens(env);
-  if (!tokens.length) return true;
+  if (!tokens.length) return !env.AIUSAGE_DEVICE_ADMIN_TOKEN?.trim() && env.AIUSAGE_BACKEND_MODE?.trim() !== "native_d1_production";
   if (!supplied) return false;
   return tokens.some((token) => token === supplied);
 }

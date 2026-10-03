@@ -884,8 +884,8 @@ final class MenuBarAppModelTests: XCTestCase {
             model.isLoading == false
         }
 
-        XCTAssertTrue(model.errorMessage?.hasPrefix("刷新失败，正在显示缓存：") == true)
-        XCTAssertTrue(model.errorMessage?.contains("-1001") == true)
+        XCTAssertEqual(model.errorMessage, "刷新失败，正在显示缓存：连接超时，请稍后重试")
+        XCTAssertFalse(model.errorMessage?.contains("-1001") == true)
         XCTAssertEqual(model.summary, cached)
     }
 

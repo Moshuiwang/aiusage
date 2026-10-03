@@ -57,3 +57,6 @@ docs/usage-fact-check-board.md
 
 # Claude Code subagent worktree（完整仓库副本,git add -A 会整个提进去）
 .claude/worktrees/
+
+# Project-local development runtimes
+.tools/
