@@ -311,10 +311,25 @@ final class ProviderSlotViewModelTests: XCTestCase {
         XCTAssertEqual(ring.innerPctText, "20%")
     }
 
+    func testHealthyCodexSourceShowsWeekAfterOtherDeviceFails() throws {
+        let record = try goldenRecord(named: "16-healthy-source-with-other-failure:mobile-summary")
+        let state = MenuBarViewModel.build(
+            from: try summary(for: record), selectedPeriodID: "today",
+            now: try date("2026-06-03T12:00:00+08:00"), deviceTimeZone: shanghaiTZForTests)
+        XCTAssertEqual(state.quotaRings.count, 3)
+        let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "codex" })
+        XCTAssertTrue(ring.isAvailable)
+        XCTAssertEqual(ring.primaryPctText, "20%")
+        XCTAssertEqual(ring.innerPctText, "20%")
+        XCTAssertEqual(ring.hoverRows.count, 1)
+        XCTAssertTrue(ring.hoverRows[0].valueText.contains("6月10日"))
+        XCTAssertTrue(ring.hoverRows[0].valueText.contains("05:13"))
+    }
+
     func testEveryOwnerScenarioKeepsFixedSlotsAndShowsLastSuccessfulQuota() throws {
         let records = try allGoldenRecords()
-        // 场景数变化必须显式改这里。Worker 侧 provider-slots-parity.test.ts 有对称的 toBe(15)。
-        XCTAssertEqual(records.count, 15)
+        // 场景数变化必须显式改这里。Worker 侧 provider-slots-parity.test.ts 有对称的 toBe(16)。
+        XCTAssertEqual(records.count, 16)
 
         for record in records {
             let state = MenuBarViewModel.build(

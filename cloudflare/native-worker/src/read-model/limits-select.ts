@@ -107,14 +107,24 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
     const key = `${limit.provider.toLowerCase()}\u0000${limit.source_id}`;
     bySource.set(key, [...(bySource.get(key) ?? []), limit]);
   }
-  const selected = new Map<string, { newest: number; source: string; rows: LimitRow[] }>();
+  const selected = new Map<string, { available: boolean; newest: number; source: string; rows: LimitRow[] }>();
   for (const [key, rows] of bySource) {
-    if (!rows.some((row) => effectiveLimitWindow(row) || row.status === "provider_failed")) continue;
+    const successful = rows.filter(effectiveLimitWindow);
+    const failures = rows.filter((row) => row.status === "provider_failed");
+    if (!successful.length && !failures.length) continue;
     const [provider, source] = key.split("\u0000");
-    const newest = Math.max(...rows.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
+    const latestSuccess = Math.max(...successful.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
+    const latestFailure = Math.max(...failures.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
+    // 只在同一个来源内判断失败是否覆盖成功；其他设备失败不能遮住有效官方窗口。
+    // 每个 provider 仍只选一个来源，绝不拼接不同账号的百分比。
+    const available = latestFailure <= latestSuccess && successful.some((row) =>
+      !limitWindowStale(row, refTime) && !limitWindowExpired(row, refTime));
+    const newest = available ? latestSuccess : Math.max(latestSuccess, latestFailure);
     const existing = selected.get(provider);
-    if (!existing || newest > existing.newest || (newest === existing.newest && source > existing.source)) {
-      selected.set(provider, { newest, source, rows });
+    if (!existing || (available && !existing.available) ||
+        (available === existing.available &&
+          (newest > existing.newest || (newest === existing.newest && source > existing.source)))) {
+      selected.set(provider, { available, newest, source, rows });
     }
   }
   return [...selected.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([provider, value]) => {
