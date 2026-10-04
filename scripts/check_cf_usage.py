@@ -117,7 +117,10 @@ def overall_conclusion(percentages):
         text = "✅ 结论: 正常！所有 Cloudflare 核心资源用量均在安全绿色区间内。"
     return text, has_unknown, has_critical, has_warning
 
-def get_oauth_token():
+def get_cloudflare_token():
+    api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+    if api_token:
+        return api_token
     config_path = os.path.expanduser("~/Library/Preferences/.wrangler/config/default.toml")
     if not os.path.exists(config_path):
         return None
@@ -151,10 +154,10 @@ def check_status(pct):
     return "🟢 安全正常 (<50%)"
 
 def main():
-    token = get_oauth_token()
+    token = get_cloudflare_token()
     if not token:
-        print("⚠️ 未找到本地 Wrangler OAuth 凭据（~/.wrangler）。若在非 Mac/非生产机环境，请回 Mac 侧执行。")
-        sys.exit(0)
+        print("❓ Cloudflare 用量未知：未配置 CLOUDFLARE_API_TOKEN 或本机 Wrangler 登录凭据，未执行巡检。")
+        sys.exit(2)
 
     now = datetime.now(timezone.utc)
     t_24h_ago = now - timedelta(days=1)

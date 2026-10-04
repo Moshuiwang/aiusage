@@ -8,6 +8,11 @@ overall_conclusion（结论判定，包括"D1 读写未知不得判定为全部�
 from __future__ import annotations
 
 import sys
+import os
+import io
+import tempfile
+from unittest.mock import patch
+from contextlib import redirect_stdout
 import unittest
 from pathlib import Path
 
@@ -16,6 +21,39 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import check_cf_usage as ccu  # noqa: E402
 
+
+
+class TestCloudflareCredentials(unittest.TestCase):
+    def test_environment_api_token_precedes_existing_wrangler_login(self):
+        with tempfile.TemporaryDirectory() as folder:
+            login = Path(folder) / "login.toml"
+            login.write_text('oauth_token = "synthetic-old-login"\n')
+            with patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "synthetic-api-token"}, clear=True), patch.object(ccu.os.path, "expanduser", return_value=str(login)):
+                self.assertEqual(ccu.get_cloudflare_token(), "synthetic-api-token")
+
+    def test_blank_environment_uses_existing_login_without_exposing_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            login = Path(folder) / "login.toml"
+            login.write_text('oauth_token = "synthetic-login"\n')
+            output = io.StringIO()
+            with patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "  "}, clear=True), patch.object(ccu.os.path, "expanduser", return_value=str(login)), redirect_stdout(output):
+                self.assertEqual(ccu.get_cloudflare_token(), "synthetic-login")
+            self.assertNotIn("synthetic-login", output.getvalue())
+
+    def test_missing_credentials_exit_nonzero_without_contacting_api(self):
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {}, clear=True), patch.object(ccu.os.path, "expanduser", return_value=str(Path(folder) / "missing.toml")), patch.object(ccu, "query_cf_api") as query, redirect_stdout(output):
+            with self.assertRaises(SystemExit) as stopped:
+                ccu.main()
+            self.assertEqual(stopped.exception.code, 2)
+            query.assert_not_called()
+        self.assertIn("未知", output.getvalue())
+
+    def test_environment_token_requires_no_local_login_file(self):
+        output = io.StringIO()
+        with patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "synthetic-api-token"}, clear=True), patch.object(ccu.os.path, "expanduser", side_effect=AssertionError("must not read login file")), redirect_stdout(output):
+            self.assertEqual(ccu.get_cloudflare_token(), "synthetic-api-token")
+        self.assertNotIn("synthetic-api-token", output.getvalue())
 
 def d1_response(groups):
     return {"data": {"viewer": {"accounts": [{"d1AnalyticsAdaptiveGroups": groups}]}}}
