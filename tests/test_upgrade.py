@@ -139,6 +139,58 @@ class UpgradeTests(unittest.TestCase):
             self.assertEqual((Path(str(app)+'.previous')/'version').read_text(),'new')
             self.assertEqual(len(list(Path(folder).glob('.aiusage-older-*'))),0)
 
+
+    def test_mac_copy_failure_cleans_partial_candidate_without_stopping_app(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            app = base / 'AI Usage Menu Bar.app'; app.mkdir()
+            (app / 'version').write_text('current')
+            stage = base / 'stage'; candidate = stage / app.name; candidate.mkdir(parents=True)
+            (candidate / 'version').write_text('new')
+            events = []
+            def broken_copy(source, destination, **kwargs):
+                Path(destination).mkdir()
+                (Path(destination) / 'partial').write_text('incomplete')
+                raise OSError('injected copy failure')
+            with patch('ai_usage_widget.upgrade_apply.shutil.copytree', side_effect=broken_copy):
+                with self.assertRaisesRegex(OSError, 'injected copy failure'):
+                    apply_mac(base / 'runtime', app, stage, {}, stop_app=lambda: events.append('stop'),
+                              launch=lambda path: events.append('launch') or True)
+            self.assertEqual((app / 'version').read_text(), 'current')
+            self.assertEqual(events, [])
+            self.assertEqual(list(base.glob('.aiusage-candidate-*')), [])
+
+    def test_mac_switch_failures_restore_both_app_generations_and_launch_once(self):
+        for fail_current in (True, False):
+            with self.subTest(fail_current=fail_current), tempfile.TemporaryDirectory() as folder:
+                base = Path(folder); root = base / 'runtime'; root.mkdir()
+                config = root / 'config.json'; config.write_text('{"source_id":"stable","token":"test-only"}')
+                outbox = root / 'outbox.sqlite'; outbox.write_bytes(b'buffered facts')
+                before = (config.read_bytes(), outbox.read_bytes())
+                app = base / 'AI Usage Menu Bar.app'; app.mkdir(); (app / 'version').write_text('current')
+                backup = Path(str(app) + '.previous'); backup.mkdir(); (backup / 'version').write_text('previous')
+                stage = base / 'stage'; candidate = stage / app.name; candidate.mkdir(parents=True)
+                (candidate / 'version').write_text('new')
+                events = []; injected = []
+                rename = Path.rename
+                def failing_rename(source, target):
+                    should_fail = source == app if fail_current else source.name.startswith('.aiusage-candidate-')
+                    if should_fail:
+                        injected.append(source.name)
+                        raise OSError('injected rename failure')
+                    return rename(source, target)
+                with patch.object(Path, 'rename', failing_rename):
+                    with self.assertRaisesRegex(OSError, 'injected rename failure'):
+                        apply_mac(root, app, stage, {}, stop_app=lambda: events.append('stop'),
+                                  launch=lambda path: events.append(('launch', (path / 'version').read_text())) or True)
+                self.assertEqual(len(injected), 1)
+                self.assertEqual((app / 'version').read_text(), 'current')
+                self.assertEqual((backup / 'version').read_text(), 'previous')
+                self.assertEqual(events, ['stop', ('launch', 'current')])
+                self.assertEqual((config.read_bytes(), outbox.read_bytes()), before)
+                self.assertEqual(list(base.glob('.aiusage-candidate-*')), [])
+                self.assertEqual(list(base.glob('.aiusage-older-*')), [])
+
     def test_persistent_upgrade_receipt_is_loaded_without_reading_credentials(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);(root/'current').mkdir();(root/'config').mkdir()
