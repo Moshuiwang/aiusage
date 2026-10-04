@@ -178,17 +178,14 @@ def apply_mac(root, app, stage, manifest, *, stop_app=None, launch=launch_mac_ap
     older=app.with_name('.aiusage-older-'+uuid.uuid4().hex+'.app')
     with FileLock(str(root/'upgrade.lock')):
         if not app.is_dir():raise UpgradeError('找不到已安装的 Mac App')
-        shutil.copytree(stage/'AI Usage Menu Bar.app',candidate,symlinks=True)
-        switched=False
+        switched=False;parked_current=False;stop_requested=False
         try:
+            shutil.copytree(stage/'AI Usage Menu Bar.app',candidate,symlinks=True)
+            stop_requested=True
             stop_app();wait_mac_collector(root)
             if backup.exists():backup.rename(older)
-            app.rename(backup)
-            try:candidate.rename(app)
-            except Exception:
-                backup.rename(app)
-                if older.exists():older.rename(backup)
-                launch(app);raise
+            app.rename(backup);parked_current=True
+            candidate.rename(app)
             switched=True;started=time.time()
             try:healthy=launch(app) and health(root,manifest,started)
             except Exception:healthy=False
@@ -206,6 +203,11 @@ def apply_mac(root, app, stage, manifest, *, stop_app=None, launch=launch_mac_ap
                           'finished_at':datetime.now(timezone.utc).isoformat()}))
             if older.exists():shutil.rmtree(older)
             return {'success':True,'health_verified':True,'previous_app':str(backup)}
+        except Exception:
+            if not switched:
+                if parked_current:backup.rename(app)
+                if older.exists():older.rename(backup)
+            raise
         finally:
             if candidate.exists():shutil.rmtree(candidate)
-            if not switched and app.exists():launch(app)
+            if not switched and stop_requested and app.exists():launch(app)
