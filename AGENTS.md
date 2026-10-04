@@ -55,8 +55,10 @@
 
 - 动手前先确认自己在哪台机器；领 Issue 前先看 `env:` 标签（`gh label list` 为准），
   不是本机能做的别领。
-- MacBook Air 独有：Xcode / `swift test` / 模拟器 / 真机 / Watch、LaunchAgent 生产上报、
-  Cloudflare Ops Agent（真实部署、Secrets、线上 smoke 只能它做）。Linux 开发机：Python 全量 +
+- MacBook Air 独有：Xcode / `swift test` / 模拟器 / 真机 / Watch、LaunchAgent 生产上报。
+  用户于 2026-10-04 明确授权 Mac mini 今后承担部署工作，包括 Cloudflare 部署、Secrets 与线上
+  smoke；取得对应最小权限凭据前只做本机验证，不借用其他机器身份，不输出凭据。
+  Linux 开发机：Python 全量 +
   Worker 测试（需 Node 22）。
 - 文档里 `/Users/wangzhipeng/...`、`swift`、`xcodebuild` 类步骤是 macOS 专属：其他机器不执行、
   不判故障，标注「需回 Mac 侧执行」并列为验收缺口。本机事实见各机 `ENVIRONMENT.local.md`。
