@@ -55,14 +55,15 @@ describe.sequential('Python device CLI over verified local HTTPS to the real Wor
     return JSON.parse(stdout);
   }
 
-  async function enroll(read: boolean) {
+  async function enroll(read: boolean, withAntigravity = false) {
     const pending = path.join(folder, `pending-${++sequence}.json`);
     const source = `local-cli-${sequence}`;
     const args = ['enroll', '--server', server, '--pending', pending,
       '--source-id', source, '--source-id', source + '-codex'];
+    if (withAntigravity) args.push('--source-id', source + '-antigravity');
     if (read) args.push('--read');
     const request = await cli(args);
-    expect(request.source_ids).toEqual([source, source + '-codex']);
+    expect(request.source_ids).toEqual([source, source + '-codex', ...(withAntigravity ? [source + '-antigravity'] : [])]);
     expect(request.read_requested).toBe(read);
     expect((await stat(pending)).mode & 0o777).toBe(0o600);
     const retry = await cli(args);
@@ -128,6 +129,85 @@ describe.sequential('Python device CLI over verified local HTTPS to the real Wor
     expect((await cli(['revoke', '--server', server, '--request-id', request.request_id])).status).toBe('revoked');
     expect((await probe('/api/devices/self', credential)).status).toBe(401);
     expect((await probe('/ingest', credential, { source_id: source })).status).toBe(401);
+  });
+
+  async function publishLimits(source: string, credential: string, healthy: boolean, observed: string) {
+    const fixture = path.join(folder, source + '-limits.json');
+    // The collector owner emits the fixture; no hand-written wire payload or raw user logs.
+    const generate = [
+      'import sys,json;sys.path.insert(0,sys.argv[1])',
+      'from ai_usage_widget.limits import LimitWindow',
+      'from ai_usage_widget.limits_runtime import _failed_window',
+      'path,source,healthy,observed=sys.argv[2:];healthy=healthy=="true"',
+      'providers={}',
+      'for provider,percent,kind in [("codex",20,"runtime_api"),("antigravity",1,"language_server")]:',
+      ' window=LimitWindow(provider=provider,source_id=source+"-"+provider,window="week",used_percent=percent,remaining_percent=100-percent,reset_at="2026-10-11T00:00:00Z",window_duration_minutes=10080,observed_at=observed,source_type=kind,confidence="observed",status="ok") if healthy else _failed_window(provider,observed,source_id=source+"-"+provider)',
+      ' providers[provider]=[window.to_snapshot_dict()]',
+      'with open(path,"w") as output:json.dump({"providers":providers},output)',
+    ].join('\n');
+    await execute(python, ['-I', '-c', generate, path.join(repoRoot, 'src'), fixture, source, String(healthy), observed]);
+    const code = 'import sys;sys.path.insert(0,sys.argv.pop(1));from ai_usage_widget.cli import main;raise SystemExit(main(sys.argv[1:]))';
+    const args = ['-I', '-c', code, path.join(repoRoot, 'src'), 'push-limits',
+      '--provider-fixture', fixture, '--url', server + '/ingest-limits'];
+    let stdout: string;
+    try {
+      ({ stdout } = await execute(python, args, {
+        env: { ...process.env, SSL_CERT_FILE: ca, AI_USAGE_INGEST_TOKEN: credential }, timeout: 20000,
+      }));
+      expect(healthy).toBe(true);
+    } catch (error) {
+      const failed = error as { code: number; stdout: string };
+      expect(healthy).toBe(false);
+      expect(failed.code).toBe(1);
+      stdout = failed.stdout;
+    }
+    const result = JSON.parse(stdout);
+    expect(result.success).toBe(healthy);
+    expect(result.delivered).toBe(true);
+    expect(result.windows_collected).toBe(2);
+    expect(result.windows_written).toBe(2);
+    expect(JSON.stringify(result)).not.toContain(credential);
+    return result;
+  }
+
+  it('activated device publishes two official windows; other-device failures cannot mask them', async () => {
+    const good = await enroll(true, true);
+    const config = path.join(folder, 'quota-display.json');
+    expect((await cli(['approve', '--server', server, '--request-id', good.request.request_id, '--read'])).status).toBe('approved');
+    expect((await cli(['check', '--pending', good.pending, '--display-config', config])).status).toBe('activated');
+    const saved = JSON.parse(await readFile(config, 'utf8'));
+    expect(saved.token === good.credential).toBe(true);
+    await publishLimits(good.source, saved.token, true, '2026-10-03T23:00:00Z');
+    const bad = await enroll(false, true);
+    expect((await cli(['approve', '--server', server, '--request-id', bad.request.request_id])).status).toBe('approved');
+    expect((await cli(['check', '--pending', bad.pending, '--token-env-file', path.join(folder, 'quota-ingest.env')])).status).toBe('activated');
+    await publishLimits(bad.source, bad.credential, false, '2026-10-03T23:30:00Z');
+    for (const endpoint of ['/api/summary', '/api/mobile/summary']) {
+      const response = await probe(endpoint, saved.token);
+      expect(response.status).toBe(200);
+      const summary = await response.json() as { provider_slots: { provider: string; quota: { status: string; source_id: string; last_verified_at: string; windows: Record<string, unknown>[] } }[] };
+      expect(summary.provider_slots).toHaveLength(3);
+      for (const [provider, percent] of [['codex', 20], ['antigravity', 1]] as const) {
+        const quota = summary.provider_slots.find(slot => slot.provider === provider)?.quota;
+        expect(quota?.status).toBe('available');
+        expect(quota?.source_id).toBe(good.source + '-' + provider);
+        expect(Date.parse(quota!.last_verified_at)).toBe(Date.parse('2026-10-03T23:00:00Z'));
+        expect(quota?.windows).toHaveLength(1);
+        const window = quota!.windows[0];
+        expect(window.source_id).toBe(quota?.source_id);
+        expect(window.official).toBe(true); expect(window.confidence).toBe('observed'); expect(window.status).toBe('ok');
+        expect(window.used_percent).toBe(percent);
+        expect(Date.parse(String(window.reset_at))).toBe(Date.parse('2026-10-11T00:00:00Z'));
+      }
+    }
+    // A later failure on the same owned source must still remove its current availability.
+    await publishLimits(good.source, saved.token, false, '2026-10-03T23:45:00Z');
+    const degraded = await (await probe('/api/mobile/summary', saved.token)).json() as { provider_slots: { provider: string; quota: { status: string } }[] };
+    const affected = degraded.provider_slots.filter(slot => ['codex', 'antigravity'].includes(slot.provider));
+    expect(affected).toHaveLength(2);
+    expect(affected.map(slot => slot.quota.status)).toEqual(['missing', 'missing']);
+    expect((await cli(['revoke', '--server', server, '--request-id', good.request.request_id])).status).toBe('revoked');
+    expect((await probe('/api/mobile/summary', saved.token)).status).toBe(401);
   });
 
   it('denied and expired requests never activate; an approved grant survives request expiry', async () => {
