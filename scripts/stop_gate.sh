@@ -115,9 +115,29 @@ if [ -f .claude/.skip-stop-gate ]; then
   exit 0
 fi
 
+# 项目工具链：Claude Code 拉起 hook 时 PATH 不含 `.tools`，裸 python3 会落到系统解释器
+# （Mac mini 是 CommandLineTools 3.9：缺 tomllib / cryptography，子进程也找不到 node），
+# 固定误红、与代码无关。与 `.tools/env.zsh` 一致地前置 node 与 python-venv。
+# `.tools/` 被 gitignore，worktree 里没有，所以先找当前工作树、再找主检出；
+# 都没有（Linux 开发机等）时 PATH 保持原样。
+use_project_toolchain() {
+  local common root tools node_bin
+  common="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+  for root in "$REPO_ROOT" "$(dirname "$common")"; do
+    tools="$root/.tools"
+    [ -x "$tools/python-venv/bin/python3" ] || continue
+    PATH="$tools/python-venv/bin:$PATH"
+    node_bin="$(ls -d "$tools"/node-*/bin 2>/dev/null | sort -V | tail -1)"
+    [ -n "$node_bin" ] && PATH="$node_bin:$PATH"
+    export PATH
+    return 0
+  done
+}
+
 LOG="$(mktemp -t aiusage-stop-gate.XXXXXX)"
 
 if [ "$NEED_PY" -eq 1 ]; then
+  use_project_toolchain
   if ! PYTHONPATH=src python3 -m unittest discover -s tests >"$LOG" 2>&1; then
     {
       echo "【收口被阻止】src/ 或 tests/ 有改动，但 Python 测试未通过。"
