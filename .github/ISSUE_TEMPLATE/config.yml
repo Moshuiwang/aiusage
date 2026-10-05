@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 建卡规范（必读）
+    url: https://github.com/Moshuiwang/aiusage/issues/233
+    about: 统一标题、类型、状态、优先级、执行环境与版本里程碑；规则只在此 Issue 维护。

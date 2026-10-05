@@ -6,6 +6,13 @@
 任务真值在 GitHub Issue（`gh issue list`），不在仓库内维护第二份进度表；新工作直接开 Issue，
 用产品语言描述用户结果；同一变更只能有一个主实施代理。
 
+## Issue 治理入口
+
+创建或编辑 Issue、标签、Milestone 前读取
+[Issue 治理规范 #233](https://github.com/Moshuiwang/aiusage/issues/233)。
+标题、类型/状态/优先级、版本归属与留档规则只在该 Issue 维护；本文件不复制规则正文。
+治理标签不改变下述机器职责、证据等级、Git 提交或生产授权边界。
+
 ## 实现原则
 
 - 明确废弃的接口、字段、调用路径和兼容层，确认无调用者后直接删除；不新增旧格式 migration
@@ -77,3 +84,11 @@
 当前事实 `docs/status.md` · 产品方向 `docs/product-brief.md` · 架构
 `docs/architecture/architecture.md` · 项目地图 `docs/project-map.md` · 命令 `README.md`。
 能用本文件和对应 Issue 完成的任务，不要额外读其他文档。
+
+## Mac mini Cloudflare 凭据取用
+
+本机任务通过 Ops 的 BWS 入口按需取用，不需逐次向用户或其他聊天索取 Token。
+先读 `/Users/wangzhipeng/Documents/project/ops/projects/ai-usage/bws-cloudflare.md`，
+其中包含可直接运行的 D1/Worker 只读探针和可信命令启动方式。
+管理 Token 只由入口从 BWS 取得并注入本次进程；不读取/显示真实值、不复制 `.env`。
+生产操作继续遵守上述授权、Issue、备份回滚与验收边界；入口可用不等于所有写权限已验证。
