@@ -91,4 +91,6 @@
 先读 `/Users/wangzhipeng/Documents/project/ops/projects/ai-usage/bws-cloudflare.md`，
 其中包含可直接运行的 D1/Worker 只读探针和可信命令启动方式。
 管理 Token 只由入口从 BWS 取得并注入本次进程；不读取/显示真实值、不复制 `.env`。
-生产操作继续遵守上述授权、Issue、备份回滚与验收边界；入口可用不等于所有写权限已验证。
+生产操作继续遵守上述授权、Issue、备份回滚与验收边界；入口可用不等于所有写权限已验证，
+也不视为已满足「多机边界」中的最小权限凭据条件（BWS Token 尚未按项目最小化），写操作仍按该
+条件和对应 Issue 授权逐项判断。
