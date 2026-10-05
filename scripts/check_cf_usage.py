@@ -112,7 +112,7 @@ def overall_conclusion(percentages):
     elif has_warning:
         text = "💡 结论: 关注！部分资源用量已过半，建议排查高频调用或优化批次。"
     elif has_unknown:
-        text = "❓ 结论: 未知！部分指标（D1 读写）无法确认，不能判定为全部安全，请人工核实。"
+        text = "❓ 结论: 未知！部分资源指标无法确认，不能判定为全部安全，请人工核实。"
     else:
         text = "✅ 结论: 正常！所有 Cloudflare 核心资源用量均在安全绿色区间内。"
     return text, has_unknown, has_critical, has_warning
@@ -142,6 +142,10 @@ def query_cf_api(url, token, data=None):
     req = urllib.request.Request(url, headers=headers, data=json.dumps(data).encode("utf-8") if data else None)
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read().decode("utf-8"))
+
+def optional_int(value):
+    return None if value is None else int(value)
+
 
 def format_num(n):
     return f"{n:,}"
@@ -208,38 +212,41 @@ def main():
         "end": now.strftime("%Y-%m-%dT%H:%M:%SZ")
     }
 
-    worker_day_req = 0
-    worker_day_err = 0
-    worker_cpu_p50 = 0
-    worker_week_req = 0
+    worker_day_req = None
+    worker_day_err = None
+    worker_cpu_p50 = None
+    worker_week_req = None
     try:
         gql_res = query_cf_api(graphql_url, token, {"query": query, "variables": variables})
+        if gql_res.get("errors"):
+            raise ValueError("GraphQL response contains errors")
         accounts = gql_res.get("data", {}).get("viewer", {}).get("accounts", [])
         if accounts:
             day_data = accounts[0].get("dayUsage", [])
             if day_data:
-                worker_day_req = day_data[0].get("sum", {}).get("requests", 0)
-                worker_day_err = day_data[0].get("sum", {}).get("errors", 0)
-                worker_cpu_p50 = (day_data[0].get("quantiles", {}).get("cpuTimeP50", 0)) / 1000.0 # µs -> ms
+                worker_day_req = day_data[0].get("sum", {}).get("requests")
+                worker_day_err = day_data[0].get("sum", {}).get("errors")
+                cpu = day_data[0].get("quantiles", {}).get("cpuTimeP50")
+                worker_cpu_p50 = None if cpu is None else cpu / 1000.0 # µs -> ms
             week_data = accounts[0].get("weekUsage", [])
             if week_data:
-                worker_week_req = week_data[0].get("sum", {}).get("requests", 0)
+                worker_week_req = week_data[0].get("sum", {}).get("requests")
     except Exception as e:
         print(f"⚠️ Workers 监控获取失败: {e}")
 
     # 2. D1 数据库指标
     d1_url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/d1/database/{D1_DATABASE_ID}"
-    d1_size_bytes = 0
-    d1_num_tables = 0
+    d1_size_bytes = None
+    d1_num_tables = None
     try:
         d1_res = query_cf_api(d1_url, token)
         result = d1_res.get("result", {})
-        d1_size_bytes = result.get("file_size", 0)
-        d1_num_tables = result.get("num_tables", 0)
+        d1_size_bytes = result.get("file_size")
+        d1_num_tables = result.get("num_tables")
     except Exception as e:
         print(f"⚠️ D1 信息获取失败: {e}")
 
-    d1_size_mb = d1_size_bytes / (1024 * 1024)
+    d1_size_mb = None if d1_size_bytes is None else d1_size_bytes / (1024 * 1024)
 
     # 3. D1 24h 读写查询（#190 第 3 项：GraphQL d1AnalyticsAdaptiveGroups）。
     d1_rows_read, d1_rows_written = None, None
@@ -262,29 +269,47 @@ def main():
 
     # 4. R2 存储
     r2_url = f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT_ID}/r2/buckets/{R2_BUCKET_NAME}/usage"
-    r2_size_bytes = 0
-    r2_objects = 0
+    r2_size_bytes = None
+    r2_objects = None
     try:
         r2_res = query_cf_api(r2_url, token)
         r2_res_data = r2_res.get("result", {})
-        r2_size_bytes = int(r2_res_data.get("payloadSize", 0))
-        r2_objects = int(r2_res_data.get("objectCount", 0))
+        r2_size_bytes = optional_int(r2_res_data.get("payloadSize"))
+        r2_objects = optional_int(r2_res_data.get("objectCount"))
     except Exception as e:
         print(f"⚠️ R2 信息获取失败: {e}")
-    r2_size_gb = r2_size_bytes / (1024 * 1024 * 1024)
+    r2_size_gb = None if r2_size_bytes is None else r2_size_bytes / (1024 * 1024 * 1024)
 
     # 打印汇总表格
     print("\n[1] Workers 指标 (aiusage-api):")
-    req_pct = (worker_day_req / FREE_LIMITS["worker_requests_per_day"]) * 100
-    print(f"  - 24h 请求量: {format_num(worker_day_req)} / {format_num(FREE_LIMITS['worker_requests_per_day'])} ({req_pct:.2f}%) -> {check_status(req_pct)}")
-    print(f"  - 7d 请求总量: {format_num(worker_week_req)} (日均 {worker_week_req // 7} 次)")
-    print(f"  - 24h 报错数: {worker_day_err} 次")
-    print(f"  - P50 CPU 耗时: {worker_cpu_p50:.2f} ms (上限: {FREE_LIMITS['worker_cpu_ms_per_request']} ms)")
+    req_pct = None if worker_day_req is None else (worker_day_req / FREE_LIMITS["worker_requests_per_day"]) * 100
+    if req_pct is None:
+        print("  - 24h 请求量: 未知")
+    else:
+        print(f"  - 24h 请求量: {format_num(worker_day_req)} / {format_num(FREE_LIMITS['worker_requests_per_day'])} ({req_pct:.2f}%) -> {check_status(req_pct)}")
+    if worker_week_req is None:
+        print("  - 7d 请求总量: 未知")
+    else:
+        print(f"  - 7d 请求总量: {format_num(worker_week_req)} (日均 {worker_week_req // 7} 次)")
+    if worker_day_err is None:
+        print("  - 24h 报错数: 未知")
+    else:
+        print(f"  - 24h 报错数: {worker_day_err} 次")
+    if worker_cpu_p50 is None:
+        print("  - P50 CPU 耗时: 未知")
+    else:
+        print(f"  - P50 CPU 耗时: {worker_cpu_p50:.2f} ms (上限: {FREE_LIMITS['worker_cpu_ms_per_request']} ms)")
 
     print("\n[2] D1 数据库存储 (aiusage-prod-db):")
-    db_size_pct = (d1_size_mb / FREE_LIMITS["d1_db_size_mb"]) * 100
-    print(f"  - 表数量: {d1_num_tables} 张")
-    print(f"  - 存储空间: {d1_size_mb:.2f} MB / {FREE_LIMITS['d1_db_size_mb']} MB ({db_size_pct:.2f}%) -> {check_status(db_size_pct)}")
+    db_size_pct = None if d1_size_mb is None else (d1_size_mb / FREE_LIMITS["d1_db_size_mb"]) * 100
+    if d1_num_tables is None:
+        print("  - 表数量: 未知")
+    else:
+        print(f"  - 表数量: {d1_num_tables} 张")
+    if db_size_pct is None:
+        print("  - 存储空间: 未知")
+    else:
+        print(f"  - 存储空间: {d1_size_mb:.2f} MB / {FREE_LIMITS['d1_db_size_mb']} MB ({db_size_pct:.2f}%) -> {check_status(db_size_pct)}")
     if d1_rows_read is None:
         print("  - 24h rows_read: 未知（D1 读写未知，见上方警告）")
     else:
@@ -295,9 +320,15 @@ def main():
         print(f"  - 24h rows_written: {format_num(d1_rows_written)} / {format_num(FREE_LIMITS['d1_rows_written_per_day'])} ({d1_write_pct:.2f}%) -> {check_status(d1_write_pct)}")
 
     print("\n[3] R2 备份桶存储 (aiusage-backups):")
-    r2_pct = (r2_size_gb / FREE_LIMITS["r2_storage_gb"]) * 100
-    print(f"  - 备份对象数: {r2_objects} 个")
-    print(f"  - 存储空间: {r2_size_gb * 1024:.2f} MB / {FREE_LIMITS['r2_storage_gb'] * 1024:.0f} MB ({r2_pct:.2f}%) -> {check_status(r2_pct)}")
+    r2_pct = None if r2_size_gb is None else (r2_size_gb / FREE_LIMITS["r2_storage_gb"]) * 100
+    if r2_objects is None:
+        print("  - 备份对象数: 未知")
+    else:
+        print(f"  - 备份对象数: {r2_objects} 个")
+    if r2_pct is None:
+        print("  - 存储空间: 未知")
+    else:
+        print(f"  - 存储空间: {r2_size_gb * 1024:.2f} MB / {FREE_LIMITS['r2_storage_gb'] * 1024:.0f} MB ({r2_pct:.2f}%) -> {check_status(r2_pct)}")
 
     print("\n" + "=" * 70)
     # 总体评估：D1 读写纳入判定——结论按最差项，D1 读写未知时不得判定为"全部安全"。
@@ -310,6 +341,8 @@ def main():
     })
     print(conclusion)
     print("=" * 70)
+    if _has_unknown:
+        sys.exit(2)
 
 if __name__ == "__main__":
     main()
