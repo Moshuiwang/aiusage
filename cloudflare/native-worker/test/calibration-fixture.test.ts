@@ -20,8 +20,9 @@
  *
  * 结论对照 #183 设计 v1 §0（数据依据）和数据完整性核查评论：Claude 现在能算出 B 档信号
  * （逐日留出最大误差落在 [10%,25%] 区间）；Codex 因账户读数漂移大、报告空洞多，定级 none
- * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 原先因读数抖动被误切成碎周期而不足（#206 后 flash 可定级 B），
- * 定级 none。这些是从这份真实 fixture 跑出来的结果，不是预设结论。
+ * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 原先因读数抖动被误切成碎周期而全部 none，
+ * #206 后合成 1 个周期，flash 定级 B，pro / claude-on-antigravity 无用量仍为 none。
+ * 这些是从这份真实 fixture 跑出来的结果，不是预设结论。
  */
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";

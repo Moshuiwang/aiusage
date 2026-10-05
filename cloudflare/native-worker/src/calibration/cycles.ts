@@ -1,8 +1,8 @@
 /**
  * #183-a：周期切分与重置识别。
  *
- * 同一来源（source_id + provider + window）的官方读数按时间排序后，`reset_at` 相对上一条
- * 变化超过 2 分钟时切出新周期。
+ * 同一 provider 账户下全部 source 的官方读数合并成一条时间线、按时间排序后，`reset_at`
+ * 相对上一条变化超过 2 分钟时切出新周期。
  *
  * `reset_at` 不变而 `used_percent` 下降是上游纠正（#206：Codex 2026-09-30 本地 0 token 时
  * 22→43，数小时后同一 `reset_at` 下纠正回 24），不是重置——生产全部历史里这类下降没有一次
@@ -26,7 +26,7 @@ export interface Cycle {
   readings: LimitObservation[];
 }
 
-/** 按 `source_id` 分组、时间排序，切出周期，丢弃 used=0 的滚动噪音段。 */
+/** 合并时间线按时间排序，切出周期（含上游纠正回溯），丢弃 used=0 的滚动噪音段。 */
 export function splitCycles(observations: LimitObservation[]): Cycle[] {
   const sorted = [...observations].sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
   const rawSegments: LimitObservation[][] = [];
