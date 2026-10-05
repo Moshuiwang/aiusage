@@ -256,6 +256,9 @@
                 "input_tokens": 1000,
                 "model_name": "gpt-5",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1600
               }
             ],
@@ -280,6 +283,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 950
               },
               {
@@ -289,6 +295,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -1216,12 +1225,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 2150
                     }
@@ -1271,6 +1286,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -1347,12 +1365,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 2150
                     }
@@ -1397,6 +1421,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -1429,12 +1456,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 2150
                     }
@@ -1481,6 +1514,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -2429,6 +2465,9 @@
                 "input_tokens": 1200,
                 "model_name": "claude-sonnet",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2000
               }
             ],
@@ -2453,6 +2492,9 @@
                 "input_tokens": 700,
                 "model_name": "ag-coder",
                 "output_tokens": 300,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1100
               }
             ],
@@ -2491,6 +2533,9 @@
                 "input_tokens": 1000,
                 "model_name": "gpt-5",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1600
               }
             ],
@@ -2515,6 +2560,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 950
               },
               {
@@ -2524,6 +2572,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -3280,12 +3331,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -3342,6 +3399,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -3386,6 +3446,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -3476,12 +3539,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -3526,6 +3595,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -3570,6 +3642,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -3639,12 +3714,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -3691,6 +3772,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -3737,6 +3821,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -4503,6 +4590,9 @@
                 "input_tokens": 1600,
                 "model_name": "gpt-5",
                 "output_tokens": 900,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 3000
               }
             ],
@@ -4527,6 +4617,9 @@
                 "input_tokens": 1200,
                 "model_name": "claude-sonnet",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2000
               }
             ],
@@ -4551,6 +4644,9 @@
                 "input_tokens": 700,
                 "model_name": "ag-coder",
                 "output_tokens": 300,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1100
               }
             ],
@@ -4589,6 +4685,9 @@
                 "input_tokens": 1000,
                 "model_name": "gpt-5",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1600
               }
             ],
@@ -4613,6 +4712,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 950
               },
               {
@@ -4622,6 +4724,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -5714,12 +5819,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -5776,6 +5887,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 4600
                     }
@@ -5820,6 +5934,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -5910,12 +6027,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -5960,6 +6083,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 4600
                     }
@@ -6004,6 +6130,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -6073,12 +6202,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -6125,6 +6260,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 4600
                     }
@@ -6171,6 +6309,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -7253,6 +7394,9 @@
                 "input_tokens": 800,
                 "model_name": "gpt-4.1",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 1300
               }
             ],
@@ -7277,6 +7421,9 @@
                 "input_tokens": 1600,
                 "model_name": "gpt-5",
                 "output_tokens": 900,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 3000
               }
             ],
@@ -7301,6 +7448,9 @@
                 "input_tokens": 1200,
                 "model_name": "claude-sonnet",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 2000
               }
             ],
@@ -7325,6 +7475,9 @@
                 "input_tokens": 700,
                 "model_name": "ag-coder",
                 "output_tokens": 300,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 1100
               }
             ],
@@ -7363,6 +7516,9 @@
                 "input_tokens": 1000,
                 "model_name": "gpt-5",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 1600
               }
             ],
@@ -7387,6 +7543,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 950
               },
               {
@@ -7396,6 +7555,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_period"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -8171,12 +8333,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -8233,6 +8401,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 4600
                     }
@@ -8270,6 +8441,9 @@
                     {
                       "id": "gpt-4.1",
                       "label": "gpt-4.1",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 1300
                     }
@@ -8314,6 +8488,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -8418,12 +8595,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -8468,6 +8651,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 4600
                     }
@@ -8505,6 +8691,9 @@
                     {
                       "id": "gpt-4.1",
                       "label": "gpt-4.1",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 1300
                     }
@@ -8549,6 +8738,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -8618,12 +8810,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -8670,6 +8868,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 4600
                     }
@@ -8709,6 +8910,9 @@
                     {
                       "id": "gpt-4.1",
                       "label": "gpt-4.1",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 1300
                     }
@@ -8755,6 +8959,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_period"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -9384,6 +9591,9 @@
                 "input_tokens": 1200,
                 "model_name": "claude-sonnet",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2000
               }
             ],
@@ -9422,6 +9632,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 950
               },
               {
@@ -9431,6 +9644,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -9961,6 +10177,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -10016,6 +10235,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -10055,6 +10277,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -10547,6 +10772,9 @@
                 "input_tokens": 1200,
                 "model_name": "claude-sonnet",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2000
               }
             ],
@@ -10571,6 +10799,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 950
               },
               {
@@ -10580,6 +10811,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -11050,6 +11284,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -11105,6 +11342,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -11144,6 +11384,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -11811,6 +12054,9 @@
                 "input_tokens": 1200,
                 "model_name": "claude-sonnet",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2000
               }
             ],
@@ -11835,6 +12081,9 @@
                 "input_tokens": 700,
                 "model_name": "ag-coder",
                 "output_tokens": 300,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1100
               }
             ],
@@ -11873,6 +12122,9 @@
                 "input_tokens": 1000,
                 "model_name": "gpt-5",
                 "output_tokens": 500,
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                },
                 "total_tokens": 1600
               }
             ],
@@ -11897,6 +12149,9 @@
                 "input_tokens": 600,
                 "model_name": "claude-opus",
                 "output_tokens": 200,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 950
               },
               {
@@ -11906,6 +12161,9 @@
                 "input_tokens": 1600,
                 "model_name": "claude-sonnet",
                 "output_tokens": 400,
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                },
                 "total_tokens": 2150
               }
             ],
@@ -12662,12 +12920,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -12724,6 +12988,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -12768,6 +13035,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -12858,12 +13128,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -12908,6 +13184,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -12952,6 +13231,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }
@@ -13021,12 +13303,18 @@
                     {
                       "id": "claude-opus",
                       "label": "claude-opus",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 950
                     },
                     {
                       "id": "claude-sonnet",
                       "label": "claude-sonnet",
+                      "quota_estimate_unavailable": {
+                        "reason": "not_calibrated"
+                      },
                       "status": "available",
                       "tokens": 4150
                     }
@@ -13073,6 +13361,9 @@
                     {
                       "id": "gpt-5",
                       "label": "gpt-5",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1600
                     }
@@ -13119,6 +13410,9 @@
                     {
                       "id": "ag-coder",
                       "label": "ag-coder",
+                      "quota_estimate_unavailable": {
+                        "reason": "unsupported_model"
+                      },
                       "status": "available",
                       "tokens": 1100
                     }

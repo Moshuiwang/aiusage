@@ -1,0 +1,695 @@
+{
+  "schema_version": 1,
+  "client": "ios",
+  "generated_at": "2026-06-10T12:00:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "period": {
+    "id": "week",
+    "date": "2026-06-10",
+    "start_date": "2026-06-04",
+    "end_date": "2026-06-10",
+    "total_tokens": 7200,
+    "input_tokens": 7200,
+    "output_tokens": 0,
+    "cache_tokens": 0,
+    "cache_ratio": 0,
+    "machine": null,
+    "account": null
+  },
+  "trend": {
+    "period": "week",
+    "granularity": "day",
+    "start_date": "2026-06-04",
+    "end_date": "2026-06-10",
+    "points": [
+      {
+        "bucket": "2026-06-04",
+        "label": "2026-06-04",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-06-05",
+        "label": "2026-06-05",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-06-06",
+        "label": "2026-06-06",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-06-07",
+        "label": "2026-06-07",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-06-08",
+        "label": "2026-06-08",
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 0,
+        "codex_tokens": 0,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-06-09",
+        "label": "2026-06-09",
+        "tokens": 3600,
+        "input_tokens": 3600,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 2000,
+        "codex_tokens": 1600,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      },
+      {
+        "bucket": "2026-06-10",
+        "label": "2026-06-10",
+        "tokens": 3600,
+        "input_tokens": 3600,
+        "output_tokens": 0,
+        "cache_tokens": 0,
+        "cache_ratio": 0,
+        "claude_tokens": 2000,
+        "codex_tokens": 1600,
+        "gemini_tokens": 0,
+        "unknown_tokens": 0
+      }
+    ]
+  },
+  "sources": [],
+  "breakdown": {
+    "by_source": [
+      {
+        "id": "quota-owner",
+        "label": "quota-user / quota-host",
+        "machine": "quota-host",
+        "os_user": "quota-user",
+        "tokens": 7200,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 7200
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 4000,
+            "status": "available",
+            "models": [
+              {
+                "id": "claude-fable-5",
+                "label": "claude-fable-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "formula_changed",
+                  "sample_intervals": 10,
+                  "backtest_max_error": 0.2
+                }
+              },
+              {
+                "id": "claude-haiku-5",
+                "label": "claude-haiku-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                }
+              },
+              {
+                "id": "claude-opus-5",
+                "label": "claude-opus-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate": {
+                  "percent": 0.01,
+                  "grade": "A",
+                  "basis": "week"
+                }
+              },
+              {
+                "id": "claude-sonnet-5",
+                "label": "claude-sonnet-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "stale",
+                  "sample_intervals": 10,
+                  "backtest_max_error": 0.2
+                }
+              }
+            ]
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 3200,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-5.6-sol",
+                "label": "gpt-5.6-sol",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "insufficient_data",
+                  "sample_intervals": 0
+                }
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "backtest_failed",
+                  "sample_intervals": 92,
+                  "backtest_max_error": 2.306
+                }
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 200,
+                "status": "missing"
+              },
+              {
+                "id": "unmapped-model",
+                "label": "unmapped-model",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "by_machine": [
+      {
+        "id": "quota-host",
+        "label": "quota-host",
+        "tokens": 7200,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 7200
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 4000,
+            "status": "available",
+            "models": [
+              {
+                "id": "claude-fable-5",
+                "label": "claude-fable-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "formula_changed",
+                  "sample_intervals": 10,
+                  "backtest_max_error": 0.2
+                }
+              },
+              {
+                "id": "claude-haiku-5",
+                "label": "claude-haiku-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                }
+              },
+              {
+                "id": "claude-opus-5",
+                "label": "claude-opus-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate": {
+                  "percent": 0.01,
+                  "grade": "A",
+                  "basis": "week"
+                }
+              },
+              {
+                "id": "claude-sonnet-5",
+                "label": "claude-sonnet-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "stale",
+                  "sample_intervals": 10,
+                  "backtest_max_error": 0.2
+                }
+              }
+            ]
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 3200,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-5.6-sol",
+                "label": "gpt-5.6-sol",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "insufficient_data",
+                  "sample_intervals": 0
+                }
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "backtest_failed",
+                  "sample_intervals": 92,
+                  "backtest_max_error": 2.306
+                }
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 200,
+                "status": "missing"
+              },
+              {
+                "id": "unmapped-model",
+                "label": "unmapped-model",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "by_os_user": [
+      {
+        "id": "quota-user",
+        "label": "quota-user",
+        "tokens": 7200,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 7200
+          }
+        ],
+        "agents": [
+          {
+            "id": "claude",
+            "label": "Claude",
+            "tokens": 4000,
+            "status": "available",
+            "models": [
+              {
+                "id": "claude-fable-5",
+                "label": "claude-fable-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "formula_changed",
+                  "sample_intervals": 10,
+                  "backtest_max_error": 0.2
+                }
+              },
+              {
+                "id": "claude-haiku-5",
+                "label": "claude-haiku-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "not_calibrated"
+                }
+              },
+              {
+                "id": "claude-opus-5",
+                "label": "claude-opus-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate": {
+                  "percent": 0.01,
+                  "grade": "A",
+                  "basis": "week"
+                }
+              },
+              {
+                "id": "claude-sonnet-5",
+                "label": "claude-sonnet-5",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "stale",
+                  "sample_intervals": 10,
+                  "backtest_max_error": 0.2
+                }
+              }
+            ]
+          },
+          {
+            "id": "codex",
+            "label": "Codex",
+            "tokens": 3200,
+            "status": "available",
+            "models": [
+              {
+                "id": "gpt-5.6-sol",
+                "label": "gpt-5.6-sol",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "insufficient_data",
+                  "sample_intervals": 0
+                }
+              },
+              {
+                "id": "gpt-6-sol",
+                "label": "gpt-6-sol",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "backtest_failed",
+                  "sample_intervals": 92,
+                  "backtest_max_error": 2.306
+                }
+              },
+              {
+                "id": "unknown",
+                "label": "模型未知",
+                "tokens": 200,
+                "status": "missing"
+              },
+              {
+                "id": "unmapped-model",
+                "label": "unmapped-model",
+                "tokens": 1000,
+                "status": "available",
+                "quota_estimate_unavailable": {
+                  "reason": "unsupported_model"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "by_agent": [
+      {
+        "id": "claude",
+        "label": "claude",
+        "tokens": 4000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 4000
+          }
+        ]
+      },
+      {
+        "id": "codex",
+        "label": "codex",
+        "tokens": 3200,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 3200
+          }
+        ]
+      }
+    ],
+    "by_model": [
+      {
+        "id": "claude-fable-5",
+        "label": "claude-fable-5",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      },
+      {
+        "id": "claude-haiku-5",
+        "label": "claude-haiku-5",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      },
+      {
+        "id": "claude-opus-5",
+        "label": "claude-opus-5",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      },
+      {
+        "id": "claude-sonnet-5",
+        "label": "claude-sonnet-5",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      },
+      {
+        "id": "gpt-5.6-sol",
+        "label": "gpt-5.6-sol",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      },
+      {
+        "id": "gpt-6-sol",
+        "label": "gpt-6-sol",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      },
+      {
+        "id": "unmapped-model",
+        "label": "unmapped-model",
+        "tokens": 1000,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 1000
+          }
+        ]
+      }
+    ],
+    "by_date": [
+      {
+        "id": "2026-06-09",
+        "label": "2026-06-09",
+        "tokens": 3600,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 3600
+          }
+        ]
+      },
+      {
+        "id": "2026-06-10",
+        "label": "2026-06-10",
+        "tokens": 3600,
+        "source_ids": [
+          "quota-owner"
+        ],
+        "contributions": [
+          {
+            "source_id": "quota-owner",
+            "tokens": 3600
+          }
+        ]
+      }
+    ]
+  },
+  "limits": {
+    "observed_count": 0,
+    "total_count": 0,
+    "windows": [],
+    "providers": []
+  },
+  "provider_slots": [
+    {
+      "provider": "claude",
+      "usage": {
+        "status": "available",
+        "total_tokens": 4000,
+        "input_tokens": 4000,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
+    },
+    {
+      "provider": "codex",
+      "usage": {
+        "status": "available",
+        "total_tokens": 3200,
+        "input_tokens": 3200,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
+    },
+    {
+      "provider": "antigravity",
+      "usage": {
+        "status": "missing",
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      }
+    }
+  ],
+  "provider_usage_coverage": {
+    "status": "complete",
+    "total_tokens": 7200,
+    "attributed_tokens": 7200,
+    "other_provider_tokens": 0,
+    "unattributed_tokens": 0
+  },
+  "metadata": {
+    "backend_mode": "native_d1_unknown",
+    "canonical_store": "cloudflare_d1",
+    "read_model_generated_at": "2026-06-10T12:00:00+08:00",
+    "freshness_status": "unknown",
+    "limits_observed_at": null
+  }
+}

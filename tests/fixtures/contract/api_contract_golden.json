@@ -1383,6 +1383,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -1394,6 +1405,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -2584,6 +2596,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -2595,6 +2618,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -2795,6 +2819,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -2806,6 +2841,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -2948,6 +2984,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -2959,6 +3006,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -4272,6 +4320,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -4283,6 +4342,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -5625,6 +5685,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -5636,6 +5707,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -5803,6 +5875,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -5814,6 +5897,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -6035,6 +6119,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -6046,6 +6141,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -6213,6 +6309,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -6224,6 +6331,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -6335,6 +6443,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -6346,6 +6465,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -6521,6 +6641,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -6532,6 +6663,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -7814,6 +7946,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -7825,6 +7968,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -9167,6 +9311,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -9178,6 +9333,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -9345,6 +9501,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -9356,6 +9523,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -9577,6 +9745,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -9588,6 +9767,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -9755,6 +9935,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -9766,6 +9957,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -9877,6 +10069,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -9888,6 +10091,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -10063,6 +10267,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -10074,6 +10289,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -11356,6 +11572,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -11367,6 +11594,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -12709,6 +12937,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -12720,6 +12959,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -12887,6 +13127,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -12898,6 +13149,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -13119,6 +13371,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -13130,6 +13393,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -13297,6 +13561,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -13308,6 +13583,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -13419,6 +13695,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -13430,6 +13717,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -13605,6 +13893,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -13616,6 +13915,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -14813,6 +15113,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -14824,6 +15135,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -16139,6 +16451,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -16150,6 +16473,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -17180,6 +17504,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -17191,6 +17526,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -17391,6 +17727,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -17402,6 +17749,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -17544,6 +17892,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -17555,6 +17914,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -18404,6 +18764,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -18415,6 +18786,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -18615,6 +18987,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -18626,6 +19009,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -18768,6 +19152,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -18779,6 +19174,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -20495,6 +20891,17 @@
                             "output_tokens": {
                               "type": "int"
                             },
+                            "quota_estimate_unavailable": {
+                              "fields": {
+                                "reason": {
+                                  "type": "str"
+                                }
+                              },
+                              "keys": [
+                                "reason"
+                              ],
+                              "type": "object"
+                            },
                             "total_tokens": {
                               "type": "int"
                             }
@@ -20506,6 +20913,7 @@
                             "input_tokens",
                             "model_name",
                             "output_tokens",
+                            "quota_estimate_unavailable",
                             "total_tokens"
                           ],
                           "type": "object"
@@ -22089,6 +22497,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -22100,6 +22519,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -22267,6 +22687,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -22278,6 +22709,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -22499,6 +22931,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -22510,6 +22953,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -22677,6 +23121,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -22688,6 +23143,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -22799,6 +23255,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -22810,6 +23277,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],
@@ -22985,6 +23453,17 @@
                                         "label": {
                                           "type": "str"
                                         },
+                                        "quota_estimate_unavailable": {
+                                          "fields": {
+                                            "reason": {
+                                              "type": "str"
+                                            }
+                                          },
+                                          "keys": [
+                                            "reason"
+                                          ],
+                                          "type": "object"
+                                        },
                                         "status": {
                                           "type": "str",
                                           "value": "available"
@@ -22996,6 +23475,7 @@
                                       "keys": [
                                         "id",
                                         "label",
+                                        "quota_estimate_unavailable",
                                         "status",
                                         "tokens"
                                       ],

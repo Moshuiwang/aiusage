@@ -215,3 +215,36 @@ describe("quota_estimate on /api/summary", () => {
     });
   });
 });
+
+
+describe("quota_estimate_unavailable truthful diagnosis", () => {
+  it("same failed account backtest survives two days and all three mobile groups without summing error", async () => {
+    const now = "2026-06-10T12:00:00+08:00";
+    await withWorker({ now }, async ({ fetchRaw, db }) => {
+      await seedIdentity(db, now);
+      await seedOpusFact(db, "diag-day-1", "2026-06-09T02:00:00+08:00", "2026-06-09T03:00:00+08:00", now);
+      await seedOpusFact(db, "diag-day-2", "2026-06-10T02:00:00+08:00", "2026-06-10T03:00:00+08:00", now);
+      await seedCalibration(db, "opus", "none", now);
+      await db.prepare("UPDATE quota_calibration SET backtest_max_err = -2.306, sample_intervals = 92").run();
+      const response = await fetchRaw({ method: "GET", path: "/api/mobile/summary?period=week", auth: true });
+      expect(response.status).toBe(200);
+      const body = JSON.parse(response.body.toString());
+      for (const key of ["by_source", "by_machine", "by_os_user"]) {
+        expect(body.breakdown[key]).toHaveLength(1);
+        const models = body.breakdown[key][0].agents.flatMap((a: any) => a.models);
+        expect(models).toHaveLength(1);
+        expect(models[0].tokens).toBe(2 * (opusInput + opusOutput));
+        expect(models[0].quota_estimate).toBeUndefined();
+        expect(models[0].quota_estimate_unavailable).toEqual({
+          reason: "backtest_failed", sample_intervals: 92, backtest_max_error: 2.306,
+        });
+      }
+      const raw = await fetchRaw({ method: "GET", path: "/api/summary?period=week", auth: true });
+      const details = JSON.parse(raw.body.toString()).items.flatMap((i: any) => i.model_breakdowns);
+      expect(details).toHaveLength(2);
+      for (const model of details) expect(model.quota_estimate_unavailable).toEqual({
+        reason: "backtest_failed", sample_intervals: 92, backtest_max_error: 2.306,
+      });
+    });
+  });
+});

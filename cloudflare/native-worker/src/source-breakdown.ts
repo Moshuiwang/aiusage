@@ -1,6 +1,7 @@
+import type { QuotaEstimateUnavailable } from "./read-model/quota-estimate";
 type Row = Record<string, unknown>;
 type QuotaEstimate = { percent: number; grade: string; basis: string };
-type Model = { id: string; label: string; tokens: number; status: "available" | "missing"; quota_estimate?: QuotaEstimate };
+type Model = { id: string; label: string; tokens: number; status: "available" | "missing"; quota_estimate?: QuotaEstimate; quota_estimate_unavailable?: QuotaEstimateUnavailable };
 type Agent = Model & { models: Model[] };
 
 function quotaEstimateOf(model: Row): QuotaEstimate | undefined {
@@ -34,12 +35,12 @@ function agentID(value: unknown): string {
 
 /** Read-model projection: clients receive every source/Agent/model subtotal. */
 export function sourceAgents(items: Row[]): Agent[] {
-  type ModelGroup = { total: number; seen: boolean; models: Map<string, number>; quota: Map<string, QuotaEstimate> };
+  type ModelGroup = { total: number; seen: boolean; models: Map<string, number>; quota: Map<string, QuotaEstimate>; unavailable: Map<string, QuotaEstimateUnavailable | null> };
   const grouped = new Map<string, ModelGroup>();
-  for (const id of ["claude", "codex"]) grouped.set(id, { total: 0, seen: false, models: new Map(), quota: new Map() });
+  for (const id of ["claude", "codex"]) grouped.set(id, { total: 0, seen: false, models: new Map(), quota: new Map(), unavailable: new Map() });
   for (const item of items) {
     const id = agentID(item.agent);
-    const group = grouped.get(id) ?? { total: 0, seen: false, models: new Map<string, number>(), quota: new Map<string, QuotaEstimate>() };
+    const group = grouped.get(id) ?? { total: 0, seen: false, models: new Map<string, number>(), quota: new Map<string, QuotaEstimate>(), unavailable: new Map<string, QuotaEstimateUnavailable | null>() };
     const total = tokens(item.total_tokens);
     group.total += total;
     group.seen = true;
@@ -54,6 +55,12 @@ export function sourceAgents(items: Row[]): Agent[] {
       // 同一模型名跨多条 model_breakdowns 的 percent 可以直接相加——但只在 grade/basis
       // 一致时才相加（正常情况下同一批次同一模型的 quota_estimate 必然来自同一条
       // quota_calibration 行，grade/basis 恒定；不一致就是数据反常，整个撤销不猜）。
+      // 诊断为同一批校准的元数据，不是用量；冲突或缺失则撤销，不能用最后一条覆盖。
+      const unavailable = model.quota_estimate_unavailable as QuotaEstimateUnavailable | undefined;
+      if (!group.unavailable.has(name)) group.unavailable.set(name, unavailable ?? null);
+      else if (JSON.stringify(group.unavailable.get(name)) !== JSON.stringify(unavailable ?? null)) {
+        group.unavailable.set(name, null);
+      }
       const qe = quotaEstimateOf(model);
       if (qe) {
         const existing = group.quota.get(name);
@@ -77,6 +84,10 @@ export function sourceAgents(items: Row[]): Agent[] {
         // 只在 status === "available"（真实模型名，不是撤销分摊的 "unknown" 占位）时附加。
         const quota = status === "available" ? group.quota.get(name) : undefined;
         if (quota) model.quota_estimate = quota;
+        else if (status === "available") {
+          const unavailable = group.unavailable.get(name);
+          if (unavailable) model.quota_estimate_unavailable = unavailable;
+        }
         return model;
       }),
   }));

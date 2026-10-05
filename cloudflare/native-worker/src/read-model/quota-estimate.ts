@@ -21,6 +21,8 @@ export interface QuotaCalibrationRow {
   grade: string;
   fitted_at: string;
   formula_version: string;
+  backtest_max_err?: number | null;
+  sample_intervals?: number;
 }
 
 export interface ModelTokenTotals {
@@ -34,6 +36,41 @@ export interface QuotaEstimate {
   percent: number;
   grade: string;
   basis: "week" | "weekly_average";
+}
+
+/** 原因独立于额度估算；误差为账户回测的相对误差，不能当额度占比或跨日相加。 */
+export interface QuotaEstimateUnavailable {
+  reason: "backtest_failed" | "insufficient_data" | "stale" | "formula_changed"
+    | "not_calibrated" | "unsupported_model" | "unsupported_period";
+  sample_intervals?: number;
+  backtest_max_error?: number;
+}
+
+export function quotaEstimateUnavailableForModel(
+  provider: string, modelName: string, periodId: Period, refTime: Date,
+  calibrationByKey: Map<string, QuotaCalibrationRow>,
+): QuotaEstimateUnavailable | undefined {
+  if (periodId === "all") return { reason: "unsupported_period" };
+  if (!isProvider(provider)) return { reason: "unsupported_model" };
+  const family = familyForModel(provider, modelName);
+  if (family === null) return { reason: "unsupported_model" };
+  const row = calibrationByKey.get(`${provider}:${family}`);
+  if (!row) return { reason: "not_calibrated" };
+  const details: Omit<QuotaEstimateUnavailable, "reason"> = {};
+  if (typeof row.sample_intervals === "number" && Number.isInteger(row.sample_intervals) && row.sample_intervals >= 0) {
+    details.sample_intervals = row.sample_intervals;
+  }
+  if (typeof row.backtest_max_err === "number" && Number.isFinite(row.backtest_max_err)) {
+    details.backtest_max_error = Math.abs(row.backtest_max_err);
+  }
+  if (row.formula_version !== FORMULA_VERSION) return { reason: "formula_changed", ...details };
+  if (isStale(row.fitted_at, refTime)) return { reason: "stale", ...details };
+  if (row.grade === "none") {
+    const reason = (details.backtest_max_error ?? 0) > 0.25 ? "backtest_failed" : "insufficient_data";
+    return { reason, ...details };
+  }
+  if (row.grade !== "A" && row.grade !== "B") return { reason: "not_calibrated", ...details };
+  return undefined;
 }
 
 function isProvider(value: string): value is Provider {
@@ -71,15 +108,12 @@ export function quotaEstimateForModel(
   refTime: Date,
   calibrationByKey: Map<string, QuotaCalibrationRow>,
 ): QuotaEstimate | undefined {
+  if (quotaEstimateUnavailableForModel(provider, modelName, periodId, refTime, calibrationByKey)) return undefined;
   if (!isProvider(provider)) return undefined;
   const family = familyForModel(provider, modelName);
   if (family === null) return undefined;
   const calibration = calibrationByKey.get(`${provider}:${family}`);
   if (!calibration) return undefined;
-  if (calibration.grade === "none") return undefined;
-  // 公式版本不一致（例如价格权重升级后轮换尚未覆盖到该 provider）：旧系数不能乘新权重。
-  if (calibration.formula_version !== FORMULA_VERSION) return undefined;
-  if (isStale(calibration.fitted_at, refTime)) return undefined;
 
   const rawPercent = calibration.coef * priceWeightedTokens(provider, tokens);
 

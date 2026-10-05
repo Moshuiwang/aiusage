@@ -11,6 +11,7 @@
  * golden 里改掉一个既有值，等于悄悄改掉一条验收标准。
  */
 
+import { collectQuotaUnavailableSummary, quotaUnavailableOwnerFixturePath } from "./quota-unavailable-owner";
 import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { collectApiContractRecords } from "./api-contract-golden";
@@ -57,6 +58,7 @@ async function writeJson(filePath: string, records: unknown[]): Promise<void> {
 
 export async function generateGoldens(): Promise<void> {
   try {
+    await writeFile(quotaUnavailableOwnerFixturePath, `${JSON.stringify(await collectQuotaUnavailableSummary(), null, 2)}\n`, "utf8");
     await writeJson(valueGoldenPath, await collectValueGoldenRecords());
 
     const providerSlots = await collectProviderSlotsRecords();
