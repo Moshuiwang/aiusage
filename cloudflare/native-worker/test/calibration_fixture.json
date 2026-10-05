@@ -1,5 +1,5 @@
 {
-  "_comment": "由 scripts/export_calibration_fixture.py 生成，禁止手改。来源：2026-09-27 对 aiusage-prod-db 的只读导出（limit_window_history / usage_hourly_facts / usage_hourly_models）。重新生成见脚本头注释。",
+  "_comment": "由 scripts/export_calibration_fixture.py 生成，禁止手改。来源：aiusage-prod-db 截点 2026-09-27T10:52Z 的只读导出（limit_window_history / usage_hourly_facts / usage_hourly_models），2026-10-06 按同一截点重导出。重新生成见脚本头注释。",
   "limit_observations": [
     {
       "source_id": "source-a",

@@ -66,6 +66,8 @@ const FAMILY_MATCHERS: Record<Provider, Array<{ family: string; match: (modelLow
   ],
   // Codex 按档位分族（#206）：同一版本前缀下 astra / sol / luna 的额度消耗相差十倍以上，
   // 版本号（gpt-6 / gpt-6.1 / gpt-5.6）不决定消耗。没有档位名的模型（本地 qwen 等）不属于任何族。
+  // 已知风险：将来若出现消耗 Codex 额度却不带档位名的模型（如裸 gpt-7），它会被排除出拟合且
+  // 不进 unattributed，系数会被低估；读侧对其如实显示 unsupported_model。出现新档位时在此补一行。
   codex: [
     { family: "review", match: (m) => m.includes("review") },
     { family: "astra", match: (m) => m.includes("astra") },

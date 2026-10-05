@@ -1,26 +1,35 @@
 """重新生成 ``cloudflare/native-worker/test/calibration_fixture.json``。
 
 这份 fixture 是 #183-a（Worker 官方额度持续校准计算内核）离线测试用的真实数据快照，
-来源是 2026-09-27 对生产 D1（`aiusage-prod-db`）的三条只读导出：
+快照截点为 2026-09-27T10:52Z。最初于 2026-09-27 导出；2026-10-06（#206 档位分族）因原始
+导出已不在，按同一截点与口径从生产 D1（`aiusage-prod-db`）重新只读导出三条结果：
 
 - `limit_window_history` → 官方额度读数（本脚本的 ``--lim`` 输入）
 - `usage_hourly_facts` → 小时级 token 汇总（本脚本的 ``--facts`` 输入）
 - `usage_hourly_models` → 小时 × 模型级 token 明细（本脚本的 ``--models`` 输入）
 
 **fixture 一个字节都不许手写、不许手改**（AGENTS.md：手写 fixture 会和现实脱节，且脱节
-方向正好是「实现者以为的样子」）。要更新它，只能重新导出三份原始查询结果再重跑本脚本：
+方向正好是「实现者以为的样子」）。要更新它，只能重新导出三份原始查询结果再重跑本脚本
+（截点过滤用 ``julianday`` 统一时区；D1 里的小时事实会被后续上报覆盖，截点所在的未结束
+小时无法逐字节复现原快照，2026-10-06 重导出时 claude 2026-09-27 18:00 一小时即被修订）：
 
     cd cloudflare/native-worker
     npx wrangler d1 execute aiusage-prod-db --remote --json \\
       --command "SELECT source_id, provider, used_percent, reset_at, window_duration_minutes, \\
-                        observed_at FROM limit_window_history WHERE window='week'" > /tmp/lim.json
+                        observed_at FROM limit_window_history WHERE window='week' \\
+                 AND julianday(observed_at) <= julianday('2026-09-27T10:52:00Z')" > /tmp/lim.json
     npx wrangler d1 execute aiusage-prod-db --remote --json \\
       --command "SELECT fact_id, source_id, agent, window_start, window_end, input_tokens, \\
                         output_tokens, cache_creation_tokens, cache_read_tokens \\
-                 FROM usage_hourly_facts" > /tmp/facts.json
+                 FROM usage_hourly_facts \\
+                 WHERE julianday(window_start) >= julianday('2026-09-14T00:00:00+08:00') \\
+                   AND julianday(window_start) <= julianday('2026-09-27T10:52:00Z')" > /tmp/facts.json
     npx wrangler d1 execute aiusage-prod-db --remote --json \\
-      --command "SELECT fact_id, model, input_tokens, output_tokens, cache_creation_tokens, \\
-                        cache_read_tokens FROM usage_hourly_models" > /tmp/models.json
+      --command "SELECT m.fact_id, m.model, m.input_tokens, m.output_tokens, m.cache_creation_tokens, \\
+                        m.cache_read_tokens FROM usage_hourly_models m \\
+                 JOIN usage_hourly_facts f ON f.fact_id = m.fact_id \\
+                 WHERE julianday(f.window_start) >= julianday('2026-09-14T00:00:00+08:00') \\
+                   AND julianday(f.window_start) <= julianday('2026-09-27T10:52:00Z')" > /tmp/models.json
     python3 scripts/export_calibration_fixture.py \\
       --lim /tmp/lim.json --facts /tmp/facts.json --models /tmp/models.json \\
       --out cloudflare/native-worker/test/calibration_fixture.json
@@ -200,8 +209,8 @@ def main() -> None:
     fixture = {
         "_comment": (
             "由 scripts/export_calibration_fixture.py 生成，禁止手改。"
-            "来源：2026-09-27 对 aiusage-prod-db 的只读导出（limit_window_history / "
-            "usage_hourly_facts / usage_hourly_models）。重新生成见脚本头注释。"
+            "来源：aiusage-prod-db 截点 2026-09-27T10:52Z 的只读导出（limit_window_history / "
+            "usage_hourly_facts / usage_hourly_models），2026-10-06 按同一截点重导出。重新生成见脚本头注释。"
         ),
         "limit_observations": limit_observations,
         "hourly_family_facts": hourly_family_facts,

@@ -14,6 +14,10 @@
  * 数据完整性问题，不能解决 Codex 账户读数本身漂移大、报告空洞多这些独立问题（详见 Issue
  * #183 数据完整性核查评论第 2、3、5 节）。
  *
+ * 2026-10-06（#206）：Codex 改按档位分族（astra/sol/luna/terra/review），fixture 按同一截点
+ * 重导出。同一快照上 Codex 回测误差从约 5.5 降到约 1.42（仍全部 none）；拿掉的主要是
+ * 「版本前缀族混了消耗相差十倍的档位」这一项，剩余误差来自早期稀疏读数与上游纠正。
+ *
  * 结论对照 #183 设计 v1 §0（数据依据）和数据完整性核查评论：Claude 现在能算出 B 档信号
  * （逐日留出最大误差落在 [10%,25%] 区间）；Codex 因账户读数漂移大、报告空洞多，定级 none
  * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 数据不足（3 天、频繁重置），
@@ -121,7 +125,7 @@ describe("calibration fixture：Claude 定级（逐族）", () => {
 describe("calibration fixture：Codex 定级（设计结论：现在不可用）", () => {
   it("mac-local 9/14–9/20 model 行补扫后，unattributed 门禁不再剔除任何区间，但账户读数漂移大、报告空洞多，全部族仍定级 none", async () => {
     // 补扫前（见本文件头注释）unattributedDroppedIntervals=10、sample_intervals=21、
-    // backtest_max_err≈5.78；补扫后 0 / 34 / ≈5.50——可用区间变多了，但回测误差量级没有
+    // backtest_max_err≈5.78；补扫后 0 / 34 / ≈5.50（#206 档位分族后同一快照 ≈1.42）——可用区间变多了，但回测误差量级没有
     //实质改善（仍是「不可用」>50% 的量级好几倍），跟 Issue #183 数据完整性核查结论一致：
     // model 行缺失只是 Codex 数据问题的一部分，账户读数本身长时间空洞、饱和 plateau 才是
     // 主因，补扫不能单独解决。
