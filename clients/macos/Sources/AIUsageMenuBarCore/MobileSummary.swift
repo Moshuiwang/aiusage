@@ -328,16 +328,18 @@ public struct MobileSourceModel: Codable, Equatable, Sendable, Identifiable {
     public let status: String
     /// #184：服务端按官方额度校准算出的估算（缺省表示不可显示，不是 null——见 quota-estimate.ts 注释）。
     public let quotaEstimate: MobileQuotaEstimate?
+    public let quotaEstimateUnavailable: MobileQuotaEstimateUnavailable?
 
     public var title: String { status == "missing" ? "模型未知" : label }
     public var valueText: String { TokenFormat.compact(tokens) }
 
-    public init(id: String, label: String, tokens: Int, status: String, quotaEstimate: MobileQuotaEstimate? = nil) {
+    public init(id: String, label: String, tokens: Int, status: String, quotaEstimate: MobileQuotaEstimate? = nil, quotaEstimateUnavailable: MobileQuotaEstimateUnavailable? = nil) {
         self.id = id
         self.label = label
         self.tokens = tokens
         self.status = status
         self.quotaEstimate = quotaEstimate
+        self.quotaEstimateUnavailable = quotaEstimateUnavailable
     }
 
     enum CodingKeys: String, CodingKey {
@@ -346,6 +348,26 @@ public struct MobileSourceModel: Codable, Equatable, Sendable, Identifiable {
         case tokens
         case status
         case quotaEstimate = "quota_estimate"
+        case quotaEstimateUnavailable = "quota_estimate_unavailable"
+    }
+}
+
+/// 服务端判定的不可换算原因；误差是账户回测比例，不是额度占比。
+public struct MobileQuotaEstimateUnavailable: Codable, Equatable, Sendable {
+    public let reason: String
+    public let sampleIntervals: Int?
+    public let backtestMaxError: Double?
+
+    public init(reason: String, sampleIntervals: Int? = nil, backtestMaxError: Double? = nil) {
+        self.reason = reason
+        self.sampleIntervals = sampleIntervals
+        self.backtestMaxError = backtestMaxError
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case reason
+        case sampleIntervals = "sample_intervals"
+        case backtestMaxError = "backtest_max_error"
     }
 }
 

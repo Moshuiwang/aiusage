@@ -717,7 +717,7 @@ public enum MenuBarViewModel {
                         // #184：只在 status == "available" 时信任服务端 quota_estimate——非 available
                         // 的模型行（如「模型未知」撤销分摊占位）即便意外带了字段也不能展示估算。
                         let estimate = model.status == "available" ? model.quotaEstimate : nil
-                        let (quotaText, quotaHelpText) = Self.quotaEstimateTexts(estimate)
+                        let (quotaText, quotaHelpText) = Self.quotaEstimateTexts(estimate, unavailable: model.status == "available" ? model.quotaEstimateUnavailable : nil)
                         models.append(MenuServerModelRow(
                             id: "\(row.id)/\(agent.id)/\(model.id)",
                             modelID: model.id,
@@ -760,9 +760,9 @@ public enum MenuBarViewModel {
     /// 数值必须带「≈」——AGENTS.md 关键不变量：不得把估算伪装成官方额度。
     /// 追加：未知 grade（不是 "A"/"B"）视同没有估算——服务端合同只承诺下发 A/B
     /// （见 quota-estimate.ts），客户端不为陌生等级编一句听起来权威的说明。
-    private static func quotaEstimateTexts(_ estimate: MobileQuotaEstimate?) -> (text: String, helpText: String) {
+    private static func quotaEstimateTexts(_ estimate: MobileQuotaEstimate?, unavailable: MobileQuotaEstimateUnavailable?) -> (text: String, helpText: String) {
         guard let estimate, let gradeHelpText = gradePrecisionHelpText(estimate.grade) else {
-            return ("—", "校准中或数据不足，暂不估算")
+            return quotaUnavailableTexts(unavailable)
         }
         let text: String
         if estimate.percent < 0.05 {
@@ -775,6 +775,27 @@ public enum MenuBarViewModel {
             helpText += "；月视图为周均"
         }
         return (text, helpText)
+    }
+
+    private static func quotaUnavailableTexts(_ unavailable: MobileQuotaEstimateUnavailable?) -> (String, String) {
+        switch unavailable?.reason {
+        case "backtest_failed":
+            var help = "换算回测未通过"
+            if let error = unavailable?.backtestMaxError, error.isFinite, error >= 0 {
+                help += String(format: "：账户最大误差%.1f%%（要求≤25%%）", error * 100)
+            }
+            if let samples = unavailable?.sampleIntervals, samples >= 0 {
+                help += "，\(samples)个区间"
+            }
+            return ("未达标", help + "；暂不估算")
+        case "insufficient_data": return ("数据不足", "有效校准数据不足，暂不估算")
+        case "stale": return ("已过期", "校准已过期，暂不估算")
+        case "formula_changed": return ("未校准", "换算口径已更新，等待重新校准")
+        case "not_calibrated": return ("未校准", "尚无可用校准，暂不估算")
+        case "unsupported_model": return ("—", "当前模型尚不支持额度换算")
+        case "unsupported_period": return ("—", "全部历史尚无周额度换算口径")
+        default: return ("—", "校准中或数据不足，暂不估算")
+        }
     }
 
     private static func gradePrecisionHelpText(_ grade: String) -> String? {

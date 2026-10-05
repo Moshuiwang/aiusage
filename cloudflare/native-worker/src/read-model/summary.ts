@@ -8,7 +8,7 @@ import {
 } from "./db";
 import { buildLimitStatus, effectiveLimitWindow } from "./limits-select";
 import { accumulateProviderUsage, buildProviderSlots, buildProviderUsageCoverage, providerTokensByItem } from "./provider-slots";
-import { indexQuotaCalibration, quotaEstimateForModel } from "./quota-estimate";
+import { indexQuotaCalibration, quotaEstimateForModel, quotaEstimateUnavailableForModel } from "./quota-estimate";
 import { buildSourceStatus } from "./source-status";
 import { capTodayHourlyToPeriodTotals, codexHourlyContext, fillTodayHourlyResidual, hourlyTrend } from "./trend";
 import {
@@ -114,6 +114,9 @@ async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: 
       str(row.agent), str(row.model_name), tokens, periodId, startDate, endDate, refTime, quotaCalibrationByKey,
     );
     if (quotaEstimate) breakdown.quota_estimate = quotaEstimate;
+    else breakdown.quota_estimate_unavailable = quotaEstimateUnavailableForModel(
+      str(row.agent), str(row.model_name), periodId, refTime, quotaCalibrationByKey,
+    );
     const list = modelsByItem.get(key) ?? [];
     list.push(breakdown);
     modelsByItem.set(key, list);
