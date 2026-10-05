@@ -226,17 +226,17 @@ final class ServerCardTests: XCTestCase {
         XCTAssertEqual(mac.models.map(\.modelLabel), ["claude-opus", "gpt-6-luna", "gpt-6-sol", "模型未知"])
         XCTAssertEqual(mac.models.map(\.tokens), [300, 200, 100, 50])
 
-        // #180：客户端估算已暂停（等待服务端校准），quotaText 一律「—」——不论 Agent、不论 status。
-        XCTAssertEqual(mac.models[0].quotaText, "—")
-        XCTAssertEqual(mac.models[1].quotaText, "—")
-        XCTAssertEqual(mac.models[2].quotaText, "—")
+        // #248：真实模型收到 owner 的 not_calibrated 诊断；未知占位仍不展示校准状态。
+        XCTAssertEqual(mac.models[0].quotaText, "未校准")
+        XCTAssertEqual(mac.models[1].quotaText, "未校准")
+        XCTAssertEqual(mac.models[2].quotaText, "未校准")
         XCTAssertEqual(mac.models[3].status, "missing")
         XCTAssertEqual(mac.models[3].quotaText, "—")
 
         XCTAssertEqual(linux.models.map(\.modelLabel), ["gpt-6-luna", "gpt-6-sol", "模型未知"])
         XCTAssertEqual(linux.models.map(\.tokens), [200, 100, 50])
-        XCTAssertEqual(linux.models[0].quotaText, "—")
-        XCTAssertEqual(linux.models[1].quotaText, "—")
+        XCTAssertEqual(linux.models[0].quotaText, "未校准")
+        XCTAssertEqual(linux.models[1].quotaText, "未校准")
         XCTAssertEqual(linux.models[2].status, "missing")
         XCTAssertEqual(linux.models[2].quotaText, "—")
 
