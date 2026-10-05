@@ -87,10 +87,22 @@ describe("leaveOneDayOutMaxError", () => {
     iv("2026-09-03T00:00:00Z", 60, 30),
   ];
 
-  it("绝对误差 ≤1 个点的计分日属于整数取整误差，记 0（实际 3、预测 4）", () => {
-    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 3, 2)]), fit);
-    expect(err).not.toBeNull();
-    expect(Math.abs(err as number)).toBeLessThan(0.05);
+  // 固定系数 2 的桩：预测值精确可控，锁住「≤1」的边界，不依赖 NNLS 数值偏差。
+  const fixedFit = () => [2];
+
+  it("绝对误差恰好 1 个点仍属取整误差，记 0（实际 3、预测恰好 4）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 3, 2)]), fixedFit);
+    expect(err).toBe(0);
+  });
+
+  it("容差两个方向对称：低估 1 个点内同样记 0（实际 4、预测 3）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 4, 1.5)]), fixedFit);
+    expect(err).toBe(0);
+  });
+
+  it("低估超过 1 个点仍按相对误差计（实际 20、预测 14 → −30%）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 20, 7)]), fixedFit);
+    expect(err).toBeCloseTo(-0.3, 6);
   });
 
   it("绝对误差超过 1 个点仍按相对误差计（实际 4、预测 6 → +50%）", () => {

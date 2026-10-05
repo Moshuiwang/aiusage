@@ -25,8 +25,9 @@ import type { Grade, Interval } from "./types";
 
 const MIN_DAILY_ACTUAL_DELTA_U = 3;
 /**
- * 官方 used_percent 是整数，小涨幅计分日自带 ±1 点取整误差（3 点日即 ±33%）。产品负责人
- * 2026-10-06 决定（#206）：某天「相对误差 ≤ 门槛」或「绝对误差 ≤ 1 个点」即合格——
+ * Claude / Codex 官方 used_percent 是整数，小涨幅计分日自带 ±1 点取整误差（3 点日即 ±33%）。
+ * 产品负责人 2026-10-06 决定（#206）对所有 provider 统一适用（Antigravity 读数是小数，没有取整
+ * 误差这个理由，统一适用属于产品决定）：某天「相对误差 ≤ 门槛」或「绝对误差 ≤ 1 个点」即合格——
  * 绝对误差在这个范围内的天记 0，其余天照常按相对误差计入最大值，大涨幅日不享受宽限。
  */
 const QUANTIZATION_TOLERANCE_POINTS = 1;
