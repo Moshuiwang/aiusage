@@ -85,7 +85,7 @@ describe.sequential("native TS Worker collector version contract", () => {
   it("accepts an optional collector_release block and echoes the flattened version block", async () => {
     const response = await ingest(ingestPayload({
       collector_release: {
-        collector_version: "0.4.0",
+        collector_version: "0.4.1",
         config_schema_version: 1,
         parser_schema_version: 2,
         release_channel: "stable",
@@ -93,7 +93,7 @@ describe.sequential("native TS Worker collector version contract", () => {
         last_upgrade: {
           status: "succeeded",
           from_version: "0.2.0",
-          to_version: "0.4.0",
+          to_version: "0.4.1",
           finished_at: "2026-06-02T10:00:00+08:00",
         },
       },
@@ -103,17 +103,17 @@ describe.sequential("native TS Worker collector version contract", () => {
     expect(response.status).toBe(200);
     expect(body.status).toBe("accepted");
     expect(body.version).toEqual({
-      collector_version: "0.4.0",
+      collector_version: "0.4.1",
       config_schema_version: 1,
       parser_schema_version: 2,
       release_channel: "stable",
       build_sha: "0a1b2c3d4e5",
       last_upgrade_status: "succeeded",
       last_upgrade_from_version: "0.2.0",
-      last_upgrade_to_version: "0.4.0",
+      last_upgrade_to_version: "0.4.1",
       last_upgrade_finished_at: "2026-06-02T10:00:00+08:00",
       min_supported_collector_version: "0.1.0",
-      target_collector_version: "0.4.0",
+      target_collector_version: "0.4.1",
       rollback_target_version: null,
       state: "current",
       reason: "collector_version_current",

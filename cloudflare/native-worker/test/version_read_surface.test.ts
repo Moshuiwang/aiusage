@@ -117,7 +117,7 @@ const SOURCES = [
     collected_at: "2026-06-03T11:45:00+08:00",
     status: "ok",
     error_message: null as string | null,
-    collector_version: "0.4.0" as string | null,
+    collector_version: "0.4.1" as string | null,
   },
   {
     source_id: "gamma-legacy",
@@ -175,7 +175,7 @@ const SOURCES = [
 /** 每个来源期望的 `source_status[].version`，逐字手写。 */
 const EXPECTED_VERSION_VIEW: Record<string, AnyRecord> = {
   "zeta-current": expectedVersionView({
-    collector_version: "0.4.0",
+    collector_version: "0.4.1",
     state: "current",
     reason: "collector_version_current",
     compatible: true,
@@ -204,7 +204,7 @@ const EXPECTED_VERSION_VIEW: Record<string, AnyRecord> = {
   }),
   "beta-ahead": expectedVersionView({
     collector_version: "0.5.0",
-    rollback_target_version: "0.4.0",
+    rollback_target_version: "0.4.1",
     state: "rollback_available",
     reason: "collector_version_ahead_of_target",
     compatible: true,
@@ -224,7 +224,7 @@ const EXPECTED_SERVER_BLOCK = {
   read_model_version: "1.0.0",
   ingest_schema_version: 1,
   min_supported_collector_version: "0.1.0",
-  target_collector_version: "0.4.0",
+  target_collector_version: "0.4.1",
 };
 
 const EXPECTED_COUNTS = {
@@ -268,7 +268,7 @@ describe.sequential("native TS Worker version read surface", () => {
   it("pins the version policy constants the seeded fixture versions are chosen against", () => {
     // 这条不是产品断言，是防呆：常量一变，下面所有 state 期望都要重挑版本号。
     expect(MIN_SUPPORTED_COLLECTOR_VERSION).toBe("0.1.0");
-    expect(TARGET_COLLECTOR_VERSION).toBe("0.4.0");
+    expect(TARGET_COLLECTOR_VERSION).toBe("0.4.1");
   });
 
   it("exposes the full Python-equivalent version block on every /api/summary source_status entry", async () => {
@@ -302,7 +302,7 @@ describe.sequential("native TS Worker version read surface", () => {
 
     // 不兼容必须同时体现在 compatible 上，不能只改 state 文案。
     expect((bySource.get("gamma-legacy") as AnyRecord).version.compatible).toBe(false);
-    expect((bySource.get("beta-ahead") as AnyRecord).version.rollback_target_version).toBe("0.4.0");
+    expect((bySource.get("beta-ahead") as AnyRecord).version.rollback_target_version).toBe("0.4.1");
   });
 
   it("never marks a source with no reported version as verified", async () => {
@@ -497,7 +497,7 @@ async function seedVersionFixture(db: D1Database): Promise<void> {
   await db.prepare(`
     INSERT INTO collection_runs (id, collected_at, timezone, collector_version, status)
     VALUES (?, ?, ?, ?, ?)
-  `).bind(1, "2026-06-03T11:45:00+08:00", "Asia/Shanghai", "0.4.0", "ok").run();
+  `).bind(1, "2026-06-03T11:45:00+08:00", "Asia/Shanghai", "0.4.1", "ok").run();
 
   for (const source of SOURCES) {
     await db.batch([

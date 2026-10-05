@@ -330,7 +330,7 @@
       "read_model_version": "1.0.0",
       "ingest_schema_version": 1,
       "min_supported_collector_version": "0.1.0",
-      "target_collector_version": "0.4.0"
+      "target_collector_version": "0.4.1"
     },
     "counts": {
       "current": 2,
