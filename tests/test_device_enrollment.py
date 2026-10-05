@@ -2,11 +2,33 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+import io
 
-from ai_usage_widget.device_enrollment import begin, finish, EnrollmentError
+from ai_usage_widget.device_enrollment import begin, finish, request_json, EnrollmentError
 
 
 class EnrollmentTests(unittest.TestCase):
+    def test_all_device_http_methods_use_product_identity_and_preserve_authorization(self):
+        captured = []
+        class Opener:
+            def open(self, request, timeout):
+                captured.append((request, timeout))
+                return io.BytesIO(b'{"status":"ok"}')
+        with patch('ai_usage_widget.device_enrollment.urllib.request.build_opener', return_value=Opener()):
+            for method, body, token in [('POST', {'read_requested': True}, None), ('GET', None, 'test-device'), ('POST', {}, 'test-admin')]:
+                with self.subTest(method=method, token=token):
+                    self.assertEqual(request_json('https://example.test/api/devices/enrollments', method, body, token), {'status':'ok'})
+        self.assertEqual(len(captured), 3)
+        for request, timeout in captured:
+            self.assertEqual(request.get_header('User-agent'), 'AIUsagePusher/1.0')
+            self.assertEqual(request.get_header('Content-type'), 'application/json')
+            self.assertEqual(timeout, 15)
+        self.assertIsNone(captured[0][0].get_header('Authorization'))
+        self.assertEqual(json.loads(captured[0][0].data), {'read_requested':True})
+        self.assertEqual(captured[1][0].get_header('Authorization'), 'Bearer test-device')
+        self.assertEqual(captured[2][0].get_header('Authorization'), 'Bearer test-admin')
+
     def test_begin_sends_hashes_only_and_reuses_private_pending_state(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'pending.json'

@@ -13,6 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import getpass
+from .http_identity import PRODUCT_USER_AGENT
 
 
 class EnrollmentError(ValueError):
@@ -45,7 +46,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def request_json(url, method, body=None, token=None):
-    headers = {'Content-Type': 'application/json'}
+    headers = {'Content-Type': 'application/json', 'User-Agent': PRODUCT_USER_AGENT}
     if token:
         headers['Authorization'] = 'Bearer ' + token
     data = json.dumps(body).encode() if body is not None else None
