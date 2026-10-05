@@ -129,6 +129,42 @@ class TestParseD1RowsReadWritten(unittest.TestCase):
         self.assertEqual(ccu.parse_d1_rows_read_written(response), (None, None))
 
 
+
+class TestUnavailableMainMetrics(unittest.TestCase):
+    def test_optional_resource_counts_preserve_real_zero_and_numeric_strings(self):
+        for value, expected in [(None, None), (0, 0), ("0", 0), ("17845989", 17845989)]:
+            with self.subTest(value=value):
+                self.assertEqual(ccu.optional_int(value), expected)
+
+    def run_offline(self):
+        output = io.StringIO()
+        with patch.object(ccu, "get_cloudflare_token", return_value="synthetic-audit-token"), patch.object(ccu, "query_cf_api", side_effect=OSError("offline failure")) as query, patch.object(ccu, "overall_conclusion", wraps=ccu.overall_conclusion) as conclusion, redirect_stdout(output):
+            code = 0
+            try:
+                ccu.main()
+            except SystemExit as stopped:
+                code = stopped.code
+        self.assertEqual(query.call_count, 4)
+        self.assertEqual(conclusion.call_count, 1)
+        self.assertNotIn("synthetic-audit-token", output.getvalue())
+        return conclusion.call_args.args[0], output.getvalue(), code
+
+    def test_failed_resource_reads_are_unknown_not_zero(self):
+        percentages, output, _ = self.run_offline()
+        self.assertEqual(set(percentages), {"worker_requests", "d1_db_size", "r2_storage", "d1_rows_read", "d1_rows_written"})
+        for metric in percentages:
+            with self.subTest(metric=metric):
+                self.assertIsNone(percentages[metric])
+        self.assertIn("存储空间: 未知", output)
+        self.assertIn("请求量: 未知", output)
+        self.assertNotIn("0.00 MB", output)
+
+    def test_incomplete_audit_exits_nonzero(self):
+        _, output, code = self.run_offline()
+        self.assertEqual(code, 2)
+        self.assertNotIn("结论: 正常", output)
+
+
 class TestD1UsagePercentages(unittest.TestCase):
     def test_known_values_convert_against_free_limits(self):
         read_pct, write_pct = ccu.d1_usage_percentages(2_500_000, 50_000)
