@@ -1,10 +1,14 @@
 /**
  * #183-a：周期切分与重置识别。
  *
- * 同一来源（source_id + provider + window）的官方读数按时间排序后，遇到以下任一条件切出
- * 新周期：
- * - `reset_at` 相对上一条变化超过 2 分钟；
- * - `used_percent` 比上一条下降（额度被重置或被上游纠正）。
+ * 同一 provider 账户下全部 source 的官方读数合并成一条时间线、按时间排序后，`reset_at`
+ * 相对上一条变化超过 2 分钟时切出新周期。
+ *
+ * `reset_at` 不变而 `used_percent` 下降是上游纠正（#206：Codex 2026-09-30 本地 0 token 时
+ * 22→43，数小时后同一 `reset_at` 下纠正回 24），不是重置——生产全部历史里这类下降没有一次
+ * 是真实重置，真实重置都会把 `reset_at` 推后一个窗口。此时回溯丢弃本周期内高于纠正值的
+ * 读数（被撤销的计费），不切周期；否则被撤销的涨幅会作为一段「没有 token 却涨了额度」的
+ * 区间留在训练集里。
  *
  * 但 `used_percent == 0` 时 `reset_at` 本身会每隔一段时间滚动（观察到 Codex 在 used=0 时
  * 每 30 分钟滚动一次 reset_at，不代表真的发生了重置）——这类「全零 + 读数条数很少」的段落
@@ -22,7 +26,7 @@ export interface Cycle {
   readings: LimitObservation[];
 }
 
-/** 按 `source_id` 分组、时间排序，切出周期，丢弃 used=0 的滚动噪音段。 */
+/** 合并时间线按时间排序，切出周期（含上游纠正回溯），丢弃 used=0 的滚动噪音段。 */
 export function splitCycles(observations: LimitObservation[]): Cycle[] {
   const sorted = [...observations].sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
   const rawSegments: LimitObservation[][] = [];
@@ -31,10 +35,12 @@ export function splitCycles(observations: LimitObservation[]): Cycle[] {
     if (current.length > 0) {
       const prev = current[current.length - 1];
       const resetDriftMs = Math.abs(Date.parse(reading.reset_at) - Date.parse(prev.reset_at));
-      const usedDropped = reading.used_percent < prev.used_percent - 0.01;
-      if (resetDriftMs > RESET_AT_DRIFT_TOLERANCE_MS || usedDropped) {
+      if (resetDriftMs > RESET_AT_DRIFT_TOLERANCE_MS) {
         rawSegments.push(current);
         current = [];
+      } else {
+        // 上游纠正：周期内读数单调不减，高于纠正值的只会在末尾。
+        while (current.length > 0 && current[current.length - 1].used_percent > reading.used_percent + 0.01) current.pop();
       }
     }
     current.push(reading);
