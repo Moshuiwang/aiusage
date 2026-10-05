@@ -30,13 +30,36 @@ describe("splitCycles", () => {
     expect(cycles[1].readings).toHaveLength(1);
   });
 
-  it("used_percent 下降时切出新周期（即使 reset_at 没变超过阈值）", () => {
+  it("reset_at 不变而 used_percent 下降是上游纠正：回溯丢弃被撤销的读数，不切周期", () => {
+    // #206 真实序列（Codex 2026-09-30，同一 reset_at）：本地 0 token 时 22→43，数小时后纠正回 24。
+    // 生产全部历史里 reset_at 不变的下降没有一次是真实重置（真实重置都会把 reset_at 推后一周）。
+    const reset = "2026-10-03T16:58:00Z";
     const readings = [
-      obs({ observed_at: "2026-09-01T00:00:00Z", reset_at: "2026-09-08T00:00:00Z", used_percent: 90 }),
-      obs({ observed_at: "2026-09-01T01:00:00Z", reset_at: "2026-09-08T00:00:00Z", used_percent: 3 }),
+      obs({ provider: "codex", observed_at: "2026-09-29T16:51:00Z", reset_at: reset, used_percent: 21 }),
+      obs({ provider: "codex", observed_at: "2026-09-29T17:15:00Z", reset_at: reset, used_percent: 22 }),
+      obs({ provider: "codex", observed_at: "2026-09-29T17:25:00Z", reset_at: reset, used_percent: 43 }),
+      obs({ provider: "codex", observed_at: "2026-09-29T23:01:00Z", reset_at: reset, used_percent: 46 }),
+      obs({ provider: "codex", observed_at: "2026-09-30T01:35:00Z", reset_at: reset, used_percent: 49 }),
+      obs({ provider: "codex", observed_at: "2026-09-30T05:14:00Z", reset_at: reset, used_percent: 24 }),
+      obs({ provider: "codex", observed_at: "2026-09-30T05:19:00Z", reset_at: reset, used_percent: 49 }), // 纠正期间的交错读数
+      obs({ provider: "codex", observed_at: "2026-09-30T05:35:00Z", reset_at: reset, used_percent: 24 }),
+      obs({ provider: "codex", observed_at: "2026-10-01T00:02:00Z", reset_at: reset, used_percent: 25 }),
     ];
     const cycles = splitCycles(readings);
-    expect(cycles).toHaveLength(2);
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0].readings.map((r) => r.used_percent)).toEqual([21, 22, 24, 24, 25]);
+  });
+
+  it("纠正只撤销高于纠正值的读数，纠正之前的正常增长保留", () => {
+    const readings = [
+      obs({ observed_at: "2026-09-01T00:00:00Z", used_percent: 10 }),
+      obs({ observed_at: "2026-09-01T01:00:00Z", used_percent: 12 }),
+      obs({ observed_at: "2026-09-01T02:00:00Z", used_percent: 15 }),
+      obs({ observed_at: "2026-09-01T03:00:00Z", used_percent: 14 }),
+    ];
+    const cycles = splitCycles(readings);
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0].readings.map((r) => r.used_percent)).toEqual([10, 12, 14]);
   });
 
   it("reset_at 漂移在 2 分钟以内、used_percent 不下降时不切周期", () => {
@@ -78,18 +101,19 @@ describe("splitCycles", () => {
     expect(splitCycles(readings)[0].readings).toHaveLength(9);
   });
 
-  it("【变异证据】去掉 used_percent 下降判据后，会把一次真实重置误判成同一个周期", () => {
-    // 模拟「不切重置」的错误实现：只看 reset_at 漂移，不看 used_percent 下降。
+  it("【变异证据】把纠正当成新周期（旧实现）会让被撤销的 +21 留在训练区间里", () => {
+    const reset = "2026-10-03T16:58:00Z";
     const readings = [
-      obs({ observed_at: "2026-09-01T00:00:00Z", reset_at: "2026-09-08T00:00:00Z", used_percent: 95 }),
-      obs({ observed_at: "2026-09-01T01:00:00Z", reset_at: "2026-09-08T00:00:00Z", used_percent: 2 }), // 真实重置，但 reset_at 没变
+      obs({ provider: "codex", observed_at: "2026-09-29T17:15:00Z", reset_at: reset, used_percent: 22 }),
+      obs({ provider: "codex", observed_at: "2026-09-29T17:25:00Z", reset_at: reset, used_percent: 43 }),
+      obs({ provider: "codex", observed_at: "2026-09-30T05:14:00Z", reset_at: reset, used_percent: 24 }),
     ];
-    const brokenSplit = (obsList: LimitObservation[]) => {
-      // 故意只用 reset_at 漂移判据，复刻「不切 used_percent 下降」这个 bug。
+    // 旧实现：used 下降即切新周期，22→43 保留在第一个周期里。
+    const splitOnDrop = (list: LimitObservation[]) => {
       const segs: LimitObservation[][] = [];
       let cur: LimitObservation[] = [];
-      for (const r of obsList) {
-        if (cur.length > 0 && Math.abs(Date.parse(r.reset_at) - Date.parse(cur[cur.length - 1].reset_at)) > 120000) {
+      for (const r of list) {
+        if (cur.length > 0 && r.used_percent < cur[cur.length - 1].used_percent - 0.01) {
           segs.push(cur);
           cur = [];
         }
@@ -98,10 +122,24 @@ describe("splitCycles", () => {
       if (cur.length) segs.push(cur);
       return segs;
     };
-    // 正确实现：2 个周期。
-    expect(splitCycles(readings)).toHaveLength(2);
-    // 「不切 used_percent 下降」的错误实现：只有 1 个（错误地把两次重置状态合并）。
-    expect(brokenSplit(readings)).toHaveLength(1);
+    const broken = splitOnDrop(readings);
+    expect(broken).toHaveLength(2);
+    expect(broken[0].map((r) => r.used_percent)).toEqual([22, 43]);
+    // 正确实现：一个周期，被撤销的 43 不再出现。
+    const cycles = splitCycles(readings);
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0].readings.map((r) => r.used_percent)).toEqual([22, 24]);
+  });
+
+  it("真实重置（reset_at 推后一周）即使 used 下降也仍然切出新周期", () => {
+    const readings = [
+      obs({ observed_at: "2026-09-01T00:00:00Z", reset_at: "2026-09-08T00:00:00Z", used_percent: 95 }),
+      obs({ observed_at: "2026-09-08T01:00:00Z", reset_at: "2026-09-15T00:00:00Z", used_percent: 2 }),
+    ];
+    const cycles = splitCycles(readings);
+    expect(cycles).toHaveLength(2);
+    expect(cycles[0].readings.map((r) => r.used_percent)).toEqual([95]);
+    expect(cycles[1].readings.map((r) => r.used_percent)).toEqual([2]);
   });
 });
 

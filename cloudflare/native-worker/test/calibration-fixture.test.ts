@@ -20,7 +20,7 @@
  *
  * 结论对照 #183 设计 v1 §0（数据依据）和数据完整性核查评论：Claude 现在能算出 B 档信号
  * （逐日留出最大误差落在 [10%,25%] 区间）；Codex 因账户读数漂移大、报告空洞多，定级 none
- * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 数据不足（3 天、频繁重置），
+ * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 原先因读数抖动被误切成碎周期而不足（#206 后 flash 可定级 B），
  * 定级 none。这些是从这份真实 fixture 跑出来的结果，不是预设结论。
  */
 import { readFile } from "node:fs/promises";
@@ -153,12 +153,31 @@ describe("calibration fixture：Codex 定级（设计结论：现在不可用）
   });
 });
 
-describe("calibration fixture：Antigravity（设计结论：数据不足）", () => {
-  it("3 天、频繁重置、样本不足，全部族定级 none", async () => {
+describe("calibration fixture：Antigravity", () => {
+  it("reset_at 不变的小幅回落是读数抖动不是重置：合成 1 个周期后 flash 定级 B，无用量的族 none", async () => {
+    // #206 之前每次不足 1 点的回落都被切成新周期（快照上 18 个碎周期，回测 −34.9%，全部 none）；
+    // 这些回落 reset_at 都没变，不是重置。产品负责人 2026-10-06 同意 Antigravity 据此诚实定级。
     const { limit_observations, hourly_family_facts } = await loadFixture();
-    const out = calibrate("antigravity", limit_observations.filter((r) => r.provider === "antigravity"), hourly_family_facts, { now: NOW });
-    for (const r of out.results) {
-      expect(r.grade).toBe("none");
+    const agObs = limit_observations.filter((r) => r.provider === "antigravity");
+    // 独立从原始读数数出 reset_at 不变的回落（不调用 splitCycles）。
+    const sorted = [...agObs].sort((a, b) => Date.parse(a.observed_at) - Date.parse(b.observed_at));
+    let sameResetDrops = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const sameReset = Math.abs(Date.parse(sorted[i].reset_at) - Date.parse(sorted[i - 1].reset_at)) <= 2 * 60 * 1000;
+      if (sameReset && sorted[i].used_percent < sorted[i - 1].used_percent - 0.01) sameResetDrops++;
+    }
+    expect(sameResetDrops).toBeGreaterThanOrEqual(10);
+    expect(splitCycles(agObs)).toHaveLength(1);
+
+    const out = calibrate("antigravity", agObs, hourly_family_facts, { now: NOW });
+    const byFamily = Object.fromEntries(out.results.map((r) => [r.model_family, r]));
+    expect(Object.keys(byFamily).sort()).toEqual(["claude-on-antigravity", "flash", "pro"]);
+    expect(byFamily.flash.grade).toBe("B");
+    expect(byFamily.flash.effective_delta_u).toBeGreaterThanOrEqual(4);
+    expect(Math.abs(byFamily.flash.backtest_max_err as number)).toBeLessThanOrEqual(0.25);
+    for (const family of ["pro", "claude-on-antigravity"]) {
+      expect(byFamily[family].grade).toBe("none");
+      expect(byFamily[family].effective_delta_u).toBe(0);
     }
   });
 });
