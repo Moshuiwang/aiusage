@@ -21,6 +21,7 @@ import os
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -92,8 +93,11 @@ class StopGateTestCase(unittest.TestCase):
         snapshot: list[str] | None = None,
         use_real_ps: bool = False,
         cwd: Path | None = None,
+        path_prefix: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = {**os.environ, "LC_ALL": "C.UTF-8"}
+        if path_prefix is not None:
+            env["PATH"] = f"{path_prefix}{os.pathsep}{env.get('PATH', '')}"
         if use_real_ps:
             env.pop("AIUSAGE_STOP_GATE_PS", None)
         else:
@@ -187,6 +191,100 @@ class TestChangeScope(StopGateTestCase):
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertFalse(marker.exists(), "跳过标记必须是一次性的")
+
+
+class TestProjectToolchain(StopGateTestCase):
+    """Python 门禁要用项目工具链跑，不能落到 hook PATH 里的系统 python3。
+
+    Claude Code 拉起 hook 时 PATH 不含 `.tools`：Mac mini 上裸 `python3` 是
+    CommandLineTools 的 3.9，缺 `tomllib` / `cryptography`，子进程也找不到 node，
+    固定 3 项与代码无关的失败阻止收口。修法是与 `.tools/env.zsh` 一致地前置
+    node 与 python-venv；门禁本身（测试不绿就阻止）不变。
+
+    用一个记录 PATH 后 exec 真解释器的包装脚本冒充 venv 的 python3：
+    既能证明「用的是它」，又让通过 / 失败仍由真实测试结果决定。
+    """
+
+    NODE_DIR = "node-v22.0.0-darwin-arm64"
+
+    def _install_toolchain(self, root: Path) -> Path:
+        marker = Path(self._tmp.name) / f"venv-python-{root.name}.path"
+        venv_bin = root / ".tools" / "python-venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        wrapper = venv_bin / "python3"
+        wrapper.write_text(
+            f"#!/bin/sh\nprintf '%s\\n' \"$PATH\" > '{marker}'\nexec '{sys.executable}' \"$@\"\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        (root / ".tools" / self.NODE_DIR / "bin").mkdir(parents=True)
+        return marker
+
+    def _ignore_tools(self) -> None:
+        # 与真实仓库一致：`.tools/` 被 gitignore，不算改动、也不会出现在 worktree 里。
+        (self.repo / ".git" / "info" / "exclude").write_text(".tools/\n", encoding="utf-8")
+
+    def test_repo_toolchain_runs_the_suite_with_node_first_on_path(self) -> None:
+        self._ignore_tools()
+        marker = self._install_toolchain(self.repo)
+        (self.repo / "src" / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+
+        result = self._run()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(marker.exists(), "src/ 有改动时必须用 .tools/python-venv 的 python3 跑测试")
+        path_entries = marker.read_text(encoding="utf-8").strip().split(":")
+        tools = (self.repo / ".tools").resolve()
+        self.assertEqual(
+            [Path(entry).resolve() for entry in path_entries[:2]],
+            [tools / self.NODE_DIR / "bin", tools / "python-venv" / "bin"],
+            "PATH 顺序必须与 .tools/env.zsh 一致：node 在前、python-venv 其次",
+        )
+
+    def test_repo_toolchain_still_blocks_on_red_tests(self) -> None:
+        self._ignore_tools()
+        marker = self._install_toolchain(self.repo)
+        (self.repo / "src" / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+        self._write_failing_test()
+
+        result = self._run()
+
+        self.assertTrue(marker.exists(), "必须由项目 venv 跑测试")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Python 测试未通过", result.stderr)
+
+    def test_worktree_without_tools_uses_main_checkout_toolchain(self) -> None:
+        """`.tools/` 被 gitignore，worktree 里永远没有；要回到主检出找。"""
+        self._ignore_tools()
+        marker = self._install_toolchain(self.repo)
+        worktree = Path(self._tmp.name) / "tool-worktree"
+        _git(self.repo, "worktree", "add", "-q", "-b", "feature-tools", str(worktree))
+        self.assertFalse((worktree / ".tools").exists())
+        (worktree / "src" / "app.py").write_text("VALUE = 4\n", encoding="utf-8")
+
+        result = self._run(cwd=worktree)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(marker.exists(), "worktree 会话必须用主检出的 .tools/python-venv")
+
+    def test_without_toolchain_keeps_python3_from_path(self) -> None:
+        """Linux 开发机等没有 `.tools` 时，保持原行为：用 PATH 里的 python3。"""
+        marker = Path(self._tmp.name) / "path-python.path"
+        fake_bin = Path(self._tmp.name) / "fake-bin"
+        fake_bin.mkdir()
+        wrapper = fake_bin / "python3"
+        wrapper.write_text(
+            f"#!/bin/sh\n: > '{marker}'\nexec '{sys.executable}' \"$@\"\n", encoding="utf-8"
+        )
+        wrapper.chmod(0o755)
+        (self.repo / "src" / "app.py").write_text("VALUE = 2\n", encoding="utf-8")
+        self._write_failing_test()
+
+        result = self._run(path_prefix=fake_bin)
+
+        self.assertTrue(marker.exists(), "没有 .tools 时应使用 PATH 中的 python3")
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("Python 测试未通过", result.stderr)
 
 
 class TestResidueDetection(StopGateTestCase):
