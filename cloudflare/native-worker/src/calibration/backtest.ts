@@ -24,6 +24,13 @@ import { predictRow } from "./nnls";
 import type { Grade, Interval } from "./types";
 
 const MIN_DAILY_ACTUAL_DELTA_U = 3;
+/**
+ * Claude / Codex 官方 used_percent 是整数，小涨幅计分日自带 ±1 点取整误差（3 点日即 ±33%）。
+ * 产品负责人 2026-10-06 决定（#206）对所有 provider 统一适用（Antigravity 读数是小数，没有取整
+ * 误差这个理由，统一适用属于产品决定）：某天「相对误差 ≤ 门槛」或「绝对误差 ≤ 1 个点」即合格——
+ * 绝对误差在这个范围内的天记 0，其余天照常按相对误差计入最大值，大涨幅日不享受宽限。
+ */
+const QUANTIZATION_TOLERANCE_POINTS = 1;
 
 /** 一个区间预计算出的、逐日留出回测只需要的最小数据——不再持有整条 Interval。 */
 export interface Sample {
@@ -49,7 +56,7 @@ export function toSamples(intervals: Interval[], keys: string[], weightOf: (inte
 
 /**
  * 逐日留出回测：对每一天，用其余所有天的样本重新拟合，预测这一天各区间 ΔU 之和，
- * 跟这一天区间的实际 ΔU 之和比较相对误差。返回所有天里绝对值最大的相对误差；
+ * 跟这一天区间的实际 ΔU 之和比较相对误差（绝对误差 ≤1 个点的天记 0，见上）。返回所有天里绝对值最大的相对误差；
  * 没有任何一天满足最小 ΔU 门槛（数据太稀疏）时返回 null（意味着无法给出回测证据）。
  */
 export function leaveOneDayOutMaxError(
@@ -75,7 +82,8 @@ export function leaveOneDayOutMaxError(
       train.map((s) => s.weight),
     );
     const predictedSum = test.reduce((s, x) => s + predictRow(x.row, coef), 0);
-    const relErr = (predictedSum - actualSum) / actualSum;
+    const relErr =
+      Math.abs(predictedSum - actualSum) <= QUANTIZATION_TOLERANCE_POINTS ? 0 : (predictedSum - actualSum) / actualSum;
     if (maxErr === null || Math.abs(relErr) > Math.abs(maxErr)) maxErr = relErr;
   }
   return maxErr;

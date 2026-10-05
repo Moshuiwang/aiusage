@@ -79,6 +79,42 @@ describe("leaveOneDayOutMaxError", () => {
     expect(Math.abs(err as number)).toBeLessThan(0.05);
   });
 
+  // #206：官方 used_percent 是整数，3 点的计分日自带 ±1 点（±33%）取整误差。
+  // 产品负责人 2026-10-06 决定：某天「相对误差 ≤ 门槛」或「绝对误差 ≤ 1 个点」即算合格。
+  const perfect = [
+    iv("2026-09-01T00:00:00Z", 20, 10),
+    iv("2026-09-02T00:00:00Z", 40, 20),
+    iv("2026-09-03T00:00:00Z", 60, 30),
+  ];
+
+  // 固定系数 2 的桩：预测值精确可控，锁住「≤1」的边界，不依赖 NNLS 数值偏差。
+  const fixedFit = () => [2];
+
+  it("绝对误差恰好 1 个点仍属取整误差，记 0（实际 3、预测恰好 4）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 3, 2)]), fixedFit);
+    expect(err).toBe(0);
+  });
+
+  it("容差两个方向对称：低估 1 个点内同样记 0（实际 4、预测 3）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 4, 1.5)]), fixedFit);
+    expect(err).toBe(0);
+  });
+
+  it("低估超过 1 个点仍按相对误差计（实际 20、预测 14 → −30%）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 20, 7)]), fixedFit);
+    expect(err).toBeCloseTo(-0.3, 6);
+  });
+
+  it("绝对误差超过 1 个点仍按相对误差计（实际 4、预测 6 → +50%）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 4, 3)]), fit);
+    expect(err).toBeCloseTo(0.5, 2);
+  });
+
+  it("大涨幅日不享受 1 个点宽限（实际 20、预测 26 → +30%）", () => {
+    const err = leaveOneDayOutMaxError(samplesOf([...perfect, iv("2026-09-04T00:00:00Z", 20, 13)]), fit);
+    expect(err).toBeCloseTo(0.3, 2);
+  });
+
   it("没有任何一天的 ΔU 达到门槛时返回 null", () => {
     const intervals = [iv("2026-09-01T00:00:00Z", 1, 0.5), iv("2026-09-02T00:00:00Z", 2, 1)];
     expect(leaveOneDayOutMaxError(samplesOf(intervals), fit)).toBeNull();
