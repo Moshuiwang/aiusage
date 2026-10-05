@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from ai_usage_widget.upgrade import stage_release, preflight, discover
 from ai_usage_widget.signed_release import UpgradeError
+from ai_usage_widget import version_contract
 from ai_usage_widget.upgrade_apply import apply_linux, apply_mac, populate_release_environment
 from ai_usage_widget.deploy_release import ReleasePlan, install_release
 from ai_usage_widget.deploy_units import CollectorUnitSpec
@@ -87,11 +88,11 @@ class UpgradeTests(unittest.TestCase):
             shutil.copyfile(fixture, cache)
             write_status(root, {'usage': {'success': True}, 'limits': {'success': True}})
             with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
-                self.assertTrue(mac_health(root, {'collector_version': '0.4.0'}, 0))
+                self.assertTrue(mac_health(root, {'collector_version': version_contract.COLLECTOR_VERSION}, 0))
             summary['sources'] = []
             cache.write_text(json.dumps(summary))
             with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
-                self.assertFalse(mac_health(root, {'collector_version': '0.4.0'}, 0))
+                self.assertFalse(mac_health(root, {'collector_version': version_contract.COLLECTOR_VERSION}, 0))
 
     def test_mac_health_accepts_recent_owner_cache_without_forcing_another_read(self):
         from ai_usage_widget.upgrade_apply import mac_health
@@ -107,10 +108,10 @@ class UpgradeTests(unittest.TestCase):
             os.utime(cache, (started - 90, started - 90))
             write_status(root, {'usage': {'success': True}, 'limits': {'success': True}})
             with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
-                self.assertTrue(mac_health(root, {'collector_version': '0.4.0'}, started))
+                self.assertTrue(mac_health(root, {'collector_version': version_contract.COLLECTOR_VERSION}, started))
             os.utime(cache, (started - 601, started - 601))
             with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
-                self.assertFalse(mac_health(root, {'collector_version': '0.4.0'}, started))
+                self.assertFalse(mac_health(root, {'collector_version': version_contract.COLLECTOR_VERSION}, started))
 
     def test_mac_failed_health_restores_app_and_keeps_runtime_config(self):
         with tempfile.TemporaryDirectory() as folder:
