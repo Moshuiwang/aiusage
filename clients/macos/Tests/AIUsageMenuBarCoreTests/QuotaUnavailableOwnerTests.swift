@@ -12,7 +12,7 @@ final class QuotaUnavailableOwnerTests: XCTestCase {
         let rows = state.serverCards[0].models
         XCTAssertEqual(rows.count, 8)
         XCTAssertEqual(rows.reduce(0) { $0 + $1.tokens }, 7200)
-        let expected = ["gpt-6-sol": "未达标", "gpt-5.6-sol": "数据不足",
+        let expected = ["gpt-6-sol": "未达标", "gpt-6-luna": "数据不足",
             "claude-sonnet-5": "已过期", "claude-haiku-5": "未校准", "claude-fable-5": "未校准",
             "unmapped-model": "—", "unknown": "—", "claude-opus-5": "≈<0.1%"]
         XCTAssertEqual(Set(rows.map(\.modelID)), Set(expected.keys))

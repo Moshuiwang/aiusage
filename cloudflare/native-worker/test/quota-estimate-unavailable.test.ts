@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { indexQuotaCalibration, quotaEstimateForModel, quotaEstimateUnavailableForModel, type QuotaCalibrationRow } from "../src/read-model/quota-estimate";
 const now = new Date("2026-06-10T12:00:00Z");
-const base: QuotaCalibrationRow = { provider: "codex", model_family: "gpt-6", coef: 0.001,
+const base: QuotaCalibrationRow = { provider: "codex", model_family: "sol", coef: 0.001,
   grade: "B", fitted_at: now.toISOString(), formula_version: "v1", backtest_max_err: 0.2, sample_intervals: 10 };
 
 describe("quota estimate failure gates", () => {

@@ -14,7 +14,7 @@ export async function collectQuotaUnavailableSummary(): Promise<Record<string, a
       VALUES ('quota-owner', 'quota-host', 'quota-host', 'quota-user', 'darwin', ?, ?)`)
       .bind(quotaUnavailableNow, quotaUnavailableNow).run();
     for (const [provider, models] of [
-      ["codex", ["gpt-6-sol", "gpt-5.6-sol", "unmapped-model"]],
+      ["codex", ["gpt-6-sol", "gpt-6-luna", "unmapped-model"]],
       ["claude", ["claude-opus-5", "claude-sonnet-5", "claude-haiku-5", "claude-fable-5"]],
     ] as const) {
       for (const day of ["09", "10"]) {
@@ -35,8 +35,8 @@ export async function collectQuotaUnavailableSummary(): Promise<Record<string, a
       }
     }
     for (const [provider, family, grade, error, sample, fittedAt, formula] of [
-      ["codex", "gpt-6", "none", -2.306, 92, quotaUnavailableNow, "v1"],
-      ["codex", "gpt-5.6", "none", null, 0, quotaUnavailableNow, "v1"],
+      ["codex", "sol", "none", -2.306, 92, quotaUnavailableNow, "v1"],
+      ["codex", "luna", "none", null, 0, quotaUnavailableNow, "v1"],
       ["claude", "opus", "A", 0.05, 20, quotaUnavailableNow, "v1"],
       ["claude", "sonnet", "B", 0.2, 10, "2026-06-01T12:00:00+08:00", "v1"],
       ["claude", "fable", "B", 0.2, 10, quotaUnavailableNow, "v0"],
