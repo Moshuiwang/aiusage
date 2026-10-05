@@ -129,7 +129,7 @@ describe("calibration fixture：Codex 定级（设计结论：现在不可用）
     const codexObs = limit_observations.filter((r) => r.provider === "codex");
     const out = calibrate("codex", codexObs, hourly_family_facts, { now: NOW });
     expect(out.unattributedDroppedIntervals).toBe(0);
-    expect(Object.keys(Object.fromEntries(out.results.map((r) => [r.model_family, r]))).sort()).toEqual(["gpt-5.6", "gpt-6", "review"]);
+    expect(Object.keys(Object.fromEntries(out.results.map((r) => [r.model_family, r]))).sort()).toEqual(["astra", "luna", "review", "sol", "terra"]);
     for (const r of out.results) {
       expect(r.grade).toBe("none");
       // 回测误差仍然巨大（远超「不可用」阈值 0.5），确认「剔除消失」不等于「数据变可用」。

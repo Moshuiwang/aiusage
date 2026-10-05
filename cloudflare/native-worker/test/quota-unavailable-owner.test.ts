@@ -9,7 +9,7 @@ describe("quota unavailable owner fixture", () => {
     const fixture = JSON.parse(await readFile(quotaUnavailableOwnerFixturePath, "utf8"));
     expect(actual).toEqual(fixture);
     const expected: Record<string, string> = {
-      "gpt-6-sol": "backtest_failed", "gpt-5.6-sol": "insufficient_data",
+      "gpt-6-sol": "backtest_failed", "gpt-6-luna": "insufficient_data",
       "unmapped-model": "unsupported_model", "claude-sonnet-5": "stale",
       "claude-haiku-5": "not_calibrated", "claude-fable-5": "formula_changed",
     };
@@ -25,7 +25,7 @@ describe("quota unavailable owner fixture", () => {
       }
       const failed = models.find((m: any) => m.id === "gpt-6-sol");
       expect(failed.quota_estimate_unavailable).toEqual({ reason: "backtest_failed", sample_intervals: 92, backtest_max_error: 2.306 });
-      const insufficient = models.find((m: any) => m.id === "gpt-5.6-sol");
+      const insufficient = models.find((m: any) => m.id === "gpt-6-luna");
       expect(insufficient.quota_estimate_unavailable).toEqual({ reason: "insufficient_data", sample_intervals: 0 });
       const opus = models.find((m: any) => m.id === "claude-opus-5");
       expect(opus.quota_estimate).toEqual({ percent: 0.01, grade: "A", basis: "week" });

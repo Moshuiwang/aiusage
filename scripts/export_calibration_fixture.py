@@ -65,8 +65,10 @@ FAMILY_MATCHERS: dict[str, list[tuple[str, "callable"]]] = {
     ],
     "codex": [
         ("review", lambda m: "review" in m),
-        ("gpt-6", lambda m: m.startswith("gpt-6")),
-        ("gpt-5.6", lambda m: m.startswith("gpt-5.6")),
+        ("astra", lambda m: "astra" in m),
+        ("sol", lambda m: "-sol" in m),
+        ("luna", lambda m: "luna" in m),
+        ("terra", lambda m: "terra" in m),
     ],
     "antigravity": [
         ("flash", lambda m: "flash" in m),

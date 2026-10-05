@@ -15,10 +15,20 @@ describe("familyForModel", () => {
     expect(familyForModel("claude", "deepseek-v4-pro")).toBeNull();
   });
 
-  it("Codex 模型按 review / gpt-6 / gpt-5.6 映射，review 优先于版本号前缀", () => {
+  it("Codex 模型按档位（astra / sol / luna / terra）映射，不按版本号；review 优先", () => {
+    // #206：同一版本前缀下不同档位的额度消耗相差十倍以上，版本号不决定消耗。
     expect(familyForModel("codex", "codex-auto-review")).toBe("review");
-    expect(familyForModel("codex", "gpt-6-astra")).toBe("gpt-6");
-    expect(familyForModel("codex", "gpt-5.6-luna")).toBe("gpt-5.6");
+    expect(familyForModel("codex", "gpt-6-astra")).toBe("astra");
+    expect(familyForModel("codex", "gpt-6-sol")).toBe("sol");
+    expect(familyForModel("codex", "gpt-6.1-sol")).toBe("sol");
+    expect(familyForModel("codex", "gpt-5.6-sol")).toBe("sol");
+    expect(familyForModel("codex", "gpt-6-luna")).toBe("luna");
+    expect(familyForModel("codex", "gpt-5.6-luna")).toBe("luna");
+    expect(familyForModel("codex", "gpt-5.6-terra")).toBe("terra");
+  });
+
+  it("codex agent 下非 OpenAI 档位模型（本地 qwen 等）不属于任何族", () => {
+    expect(familyForModel("codex", "qwen3.8-27b")).toBeNull();
   });
 
   it("Antigravity 模型按 flash / pro / claude-on-antigravity 映射，unknown 模型名不属于任何族", () => {
@@ -39,7 +49,7 @@ describe("KNOWN_FAMILIES", () => {
       expect(KNOWN_FAMILIES[provider].length).toBeGreaterThan(0);
     }
     expect(KNOWN_FAMILIES.claude).toEqual(["opus", "sonnet", "haiku", "fable"]);
-    expect(KNOWN_FAMILIES.codex).toEqual(["review", "gpt-6", "gpt-5.6"]);
+    expect(KNOWN_FAMILIES.codex).toEqual(["review", "astra", "sol", "luna", "terra"]);
     expect(KNOWN_FAMILIES.antigravity).toEqual(["flash", "pro", "claude-on-antigravity"]);
   });
 });

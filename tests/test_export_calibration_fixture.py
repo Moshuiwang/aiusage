@@ -36,10 +36,17 @@ class FamilyForModelTest(unittest.TestCase):
     def test_non_anthropic_model_under_claude_agent_is_unmapped(self):
         self.assertIsNone(family_for_model("claude", "deepseek-v4-pro"))
 
-    def test_codex_families_review_before_version_prefix(self):
+    def test_codex_families_by_tier_not_version_review_first(self):
+        # 必须与 src/calibration/constants.ts 的 FAMILY_MATCHERS.codex 一致（#206 档位分族）。
         self.assertEqual(family_for_model("codex", "codex-auto-review"), "review")
-        self.assertEqual(family_for_model("codex", "gpt-6-astra"), "gpt-6")
-        self.assertEqual(family_for_model("codex", "gpt-5.6-luna"), "gpt-5.6")
+        self.assertEqual(family_for_model("codex", "gpt-6-astra"), "astra")
+        self.assertEqual(family_for_model("codex", "gpt-6-sol"), "sol")
+        self.assertEqual(family_for_model("codex", "gpt-6.1-sol"), "sol")
+        self.assertEqual(family_for_model("codex", "gpt-5.6-sol"), "sol")
+        self.assertEqual(family_for_model("codex", "gpt-6-luna"), "luna")
+        self.assertEqual(family_for_model("codex", "gpt-5.6-luna"), "luna")
+        self.assertEqual(family_for_model("codex", "gpt-5.6-terra"), "terra")
+        self.assertIsNone(family_for_model("codex", "qwen3.8-27b"))
 
     def test_antigravity_families_and_unknown_model_name(self):
         self.assertEqual(family_for_model("antigravity", "gemini-3.8-flash-tiered"), "flash")

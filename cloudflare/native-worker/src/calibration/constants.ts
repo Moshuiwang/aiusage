@@ -64,10 +64,14 @@ const FAMILY_MATCHERS: Record<Provider, Array<{ family: string; match: (modelLow
     { family: "haiku", match: (m) => m.includes("haiku") },
     { family: "fable", match: (m) => m.includes("fable") },
   ],
+  // Codex 按档位分族（#206）：同一版本前缀下 astra / sol / luna 的额度消耗相差十倍以上，
+  // 版本号（gpt-6 / gpt-6.1 / gpt-5.6）不决定消耗。没有档位名的模型（本地 qwen 等）不属于任何族。
   codex: [
     { family: "review", match: (m) => m.includes("review") },
-    { family: "gpt-6", match: (m) => m.startsWith("gpt-6") },
-    { family: "gpt-5.6", match: (m) => m.startsWith("gpt-5.6") },
+    { family: "astra", match: (m) => m.includes("astra") },
+    { family: "sol", match: (m) => m.includes("-sol") },
+    { family: "luna", match: (m) => m.includes("luna") },
+    { family: "terra", match: (m) => m.includes("terra") },
   ],
   antigravity: [
     { family: "flash", match: (m) => m.includes("flash") },
