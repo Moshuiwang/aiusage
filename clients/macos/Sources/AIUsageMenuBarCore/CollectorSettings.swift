@@ -81,7 +81,6 @@ public struct CollectorSettingsStore {
         display["refresh_interval_seconds"] = display["refresh_interval_seconds"] ?? 600
         display["default_period"] = display["default_period"] ?? "today"
         try write(display, to: root.appendingPathComponent("config.json"))
-        try write(device, to: deviceURL)
         if !FileManager.default.fileExists(atPath: limitsURL.path) {
             var providers: [[String: Any]] = []
             let codex = home.appendingPathComponent(".codex/auth.json")
@@ -94,6 +93,19 @@ public struct CollectorSettingsStore {
             }
             try write(["schema_version": 1, "timezone": "Asia/Shanghai", "providers": providers], to: limitsURL)
         }
+        // Reuse the explicitly configured quota account; never guess among multiple accounts.
+        var fingerprintSources = device["account_fingerprint_sources"] as? [String: String] ?? [:]
+        if fingerprintSources["codex"] == nil {
+            let providers = (read(limitsURL)["providers"] as? [[String: Any]] ?? []).filter {
+                $0["provider"] as? String == "codex" && ($0["enabled"] as? Bool ?? true)
+            }
+            let paths = providers.compactMap { ($0["auth_file"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if paths.count == providers.count, Set(paths).count == 1, let path = paths.first {
+                fingerprintSources["codex"] = path
+            }
+        }
+        if !fingerprintSources.isEmpty { device["account_fingerprint_sources"] = fingerprintSources }
+        try write(device, to: deviceURL)
         try setEnabled(!awaitingApproval)
     }
 
