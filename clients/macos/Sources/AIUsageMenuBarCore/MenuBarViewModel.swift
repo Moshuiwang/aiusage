@@ -28,8 +28,6 @@ public struct MenuBarState: Equatable, Sendable {
     public let serverCards: [MenuServerCard]
     /// 标题栏「N 台 Server」只数在线（至少一个 source status == "ok"）的机器。
     public let onlineServerCount: Int
-    /// Server 模型行的额度列头：日/周为直接估算，月为周均换算。
-    public let serverModelQuotaHeader: String
 }
 
 /// #175：一台机器一张 Server 卡。
@@ -406,8 +404,7 @@ public enum MenuBarViewModel {
             ),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage),
             serverCards: cards,
-            onlineServerCount: cards.filter(\.isOnline).count,
-            serverModelQuotaHeader: serverModelQuotaHeader(periodID: summary.period.id)
+            onlineServerCount: cards.filter(\.isOnline).count
         )
     }
 
@@ -750,10 +747,6 @@ public enum MenuBarViewModel {
                 models: models
             )
         }
-    }
-
-    private static func serverModelQuotaHeader(periodID: String) -> String {
-        periodID == "month" ? "周均额度" : "周额度"
     }
 
     /// #184：把服务端 `quota_estimate` 变成展示文本 + 悬停说明。

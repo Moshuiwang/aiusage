@@ -161,7 +161,7 @@ struct MenuBarPopoverView: View {
             }
 
             if !model.state.serverCards.isEmpty {
-                MenuBarServerListView(cards: model.state.serverCards, quotaHeader: model.state.serverModelQuotaHeader)
+                MenuBarServerListView(cards: model.state.serverCards)
             }
         }
         .padding(.horizontal, 10)
