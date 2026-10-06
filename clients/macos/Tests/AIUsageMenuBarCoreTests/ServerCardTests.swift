@@ -149,29 +149,7 @@ final class ServerCardTests: XCTestCase {
     // testMonthWithoutStartDateShowsDashInsteadOfUnadjustedCumulativeNumber /
     // testMonthWithClockSkewBeforeStartDateShowsDashInsteadOfInflatedNumber /
     // testHistoricalFullMonthCountedDaysCapAtPeriodEndDateNotTodaysDate ——随实现一起删除：
-    // 它们验证的换算逻辑已不存在，继续保留就是在测试死代码。列头文案本身还在，用下面这一个测试覆盖三种周期。）
-
-    func testHeaderTextIsWeeklyDirectPhraseForDayAndWeekAndWeeklyAveragedPhraseForMonth() throws {
-        let row = MobileBreakdownRow(id: "m-a", label: "m-a", tokens: 100, sourceIDs: [], agents: [])
-        let weekSummary = makeSummary(periodID: "week", byMachine: [row], sources: [])
-        XCTAssertEqual(
-            MenuBarViewModel.build(from: weekSummary, selectedPeriodID: "week",
-            deviceTimeZone: shanghaiTZForTests).serverModelQuotaHeader,
-            "周额度"
-        )
-        let todaySummary = makeSummary(periodID: "today", byMachine: [row], sources: [])
-        XCTAssertEqual(
-            MenuBarViewModel.build(from: todaySummary, selectedPeriodID: "today",
-            deviceTimeZone: shanghaiTZForTests).serverModelQuotaHeader,
-            "周额度"
-        )
-        let monthSummary = makeSummary(periodID: "month", byMachine: [row], sources: [])
-        XCTAssertEqual(
-            MenuBarViewModel.build(from: monthSummary, selectedPeriodID: "month",
-            deviceTimeZone: shanghaiTZForTests).serverModelQuotaHeader,
-            "周均额度"
-        )
-    }
+    // 它们验证的换算逻辑已不存在，继续保留就是在测试死代码。列头已于 2026-10-06 按产品负责人要求整行移除。）
 
     // MARK: - 独立 Opus 审查追加 #2：非 available 状态的模型一律「—」，不论挂哪个 Agent
 

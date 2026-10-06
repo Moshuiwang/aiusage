@@ -9,12 +9,10 @@ import SwiftUI
 /// 冲掉」的 bug。
 struct MenuBarServerListView: View {
     let cards: [MenuServerCard]
-    let quotaHeader: String
     @StateObject private var expansion: ServerExpansionState
 
-    init(cards: [MenuServerCard], quotaHeader: String, defaults: UserDefaults = .standard) {
+    init(cards: [MenuServerCard], defaults: UserDefaults = .standard) {
         self.cards = cards
-        self.quotaHeader = quotaHeader
         _expansion = StateObject(wrappedValue: ServerExpansionState(defaults: defaults))
     }
 
@@ -23,7 +21,6 @@ struct MenuBarServerListView: View {
             ForEach(cards) { card in
                 MenuBarServerCardView(
                     card: card,
-                    quotaHeader: quotaHeader,
                     isExpanded: expansion.isExpanded(card.id),
                     onToggle: { expansion.toggle(card.id) }
                 )
@@ -34,7 +31,6 @@ struct MenuBarServerListView: View {
 
 private struct MenuBarServerCardView: View {
     let card: MenuServerCard
-    let quotaHeader: String
     let isExpanded: Bool
     let onToggle: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -96,16 +92,8 @@ private struct MenuBarServerCardView: View {
     }
 
     private var expandedContent: some View {
+        // 产品负责人 2026-10-06：「模型 / 用量 / 周额度」列头没有信息量，去掉。
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 8) {
-                Text("模型").frame(maxWidth: .infinity, alignment: .leading)
-                Text("用量")
-                Text(quotaHeader).frame(width: 92, alignment: .trailing)
-            }
-            .font(.system(size: 10))
-            .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-            .padding(.leading, 15)
-
             if card.models.isEmpty {
                 Text("暂无模型明细")
                     .font(.caption)
