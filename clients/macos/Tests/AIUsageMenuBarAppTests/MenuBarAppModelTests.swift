@@ -115,7 +115,7 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertNotNil(hosting.view.window)
         // 宽度恒为 360，与内容多少无关。
         XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
-        let maxHeight = MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+        let maxHeight = MenuBarPopoverLayout.maxPopoverHeight(screenHeight: NSScreen.main?.visibleFrame.height)
         // 40 台 Server 的可滚动内容区必须被 frame(maxHeight:) 夹到上限——这条在生产代码里
         // 去掉 `.frame(maxHeight: maxContentHeight)`（或把 maxContentHeight 传成 .infinity）
         // 时会红：document.frame.height 会远超 maxHeight，下面这条断言直接失败。
@@ -125,6 +125,12 @@ final class MenuBarAppModelTests: XCTestCase {
         let document = try XCTUnwrap(scroll.documentView)
         XCTAssertGreaterThan(scroll.frame.height, 120)
         XCTAssertLessThanOrEqual(scroll.frame.height, maxHeight + 1)
+        // #259：上限约束的是**整个弹窗**（标题栏 + 内容）。旧实现只夹滚动区，标题栏把总高推到
+        // 「上限 + 标题栏高度」，超出屏幕后 AppKit 重新摆放 popover（顶部被截、错位）。
+        XCTAssertLessThanOrEqual(hosting.preferredContentSize.height, maxHeight + 1)
+        XCTAssertLessThanOrEqual(popover.contentSize.height, maxHeight + 1)
+        // 结构下限：确实触到了上限（不是内容太少而碰巧没超）。
+        XCTAssertGreaterThan(hosting.preferredContentSize.height, maxHeight - 40)
         // 40 台 Server（即便折叠）必须比可视区高得多，才是这条测试要守护的"确实会溢出"场景。
         XCTAssertGreaterThan(document.frame.height, scroll.contentView.bounds.height + 50)
         let bottom = document.frame.height - scroll.contentView.bounds.height
@@ -162,7 +168,7 @@ final class MenuBarAppModelTests: XCTestCase {
 
         // 宽度恒为 360。
         XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
-        let maxHeight = MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+        let maxHeight = MenuBarPopoverLayout.maxPopoverHeight(screenHeight: NSScreen.main?.visibleFrame.height)
         // 少内容：preferredContentSize.height 必须贴合内容理想高度（差 ≤2pt），且显著小于
         // maxContentHeight——不强行撑到上限留白。hosting controller 取自生产工厂
         // MenuBarPopoverLayout.makeHostingController；工厂不设 sizingOptions 时 preferredContentSize
@@ -255,7 +261,7 @@ final class MenuBarAppModelTests: XCTestCase {
     func testPopoverLayoutUsesMeasuredContentHeight() {
         // #177：Popover v2 定稿宽度收窄到 360pt（HANDOFF.md 第 3 节），预期值随设计变更更新。
         XCTAssertEqual(MenuBarPopoverLayout.width, 360)
-        XCTAssertEqual(MenuBarPopoverLayout.maxContentHeight(screenHeight: 922), 874)
+        XCTAssertEqual(MenuBarPopoverLayout.maxPopoverHeight(screenHeight: 922), 874)
     }
 
     /// #177 第三轮真机反馈：展开 Server 卡片非常慢的根因——`NSPopover.animates` 默认 true，

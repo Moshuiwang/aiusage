@@ -43,6 +43,8 @@ final class MenuBarAppModel: ObservableObject {
     private let cacheFreshnessInterval: TimeInterval
     private var refreshSequence = 0
     @Published private(set) var hasLoadedUsableSummary: Bool
+    /// #259：状态栏图标所在屏幕的可用高度，弹出前由 StatusBarController 写入，用于弹窗限高。
+    @Published var popoverScreenHeight: CGFloat?
     private var todayRefreshSequence = 0
     private var cachedSummaries: [String: CachedMenuSummary]
     private var cacheReferenceDate: Date

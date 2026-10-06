@@ -19,8 +19,8 @@ struct MenuBarPopoverView: View {
         self.onMore = onMore
     }
 
-    private var maxContentHeight: CGFloat {
-        MenuBarPopoverLayout.maxContentHeight(screenHeight: NSScreen.main?.visibleFrame.height)
+    private var maxPopoverHeight: CGFloat {
+        MenuBarPopoverLayout.maxPopoverHeight(screenHeight: model.popoverScreenHeight ?? NSScreen.main?.visibleFrame.height)
     }
 
     // 性能第二步：改用 NSHostingController.sizingOptions = [.preferredContentSize]（由
@@ -31,6 +31,8 @@ struct MenuBarPopoverView: View {
     // 实测过 ViewThatFits(先裸内容、超限才落回 ScrollView) 在真实内容（多 Server 卡片）逼近
     // maxContentHeight 边界时不会被外层 frame(maxHeight:) 夹住（量出 935pt，上限 875pt）——
     // 换成单一 ScrollView + frame(maxHeight:) 后同样场景稳定夹在上限内，见测试。
+    // #259：上限加在整个 VStack（标题栏 + 内容）上，ScrollView 拿剩余高度；只夹滚动区时
+    // 标题栏会把弹窗总高推出屏幕。
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -40,10 +42,10 @@ struct MenuBarPopoverView: View {
                 ScrollView {
                     mainContent
                 }
-                .frame(maxHeight: maxContentHeight)
             }
         }
         .frame(width: MenuBarPopoverLayout.width)
+        .frame(maxHeight: maxPopoverHeight)
     }
 
     // MARK: – Header
