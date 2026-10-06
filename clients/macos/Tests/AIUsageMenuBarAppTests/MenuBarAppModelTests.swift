@@ -274,7 +274,7 @@ final class MenuBarAppModelTests: XCTestCase {
         let model = MenuBarAppModel(
             paths: try temporaryRuntimePaths(), config: testConfig(),
             cachedSummaries: ["today": CachedMenuSummary(
-                summary: try manyServerCardsSummary(periodID: "today", machineCount: 3), fetchedAt: now
+                summary: try manyServerCardsSummary(periodID: "today", machineCount: 1), fetchedAt: now
             )], now: { now }, loadSummary: loader.load
         )
         let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
@@ -294,7 +294,10 @@ final class MenuBarAppModelTests: XCTestCase {
         popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
         try await Task.sleep(nanoseconds: 300_000_000)
         let settled = hosting.preferredContentSize.height
+        // 上限随运行机器屏幕变化（CI 虚拟机屏幕小，约 633pt），断言一律相对上限表达。
+        let maxHeight = MenuBarPopoverLayout.maxPopoverHeight(screenHeight: NSScreen.main?.visibleFrame.height)
         XCTAssertGreaterThan(settled, 300, "结构下限：切换前确实有带 Server 卡片的完整内容")
+        XCTAssertLessThan(settled, maxHeight - 60, "结构下限：切换前离上限有增长空间，后面的增长断言才有意义")
 
         model.refresh(periodID: "month")
         XCTAssertTrue(model.isLoading)
@@ -302,10 +305,59 @@ final class MenuBarAppModelTests: XCTestCase {
         try await Task.sleep(nanoseconds: 200_000_000)
         XCTAssertGreaterThanOrEqual(hosting.preferredContentSize.height, settled - 1, "加载期间面板不得塌缩")
 
+        try await loader.waitForRequestCount(1)
         await loader.complete(period: "month", summary: try manyServerCardsSummary(periodID: "month", machineCount: 12))
         await waitUntil { model.hasLoadedUsableSummary && !model.isLoading }
         try await Task.sleep(nanoseconds: 200_000_000)
-        XCTAssertGreaterThan(hosting.preferredContentSize.height, settled + 50, "数据到达后调整到新内容高度")
+        XCTAssertGreaterThanOrEqual(
+            hosting.preferredContentSize.height, min(settled + 50, maxHeight - 1),
+            "数据到达后调整到新内容高度（内容超过上限时夹在上限）"
+        )
+    }
+
+    /// 反向守卫（PR #268 审查）：托住只发生在加载期间——数据到达后内容变矮必须收回，再次切换时
+    /// 托住的是新的较小高度。防止「永远托住、只增不减」。
+    func testHeightHoldReleasesWhenNewPeriodIsShorter() async throws {
+        _ = NSApplication.shared
+        let loader = ControlledSummaryLoader()
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(),
+            cachedSummaries: ["today": CachedMenuSummary(
+                summary: try manyServerCardsSummary(periodID: "today", machineCount: 12), fetchedAt: now
+            )], now: { now }, loadSummary: loader.load
+        )
+        let hosting = MenuBarPopoverLayout.makeHostingController(rootView: MenuBarPopoverView(model: model))
+        let popover = NSPopover()
+        MenuBarPopoverLayout.configure(popover)
+        popover.contentViewController = hosting
+        let anchorWindow = NSWindow(
+            contentRect: NSRect(x: -10_000, y: -10_000, width: 20, height: 20),
+            styleMask: .borderless, backing: .buffered, defer: false
+        )
+        anchorWindow.isReleasedWhenClosed = false
+        let anchor = NSButton(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+        anchorWindow.contentView?.addSubview(anchor)
+        anchorWindow.orderFront(nil)
+        defer { popover.close(); anchorWindow.close() }
+        model.refresh(periodID: "today")
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        let tall = hosting.preferredContentSize.height
+
+        model.refresh(periodID: "month")
+        try await loader.waitForRequestCount(1)
+        await loader.complete(period: "month", summary: try manyServerCardsSummary(periodID: "month", machineCount: 1))
+        await waitUntil { model.hasLoadedUsableSummary && !model.isLoading }
+        try await Task.sleep(nanoseconds: 200_000_000)
+        let short = hosting.preferredContentSize.height
+        XCTAssertLessThan(short, tall - 50, "数据到达后内容变矮必须收回，不能一直托在旧高度")
+
+        model.refresh(periodID: "week")
+        XCTAssertTrue(model.isLoading)
+        XCTAssertFalse(model.hasLoadedUsableSummary)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(hosting.preferredContentSize.height, short, accuracy: 1, "再次切换时托住的是新的较小高度")
     }
 
     private func descendants(of view: NSView) -> [NSView] {
