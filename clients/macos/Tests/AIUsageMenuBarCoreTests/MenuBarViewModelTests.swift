@@ -1283,11 +1283,12 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(notOk.primaryPctText, "—")
 
         // missing 但带着 App 层嫁接回来的「最近成功值」窗口（官方/observed/ok）：仍必须降级
+        // #203：Claude 只用周窗口，这里用周窗口继续守「最近成功值必须降级、不泄露 %」。
         let keptLastSuccess = try ring(windows: [
             MobileLimitWindow(
-                sourceID: "s", provider: "claude", window: "session",
+                sourceID: "s", provider: "claude", window: "week",
                 usedPercent: 80, remainingPercent: 20, resetAt: "2026-07-18T18:00:00+08:00",
-                windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
+                windowDurationMinutes: 10080, observedAt: "2026-07-18T09:00:00+08:00",
                 sourceType: "official_cli", confidence: "observed", status: "ok", official: true
             )
         ], status: "missing", reason: "provider_failed")
@@ -1375,20 +1376,21 @@ final class MenuBarViewModelTests: XCTestCase {
     /// #177 第四轮真机反馈：悬停浮层的 7d/5h 两行改成具体北京时间重置时刻（而不是倒计时），
     /// 格式「今天/明天 HH:mm」或「M月d日 周X HH:mm」；圆环旁的倒计时（resetCountdownText）保持不变。
     func testQuotaRingHoverRowsShowAbsoluteResetMomentInsteadOfCountdown() throws {
+        // #203：Claude 只用周窗口；本测试守的是重置时刻格式化，改用仍保留 5h 窗口的 Antigravity。
         let summary = try loadFixture()
         let slot = providerSlot(
-            provider: "claude",
+            provider: "antigravity",
             windows: [
                 // 同一天：session 窗口今天 18:00 重置
                 MobileLimitWindow(
-                    sourceID: "s", provider: "claude", window: "session",
+                    sourceID: "s", provider: "antigravity", window: "session",
                     usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-18T18:00:00+08:00",
                     windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
                     sourceType: "official_cli", confidence: "observed", status: "ok", official: true
                 ),
                 // 2026-07-20 是周一，距 now（2026-07-18 周六）相差 2 天，不是「明天」。
                 MobileLimitWindow(
-                    sourceID: "s", provider: "claude", window: "week",
+                    sourceID: "s", provider: "antigravity", window: "week",
                     usedPercent: 26, remainingPercent: 74, resetAt: "2026-07-20T00:00:00+08:00",
                     windowDurationMinutes: 10080, observedAt: "2026-07-18T09:00:00+08:00",
                     sourceType: "official_cli", confidence: "observed", status: "ok", official: true
@@ -1401,25 +1403,26 @@ final class MenuBarViewModelTests: XCTestCase {
             quotaSlots: [slot]
         ,
             deviceTimeZone: shanghaiTZForTests)
-        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        XCTAssertEqual(claude.hoverRows.count, 2)
-        let sessionRow = try XCTUnwrap(claude.hoverRows.first { $0.valueText.contains("40%") })
+        let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "antigravity" })
+        XCTAssertEqual(ring.hoverRows.count, 2)
+        let sessionRow = try XCTUnwrap(ring.hoverRows.first { $0.valueText.contains("40%") })
         XCTAssertTrue(sessionRow.valueText.contains("今天 18:00"), "got: \(sessionRow.valueText)")
         // 圆环旁的倒计时保持原有格式不变（不受本次改动影响）。
-        XCTAssertEqual(claude.resetCountdownText, "8h 0min")
+        XCTAssertEqual(ring.resetCountdownText, "8h 0min")
 
-        let weekRow = try XCTUnwrap(claude.hoverRows.first { $0.valueText.contains("26%") })
+        let weekRow = try XCTUnwrap(ring.hoverRows.first { $0.valueText.contains("26%") })
         XCTAssertTrue(weekRow.valueText.contains("7月20日 周一 00:00"), "got: \(weekRow.valueText)")
     }
 
     /// 明天重置：resetAt 落在「明天」时格式为「明天 HH:mm」。
     func testQuotaRingHoverRowsShowTomorrowForNextDayReset() throws {
+        // #203：Claude 只用周窗口；本测试守的是重置时刻格式化，改用仍保留 5h 窗口的 Antigravity。
         let summary = try loadFixture()
         let slot = providerSlot(
-            provider: "claude",
+            provider: "antigravity",
             windows: [
                 MobileLimitWindow(
-                    sourceID: "s", provider: "claude", window: "session",
+                    sourceID: "s", provider: "antigravity", window: "session",
                     usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-19T09:00:00+08:00",
                     windowDurationMinutes: 300, observedAt: "2026-07-18T09:00:00+08:00",
                     sourceType: "official_cli", confidence: "observed", status: "ok", official: true
@@ -1432,8 +1435,8 @@ final class MenuBarViewModelTests: XCTestCase {
             quotaSlots: [slot]
         ,
             deviceTimeZone: shanghaiTZForTests)
-        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        let sessionRow = try XCTUnwrap(claude.hoverRows.first)
+        let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "antigravity" })
+        let sessionRow = try XCTUnwrap(ring.hoverRows.first)
         XCTAssertTrue(sessionRow.valueText.contains("明天 09:00"), "got: \(sessionRow.valueText)")
     }
 
@@ -1468,13 +1471,14 @@ final class MenuBarViewModelTests: XCTestCase {
     ///   旧实现按 summary 时区会显示「明天 04:00」；洛杉矶同为 7/18——新实现须显示「今天 13:00」）。
     /// （#177 时代的同名测试断言方向相反——那是变更前的旧行为，已随本 Issue 决策翻转。）
     func testQuotaRingHoverRowsUseDeviceTimezoneNotSummaryTimezoneForResetMoment() throws {
+        // #203：Claude 只用周窗口；本测试守的是重置时刻格式化，改用仍保留 5h 窗口的 Antigravity。
         let summary = try loadFixture() // fixture timezone 固定 "Asia/Shanghai"。
         let losAngeles = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
         let slot = providerSlot(
-            provider: "claude",
+            provider: "antigravity",
             windows: [
                 MobileLimitWindow(
-                    sourceID: "s", provider: "claude", window: "session",
+                    sourceID: "s", provider: "antigravity", window: "session",
                     usedPercent: 40, remainingPercent: 60,
                     resetAt: "2026-07-18T13:00:00-07:00",
                     windowDurationMinutes: 300, observedAt: "2026-07-18T07:30:00-07:00",
@@ -1488,25 +1492,26 @@ final class MenuBarViewModelTests: XCTestCase {
             quotaSlots: [slot]
         ,
             deviceTimeZone: losAngeles)
-        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        let row = try XCTUnwrap(claude.hoverRows.first)
+        let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "antigravity" })
+        let row = try XCTUnwrap(ring.hoverRows.first)
         XCTAssertTrue(row.valueText.contains("今天 13:00"), "got: \(row.valueText)")
 
         // #186 补充覆盖：额度环旁的 updatedText 同样是「时刻类」——observedAt "2026-07-18T07:30:00-07:00"
         // 换算到本机（洛杉矶）与 now（洛杉矶 08:00 同一天）同日，应显示 "07:30 更新"，不是北京时间。
-        XCTAssertEqual(claude.updatedText, "07:30 更新")
+        XCTAssertEqual(ring.updatedText, "07:30 更新")
     }
 
     /// #177 第四轮 Opus 审查防回归：跨午夜——now 是北京时间 23:30，resetAt 是次日 00:30，
     /// 必须判定为「明天」。用 UTC 反证：同一对时刻换算到 UTC 是同一个 UTC 日（15:30 → 16:30），
     /// 不会跨天，如果实现误用 UTC 计算日期差就会错误显示「今天」。
     func testQuotaRingHoverRowsHandleCrossMidnightInShanghaiTimezone() throws {
+        // #203：Claude 只用周窗口；本测试守的是重置时刻格式化，改用仍保留 5h 窗口的 Antigravity。
         let summary = try loadFixture()
         let slot = providerSlot(
-            provider: "claude",
+            provider: "antigravity",
             windows: [
                 MobileLimitWindow(
-                    sourceID: "s", provider: "claude", window: "session",
+                    sourceID: "s", provider: "antigravity", window: "session",
                     usedPercent: 40, remainingPercent: 60, resetAt: "2026-07-19T00:30:00+08:00",
                     windowDurationMinutes: 300, observedAt: "2026-07-18T23:00:00+08:00",
                     sourceType: "official_cli", confidence: "observed", status: "ok", official: true
@@ -1519,8 +1524,8 @@ final class MenuBarViewModelTests: XCTestCase {
             quotaSlots: [slot]
         ,
             deviceTimeZone: shanghaiTZForTests)
-        let claude = try XCTUnwrap(state.quotaRings.first { $0.id == "claude" })
-        let row = try XCTUnwrap(claude.hoverRows.first)
+        let ring = try XCTUnwrap(state.quotaRings.first { $0.id == "antigravity" })
+        let row = try XCTUnwrap(ring.hoverRows.first)
         XCTAssertTrue(row.valueText.contains("明天 00:30"), "got: \(row.valueText)")
     }
 
