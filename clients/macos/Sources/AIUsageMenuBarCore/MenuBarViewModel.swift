@@ -961,11 +961,14 @@ public enum MenuBarViewModel {
             case "antigravity": name = "Antigravity"
             default: name = provider.prefix(1).uppercased() + provider.dropFirst()
             }
-            let hasVisibleWindow = outerWindow != nil || weekWindow != nil
+            // #203：Claude 只用周窗口展示（百分比、倒计时、悬停）——5 小时窗口的重置时间对用户
+            // 没有意义；周窗口缺失时显示「—」，不退回 5 小时窗口。Codex 只有周窗口；Antigravity 不变。
+            let displayOuterWindow = provider == "claude" ? nil : outerWindow
+            let hasVisibleWindow = displayOuterWindow != nil || weekWindow != nil
             // 「最近成功值」（quota 非 available 但保留了旧窗口）也必须降级，不当可信额度展示。
             let isAvailable = slot.quota.status == "available" && hasVisibleWindow
-            let primaryWindow = isAvailable ? (weekWindow ?? outerWindow) : nil
-            let nearestResetWindow = [outerWindow, weekWindow]
+            let primaryWindow = isAvailable ? (weekWindow ?? displayOuterWindow) : nil
+            let nearestResetWindow = [displayOuterWindow, weekWindow]
                 .filter { _ in isAvailable }
                 .compactMap { $0 }
                 .compactMap { window -> (MobileLimitWindow, Date)? in
@@ -991,7 +994,7 @@ public enum MenuBarViewModel {
                             ].joined(separator: " · ")
                         )
                     },
-                    outerWindow.map { window in
+                    displayOuterWindow.map { window in
                         QuotaHoverRow(
                             label: windowLabel(window),
                             valueText: [
