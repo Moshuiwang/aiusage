@@ -7,6 +7,8 @@ struct MenuBarPopoverView: View {
     var onQuit: (() -> Void)?
     var onMore: (() -> Void)?
     @State private var periodMenuOpen = false
+    /// 最近一次数据就绪时的整窗高度；切到无缓存周期、加载期间用它托住面板，不塌成空状态。
+    @State private var settledHeight: CGFloat = 0
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     init(
@@ -45,7 +47,24 @@ struct MenuBarPopoverView: View {
             }
         }
         .frame(width: MenuBarPopoverLayout.width)
+        // 产品负责人 2026-10-06 真机反馈：切到无缓存周期时面板先塌成「正在读取…」、约 1 秒后
+        // 数据到达再撑开，表现为上下错位。加载期间保持切换前的高度，数据到达后一次调整到位。
+        .frame(minHeight: isLoadingNewPeriod ? min(settledHeight, maxPopoverHeight) : nil, alignment: .top)
         .frame(maxHeight: maxPopoverHeight)
+        .background(GeometryReader { geometry in
+            Color.clear
+                .onAppear { recordSettledHeight(geometry.size.height) }
+                .onChange(of: geometry.size.height) { _, height in recordSettledHeight(height) }
+        })
+    }
+
+    private var isLoadingNewPeriod: Bool {
+        model.isLoading && !model.hasLoadedUsableSummary
+    }
+
+    private func recordSettledHeight(_ height: CGFloat) {
+        guard !isLoadingNewPeriod else { return }
+        settledHeight = height
     }
 
     // MARK: – Header
