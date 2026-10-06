@@ -117,7 +117,7 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
         let maxHeight = MenuBarPopoverLayout.maxPopoverHeight(screenHeight: NSScreen.main?.visibleFrame.height)
         // 40 台 Server 的可滚动内容区必须被 frame(maxHeight:) 夹到上限——这条在生产代码里
-        // 去掉 `.frame(maxHeight: maxContentHeight)`（或把 maxContentHeight 传成 .infinity）
+        // 去掉外层 `.frame(maxHeight: maxPopoverHeight)`（或把 maxPopoverHeight 传成 .infinity）
         // 时会红：document.frame.height 会远超 maxHeight，下面这条断言直接失败。
         let scrollViews = descendants(of: hosting.view).compactMap { $0 as? NSScrollView }
         XCTAssertEqual(scrollViews.count, 1)
@@ -170,7 +170,7 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(popover.contentSize.width, MenuBarPopoverLayout.width)
         let maxHeight = MenuBarPopoverLayout.maxPopoverHeight(screenHeight: NSScreen.main?.visibleFrame.height)
         // 少内容：preferredContentSize.height 必须贴合内容理想高度（差 ≤2pt），且显著小于
-        // maxContentHeight——不强行撑到上限留白。hosting controller 取自生产工厂
+        // maxPopoverHeight——不强行撑到上限留白。hosting controller 取自生产工厂
         // MenuBarPopoverLayout.makeHostingController；工厂不设 sizingOptions 时 preferredContentSize
         // 停留在 .zero，下面第一条断言失败。
         XCTAssertLessThanOrEqual(abs(hosting.preferredContentSize.height - fittingHeightBeforeShow), 2)
