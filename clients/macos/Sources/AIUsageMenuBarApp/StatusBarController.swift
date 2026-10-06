@@ -7,11 +7,14 @@ import SwiftUI
 enum MenuBarPopoverLayout {
     /// #177：Popover v2 定稿宽度（HANDOFF.md 第 3 节），从旧版 380pt 收窄到设计值 360pt。
     static let width: CGFloat = 360
-    static let bottomMargin: CGFloat = 48
+    /// 弹窗箭头、窗口边框与底部留白。#259：上限约束的是**整个弹窗**（标题栏 + 内容），
+    /// 不是只约束滚动区——只约束滚动区时，标题栏（约 50pt）会把弹窗总高推到超过屏幕，
+    /// AppKit 随即重新摆放 popover，表现为切换周期后顶部被截、整体错位。
+    static let screenMargin: CGFloat = 48
 
-    static func maxContentHeight(screenHeight: CGFloat?) -> CGFloat {
+    static func maxPopoverHeight(screenHeight: CGFloat?) -> CGFloat {
         let baseHeight = screenHeight ?? 800
-        return max(320, baseHeight - bottomMargin)
+        return max(320, baseHeight - screenMargin)
     }
 
     /// Popover 内容的 hosting controller：交给系统按 SwiftUI 理想尺寸维护 preferredContentSize。
@@ -291,6 +294,8 @@ final class StatusBarController: NSObject {
             popover.performClose(sender)
         } else {
             model.refresh()
+            // #259：按状态栏图标所在屏幕限高，而不是当前焦点屏幕（NSScreen.main）。
+            model.popoverScreenHeight = button.window?.screen?.visibleFrame.height
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             configurePopoverWindow()
             popover.contentViewController?.view.window?.makeKey()
