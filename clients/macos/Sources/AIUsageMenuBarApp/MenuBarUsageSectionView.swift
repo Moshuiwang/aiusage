@@ -8,8 +8,6 @@ struct MenuBarUsageSectionView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     @State private var menuMode: String = "week"
-    @State private var showDatePicker = false
-    @State private var pickedDate = Date()
     // #177 Opus 审查：periodMenuRows 会读盘（内存/磁盘缓存），不能放在 body 里当计算属性用——
     // 改成只在 selection 变化时算一次的缓存，菜单列表只在打开菜单时才计算。
     // 性能第二步：hoveredBar/hoverLocation 已下沉到 MenuBarTrendChartView 自己持有，
@@ -22,7 +20,6 @@ struct MenuBarUsageSectionView: View {
             HStack(spacing: 8) {
                 Button {
                     menuMode = model.selectedPeriodID
-                    showDatePicker = false
                     cachedMenuRows = model.periodMenuRows(for: menuMode)
                     periodMenuOpen = true
                 } label: {
@@ -97,38 +94,17 @@ struct MenuBarUsageSectionView: View {
 
     // MARK: – Period menu popover (原生 .popover：独立窗口，点外部/Esc 自动关闭，不被兄弟视图截断)
 
-    @ViewBuilder
     private var periodMenuPopoverContent: some View {
-        if showDatePicker {
-            datePickerContent
-        } else {
-            periodMenuListContent
-        }
+        periodMenuListContent
     }
 
     private var periodMenuListContent: some View {
         VStack(spacing: 4) {
             segmentedModePicker
+            // 产品负责人 2026-10-06：去掉「选择其他日期…」入口，只保留分段与近几期列表。
             ForEach(cachedMenuRows) { row in
                 periodMenuRow(row)
             }
-            Divider().padding(.horizontal, 6)
-            Button {
-                pickedDate = Date()
-                showDatePicker = true
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 12))
-                    Text("选择其他日期…")
-                        .font(.system(size: 13))
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 7)
-            }
-            .buttonStyle(.hoverHighlight(RoundedRectangle(cornerRadius: 10, style: .continuous)))
-            .focusable(false)
         }
         .padding(8)
         .frame(width: 300)
@@ -214,68 +190,6 @@ struct MenuBarUsageSectionView: View {
         }
         .buttonStyle(.hoverHighlight(RoundedRectangle(cornerRadius: 10, style: .continuous)))
         .focusable(false)
-    }
-
-    // MARK: – 「选择其他日期…」内嵌在同一个 popover 里切换显示，不用 .sheet
-    // （transient NSPopover 弹出 .sheet 在系统层面不可靠：sheet 依附的窗口可能随 popover
-    // 一起被判定为失去焦点而提前关闭）。
-
-    private var datePickerContent: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Button {
-                    showDatePicker = false
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(width: 24, height: 24)
-                }
-                .accessibilityLabel("返回")
-                .buttonStyle(.hoverHighlight(Circle()))
-                .focusable(false)
-                Text("选择其他日期").font(.system(size: 13, weight: .semibold))
-                Spacer()
-            }
-            DatePicker("", selection: $pickedDate, in: datePickerRange, displayedComponents: [.date])
-                .datePickerStyle(.graphical)
-                .labelsHidden()
-                // #177 第三轮真机反馈：graphical DatePicker 外层默认套一圈很粗的系统焦点环，
-                // 视觉上很突兀——关掉焦点态渲染；键盘仍可正常 tab/方向键操作，只是不再画环。
-                .focusEffectDisabled()
-            HStack {
-                Button("取消") { showDatePicker = false }
-                Spacer()
-                Button("确定") {
-                    let offset = PeriodMenuBuilder.offsetForPickedDate(
-                        pickedDate,
-                        periodID: menuMode,
-                        now: Date(),
-                        timezone: model.summary.timezone ?? model.todaySummary?.timezone
-                    )
-                    model.refresh(periodID: menuMode, offset: offset)
-                    showDatePicker = false
-                    periodMenuOpen = false
-                }
-                .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(12)
-        .frame(width: 300)
-    }
-
-    /// #177 Opus 审查：日粒度限选最近 7 天（今天...今天-6），与 MenuPeriodSelection 的
-    /// offset 下限一致；周/月粒度上限为今天（不能选未来）。
-    private var datePickerRange: ClosedRange<Date> {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        switch menuMode {
-        case "today":
-            let earliest = calendar.date(byAdding: .day, value: -6, to: today) ?? today
-            return earliest...today
-        default:
-            let earliest = calendar.date(byAdding: .year, value: -5, to: today) ?? today
-            return earliest...today
-        }
     }
 
     private var cardBackground: some ShapeStyle {
