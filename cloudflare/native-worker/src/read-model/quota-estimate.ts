@@ -9,6 +9,7 @@
 import { FORMULA_VERSION, familyForModel, priceWeightedTokens } from "../calibration/constants";
 import type { Provider } from "../calibration/constants";
 import { isStale } from "../calibration/staleness";
+import { B_MAX_DEVIATION } from "../calibration/backtest";
 import { formatDate, parseDateOnly } from "./shared";
 import type { Period } from "./shared";
 
@@ -38,12 +39,14 @@ export interface QuotaEstimate {
   basis: "week" | "weekly_average";
 }
 
-/** 原因独立于额度估算；误差为账户回测的相对误差，不能当额度占比或跨日相加。 */
+/**
+ * 原因独立于额度估算。v1 曾下发 `backtest_max_error`（单日最大误差）；v2（#271）改用多天总偏差
+ * 判定原因、不再计算单日最大误差，该字段随之停发——客户端把它当可选字段，缺省时提示不带数字。
+ */
 export interface QuotaEstimateUnavailable {
   reason: "backtest_failed" | "insufficient_data" | "stale" | "formula_changed"
     | "not_calibrated" | "unsupported_model" | "unsupported_period";
   sample_intervals?: number;
-  backtest_max_error?: number;
 }
 
 export function quotaEstimateUnavailableForModel(
@@ -60,13 +63,12 @@ export function quotaEstimateUnavailableForModel(
   if (typeof row.sample_intervals === "number" && Number.isInteger(row.sample_intervals) && row.sample_intervals >= 0) {
     details.sample_intervals = row.sample_intervals;
   }
-  if (typeof row.backtest_max_err === "number" && Number.isFinite(row.backtest_max_err)) {
-    details.backtest_max_error = Math.abs(row.backtest_max_err);
-  }
   if (row.formula_version !== FORMULA_VERSION) return { reason: "formula_changed", ...details };
   if (isStale(row.fitted_at, refTime)) return { reason: "stale", ...details };
   if (row.grade === "none") {
-    const reason = (details.backtest_max_error ?? 0) > 0.25 ? "backtest_failed" : "insufficient_data";
+    const deviation = typeof row.backtest_max_err === "number" && Number.isFinite(row.backtest_max_err)
+      ? Math.abs(row.backtest_max_err) : 0;
+    const reason = deviation > B_MAX_DEVIATION ? "backtest_failed" : "insufficient_data";
     return { reason, ...details };
   }
   if (row.grade !== "A" && row.grade !== "B") return { reason: "not_calibrated", ...details };

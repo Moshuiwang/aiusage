@@ -1,6 +1,7 @@
 import { withWorker } from "./harness";
 import { repoRoot } from "./paths";
 import path from "node:path";
+import { FORMULA_VERSION } from "../../src/calibration/constants";
 
 export const quotaUnavailableOwnerFixturePath = path.join(repoRoot,
   "clients/macos/Tests/AIUsageMenuBarCoreTests/Fixtures/quota-unavailable-owner.json");
@@ -35,11 +36,11 @@ export async function collectQuotaUnavailableSummary(): Promise<Record<string, a
       }
     }
     for (const [provider, family, grade, error, sample, fittedAt, formula] of [
-      ["codex", "sol", "none", -2.306, 92, quotaUnavailableNow, "v1"],
-      ["codex", "luna", "none", null, 0, quotaUnavailableNow, "v1"],
-      ["claude", "opus", "A", 0.05, 20, quotaUnavailableNow, "v1"],
-      ["claude", "sonnet", "B", 0.2, 10, "2026-06-01T12:00:00+08:00", "v1"],
-      ["claude", "fable", "B", 0.2, 10, quotaUnavailableNow, "v0"],
+      ["codex", "sol", "none", -2.306, 92, quotaUnavailableNow, FORMULA_VERSION],
+      ["codex", "luna", "none", null, 0, quotaUnavailableNow, FORMULA_VERSION],
+      ["claude", "opus", "A", 0.05, 20, quotaUnavailableNow, FORMULA_VERSION],
+      ["claude", "sonnet", "B", 0.2, 10, "2026-06-01T12:00:00+08:00", FORMULA_VERSION],
+      ["claude", "fable", "B", 0.2, 10, quotaUnavailableNow, "v0"], // 旧口径行 → formula_changed
     ]) await db.prepare(`INSERT INTO quota_calibration (
       provider, model_family, coef, effective_delta_u, backtest_max_err, grade,
       sample_intervals, fitted_at, formula_version) VALUES (?, ?, 0.00001, 12.5, ?, ?, ?, ?, ?)`)

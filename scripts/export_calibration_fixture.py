@@ -34,6 +34,27 @@
       --lim /tmp/lim.json --facts /tmp/facts.json --models /tmp/models.json \\
       --out cloudflare/native-worker/test/calibration_fixture.json
 
+#271 另有一份 10-07 快照 ``cloudflare/native-worker/test/calibration_fixture_2026-10-07.json``
+（校准公式 v2 的定级证据），同一流程、不同截点导出（facts 自 2026-09-09T00:00+08:00 起，
+官方读数取全量周窗口）：
+
+    --command "SELECT source_id, provider, used_percent, reset_at, window_duration_minutes, \\
+                      observed_at FROM limit_window_history WHERE window='week' \\
+               AND julianday(observed_at) <= julianday('2026-10-07T02:30:00Z')" > /tmp/lim.json
+    --command "SELECT fact_id, source_id, agent, window_start, window_end, input_tokens, \\
+                      output_tokens, cache_creation_tokens, cache_read_tokens FROM usage_hourly_facts \\
+               WHERE julianday(window_start) >= julianday('2026-09-09T00:00:00+08:00') \\
+                 AND julianday(window_start) <= julianday('2026-10-07T02:30:00Z')" > /tmp/facts.json
+    --command "SELECT m.fact_id, m.model, m.input_tokens, m.output_tokens, m.cache_creation_tokens, \\
+                      m.cache_read_tokens FROM usage_hourly_models m \\
+               JOIN usage_hourly_facts f ON f.fact_id = m.fact_id \\
+               WHERE julianday(f.window_start) >= julianday('2026-09-09T00:00:00+08:00') \\
+                 AND julianday(f.window_start) <= julianday('2026-10-07T02:30:00Z')" > /tmp/models.json
+    python3 scripts/export_calibration_fixture.py \\
+      --lim /tmp/lim.json --facts /tmp/facts.json --models /tmp/models.json \\
+      --out cloudflare/native-worker/test/calibration_fixture_2026-10-07.json \\
+      --source-note "<截点与导出日期说明>"
+
 本脚本做三件事，都是**脱敏 + 聚合**，不做任何拟合或校准计算（计算逻辑的唯一 owner 是
 ``cloudflare/native-worker/src/calibration/``）：
 
@@ -196,6 +217,12 @@ def main() -> None:
         type=Path,
         default=Path(__file__).resolve().parents[1] / "cloudflare/native-worker/test/calibration_fixture.json",
     )
+    parser.add_argument(
+        "--source-note",
+        default="aiusage-prod-db 截点 2026-09-27T10:52Z 的只读导出（limit_window_history / "
+        "usage_hourly_facts / usage_hourly_models），2026-10-06 按同一截点重导出。",
+        help="写进 _comment 的来源说明（截点与导出日期）",
+    )
     args = parser.parse_args()
 
     lim_rows = load_results(args.lim)
@@ -209,8 +236,7 @@ def main() -> None:
     fixture = {
         "_comment": (
             "由 scripts/export_calibration_fixture.py 生成，禁止手改。"
-            "来源：aiusage-prod-db 截点 2026-09-27T10:52Z 的只读导出（limit_window_history / "
-            "usage_hourly_facts / usage_hourly_models），2026-10-06 按同一截点重导出。重新生成见脚本头注释。"
+            f"来源：{args.source_note}重新生成见脚本头注释。"
         ),
         "limit_observations": limit_observations,
         "hourly_family_facts": hourly_family_facts,

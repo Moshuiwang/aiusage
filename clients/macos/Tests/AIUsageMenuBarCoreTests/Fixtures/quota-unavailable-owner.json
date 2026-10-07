@@ -147,8 +147,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "formula_changed",
-                  "sample_intervals": 10,
-                  "backtest_max_error": 0.2
+                  "sample_intervals": 10
                 }
               },
               {
@@ -178,8 +177,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "stale",
-                  "sample_intervals": 10,
-                  "backtest_max_error": 0.2
+                  "sample_intervals": 10
                 }
               }
             ]
@@ -207,8 +205,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "backtest_failed",
-                  "sample_intervals": 92,
-                  "backtest_max_error": 2.306
+                  "sample_intervals": 92
                 }
               },
               {
@@ -259,8 +256,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "formula_changed",
-                  "sample_intervals": 10,
-                  "backtest_max_error": 0.2
+                  "sample_intervals": 10
                 }
               },
               {
@@ -290,8 +286,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "stale",
-                  "sample_intervals": 10,
-                  "backtest_max_error": 0.2
+                  "sample_intervals": 10
                 }
               }
             ]
@@ -319,8 +314,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "backtest_failed",
-                  "sample_intervals": 92,
-                  "backtest_max_error": 2.306
+                  "sample_intervals": 92
                 }
               },
               {
@@ -371,8 +365,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "formula_changed",
-                  "sample_intervals": 10,
-                  "backtest_max_error": 0.2
+                  "sample_intervals": 10
                 }
               },
               {
@@ -402,8 +395,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "stale",
-                  "sample_intervals": 10,
-                  "backtest_max_error": 0.2
+                  "sample_intervals": 10
                 }
               }
             ]
@@ -431,8 +423,7 @@
                 "status": "available",
                 "quota_estimate_unavailable": {
                   "reason": "backtest_failed",
-                  "sample_intervals": 92,
-                  "backtest_max_error": 2.306
+                  "sample_intervals": 92
                 }
               },
               {

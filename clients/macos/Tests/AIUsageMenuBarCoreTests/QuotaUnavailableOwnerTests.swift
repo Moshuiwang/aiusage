@@ -18,12 +18,13 @@ final class QuotaUnavailableOwnerTests: XCTestCase {
         XCTAssertEqual(Set(rows.map(\.modelID)), Set(expected.keys))
         for row in rows { XCTAssertEqual(row.quotaText, expected[row.modelID], row.modelID) }
         let failed = try XCTUnwrap(rows.first { $0.modelID == "gpt-6-sol" })
-        XCTAssertEqual(failed.quotaHelpText, "换算回测未通过：账户最大误差230.6%（要求≤25%），92个区间；暂不估算")
+        // #271：Worker v2 不再下发 backtest_max_error，提示退化为不带误差数字的形式。
+        XCTAssertEqual(failed.quotaHelpText, "换算回测未通过，92个区间；暂不估算")
         let decoded = try XCTUnwrap(summary.breakdown.byMachine[0].agents?
             .flatMap(\.models).first { $0.id == "gpt-6-sol" })
         XCTAssertEqual(decoded.quotaEstimateUnavailable?.reason, "backtest_failed")
         XCTAssertEqual(decoded.quotaEstimateUnavailable?.sampleIntervals, 92)
-        XCTAssertEqual(decoded.quotaEstimateUnavailable?.backtestMaxError, 2.306)
+        XCTAssertNil(decoded.quotaEstimateUnavailable?.backtestMaxError)
         XCTAssertNil(decoded.quotaEstimate)
     }
 

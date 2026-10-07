@@ -24,7 +24,8 @@ describe("quota unavailable owner fixture", () => {
         expect(model.quota_estimate_unavailable.reason).toBe(reason);
       }
       const failed = models.find((m: any) => m.id === "gpt-6-sol");
-      expect(failed.quota_estimate_unavailable).toEqual({ reason: "backtest_failed", sample_intervals: 92, backtest_max_error: 2.306 });
+      // #271：v2 不再计算单日最大误差，backtest_max_error 不再下发（客户端可选字段，退化为不带数字的提示）。
+      expect(failed.quota_estimate_unavailable).toEqual({ reason: "backtest_failed", sample_intervals: 92 });
       const insufficient = models.find((m: any) => m.id === "gpt-6-luna");
       expect(insufficient.quota_estimate_unavailable).toEqual({ reason: "insufficient_data", sample_intervals: 0 });
       const opus = models.find((m: any) => m.id === "claude-opus-5");

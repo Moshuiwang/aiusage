@@ -6,8 +6,12 @@
  * #183-b 落库时标记「这批系数是用哪个公式算出来的」。
  */
 
-/** 口径版本号。价格加权系数、族映射规则任何一处变化都要递增这个值。 */
-export const FORMULA_VERSION = "v1";
+/**
+ * 口径版本号。价格加权系数、族映射规则、价比先验、定级口径任何一处变化都要递增这个值。
+ * v2（#271）：同一 provider 下有价格的族共用一个系数（单一隐藏额度 × API 价比），
+ * Codex 族内权重改按官方 credit 表，已知变更日强制切分，定级改看逐日留出总偏差。
+ */
+export const FORMULA_VERSION = "v2";
 
 export type Provider = "claude" | "codex" | "antigravity";
 
@@ -20,15 +24,57 @@ export interface PriceWeights {
 }
 
 /**
- * Claude output 定价是 input 的 5 倍；Codex 是 8 倍（#183 设计 v1 §1）。
+ * Claude output 定价是 input 的 5 倍（#183 设计 v1 §1）。Codex 按官方 credit 表
+ * （learn.chatgpt.com/docs/pricing，2026-10-07 读取：output = 5× input、cached = 0.1× input），
+ * #271 从 v1 的 8 倍改为 5 倍；cache_read 两家都按 0.1×——#271 生产回放显示 Claude 订阅计量
+ * 没有传导 Opus 5.5（0.05×）/ Fable 5.1（0.025×）的缓存读降价，按 API 标价反而拟合更差。
  * Antigravity 暂无独立验证数据，先套用 Claude 口径并在输出里标注待验证——
  * 不新增第三套未经验证的常量，避免看起来「更精确」但实际是编造。
  */
 export const PRICE_WEIGHTS: Record<Provider, PriceWeights> = {
   claude: { input_tokens: 1, output_tokens: 5, cache_creation_tokens: 1.25, cache_read_tokens: 0.1 },
-  codex: { input_tokens: 1, output_tokens: 8, cache_creation_tokens: 1.25, cache_read_tokens: 0.1 },
+  codex: { input_tokens: 1, output_tokens: 5, cache_creation_tokens: 1.25, cache_read_tokens: 0.1 },
   antigravity: { input_tokens: 1, output_tokens: 5, cache_creation_tokens: 1.25, cache_read_tokens: 0.1 },
 };
+
+/**
+ * #271：族之间的价比先验。同一 provider 下列在这里的族共用一个拟合参数（单一隐藏额度），
+ * 各族系数 = 该参数 × 本表的值；只有比值有意义，单位按各家公开价目取：
+ * - Claude：当前代各族 API input 价（$/MTok：Opus 5.5 $4、Sonnet 5.5 $2、Haiku 4.5 $1、Fable 5.1 $10）；
+ * - Codex：官方 credit 表的 input credits / MTok（Astra 250、Sol 50、Luna 2.5；Terra 无官方 credit，
+ *   按其 API 价 $2 与 Sol 同档）。review 无公开价，不列入，按 v1 方式单独拟合。
+ * Antigravity 没有公开价目可用，全部族按 v1 方式各自拟合。
+ */
+export const FAMILY_PRICE_RATIO: Record<Provider, Record<string, number>> = {
+  claude: { opus: 4, sonnet: 2, haiku: 1, fable: 10 },
+  codex: { astra: 250, sol: 50, terra: 50, luna: 2.5 },
+  antigravity: {},
+};
+
+/** 有价比先验的族在拟合特征里合并成的那一列。 */
+export const PRICED_FEATURE = "priced";
+
+/**
+ * #271：已知的订阅计量变更日（UTC）。训练集只用 now 之前最近一个变更日之后的区间——变更日可能
+ * 落在周期中段，按周重置边界找变化点的突变检测看不到它。
+ * - 2026-09-22：GPT-6 Sol/Luna 上线，生产回放前后两段单位 credit 消耗额度相差约 2 倍；
+ * - 2026-09-29：Pro $200 改用量计算（官方：新额度折合 API 消费减半），本账户回放再降约一半；
+ * - 2026-10-29：官方公布的老 Pro $200 订阅额度过渡期结束日。
+ */
+export const KNOWN_CHANGE_POINTS: Record<Provider, string[]> = {
+  claude: [],
+  codex: ["2026-09-22T00:00:00Z", "2026-09-29T00:00:00Z", "2026-10-29T00:00:00Z"],
+  antigravity: [],
+};
+
+/** now 之前（含）最近的一个已知变更日；没有则 null（训练窗口不额外截断）。 */
+export function trainingStartFor(provider: Provider, now: Date): string | null {
+  let latest: string | null = null;
+  for (const point of KNOWN_CHANGE_POINTS[provider]) {
+    if (Date.parse(point) <= now.getTime()) latest = point;
+  }
+  return latest;
+}
 
 /** Antigravity 价格加权口径尚未有独立验证数据支撑，下发时需要标注。 */
 export const ANTIGRAVITY_PRICE_WEIGHTS_UNVERIFIED = true;

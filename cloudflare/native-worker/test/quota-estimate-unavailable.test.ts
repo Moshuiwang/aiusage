@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { FORMULA_VERSION } from "../src/calibration/constants";
 import { indexQuotaCalibration, quotaEstimateForModel, quotaEstimateUnavailableForModel, type QuotaCalibrationRow } from "../src/read-model/quota-estimate";
 const now = new Date("2026-06-10T12:00:00Z");
 const base: QuotaCalibrationRow = { provider: "codex", model_family: "sol", coef: 0.001,
-  grade: "B", fitted_at: now.toISOString(), formula_version: "v1", backtest_max_err: 0.2, sample_intervals: 10 };
+  grade: "B", fitted_at: now.toISOString(), formula_version: FORMULA_VERSION, backtest_max_err: 0.2, sample_intervals: 10 };
 
 describe("quota estimate failure gates", () => {
   it("classifies each gate, including null error, signed error, period, formula, stale and unknown grade", () => {
     const cases: [Partial<QuotaCalibrationRow> | null, string, string, string, string | undefined][] = [
       [{ grade: "none", backtest_max_err: -2.306 }, "codex", "gpt-6-sol", "week", "backtest_failed"],
-      [{ grade: "none", backtest_max_err: 0.25 }, "codex", "gpt-6-sol", "week", "insufficient_data"],
+      // #271：B 档上限 20%（逐日留出总偏差）；恰在上限上仍是「数据不足」，超过才是「回测未通过」。
+      [{ grade: "none", backtest_max_err: 0.2 }, "codex", "gpt-6-sol", "week", "insufficient_data"],
+      [{ grade: "none", backtest_max_err: 0.21 }, "codex", "gpt-6-sol", "week", "backtest_failed"],
       [{ grade: "none", backtest_max_err: null, sample_intervals: 0 }, "codex", "gpt-6-sol", "today", "insufficient_data"],
       [{ fitted_at: "2026-06-01T12:00:00Z" }, "codex", "gpt-6-sol", "week", "stale"],
       [{ formula_version: "v0" }, "codex", "gpt-6-sol", "week", "formula_changed"],
@@ -20,7 +23,7 @@ describe("quota estimate failure gates", () => {
       [{}, "codex", "gpt-6-sol", "month", undefined],
       [{ grade: "A" }, "codex", "gpt-6-sol", "today", undefined],
     ];
-    expect(cases).toHaveLength(12);
+    expect(cases).toHaveLength(13);
     for (const [patch, provider, model, period, reason] of cases) {
       const rows = indexQuotaCalibration(patch === null ? [] : [{ ...base, ...patch }]);
       const diag = quotaEstimateUnavailableForModel(provider, model, period as any, now, rows);
@@ -31,7 +34,8 @@ describe("quota estimate failure gates", () => {
       if (reason) expect(estimate).toBeUndefined();
       else expect(estimate?.percent).toBeGreaterThan(0);
       if (patch?.backtest_max_err === null) expect(diag).toEqual({ reason, sample_intervals: 0 });
-      if (patch?.backtest_max_err === -2.306) expect(diag?.backtest_max_error).toBe(2.306);
+      // #271：偏差只用于内部判定原因，不再作为 backtest_max_error 下发。
+      if (diag) expect(Object.keys(diag).sort()).toEqual(diag.sample_intervals === undefined ? ["reason"] : ["reason", "sample_intervals"]);
     }
   });
 });

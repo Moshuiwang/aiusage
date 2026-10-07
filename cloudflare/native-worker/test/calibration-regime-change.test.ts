@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { KNOWN_FAMILIES } from "../src/calibration/constants";
 import type { Provider } from "../src/calibration/constants";
 import { splitCycles, withResetAnchors } from "../src/calibration/cycles";
-import { detectMutationAndSelectTrainingSet } from "../src/calibration/index";
+import { calibrate, detectMutationAndSelectTrainingSet } from "../src/calibration/index";
 import { buildIntervals } from "../src/calibration/intervals";
 import type { HourlyFamilyFact, Interval, LimitObservation } from "../src/calibration/types";
 
@@ -142,6 +142,10 @@ describe("规则突变：真实多族数据不误判（#206 评审回归）", ()
       const { training, mutationDetected } = detectMutationAndSelectTrainingSet(intervals, KNOWN_FAMILIES[provider], weightOf);
       expect(mutationDetected).toBe(false);
       expect(training).toHaveLength(intervals.length);
+      // #271：生产路径在价比特征空间（priced + 无价比族）上做突变检测，同样不得误判。
+      // 这些时刻都早于 Codex 的第一个已知变更日，训练集应等于窗口内全部区间。
+      const out = calibrate(provider, observations, facts, { now: new Date(nowMs) });
+      expect(out.results[0].sample_intervals).toBe(intervals.length);
     });
   }
 });

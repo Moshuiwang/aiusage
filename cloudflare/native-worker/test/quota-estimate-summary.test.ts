@@ -6,6 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { withWorker } from "./golden/harness";
+import { FORMULA_VERSION } from "../src/calibration/constants";
 
 const sourceId = "qe-source";
 const machineId = "qe-host";
@@ -56,7 +57,7 @@ async function seedCalibration(
   grade: string,
   fittedAt: string,
   coef = COEF,
-  formulaVersion = "v1",
+  formulaVersion = FORMULA_VERSION,
 ): Promise<void> {
   await db.prepare(`
     INSERT INTO quota_calibration (
@@ -236,14 +237,14 @@ describe("quota_estimate_unavailable truthful diagnosis", () => {
         expect(models[0].tokens).toBe(2 * (opusInput + opusOutput));
         expect(models[0].quota_estimate).toBeUndefined();
         expect(models[0].quota_estimate_unavailable).toEqual({
-          reason: "backtest_failed", sample_intervals: 92, backtest_max_error: 2.306,
+          reason: "backtest_failed", sample_intervals: 92,
         });
       }
       const raw = await fetchRaw({ method: "GET", path: "/api/summary?period=week", auth: true });
       const details = JSON.parse(raw.body.toString()).items.flatMap((i: any) => i.model_breakdowns);
       expect(details).toHaveLength(2);
       for (const model of details) expect(model.quota_estimate_unavailable).toEqual({
-        reason: "backtest_failed", sample_intervals: 92, backtest_max_error: 2.306,
+        reason: "backtest_failed", sample_intervals: 92,
       });
     });
   });

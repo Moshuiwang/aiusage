@@ -10,6 +10,13 @@
  * 4. 非负最小二乘拟合出最终系数（nnls.ts）。
  * 5. 逐日留出回测定级（backtest.ts）。
  *
+ * v2（#271）在 2 与 3 之间加两步：
+ * - 训练集只取最近一个已知订阅计量变更日（`KNOWN_CHANGE_POINTS`）之后的区间；
+ * - 有价比先验（`FAMILY_PRICE_RATIO`）的族合并成一列特征 Σ 价比×加权 token，共用一个系数
+ *   （单一隐藏额度）；没有价比的族仍各自一列。拟合后按价比把共用系数拆回各族。
+ *   好处：参数从「族数」降到 1，新族零样本时也能按价比估算；代价是假设订阅计量与价目成比例，
+ *   #271 用生产回放验证过 Claude 与 Codex（09-29 之后）都成立。
+ *
  * 周期切分为什么不按 `source_id` 分组：v1 账户口径是「每个 provider 一个账户」——同一账户的
  * 官方额度读数可能被多台机器各自的采集端重复上报，它们描述的是同一份真实配额状态，不是
  * 各自独立的时间线。实测过按 source 分组切周期：两台机器各自的重置检测互相独立，会把同一次
@@ -17,11 +24,11 @@
  * 里「9/19、9/26 两次自然 + 9/26 一次手动」这个从原始数据看到的真实重置事件数不一致）。
  * 合并成一条时间线后 Claude 得到 1 次重置，跟设计文档记录一致。
  */
-import { FORMULA_VERSION, KNOWN_FAMILIES } from "./constants";
+import { FAMILY_PRICE_RATIO, FORMULA_VERSION, KNOWN_FAMILIES, PRICED_FEATURE, trainingStartFor } from "./constants";
 import type { Provider } from "./constants";
 import { splitCycles, withResetAnchors } from "./cycles";
 import { buildIntervals } from "./intervals";
-import { grade, intervalToRow, leaveOneDayOutMaxError, toSamples } from "./backtest";
+import { grade, intervalToRow, leaveOneDayOutDeviation, toSamples } from "./backtest";
 import type { Sample } from "./backtest";
 import { nonNegativeLeastSquares, predictRow } from "./nnls";
 import type { CalibrateOptions, CalibrationOutput, CalibrationResult, HourlyFamilyFact, Interval, LimitObservation } from "./types";
@@ -114,14 +121,14 @@ function weightedSse(rows: number[][], targets: number[], weights: number[], coe
  * 残差明显低于全量拟合，才算候选，候选中取两段加权残差平方和最小的那个边界。检测到时训练集 = 变化点之后的**全部**周期——不是只取
  * 最近一个周期，否则每次周重置后训练集都缩回几条区间，新规则下的数据永远攒不过一周。
  */
-export function detectMutationAndSelectTrainingSet(
-  intervals: Interval[],
+export function detectMutationAndSelectTrainingSet<T extends Interval>(
+  intervals: T[],
   keys: string[],
-  weightOf: (i: Interval) => number,
-): { training: Interval[]; mutationDetected: boolean } {
+  weightOf: (i: T) => number,
+): { training: T[]; mutationDetected: boolean } {
   const cycleIds = [...new Set(intervals.map((i) => i.cycleIndex))].sort((x, y) => x - y);
-  const sumDeltaU = (segment: Interval[]) => segment.reduce((sum, i) => sum + i.deltaU, 0);
-  const qualifies = (segment: Interval[]) =>
+  const sumDeltaU = (segment: T[]) => segment.reduce((sum, i) => sum + i.deltaU, 0);
+  const qualifies = (segment: T[]) =>
     segment.length >= MIN_SEGMENT_INTERVALS_FOR_MUTATION_CHECK && sumDeltaU(segment) >= MIN_SEGMENT_DELTA_U_FOR_MUTATION_CHECK;
   const candidates = cycleIds.slice(1)
     .map((k) => ({ head: intervals.filter((i) => i.cycleIndex < k), tail: intervals.filter((i) => i.cycleIndex >= k) }))
@@ -132,7 +139,7 @@ export function detectMutationAndSelectTrainingSet(
   const allTargets = intervals.map((i) => i.deltaU);
   const allWeights = intervals.map(weightOf);
   const sseFull = weightedSse(allRows, allTargets, allWeights, fit(allRows, allTargets, allWeights));
-  let best: { tail: Interval[]; sse: number } | null = null;
+  let best: { tail: T[]; sse: number } | null = null;
   for (const { head, tail } of candidates) {
     const headRows = head.map((i) => intervalToRow(i, keys));
     const tailRows = tail.map((i) => intervalToRow(i, keys));
@@ -150,6 +157,29 @@ export function detectMutationAndSelectTrainingSet(
   return best ? { training: best.tail, mutationDetected: true } : { training: intervals, mutationDetected: false };
 }
 
+/** 拟合用的区间：`familyPricedTokens` 换成特征列，原始逐族加权 token 留在 `familyTokens`。 */
+type FeaturedInterval = Interval & { familyTokens: Record<string, number> };
+
+function isPriced(provider: Provider, family: string): boolean {
+  return Object.hasOwn(FAMILY_PRICE_RATIO[provider], family);
+}
+
+/** 特征列：有价比的族合并成 `PRICED_FEATURE` 一列，其余已知族各自一列。 */
+function featureKeys(provider: Provider): string[] {
+  const unpriced = KNOWN_FAMILIES[provider].filter((family) => !isPriced(provider, family));
+  return KNOWN_FAMILIES[provider].some((family) => isPriced(provider, family)) ? [PRICED_FEATURE, ...unpriced] : unpriced;
+}
+
+function toFeatured(provider: Provider, interval: Interval): FeaturedInterval {
+  const features: Record<string, number> = {};
+  for (const [family, tokens] of Object.entries(interval.familyPricedTokens)) {
+    const key = isPriced(provider, family) ? PRICED_FEATURE : family;
+    const value = isPriced(provider, family) ? FAMILY_PRICE_RATIO[provider][family] * tokens : tokens;
+    features[key] = (features[key] ?? 0) + value;
+  }
+  return { ...interval, familyPricedTokens: features, familyTokens: interval.familyPricedTokens };
+}
+
 export function calibrate(
   provider: Provider,
   observations: LimitObservation[],
@@ -160,12 +190,17 @@ export function calibrate(
   const halfLifeDays = options.halfLifeDays ?? DEFAULT_HALF_LIFE_DAYS;
   const now = options.now;
   const windowStartMs = now.getTime() - windowDays * 24 * 60 * 60 * 1000;
+  const changePoint = trainingStartFor(provider, now);
+  const trainingStartMs = changePoint === null ? windowStartMs : Math.max(windowStartMs, Date.parse(changePoint));
 
   const windowedObservations = observations.filter((o) => Date.parse(o.observed_at) >= windowStartMs);
   const built = buildAllIntervals(provider, windowedObservations, facts);
-  const intervals = built.intervals.filter((i) => Date.parse(i.t0) >= windowStartMs);
+  const intervals = built.intervals
+    .filter((i) => Date.parse(i.t0) >= trainingStartMs)
+    .map((i) => toFeatured(provider, i));
 
-  const keys = KNOWN_FAMILIES[provider];
+  const families = KNOWN_FAMILIES[provider];
+  const keys = featureKeys(provider);
   const weightOf = (i: Interval) => recencyWeight(i, now, halfLifeDays);
 
   const fittedAt = now.toISOString();
@@ -173,7 +208,7 @@ export function calibrate(
   if (intervals.length === 0) {
     return {
       unattributedDroppedIntervals: built.droppedForUnattributed,
-      results: keys.map((family) => ({
+      results: families.map((family) => ({
         provider,
         model_family: family,
         coef: 0,
@@ -198,20 +233,29 @@ export function calibrate(
     samples.map((s) => s.deltaU),
     samples.map((s) => s.weight),
   );
+  const coefOf = (key: string) => finalCoef[keys.indexOf(key)] ?? 0;
 
-  const backtestMaxErr = leaveOneDayOutMaxError(samples, fit);
+  const backtestDeviation = leaveOneDayOutDeviation(samples, fit);
 
-  const results: CalibrationResult[] = keys.map((family, idx) => {
-    const coef = finalCoef[idx];
-    let effectiveDeltaU = 0;
-    for (const s of samples) effectiveDeltaU += coef * s.row[idx];
+  const familyTokens = (family: string) => training.reduce((sum, i) => sum + (i.familyTokens[family] ?? 0), 0);
+  const pricedGroupDeltaU = families
+    .filter((family) => isPriced(provider, family))
+    .reduce((sum, family) => sum + coefOf(PRICED_FEATURE) * FAMILY_PRICE_RATIO[provider][family] * familyTokens(family), 0);
+
+  const results: CalibrationResult[] = families.map((family) => {
+    const priced = isPriced(provider, family);
+    const coef = priced ? coefOf(PRICED_FEATURE) * FAMILY_PRICE_RATIO[provider][family] : coefOf(family);
+    const effectiveDeltaU = coef * familyTokens(family);
+    let familyGrade = grade(priced ? pricedGroupDeltaU : effectiveDeltaU, backtestDeviation);
+    // 有价比的族靠共用系数估算：自身样本不足 A 档门槛时最多 B（零样本的新族冷启动即落在这里）。
+    if (priced && familyGrade === "A" && effectiveDeltaU < 10) familyGrade = "B";
     return {
       provider,
       model_family: family,
       coef,
       effective_delta_u: effectiveDeltaU,
-      backtest_max_err: backtestMaxErr,
-      grade: grade(effectiveDeltaU, backtestMaxErr),
+      backtest_max_err: backtestDeviation,
+      grade: familyGrade,
       sample_intervals: training.length,
       formula_version: FORMULA_VERSION,
       fitted_at: fittedAt,

@@ -38,9 +38,12 @@
   采集端上报不可逆账户指纹（#181，写入 `account_observations`，用于发现账户切换/冲突）；
   `cloudflare/native-worker/src/quota-calibration-cron.ts` 每日 cron 按 provider 轮换（3 天一轮，
   规避 Cloudflare Free 单次调用 CPU 预算）用最近 28 天官方周额度读数拟合系数，写
-  `quota_calibration`；菜单栏据此显示「≈x.x%」+精度档（PR #194，#184 已合并）。Codex 因样本
-  未达标暂不显示计算结果。**未验证项**：真机长期对照官方额度的持续准确性未知，只有实测截图口径
-  的验收记录（见 #180）。
+  `quota_calibration`；菜单栏据此显示「≈x.x%」+精度档（PR #194，#184 已合并）。
+  **公式 v2（#271，已合并待部署；部署与回源结果见 #271）**：有公开价目的族共用一个系数（单一隐藏额度 × API 价比：Claude 按 API
+  input 价，Codex 按官方 credit 表），Codex 训练集从已知计量变更日（09-22 / 09-29 / 10-29）截断，
+  定级改看逐日留出多天总偏差（A ≤10%、B ≤20%，至少 3 个计分日），有价比的族自身样本不足时最多 B；
+  `quota_calibration.backtest_max_err` 列名沿用 v1、含义改为总偏差，`backtest_max_error` 不再下发。
+  **已知缺口**：菜单栏 A/B 档说明「约 ±10% / ±25%」是 v1 的单日口径，待下次 App 发版改文案。**未验证项**：真机长期对照官方额度的持续准确性未知（见 #180、#271）。
 - **D1 读取预算优化已部署（效果待回源）**（#190，PR #196 已部署，线上 Worker 版本 `3db47571`）：菜单栏本周/
   本月预取此前每 10 分钟重拉导致 rows_read_24h 逼近免费额度上限；已改为低频预取 + rollup
   补 `total_cost`（0014）减少全表扫描；`scripts/check_cf_usage.py` 已纳入 D1 rows_read/written
