@@ -97,7 +97,7 @@ def d1_usage_percentages(rows_read, rows_written):
 def overall_conclusion(percentages):
     """按"最差项"给结论；percentages 里任意一项是 None（未知）都必须体现在结论里，
     不能因为其余指标都健康就宣称"全部安全"——D1 读写是本项目最容易触顶的指标
-    （见 .claude/rules/cloudflare.md），拿不到它时"安全"这个结论本身就不成立。
+    （见 AGENTS.md「关键不变量」），拿不到它时"安全"这个结论本身就不成立。
 
     返回 (conclusion_text, has_unknown, has_critical, has_warning)，方便测试分别断言
     文案与判定逻辑，而不是只断言一句拼好的话（结构下限）。

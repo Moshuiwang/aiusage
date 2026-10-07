@@ -134,5 +134,5 @@ Token 是 `wrangler.local.toml` 里的 `AIUSAGE_TOKEN = "contract-test-token"`�
 
 - 本地 D1 是 miniflare 的 SQLite 实现，与生产 D1 的行为差异（如并发、限额）不在此覆盖。
 - 本地无 `SHADOW_INGEST_URL` 等 secret，影子上报路径在本地不生效。
-- 生产部署、Secrets、线上 smoke 仍只能由 Ops Agent 在 macOS 侧执行，见
-  `.claude/rules/cloudflare.md`。
+- 生产部署、Secrets、线上 smoke 不在本地开发范围内：由获授权的 Mac mini 经 Ops BWS 入口执行
+  （见 `AGENTS.md`「机器职责」「凭据与生产」）。

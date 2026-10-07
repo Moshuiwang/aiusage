@@ -33,7 +33,7 @@
 | `data/` | 本地 SQLite、latest、备份等运行数据。 | 不提交。 |
 | `docs/` | 当前权威文档和 archive 索引。 | 当前事实优先读权威入口。 |
 | `docs/archive/reviews/` | 历史 AI review 记录。 | 根部 `reviews/` 仅是临时工作目录，当前不作为文档入口保留。 |
-| `.codex/agents/` | 项目级 agent 配置。 | 已纳入跟踪；`.codex` 其他内容仍忽略。 |
+| `.codex/agents/` | Codex 的 reviewer 子代理配置。 | 已纳入跟踪；`.codex` 其他内容仍忽略。 |
 
 顶层 Obsidian 笔记库 `.obsidian/` 和 `ai-usage-widget/欢迎.md` 已由用户在本地移除，本轮不再作为待办。
 

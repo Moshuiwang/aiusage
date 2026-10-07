@@ -81,8 +81,7 @@ CLI / HTTP handler / clients
 > `cloudflare/native-worker/src/*.ts` + `cloudflare/migrations/`。
 > 决策与执行记录见
 > [`server-path-consolidation-decision.md`](server-path-consolidation-decision.md)、
-> [`server-path-test-migration-map.md`](server-path-test-migration-map.md)
-> 与 `.claude/rules/architecture.md`。
+> 与 [`server-path-test-migration-map.md`](server-path-test-migration-map.md)。
 
 | 模块 | Owner 职责 | 禁止承载 |
 | --- | --- | --- |
