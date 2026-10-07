@@ -23,6 +23,12 @@
  * （不再是 unattributed 完整性门禁剔除的问题）；Antigravity 原先因读数抖动被误切成碎周期而全部 none，
  * #206 后合成 1 个周期，flash 定级 B，pro / claude-on-antigravity 无用量仍为 none。
  * 这些是从这份真实 fixture 跑出来的结果，不是预设结论。
+ *
+ * 2026-10-07（#271 v2）：定级改看逐日留出总偏差且至少 3 个计分日、有价格的族共用一个系数、
+ * Codex 从已知变更日 09-22 起截断训练集。这份 09-27 快照只剩 10 天数据：Claude 单一阀门总偏差
+ * 约 23%（>20%），Codex 截断后只剩 5 天且计分日不足，Antigravity 计分日不足——三家在这份快照上
+ * 都是 none。v2 的定级结论改由 `calibration-v2.test.ts`（10-07 快照）承载；本文件保留周期、
+ * 区间与独立复算这些不随公式变化的断言，以及 v2 在稀疏快照上如实降级的断言。
  */
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
@@ -78,37 +84,24 @@ describe("calibration fixture：周期与重置次数（精确值，对照 #183 
   });
 });
 
-describe("calibration fixture：Claude 定级（逐族）", () => {
-  it("opus / sonnet / fable 因为有足够的价格加权 token 信号，定级 B；haiku 因量太少定级 none", async () => {
+describe("calibration fixture：Claude 定级（v2，稀疏快照如实降级）", () => {
+  it("10 天快照上单一阀门总偏差超过 B 档上限：全部族 none，不因为价比先验就硬给估算", async () => {
     const { limit_observations, hourly_family_facts } = await loadFixture();
     const out = calibrate("claude", limit_observations.filter((r) => r.provider === "claude"), hourly_family_facts, { now: NOW });
     expect(out.unattributedDroppedIntervals).toBe(0); // Claude 这份快照里模型行覆盖完整
     const byFamily = Object.fromEntries(out.results.map((r) => [r.model_family, r]));
     expect(Object.keys(byFamily).sort()).toEqual(["fable", "haiku", "opus", "sonnet"]);
-
-    for (const family of ["opus", "sonnet", "fable"]) {
-      expect(byFamily[family].grade).toBe("B");
-      expect(byFamily[family].effective_delta_u).toBeGreaterThanOrEqual(4);
-      expect(byFamily[family].backtest_max_err).not.toBeNull();
-      expect(Math.abs(byFamily[family].backtest_max_err as number)).toBeLessThanOrEqual(0.25);
-      expect(byFamily[family].coef).toBeGreaterThan(0);
-      expect(byFamily[family].formula_version).toBe("v1");
-      expect(byFamily[family].fitted_at).toBe(NOW.toISOString());
-    }
-    expect(byFamily.haiku.grade).toBe("none");
-    expect(byFamily.haiku.effective_delta_u).toBe(0);
-
-    // 同量级校验（对照可行性分析 calib.py 的 d2_fam_pricew 拟合结果，容差按数量级）：
-    // opus≈0.1455、sonnet≈0.0451（该脚本用 /1e6 的 token 单位，这里换算回同一单位对比）。
+    expect(byFamily.opus.backtest_max_err as number).toBeGreaterThan(0.2);
+    expect(byFamily.opus.sample_intervals).toBeGreaterThan(20); // 不是因为没数据，是偏差超限
+    // 系数量级仍与 #183 独立 calib.py 的结论同一数量级（单位：额度点 / 百万价格加权 token）。
     expect(byFamily.opus.coef * 1e6).toBeGreaterThan(0.05);
     expect(byFamily.opus.coef * 1e6).toBeLessThan(0.5);
     expect(byFamily.sonnet.coef * 1e6).toBeGreaterThan(0.01);
     expect(byFamily.sonnet.coef * 1e6).toBeLessThan(0.2);
-
-    // 逐日留出最大误差同量级：分析结论中位 10%、最大 17%；本内核加了近期加权/突变检测，
-    // 训练集构成不同，允许到设计给的 B 档上限（25%）以内，但必须显著优于「不可用」(>50%)。
-    for (const family of ["opus", "sonnet", "fable"]) {
-      expect(Math.abs(byFamily[family].backtest_max_err as number)).toBeLessThan(0.5);
+    for (const r of out.results) {
+      expect(r.grade).toBe("none");
+      expect(r.formula_version).toBe("v2");
+      expect(r.fitted_at).toBe(NOW.toISOString());
     }
   });
 
@@ -123,22 +116,22 @@ describe("calibration fixture：Claude 定级（逐族）", () => {
   });
 });
 
-describe("calibration fixture：Codex 定级（设计结论：现在不可用）", () => {
-  it("mac-local 9/14–9/20 model 行补扫后，unattributed 门禁不再剔除任何区间，但账户读数漂移大、报告空洞多，全部族仍定级 none", async () => {
-    // 补扫前（见本文件头注释）unattributedDroppedIntervals=10、sample_intervals=21、
-    // backtest_max_err≈5.78；补扫后 0 / 34 / ≈5.50（#206 档位分族后同一快照 ≈1.42）——可用区间变多了，但回测误差量级没有
-    //实质改善（仍是「不可用」>50% 的量级好几倍），跟 Issue #183 数据完整性核查结论一致：
-    // model 行缺失只是 Codex 数据问题的一部分，账户读数本身长时间空洞、饱和 plateau 才是
-    // 主因，补扫不能单独解决。
+describe("calibration fixture：Codex 定级（v2：09-22 变更日后数据不足）", () => {
+  it("训练集从已知变更日 09-22 截断后，快照里只剩不足 3 个计分日：偏差为 null、全部族 none（数据不足，不是回测失败）", async () => {
     const { limit_observations, hourly_family_facts } = await loadFixture();
     const codexObs = limit_observations.filter((r) => r.provider === "codex");
     const out = calibrate("codex", codexObs, hourly_family_facts, { now: NOW });
     expect(out.unattributedDroppedIntervals).toBe(0);
     expect(Object.keys(Object.fromEntries(out.results.map((r) => [r.model_family, r]))).sort()).toEqual(["astra", "luna", "review", "sol", "terra"]);
+    // 独立数出 t0 在 09-22 之后的区间数：训练集不得超过它（截断生效）。
+    const { intervals } = buildIntervals("codex", "combined", withResetAnchors(splitCycles(codexObs)), hourly_family_facts);
+    const afterCut = intervals.filter((i) => Date.parse(i.t0) >= Date.parse("2026-09-22T00:00:00Z")).length;
+    expect(afterCut).toBeLessThan(intervals.length);
     for (const r of out.results) {
       expect(r.grade).toBe("none");
-      // 回测误差仍然巨大（远超「不可用」阈值 0.5），确认「剔除消失」不等于「数据变可用」。
-      expect(Math.abs(r.backtest_max_err as number)).toBeGreaterThan(1);
+      expect(r.backtest_max_err).toBeNull();
+      expect(r.sample_intervals).toBeGreaterThan(0);
+      expect(r.sample_intervals).toBeLessThanOrEqual(afterCut);
     }
   });
 
@@ -155,7 +148,7 @@ describe("calibration fixture：Codex 定级（设计结论：现在不可用）
 });
 
 describe("calibration fixture：Antigravity", () => {
-  it("reset_at 不变的小幅回落是读数抖动不是重置：合成 1 个周期后 flash 定级 B，无用量的族 none", async () => {
+  it("reset_at 不变的小幅回落是读数抖动不是重置：合成 1 个周期；计分日不足时全部 none", async () => {
     // #206 之前每次不足 1 点的回落都被切成新周期（快照上 18 个碎周期，回测 −34.9%，全部 none）；
     // 这些回落 reset_at 都没变，不是重置。产品负责人 2026-10-06 同意 Antigravity 据此诚实定级。
     const { limit_observations, hourly_family_facts } = await loadFixture();
@@ -169,16 +162,11 @@ describe("calibration fixture：Antigravity", () => {
     }
     expect(sameResetDrops).toBeGreaterThanOrEqual(10);
     expect(splitCycles(agObs)).toHaveLength(1);
-
+    // 定级结论（flash B）见 calibration-v2.test.ts 的 10-07 快照；这份 09-27 快照计分日不足 3 天，如实降级。
     const out = calibrate("antigravity", agObs, hourly_family_facts, { now: NOW });
-    const byFamily = Object.fromEntries(out.results.map((r) => [r.model_family, r]));
-    expect(Object.keys(byFamily).sort()).toEqual(["claude-on-antigravity", "flash", "pro"]);
-    expect(byFamily.flash.grade).toBe("B");
-    expect(byFamily.flash.effective_delta_u).toBeGreaterThanOrEqual(4);
-    expect(Math.abs(byFamily.flash.backtest_max_err as number)).toBeLessThanOrEqual(0.25);
-    for (const family of ["pro", "claude-on-antigravity"]) {
-      expect(byFamily[family].grade).toBe("none");
-      expect(byFamily[family].effective_delta_u).toBe(0);
+    for (const r of out.results) {
+      expect(r.backtest_max_err).toBeNull();
+      expect(r.grade).toBe("none");
     }
   });
 });

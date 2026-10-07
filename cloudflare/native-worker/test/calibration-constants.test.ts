@@ -55,10 +55,11 @@ describe("KNOWN_FAMILIES", () => {
 });
 
 describe("priceWeightedTokens", () => {
-  it("Claude output 权重是 input 的 5 倍，Codex 是 8 倍——同样的 token 构成算出不同的加权值", () => {
-    const tokens = { input_tokens: 1000, output_tokens: 1000, cache_creation_tokens: 0, cache_read_tokens: 0 };
-    expect(priceWeightedTokens("claude", tokens)).toBe(1000 * 1 + 1000 * 5);
-    expect(priceWeightedTokens("codex", tokens)).toBe(1000 * 1 + 1000 * 8);
+  it("Claude output 权重是 input 的 5 倍；Codex 按官方 credit 表（#271）同样是 5 倍，cached 0.1 倍", () => {
+    // 官方 credit 表（learn.chatgpt.com/docs/pricing，2026-10-07）：GPT-6 Sol input 50 / cached 5 / output 250。
+    const tokens = { input_tokens: 1000, output_tokens: 1000, cache_creation_tokens: 0, cache_read_tokens: 1000 };
+    expect(priceWeightedTokens("claude", tokens)).toBe(1000 * 1 + 1000 * 5 + 1000 * 0.1);
+    expect(priceWeightedTokens("codex", tokens) * 50).toBeCloseTo(1000 * 50 + 1000 * 250 + 1000 * 5, 6);
   });
 
   it("独立复算：input×1 + output×W_out + cache_creation×1.25 + cache_read×0.1", () => {
