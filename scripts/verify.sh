@@ -33,7 +33,7 @@ done
 # （不在 git 仓库、拿不到 base、git 命令失败）都退回全量。
 #
 # 改动面取并集，缺一不可：
-#   - 工作区未提交改动（git status --porcelain，同 stop_gate.sh 的判据）
+#   - 工作区未提交改动（git status --porcelain）
 #   - 相对 base 的已提交改动——漏了这个，commit 之后再跑 verify 就会静默跳过 Worker
 CHANGED_FILES=""
 SCOPE_REASON=""

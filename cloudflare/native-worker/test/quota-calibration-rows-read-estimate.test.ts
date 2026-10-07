@@ -1,7 +1,7 @@
 /**
  * #183-b：每日 cron（`runQuotaCalibration`）D1 rows_read 上界估算。
  *
- * D1 免费计划预算是 500 万行/天（`.claude/rules/cloudflare.md`）。部署前审查 Must 1b 之后，
+ * D1 免费计划预算是 500 万行/天（Cloudflare Free，见 AGENTS.md「关键不变量」）。部署前审查 Must 1b 之后，
  * 这个 cron 每天只对**一个** provider（按日轮换）跑一次 `fetchLimitObservations` +
  * `fetchHourlyFamilyFacts`，SQL 侧 WHERE 过滤 + GROUP BY 聚合，但 D1 按扫描的基表行数计费
  * （`rows_read`），不是按返回的聚合行数——所以估算要用**基表行数**，不是聚合后的行数。
@@ -29,7 +29,7 @@ const SAMPLED_WINDOW_DAYS = 10;
 const CALIBRATION_WINDOW_DAYS = 28;
 const SCALE_FACTOR = CALIBRATION_WINDOW_DAYS / SAMPLED_WINDOW_DAYS;
 
-/** D1 免费计划每日读预算，来自 .claude/rules/cloudflare.md。 */
+/** D1 免费计划每日读预算（Cloudflare Free：5,000,000 行/天）。 */
 const D1_FREE_DAILY_ROWS_READ_BUDGET = 5_000_000;
 
 describe("quota calibration cron：D1 rows_read 上界估算（外推，非精确值）", () => {

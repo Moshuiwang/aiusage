@@ -3,7 +3,7 @@
 这个脚本是 `cloudflare/native-worker/test/calibration_fixture.json` 的 owner——fixture 本身
 不许手写（AGENTS.md）。但脚本的**真实输入**是一次性对生产 D1 的只读导出（wrangler
 `--remote --json`），这台开发机没有那次导出留下的原始文件，也没有 Cloudflare 凭据去重新拉一份
-（`.claude/rules/cloudflare.md`：真实 Cloudflare 账号操作只能在 macOS 侧 Ops Agent 执行）。
+（真实 Cloudflare 账号操作需要获授权机器的凭据，离线测试不应依赖）。
 所以这里做不到「重新导出真实数据再逐字节 diff」那种防陈旧测试。
 
 能做、也必须做的是：**脚本的转换逻辑本身**（脱敏、模型族映射、unattributed 完整性补齐）
