@@ -12,6 +12,8 @@ const execute = promisify(execFile);
 const admin = 'local-enrollment-cli-admin-fixture';
 const shared = 'local-enrollment-cli-shared-fixture';
 const python = process.env.AIUSAGE_TEST_PYTHON ?? 'python3';
+// One clock for the Worker binding and the Python CLI's window-currency check.
+const fixedNow = '2026-10-04T00:00:00Z';
 
 describe.sequential('Python device CLI over verified local HTTPS to the real Worker', () => {
   let mf: Miniflare;
@@ -32,7 +34,7 @@ describe.sequential('Python device CLI over verified local HTTPS to the real Wor
       compatibilityDate: '2026-06-21', host: '127.0.0.1', port: 0,
       https: true, httpsKeyPath: key, httpsCertPath: ca, d1Databases: ['AIUSAGE_DB'],
       bindings: { AIUSAGE_TOKEN: shared, AIUSAGE_DEVICE_ADMIN_TOKEN: admin,
-        AIUSAGE_NOW: '2026-10-04T00:00:00Z', AIUSAGE_BACKEND_MODE: 'native_d1_production',
+        AIUSAGE_NOW: fixedNow, AIUSAGE_BACKEND_MODE: 'native_d1_production',
         AIUSAGE_DISABLE_SUMMARY_CACHE: 'true' } });
     server = (await mf.ready).origin;
     expect(new URL(server).hostname).toBe('127.0.0.1');
@@ -146,8 +148,9 @@ describe.sequential('Python device CLI over verified local HTTPS to the real Wor
       'with open(path,"w") as output:json.dump({"providers":providers},output)',
     ].join('\n');
     await execute(python, ['-I', '-c', generate, path.join(repoRoot, 'src'), fixture, source, String(healthy), observed]);
-    const code = 'import sys;sys.path.insert(0,sys.argv.pop(1));from ai_usage_widget.cli import main;raise SystemExit(main(sys.argv[1:]))';
-    const args = ['-I', '-c', code, path.join(repoRoot, 'src'), 'push-limits',
+    // Pin LimitsRuntime's default now_provider to the Worker clock; otherwise the real clock outruns reset_at.
+    const code = 'import sys;sys.path.insert(0,sys.argv.pop(1));now=sys.argv.pop(1);import ai_usage_widget.limits_runtime as runtime;runtime._default_now=lambda:now;from ai_usage_widget.cli import main;raise SystemExit(main(sys.argv[1:]))';
+    const args = ['-I', '-c', code, path.join(repoRoot, 'src'), fixedNow, 'push-limits',
       '--provider-fixture', fixture, '--url', server + '/ingest-limits'];
     let stdout: string;
     try {
