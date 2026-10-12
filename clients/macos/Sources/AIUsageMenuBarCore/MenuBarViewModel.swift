@@ -318,7 +318,6 @@ public enum MenuBarViewModel {
         selectedPeriodID: String,
         selectedOffset: Int = 0,
         now: Date = Date(),
-        machineAliases: [String: String]? = nil,
         quotaSlots: [MobileProviderSlot]? = nil,
         additionalSources: [MobileSource] = [],
         // #186：本机时区——默认真实设备时区，测试注入固定时区，绝不依赖运行测试的机器时区。
@@ -366,7 +365,6 @@ public enum MenuBarViewModel {
             sources: summary.sources,
             period: summary.period,
             now: now,
-            machineAliases: machineAliases,
             deviceTimeZone: deviceTimeZone
         )
 
@@ -644,25 +642,6 @@ public enum MenuBarViewModel {
         return bucket
     }
 
-    public static func formatMachineName(_ raw: String, aliases: [String: String]? = nil) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "未知设备" }
-
-        if let alias = aliases?[trimmed], !alias.isEmpty {
-            return alias
-        }
-
-        var cleaned = trimmed
-        if cleaned.hasSuffix(".local") {
-            cleaned = String(cleaned.dropLast(6))
-        }
-        if let alias = aliases?[cleaned], !alias.isEmpty {
-            return alias
-        }
-
-        return cleaned
-    }
-
     // MARK: - #175 Server 卡片（按机器分组）
 
     private static func serverCards(
@@ -670,7 +649,6 @@ public enum MenuBarViewModel {
         sources: [MobileSource],
         period: MobilePeriod,
         now: Date,
-        machineAliases: [String: String]?,
         deviceTimeZone: TimeZone
     ) -> [MenuServerCard] {
         let rows = breakdown.byMachine.isEmpty ? breakdown.byOSUser : breakdown.byMachine
@@ -695,10 +673,8 @@ public enum MenuBarViewModel {
             let timeText = compactDateTime(latestTime, reference: nowReference, suffix: "同步", timezone: deviceTimeZone) ?? "未同步"
             let platform = matchedSources.compactMap(\.platform).first
 
-            // aliases 的 key 是机器原名（row.id，如上报用的 hostname），不是 breakdown 已经美化过的 label；
-            // 先按原名精确查，查不到再走 formatMachineName(row.label, aliases:) 的既有猜测逻辑。
-            let title = machineAliases?[row.id].flatMap { $0.isEmpty ? nil : $0 }
-                ?? formatMachineName(row.label, aliases: machineAliases)
+            // 名称由服务端维护；稳定机器 ID 只用于归属，不在客户端重写显示名称。
+            let title = row.label
             let sharePercentText: String
             if totalTokens > 0 {
                 sharePercentText = "\(Int((Double(row.tokens) / Double(totalTokens) * 100).rounded()))%"

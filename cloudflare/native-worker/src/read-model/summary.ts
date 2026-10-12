@@ -1,3 +1,4 @@
+import { machineDisplayName } from "./machine-names";
 /** #126：/api/summary 编排（原 buildSummary 所在）。 */
 import { buildMobileSummary } from "../mobile-summary";
 import { buildVersionHealth } from "../version-contract";
@@ -253,14 +254,14 @@ function aggregateUsage(request: SummaryRequest, inputs: SummaryInputs, derived:
     const users = Array.from(entry.users.values()).map((user) => ({
       account: user.account,
       machine: user.machine,
-      display_name: `${user.machine} · ${user.account}`,
+      display_name: `${machineDisplayName(user.machine)} · ${user.account}`,
       total_tokens: user.total_tokens,
       source_ids: Array.from(user.source_ids).sort(),
     }));
     users.sort((lhs, rhs) => rhs.total_tokens - lhs.total_tokens);
     return {
       name: entry.name,
-      display_name: entry.name,
+      display_name: machineDisplayName(entry.name),
       total_tokens: entry.total_tokens,
       source_ids: Array.from(entry.source_ids).sort(),
       users,

@@ -226,9 +226,9 @@ final class ServerCardTests: XCTestCase {
         XCTAssertEqual(state.onlineServerCount, 2)
     }
 
-    // MARK: - 独立 Opus 审查追加 #4：机器别名优先按 row.id（机器原名）查找
+    // MARK: - #226: labels are server-owned; stable IDs remain independent
 
-    func testMachineAliasLooksUpRawMachineIDBeforeFormattingPrettyLabel() throws {
+    func testServerDisplayNameKeepsRawMachineIdentity() throws {
         let machineRow = MobileBreakdownRow(
             id: "host-a",
             label: "Pretty A",
@@ -239,15 +239,12 @@ final class ServerCardTests: XCTestCase {
         let summary = makeSummary(periodID: "today", byMachine: [machineRow], sources: [
             source(id: "src-1", machine: "host-a", osUser: "alice", status: "ok")
         ])
-        let aliases = ["host-a": "工作机"]
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases,
-            deviceTimeZone: shanghaiTZForTests)
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",             deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "host-a" })
 
-        // aliases 的 key 是机器原名 "host-a"，不是 breakdown 里已经美化过的 label "Pretty A"；
-        // 现有 formatMachineName(row.label, aliases:) 查的是 label，查不到会原样返回 "Pretty A"。
-        XCTAssertEqual(card.title, "工作机")
+        XCTAssertEqual(card.id, "host-a")
+        XCTAssertEqual(card.title, "Pretty A")
     }
 
     // MARK: - 迁移自已删除的 SourceHierarchyTests：byMachine 优先于 byOSUser 回退，且不对 contributions 求和
@@ -285,9 +282,9 @@ final class ServerCardTests: XCTestCase {
         }
     }
 
-    // MARK: - 迁移自已删除的 SourceHierarchyTests：机器别名回退到 formatMachineName(label) 并剥离 .local 后缀
+    // MARK: - #226: do not guess or rewrite a server-selected display label
 
-    func testMachineAliasFallsBackToFormattedLabelWhenRawIDMissesAlias() throws {
+    func testServerDisplayLabelIsNotReformattedLocally() throws {
         let machineRow = MobileBreakdownRow(
             id: "host-raw-id",
             label: "mymachine.local",
@@ -298,14 +295,12 @@ final class ServerCardTests: XCTestCase {
         let summary = makeSummary(periodID: "today", byMachine: [machineRow], sources: [
             source(id: "src-1", machine: "host-raw-id", osUser: "alice", status: "ok")
         ])
-        // aliases 里没有 "host-raw-id"（row.id 原名），只有剥离 ".local" 后缀后的 "mymachine"。
-        let aliases = ["mymachine": "工作站"]
 
-        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", machineAliases: aliases,
-            deviceTimeZone: shanghaiTZForTests)
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today",             deviceTimeZone: shanghaiTZForTests)
         let card = try XCTUnwrap(state.serverCards.first { $0.id == "host-raw-id" })
 
-        XCTAssertEqual(card.title, "工作站")
+        XCTAssertEqual(card.id, "host-raw-id")
+        XCTAssertEqual(card.title, "mymachine.local")
     }
 
     // MARK: - #184：quotaText 由服务端 quota_estimate 驱动，不再恒为「—」
@@ -368,6 +363,17 @@ final class ServerCardTests: XCTestCase {
         let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week", deviceTimeZone: shanghaiTZForTests)
         let displayed = try XCTUnwrap(state.serverCards.first?.models.first)
         XCTAssertEqual(displayed.quotaHelpText, "估算精度 A（多日回测总偏差≤10%）；模型比例按官方额度权重估算")
+    }
+
+    func testMachineDisplayLabelIsTakenVerbatimFromServerWithoutClientGuessing() throws {
+        let row = MobileBreakdownRow(id: "stable-machine-id", label: "服务端名称.local", tokens: 100,
+            sourceIDs: ["src-1"], agents: [])
+        let summary = makeSummary(periodID: "today", byMachine: [row], sources: [
+            source(id: "src-1", machine: "stable-machine-id", osUser: "alice", status: "ok")])
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", deviceTimeZone: shanghaiTZForTests)
+        let card = try XCTUnwrap(state.serverCards.first)
+        XCTAssertEqual(card.id, "stable-machine-id")
+        XCTAssertEqual(card.title, "服务端名称.local")
     }
 
     func testUnknownGradeIsTreatedAsNoEstimate() throws {
