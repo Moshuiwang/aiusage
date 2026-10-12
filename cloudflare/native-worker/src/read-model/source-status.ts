@@ -1,3 +1,4 @@
+import { machineDisplayName } from "./machine-names";
 /** #126：来源健康与版本视图（/api/summary 与 /api/health 共用产物）。 */
 import { evaluateCollectorRelease, publicVersionView } from "../version-contract";
 import { identityMatchesFilter, int, nowInTimezone, str } from "./shared";
@@ -36,8 +37,8 @@ function buildSourceStatus(
       if (host) result.host = String(host);
       if (osUser) result.os_user = String(osUser);
       if (identity.platform) result.platform = String(identity.platform);
-      if (machine && osUser) result.display_name = `${machine} · ${osUser}`;
-      else if (machine) result.display_name = String(machine);
+      if (machine && osUser) result.display_name = `${machineDisplayName(machine)} · ${osUser}`;
+      else if (machine) result.display_name = machineDisplayName(machine);
       else result.display_name = str(row.source_id || "unknown-source");
       result.accuracy = sourceAccuracySummary(accuracyBySource.get(str(row.source_id)) ?? []);
       result.version = sourceVersionView(row.collector_version);

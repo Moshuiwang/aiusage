@@ -121,7 +121,6 @@ final class MenuBarAppModel: ObservableObject {
             selectedPeriodID: selectedPeriodID,
             selectedOffset: selectedOffset,
             now: now(),
-            machineAliases: config?.machineAliases,
             quotaSlots: latestQuotaProviderSlots(),
             additionalSources: otherKnownSources(),
             deviceTimeZone: deviceTimeZone
@@ -129,7 +128,6 @@ final class MenuBarAppModel: ObservableObject {
         statusState = MenuBarViewModel.build(
             from: todaySummary ?? .empty(),
             selectedPeriodID: "today",
-            machineAliases: config?.machineAliases,
             deviceTimeZone: deviceTimeZone
         )
     }
