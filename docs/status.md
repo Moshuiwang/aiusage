@@ -39,7 +39,7 @@
   `cloudflare/native-worker/src/quota-calibration-cron.ts` 每日 cron 按 provider 轮换（3 天一轮，
   规避 Cloudflare Free 单次调用 CPU 预算）用最近 28 天官方周额度读数拟合系数，写
   `quota_calibration`；菜单栏据此显示「≈x.x%」+精度档（PR #194，#184 已合并）。
-  **公式 v2（#271，已合并待部署；部署与回源结果见 #271）**：有公开价目的族共用一个系数（单一隐藏额度 × API 价比：Claude 按 API
+  **公式 v2（#271，2026-10-07 已部署生产 Worker `77fe284f`；2026-10-12 回源确认三家均为 v2，进入观察期至 10-31）**：生产定级 Claude 四族 B（总偏差 10.0%）、Codex sol A / astra·luna·terra B / review none（5.1%）、Antigravity flash B / pro·claude-on-antigravity none（11.0%），系数比与价比一致。口径：有公开价目的族共用一个系数（单一隐藏额度 × API 价比：Claude 按 API
   input 价，Codex 按官方 credit 表），Codex 训练集从已知计量变更日（09-22 / 09-29 / 10-29）截断，
   定级改看逐日留出多天总偏差（A ≤10%、B ≤20%，至少 3 个计分日），有价比的族自身样本不足时最多 B；
   `quota_calibration.backtest_max_err` 列名沿用 v1、含义改为总偏差，`backtest_max_error` 不再下发。
