@@ -47,7 +47,7 @@ GitHub Release 是设备升级产物的发布入口；Milestone 管交付范围�
 3. **平台产物**：复用 `scripts/build_signed_release.py`，一次生成签名清单和本次支持的平台包。平台、架构、App/collector 版本、构建 SHA、下载 URL、大小与 SHA-256 必须对应；不宣称未生成或未验收的平台可升级。签名私钥留在发布 owner 的仓库外私有目录，不上传 Release；公钥固定在客户端代码，不能从下载包取得新的信任根。
 4. **草稿与正式发布**：先建 draft Release、上传包与 `release-manifest.json`、写发布说明，再核对清单签名、全部附件大小/哈希、安全解包及候选预检。草稿和 prerelease 不作为 stable 可用更新。当前客户端固定读取 GitHub `releases/latest/download/release-manifest.json`，因此被选为 latest 的正式 Release 必须提供完整、有效且前向版本检查可接受的 stable 清单与所需平台包。仅采集器发布也必须验证现有 Mac 用户的检查行为；不适用的版本不能被误报为可升级。
 5. **发布说明**：写明用户变化、App/collector 版本、准确源码 SHA、支持平台、已知限制、服务端前置条件、回滚方式和关联 Issue/Milestone。测试、CI、部署、用户可见验证与回源证据分别记录，未知项明写未知。升级检查需区分已是最新版、网络/下载失败、清单校验失败与发布服务未配置；现有笼统提示作为 #223 的交付缺口跟踪。
-6. **服务依赖与验收**：注册接口、D1 迁移和管理员配置按下节 MBA Ops 顺序完成，发布 owner 按机器权限生成与发布产物。正式发布前完成离线候选预检与回滚验证；发布后逐平台完成真实升级、配置/outbox 保留、非空数据和失败恢复验证，并回源巡检 Cloudflare 水位。Milestone 只有相关 Issue 验收缺口补齐才关闭，不能仅因 Release 已发布关闭。
+6. **服务依赖与验收**：注册接口、D1 迁移和管理员配置按下节已授权 Ops 顺序完成，发布 owner 按机器权限生成与发布产物。正式发布前完成离线候选预检与回滚验证；发布后逐平台完成真实升级、配置/outbox 保留、非空数据和失败恢复验证，并回源巡检 Cloudflare 水位。Milestone 只有相关 Issue 验收缺口补齐才关闭，不能仅因 Release 已发布关闭。
 7. **失败处理**：校验、预检或升级健康检查失败时保留或恢复旧版，不关闭安全校验，不静默降级为任意包安装。正式产物不可原位修改；严重发布缺陷先阻止有问题版本继续被当作 latest，核验旧版可用性，再发布修复版本，不能把旧版包装成新版本突破前向检查。
 
 GitHub 管理使用各机器规定的 App API 入口，不依赖浏览器个人登录；工作流权限、生产部署权限与 Release Contents 权限分别核验。
@@ -89,7 +89,7 @@ python3 scripts/prepare_release.py --output .build/release-VERSION \
 
 ## Ops 启用顺序与边界
 
-生产操作由 MBA Ops 完成：
+生产操作由对应 Issue 明确授权且具备最小凭据权限的 Ops 环境完成。Mac mini 自 2026-10-04 起具有用户授权的 Cloudflare 部署职责；每次操作仍须核对具体范围与回滚点：
 
 1. 审核并应用 `0015_device_enrollment.sql`，配置独立 `AIUSAGE_DEVICE_ADMIN_TOKEN`，部署对应 Worker。旧共享 token **不具备管理员权限**。
 2. 在管理机器配置一次管理员凭据；逐设备验证注册、来源限制、读取权限与撤销，不替用户批量自动批准。
@@ -98,4 +98,4 @@ python3 scripts/prepare_release.py --output .build/release-VERSION \
 5. 所有设备完成注册后可撤掉旧共享 token；只保留管理员凭据与设备凭据的生产模式仍禁止匿名访问。尚未迁移的旧设备需明确安排迁移，不能静默断供。
 6. 发布后执行 `scripts/check_cf_usage.py` 回源巡检（等级 7）。未做回源前不宣称生产升级完成。
 
-注册入口限定 4 KiB 请求、16 个待批申请、每小时 32 次新申请、64 个设备凭据记录；写入批量执行，过期申请与旧计数清理。客户端申请和确认均手动单次请求。达到限额时返回明确错误，不无限扩张存储。生产 Secret 与 Worker 真实部署需 Ops 权限；发布 owner 可用本机发布签名密钥和 GitHub Contents 权限生成并发布签名产物。本机不修改生产配置。
+注册入口限定 4 KiB 请求、16 个待批申请、每小时 32 次新申请、64 个设备凭据记录；写入批量执行，过期申请与旧计数清理。客户端申请和确认均手动单次请求。达到限额时返回明确错误，不无限扩张存储。生产 Secret 与 Worker 真实部署需 Ops 权限；发布 owner 可用本机发布签名密钥和 GitHub Contents 权限生成并发布签名产物。发布工具不自动修改生产部署配置；注册、迁移、Secrets 与部署按对应 Issue 的明确授权分别执行。
