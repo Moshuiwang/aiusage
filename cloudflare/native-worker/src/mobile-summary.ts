@@ -208,6 +208,8 @@ function providerSlot(provider: string, row: AnyRecord | undefined): AnyRecord {
       source_id: quota.source_id || null,
       source_type: quota.source_type || null,
       windows: quotaWindows,
+      ...(Array.isArray(quota.last_successful_windows) && quota.last_successful_windows.length
+        ? {last_successful_windows: quota.last_successful_windows} : {}),
     },
   };
 }

@@ -19,6 +19,7 @@ function validateIngestPayload(payload: unknown): IngestRequest {
   if (!Number.isInteger(payload.schema_version)) {
     throw new WriteValidationError(400, "http_schema_invalid", `schema_version must be an integer, got: ${String(payload.schema_version)}`);
   }
+  const observedAt = ingestObservedAt(payload.observed_at);
   scanIngestSensitive(payload);
   const usageHourlyFacts = payload.usage_hourly_facts;
   if (usageHourlyFacts !== undefined) {
@@ -95,7 +96,7 @@ function validateIngestPayload(payload: unknown): IngestRequest {
     os_user: String(payload.os_user),
     platform: String(payload.platform ?? "unknown"),
     timezone: String(payload.timezone),
-    observed_at: String(payload.observed_at),
+    observed_at: observedAt,
     collection_window: String(payload.collection_window ?? "daily"),
     usage_daily: Array.isArray(payload.usage_daily) ? payload.usage_daily.filter(isRecord) : [],
     ccusage_daily_report: isRecord(payload.ccusage_daily_report) ? payload.ccusage_daily_report : undefined,
@@ -112,6 +113,29 @@ function validateIngestPayload(payload: unknown): IngestRequest {
     error_type: payload.error_type ? String(payload.error_type) : null,
     error_message: payload.error_message ? String(payload.error_message) : null,
   };
+}
+
+// The same timestamp must be usable by Date and D1 julianday comparisons.
+// Reject calendar rollover and timezone-less strings before any write occurs.
+function ingestObservedAt(value: unknown): string {
+  const reject = () => new WriteValidationError(400, "http_schema_invalid", "observed_at must be a valid ISO 8601 datetime with timezone");
+  if (typeof value !== "string") throw reject();
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match) throw reject();
+  const [year, month, day, hour, minute, second] = match.slice(1, 7).map(Number);
+  const calendarDate = new Date(0);
+  calendarDate.setUTCFullYear(year, month - 1, day);
+  calendarDate.setUTCHours(hour, minute, second, 0);
+  if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 ||
+      calendarDate.getUTCDate() !== day || hour > 23 || minute > 59 || second > 59) throw reject();
+  const zone = match[7];
+  if (zone !== "Z") {
+    const zoneHours = Number(zone.slice(1, 3));
+    const zoneMinutes = Number(zone.slice(4, 6));
+    if (zoneHours > 14 || zoneMinutes > 59 || (zoneHours === 14 && zoneMinutes !== 0)) throw reject();
+  }
+  if (!Number.isFinite(new Date(value).getTime())) throw reject();
+  return value;
 }
 
 function validateLimitsPayload(payload: unknown): { observedAt: string; windows: LimitWindow[] } {
@@ -133,6 +157,11 @@ function validateLimitsPayload(payload: unknown): { observedAt: string; windows:
 function parseLimitWindow(payload: AnyRecord): LimitWindow {
   for (const field of ["provider", "window", "reset_at", "observed_at"]) {
     if (!(field in payload)) throw new WriteValidationError(400, "limit_schema_invalid", `missing required limit field: ${field}`);
+  }
+  if (payload.status === "ok" && payload.confidence === "observed") {
+    for (const field of ["used_percent", "remaining_percent"]) {
+      if (!(field in payload)) throw new WriteValidationError(400, "limit_schema_invalid", `missing measured limit field: ${field}`);
+    }
   }
   const provider = nonEmptyString(payload, "provider");
   const window = {
@@ -209,8 +238,8 @@ function requireIsoString(payload: AnyRecord, field: string): string {
 }
 
 function percent(payload: AnyRecord, field: string): number {
-  const value = payload[field] ?? 0;
-  if (typeof value === "boolean" || typeof value !== "number") throw new WriteValidationError(400, "limit_schema_invalid", `${field} must be a number`);
+  const value = field in payload ? payload[field] : 0;
+  if (typeof value === "boolean" || typeof value !== "number" || !Number.isFinite(value)) throw new WriteValidationError(400, "limit_schema_invalid", `${field} must be a number`);
   if (value < 0 || value > 100) throw new WriteValidationError(400, "limit_schema_invalid", `${field} must be between 0 and 100`);
   return value;
 }

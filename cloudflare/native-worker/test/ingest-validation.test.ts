@@ -59,6 +59,23 @@ async function post(body: unknown, options: { auth?: boolean | string; bindings?
 }
 
 describe.sequential("/ingest 写路径的入参校验", () => {
+  it("非法时间不会污染新事实键，之后合法同键仍能落库", async () => {
+    for (const invalid of ["not-a-date", "2026-02-30T12:00:00+08:00", "2026-06-03T12:00:00", null, {}, ""]) {
+      await withWorker({ now: fixedNow }, async ({ fetchRaw, db }) => {
+        const rejected = await fetchRaw({method: "POST", path: "/ingest", auth: true,
+          body: {...validPayload(), observed_at: invalid}});
+        expect(rejected.status, `非法时间 ${JSON.stringify(invalid)}`).toBe(400);
+        expect(JSON.parse(rejected.body.toString("utf8")).error_type).toBe("http_schema_invalid");
+        for (const table of ["source_identities", "usage_fact_revisions", "usage_hourly_facts", "source_report_states"]) {
+          expect(await db.prepare(`SELECT count(*) AS n FROM ${table}`).first()).toEqual({n: 0});
+        }
+        const accepted = await fetchRaw({method: "POST", path: "/ingest", auth: true, body: validPayload()});
+        expect(accepted.status).toBe(200);
+        expect(await db.prepare("SELECT total_tokens FROM usage_hourly_facts").all()).toMatchObject({results: [{total_tokens: 150}]});
+      });
+    }
+  }, 120_000);
+
   it("合法 payload 收得下并真的落库——这是下面所有拒绝断言的对照组", async () => {
     // 没有这条，「被拒绝」的断言全部可能是「这条路径根本跑不通」的假象。
     const result = await post(validPayload());

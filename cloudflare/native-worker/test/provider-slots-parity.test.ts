@@ -145,7 +145,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     expect([...reasons].sort()).toEqual(["expired", "no_data", "stale", "unavailable", "unverified"]);
   });
 
-  it("额度缺失时绝不携带百分比或重置时刻", () => {
+  it("缺失的当前额度不泄漏数字，历史参考只能来自近期同来源的官方成功", () => {
     let checked = 0;
     for (const record of golden) {
       for (const slot of record.provider_slots as Array<{ provider: string; quota: Record<string, unknown> }>) {
@@ -153,7 +153,29 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
         checked += 1;
         expect(slot.quota.windows, `${record.name} / ${slot.provider}`).toEqual([]);
         expect("last_verified_at" in slot.quota, `${record.name} / ${slot.provider} 必须显式声明未验证时刻`).toBe(true);
-        const serialized = JSON.stringify(slot.quota);
+        // #281 explicitly authorizes a separate historical-reference contract.
+        // The current quota remains missing with zero current windows; never promote history.
+        const {last_successful_windows: history, ...currentQuota} = slot.quota;
+        const serialized = JSON.stringify(currentQuota);
+        if (history !== undefined) {
+          expect(slot.quota.reason).toBe("unavailable");
+          expect(Array.isArray(history)).toBe(true);
+          expect((history as Array<Record<string, unknown>>).length).toBeGreaterThan(0);
+          for (const window of history as Array<Record<string, unknown>>) {
+            expect(window.source_id).toBe(slot.quota.source_id);
+            expect(window.provider).toBe(slot.provider);
+            expect(window.official).toBe(true);
+            expect(window.confidence).toBe("observed");
+            expect(window.status).toBe("ok");
+            expect(typeof window.used_percent).toBe("number");
+            expect(typeof window.remaining_percent).toBe("number");
+            const reference = new Date("2026-06-03T12:00:00+08:00").getTime();
+            const observed = new Date(String(window.observed_at)).getTime();
+            expect(reference - observed).toBeGreaterThanOrEqual(0);
+            expect(reference - observed).toBeLessThanOrEqual(120 * 60 * 1000);
+            expect(new Date(String(window.reset_at)).getTime()).toBeGreaterThan(reference);
+          }
+        }
         for (const leaked of ["used_percent", "remaining_percent", "reset_at"]) {
           expect(serialized.includes(leaked), `${record.name} / ${slot.provider} 泄漏了 ${leaked}`).toBe(false);
         }

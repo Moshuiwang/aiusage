@@ -26,6 +26,32 @@ class TestLimitsContract(unittest.TestCase):
         self.assertTrue(window.is_official)
         self.assertEqual(window.to_snapshot_dict()["reset_at"], "2026-06-08T00:00:00+08:00")
 
+    def test_observed_success_requires_both_measured_percentages(self) -> None:
+        payload = json.loads((FIXTURES / "limits_official_sample.json").read_text(encoding="utf-8"))
+        for missing in [("used_percent",), ("remaining_percent",), ("used_percent", "remaining_percent")]:
+            with self.subTest(missing=missing):
+                incomplete = dict(payload)
+                for field in missing:
+                    incomplete.pop(field)
+                with self.assertRaises(LimitContractError) as caught:
+                    parse_limit_window(incomplete)
+                self.assertEqual(caught.exception.error_type, "limit_schema_invalid")
+
+    def test_measurements_reject_non_finite_values_and_preserve_true_zero(self) -> None:
+        payload = json.loads((FIXTURES / "limits_official_sample.json").read_text(encoding="utf-8"))
+        for field in ["used_percent", "remaining_percent"]:
+            for value in [None, float("nan"), float("inf"), float("-inf")]:
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(LimitContractError):
+                        parse_limit_window({**payload, field: value})
+        for used, remaining in [(0, 100), (100, 0), (0, 0)]:
+            window = parse_limit_window({**payload, "used_percent": used, "remaining_percent": remaining})
+            self.assertTrue(window.is_official)
+            self.assertEqual((window.used_percent, window.remaining_percent), (used, remaining))
+        failed = parse_limit_window({**payload, "status": "provider_failed", "confidence": "missing",
+            "reset_at": payload["observed_at"], "window_duration_minutes": 0, "used_percent": 0, "remaining_percent": 0})
+        self.assertFalse(failed.is_official)
+
     def test_missing_required_fields_raise_stable_error(self) -> None:
         payload = json.loads((FIXTURES / "limits_official_sample.json").read_text(encoding="utf-8"))
 

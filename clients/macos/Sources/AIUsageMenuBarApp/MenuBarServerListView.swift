@@ -68,7 +68,8 @@ private struct MenuBarServerCardView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(card.title)
                     .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .help(card.title)
                 Text(card.subtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -100,25 +101,25 @@ private struct MenuBarServerCardView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(card.models) { model in
-                    HStack(spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Circle()
                             .fill(Color(red: model.agentBrandColor.red, green: model.agentBrandColor.green, blue: model.agentBrandColor.blue, opacity: model.agentBrandColor.opacity))
                             .frame(width: 7, height: 7)
                         Text(model.modelLabel)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .foregroundStyle(Color(nsColor: .labelColor).opacity(0.85))
                         Text(model.valueText)
                             .fontWeight(.medium)
                             .monospacedDigit()
+                            .frame(width: 64, alignment: .trailing)
                         Text(model.quotaText)
                             .font(.system(size: 11))
                             .foregroundStyle(Color(nsColor: .secondaryLabelColor))
-                            .frame(width: 92, alignment: .trailing)
+                            .frame(width: 64, alignment: .trailing)
                     }
                     .font(.system(size: 12))
-                    .help(model.quotaHelpText)
+                    .help(model.modelLabel + " · " + model.quotaHelpText)
                 }
             }
         }

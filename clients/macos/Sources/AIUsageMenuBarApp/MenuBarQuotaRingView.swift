@@ -18,11 +18,12 @@ struct MenuBarQuotaSectionView: View {
             ForEach(Array(rings.enumerated()), id: \.element.id) { index, ring in
                 MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
                 if index < rings.count - 1 {
-                    Spacer(minLength: 6)
+                    Spacer(minLength: 4)
                 }
             }
         }
-        .padding(12)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 12)
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
@@ -53,14 +54,14 @@ struct MenuBarQuotaRingItem: View {
         // #177 第三轮真机反馈：回到设计稿版式——圆环在左，名称 + 倒计时在右侧纵排。
         // 名称 11pt semibold 一行完整显示，不缩放/不截断；容器（MenuBarQuotaSectionView）
         // 已改成按内容自然宽度 + Spacer 均分布局，不再有等宽列挤压这一行的空间。
-        HStack(alignment: .center, spacing: 6) {
+        HStack(alignment: .center, spacing: 5) {
             ring
             VStack(alignment: .leading, spacing: 1) {
                 Text(data.displayName)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize()
-                Text(data.isAvailable ? data.resetCountdownText : "暂不可用")
+                Text(data.isAvailable ? data.resetCountdownText : (data.isShowingLastSuccess ? "最近成功值" : "暂不可用"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .lineLimit(1)
@@ -101,12 +102,13 @@ struct MenuBarQuotaRingItem: View {
                     .foregroundStyle(.primary)
             } else {
                 Circle().stroke(brandColor.opacity(0.55), style: StrokeStyle(lineWidth: 2, dash: [3, 4]))
-                Text("—")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                Text(data.isShowingLastSuccess ? data.primaryPctText : "—")
+                    .font(.system(size: data.isShowingLastSuccess ? 11.5 : 12, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color(nsColor: .secondaryLabelColor))
             }
         }
-        .frame(width: 46, height: 46)
+        .frame(width: 42, height: 42)
     }
 }
 

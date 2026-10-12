@@ -497,6 +497,22 @@
       {
         "provider": "claude",
         "quota": {
+          "last_successful_windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ],
           "last_verified_at": "2026-06-03T11:00:00+08:00",
           "reason": "unavailable",
           "source_id": "claude-main",

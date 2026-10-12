@@ -75,6 +75,18 @@ Mac 使用菜单“检查 App 更新…”；更新器运行于独立复制的 h
 
 手动触发检查与升级，不引入客户端短轮询。Linux 依赖环境须通过 `pip install .` 安装项目声明依赖；Mac 内置相同验签依赖，无需用户配置 Python。
 
+### Mac mini 草稿发布入口
+
+`scripts/prepare_release.py` 复用构建/签名 owner、安全解包和候选预检，只使用 Mac mini 已批准 GitHub App 入口。它先核对干净的 `origin/main` 提交、该提交对应的已合并 PR 和四项必需 CI，再拒绝已存在标签，构建两平台包，创建 draft 并逐附件核对远端大小、SHA-256 及下载回读。签名私钥路径仅传给构建 owner，不输出内容；其他机器不得借用此机器身份。
+
+```sh
+python3 scripts/prepare_release.py --output .build/release-VERSION \
+  --mac-app "PATH_TO/AI Usage Menu Bar.app" \
+  --signing-key PRIVATE_KEY_OUTSIDE_REPO
+```
+
+此入口不会转为正式 Release。草稿出错时停止，保留可审阅的草稿与本地证据；正式发布须另行按已授权发布窗口执行，不能覆盖已有标签/正式资产。当前入口固定 macOS arm64 与 Linux 源码包；真实平台升级和生产回源依旧必须分别验收。
+
 ## Ops 启用顺序与边界
 
 生产操作由 MBA Ops 完成：
