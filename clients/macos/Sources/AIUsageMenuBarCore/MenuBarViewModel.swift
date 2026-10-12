@@ -161,6 +161,7 @@ public struct QuotaRingData: Equatable, Sendable, Identifiable {
     public let resetCountdownText: String
     /// 仅当官方观测且状态正常的窗口存在时为 true。
     public let isAvailable: Bool
+    public var isShowingLastSuccess: Bool { !isAvailable && primaryPctText != "—" && availabilityText.hasPrefix("最近成功值") }
     /// #177：悬停浮层用的行数据。isAvailable=false 时不含任何百分比——只显示降级状态说明与更新时间，
     /// 不能把「最近成功值」窗口残留的旧百分比泄露到浮层里。
     public let hoverRows: [QuotaHoverRow]
@@ -714,7 +715,7 @@ public enum MenuBarViewModel {
                         // #184：只在 status == "available" 时信任服务端 quota_estimate——非 available
                         // 的模型行（如「模型未知」撤销分摊占位）即便意外带了字段也不能展示估算。
                         let estimate = model.status == "available" ? model.quotaEstimate : nil
-                        let (quotaText, quotaHelpText) = Self.quotaEstimateTexts(estimate, unavailable: model.status == "available" ? model.quotaEstimateUnavailable : nil)
+                        let (quotaText, quotaHelpText) = Self.quotaEstimateTexts(estimate, unavailable: model.status == "available" ? model.quotaEstimateUnavailable : nil, provider: canonicalProvider(agent.id))
                         models.append(MenuServerModelRow(
                             id: "\(row.id)/\(agent.id)/\(model.id)",
                             modelID: model.id,
@@ -753,7 +754,7 @@ public enum MenuBarViewModel {
     /// 数值必须带「≈」——AGENTS.md 关键不变量：不得把估算伪装成官方额度。
     /// 追加：未知 grade（不是 "A"/"B"）视同没有估算——服务端合同只承诺下发 A/B
     /// （见 quota-estimate.ts），客户端不为陌生等级编一句听起来权威的说明。
-    private static func quotaEstimateTexts(_ estimate: MobileQuotaEstimate?, unavailable: MobileQuotaEstimateUnavailable?) -> (text: String, helpText: String) {
+    private static func quotaEstimateTexts(_ estimate: MobileQuotaEstimate?, unavailable: MobileQuotaEstimateUnavailable?, provider: String) -> (text: String, helpText: String) {
         guard let estimate, let gradeHelpText = gradePrecisionHelpText(estimate.grade) else {
             return quotaUnavailableTexts(unavailable)
         }
@@ -763,7 +764,7 @@ public enum MenuBarViewModel {
         } else {
             text = String(format: "≈%.1f%%", estimate.percent)
         }
-        var helpText = gradeHelpText
+        var helpText = gradeHelpText + (provider == "codex" ? "；模型比例按官方额度权重估算" : "；模型比例按价比估算")
         if estimate.basis == "weekly_average" {
             helpText += "；月视图为周均"
         }
@@ -774,9 +775,6 @@ public enum MenuBarViewModel {
         switch unavailable?.reason {
         case "backtest_failed":
             var help = "换算回测未通过"
-            if let error = unavailable?.backtestMaxError, error.isFinite, error >= 0 {
-                help += String(format: "：账户最大误差%.1f%%（要求≤25%%）", error * 100)
-            }
             if let samples = unavailable?.sampleIntervals, samples >= 0 {
                 help += "，\(samples)个区间"
             }
@@ -793,8 +791,8 @@ public enum MenuBarViewModel {
 
     private static func gradePrecisionHelpText(_ grade: String) -> String? {
         switch grade {
-        case "A": return "估算精度 A（约 ±10%），基于官方额度校准"
-        case "B": return "估算精度 B（约 ±25%），基于官方额度校准"
+        case "A": return "估算精度 A（多日回测总偏差≤10%）"
+        case "B": return "估算精度 B（多日回测总偏差≤20%）"
         default: return nil
         }
     }
@@ -938,7 +936,16 @@ public enum MenuBarViewModel {
             return lhs == rhs ? $0.0.provider < $1.0.provider : lhs < rhs
         }.map { slot, wins in
             let provider = canonicalProvider(slot.provider)
-            let bestWindows = bestWindowPerType(wins)
+            // Historical reference is supplied separately by the server, never inferred from current windows.
+            let history = slot.quota.status == "missing" && ["unavailable", "failed", "provider_failed"].contains(slot.quota.reason ?? "")
+                ? slot.quota.lastSuccessfulWindows.filter { window in
+                    guard window.sourceID == slot.quota.sourceID, canonicalProvider(window.provider) == provider,
+                          window.official == true, window.confidence == "observed", window.status == "ok",
+                          !isLocalEstimate(window.sourceType), let observed = parseDate(window.observedAt),
+                          let reset = parseDate(window.resetAt) else { return false }
+                    return observed <= now && now.timeIntervalSince(observed) <= 120 * 60 && reset > now
+                } : []
+            let bestWindows = bestWindowPerType(history.isEmpty ? wins : history)
             let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
             let weekWindow = bestWindows.first(where: isWeekLimitWindow)
             let otherWindow = bestWindows
@@ -960,7 +967,8 @@ public enum MenuBarViewModel {
             let hasVisibleWindow = displayOuterWindow != nil || weekWindow != nil
             // 「最近成功值」（quota 非 available 但保留了旧窗口）也必须降级，不当可信额度展示。
             let isAvailable = slot.quota.status == "available" && hasVisibleWindow
-            let primaryWindow = isAvailable ? (weekWindow ?? displayOuterWindow) : nil
+            let isShowingLastSuccess = !isAvailable && !history.isEmpty && hasVisibleWindow
+            let primaryWindow = isAvailable || isShowingLastSuccess ? (weekWindow ?? displayOuterWindow) : nil
             let nearestResetWindow = [displayOuterWindow, weekWindow]
                 .filter { _ in isAvailable }
                 .compactMap { $0 }
@@ -969,10 +977,10 @@ public enum MenuBarViewModel {
                     return (window, reset)
                 }
                 .min { $0.1 < $1.1 }?.0
-            let availabilityTextValue = quotaAvailabilityText(slot.quota, hasVisibleWindow: hasVisibleWindow)
-            let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: "更新", timezone: deviceTimeZone) ?? "未更新"
-            // #177：浮层不得泄露「最近成功值」残留的旧百分比——isAvailable=false 时只给状态说明 + 更新时间，
-            // 不能沿用 outerPctText/innerPctText（它们对 isHistorical 的 quota 仍可能带着旧窗口的百分比）。
+            let availabilityTextValue = isShowingLastSuccess ? "最近成功值 · 本次更新失败" : quotaAvailabilityText(slot.quota, hasVisibleWindow: hasVisibleWindow)
+            let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: isShowingLastSuccess ? "核对" : "更新", timezone: deviceTimeZone) ?? "未更新"
+            // Current windows never become available through cached values. #281 exposes only
+            // separately supplied recent history, with an explicit historical label and no countdown.
             // #177 真机反馈：只显示确实有数据的窗口行——某个 Agent 只有 7d/week 窗口时
             // （如 Codex），不能在悬停浮层里造出一条「额度 — · --」的空占位行。
             let hoverRows: [QuotaHoverRow]
@@ -997,6 +1005,11 @@ public enum MenuBarViewModel {
                         )
                     },
                 ].compactMap { $0 }
+            } else if isShowingLastSuccess, let primaryWindow {
+                hoverRows = [
+                    QuotaHoverRow(label: "参考", valueText: "最近成功值 \(Int(primaryWindow.usedPercent.rounded()))%"),
+                    QuotaHoverRow(label: "状态", valueText: "本次更新失败 · \(updatedTextValue)")
+                ]
             } else {
                 hoverRows = [
                     QuotaHoverRow(
@@ -1011,10 +1024,10 @@ public enum MenuBarViewModel {
             return QuotaRingData(
                 id: provider, displayName: name,
                 primaryFraction: (primaryWindow?.usedPercent ?? 0) / 100.0,
-                outerPctText: outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
-                innerPctText: weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--",
-                outerTimeText: outerWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
-                innerTimeText: weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                outerPctText: history.isEmpty ? (outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--") : "--",
+                innerPctText: history.isEmpty ? (weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--") : "--",
+                outerTimeText: history.isEmpty ? (outerWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--") : "--",
+                innerTimeText: history.isEmpty ? (weekWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--") : "--",
                 outerLabel: outerWindow.map(windowLabel) ?? "额度",
                 innerLabel: weekWindow.map(windowLabel) ?? "长期",
                 updatedText: updatedTextValue,
@@ -1048,6 +1061,7 @@ public enum MenuBarViewModel {
             case "unverified": return "未验证"
             case "unsupported": return "暂不支持"
             case "unavailable", "failed", "provider_failed": return "读取失败"
+            case "expired": return "等待重新核对"
             default: return reason
             }
         }

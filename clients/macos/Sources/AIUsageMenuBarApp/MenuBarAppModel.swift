@@ -490,7 +490,7 @@ final class MenuBarAppModel: ObservableObject {
         var seenProviders = Set<String>()
         var slots = loaded.providerSlots.map { slot -> MobileProviderSlot in
             seenProviders.insert(slot.provider)
-            guard slot.quota.windows.isEmpty,
+            guard slot.quota.windows.isEmpty, slot.quota.lastSuccessfulWindows.isEmpty,
                   let previous = fallbackByProvider[slot.provider],
                   !previous.quota.windows.isEmpty
             else {

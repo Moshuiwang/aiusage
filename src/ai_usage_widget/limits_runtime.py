@@ -85,7 +85,10 @@ class LimitsRuntime:
             source_id = str(getattr(provider, "source_id", provider_name))
             try:
                 windows = [_normalize_window_source_id(window, source_id) for window in provider.collect()]
-            except Exception:
+            except Exception as exc:
+                category = getattr(exc, "error_type", "provider_failed")
+                if category not in {"timeout", "unauthorized", "missing_credentials", "provider_failed", "unsupported", "limit_schema_invalid", "claude_cli_schema_invalid"}:
+                    category = "provider_failed"
                 windows = [_failed_window(provider_label, seen_at, source_id=source_id)]
                 all_windows.extend(windows)
                 provider_results.append(
@@ -93,7 +96,7 @@ class LimitsRuntime:
                         provider=provider_name,
                         status="provider_failed",
                         windows_collected=len(windows),
-                        error_type="provider_failed",
+                        error_type=category,
                         source_id=source_id,
                     )
                 )

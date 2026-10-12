@@ -156,7 +156,7 @@ function providerQuotaSlot(
 ): Record<string, unknown> {
   const selectedSourceId = statusRow ? statusRow.source_id : undefined;
   const lastVerifiedAt = lastVerifiedAtOf(rows, selectedSourceId);
-  // 缺失态只暴露「最近一次验证时间」和来源标识，绝不带任何百分比或 reset 时间。
+  // Current missing windows stay empty. #281 separately labels recent successful observations as historical reference.
   const missing = (reason: string, sourceId: unknown = null, sourceType: unknown = null) => ({
     status: "missing",
     reason,
@@ -171,7 +171,17 @@ function providerQuotaSlot(
   const sourceId = statusRow.source_id;
   const sourceType = statusRow.source_type;
   const state = str(statusRow.status);
-  if (state !== "ok") return missing(state || "unverified", sourceId, sourceType);
+  if (state !== "ok") {
+    const result = missing(state || "unverified", sourceId, sourceType);
+    if (state !== "unavailable") return result;
+    const successes = rows.filter((row) => str(row.source_id) === str(sourceId) && effectiveLimitWindow(row));
+    const history = successes.filter((row) => new Date(row.observed_at).getTime() <= refTime.getTime() && !limitWindowStale(row, refTime) && !limitWindowExpired(row, refTime));
+    if (history.length) return {...result, last_successful_windows: history};
+    if (successes.length) {
+      result.reason = successes.every((row) => limitWindowExpired(row, refTime)) ? "expired" : "stale";
+    }
+    return result;
+  }
 
   const windows = rows.filter((row) =>
     str(row.source_id) === str(sourceId) &&

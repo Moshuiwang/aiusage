@@ -33,6 +33,20 @@ class BrokenOAuthProvider:
 
 
 class TestClaudeCliAdapter(unittest.TestCase):
+    def test_timeout_is_classified_without_repeating_output_or_running_model_probe(self) -> None:
+        import subprocess
+        class SlowRunner:
+            def __init__(self): self.calls = 0
+            def run(self, command, timeout, env=None):
+                self.calls += 1
+                raise subprocess.TimeoutExpired(command, timeout, output="private provider output")
+        runner = SlowRunner()
+        with self.assertRaises(ClaudeProviderError) as caught:
+            ClaudeCliUsageProvider(runner=runner).collect()
+        self.assertEqual(caught.exception.error_type, "timeout")
+        self.assertNotIn("private provider output", str(caught.exception))
+        self.assertEqual(runner.calls, 1)
+
     def test_cli_provider_runs_usage_command_and_parses_windows(self) -> None:
         cli_text = (FIXTURES / "claude_usage_cli.txt").read_text(encoding="utf-8")
         runner = RecordingRunner(ClaudeCommandResult(returncode=0, stdout=cli_text, stderr=""))

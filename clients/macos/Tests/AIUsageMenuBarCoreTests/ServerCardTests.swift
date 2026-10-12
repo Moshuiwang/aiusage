@@ -344,12 +344,12 @@ final class ServerCardTests: XCTestCase {
         // 换成同样断言也会通过，必须锁具体文本才能守住「按实际 grade 分支」这个行为。
         let opus = try XCTUnwrap(card.models.first { $0.modelID == "claude-opus-5" })
         XCTAssertEqual(opus.quotaText, "≈2.3%")
-        XCTAssertEqual(opus.quotaHelpText, "估算精度 A（约 ±10%），基于官方额度校准")
+        XCTAssertEqual(opus.quotaHelpText, "估算精度 A（多日回测总偏差≤10%）；模型比例按价比估算")
 
         // grade B + basis weekly_average：精度换成 B 档，且追加周均折算说明。
         let haiku = try XCTUnwrap(card.models.first { $0.modelID == "claude-haiku-5" })
         XCTAssertEqual(haiku.quotaText, "≈<0.1%")
-        XCTAssertEqual(haiku.quotaHelpText, "估算精度 B（约 ±25%），基于官方额度校准；月视图为周均")
+        XCTAssertEqual(haiku.quotaHelpText, "估算精度 B（多日回测总偏差≤20%）；模型比例按价比估算；月视图为周均")
 
         let sol = try XCTUnwrap(card.models.first { $0.modelID == "gpt-6-sol" })
         XCTAssertEqual(sol.quotaText, "—")
@@ -357,6 +357,18 @@ final class ServerCardTests: XCTestCase {
     }
 
     // MARK: - #184 追加：未知 grade（不是 "A"/"B"）视同没有估算，不编一句听起来权威的说明
+
+    func testCodexEstimateExplainsOfficialWeightsRatherThanApiPriceRatio() throws {
+        let model = MobileSourceModel(id: "gpt-6-sol", label: "GPT-6 Sol", tokens: 100, status: "available",
+            quotaEstimate: MobileQuotaEstimate(percent: 2, grade: "A", basis: "week"))
+        let row = MobileBreakdownRow(id: "mac-1", label: "mac-1", tokens: 100, sourceIDs: ["src-1"],
+            agents: [MobileSourceAgent(id: "codex", label: "Codex", tokens: 100, status: "available", models: [model])])
+        let summary = makeSummary(periodID: "week", byMachine: [row], sources: [
+            source(id: "src-1", machine: "mac-1", osUser: "alice", status: "ok")])
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "week", deviceTimeZone: shanghaiTZForTests)
+        let displayed = try XCTUnwrap(state.serverCards.first?.models.first)
+        XCTAssertEqual(displayed.quotaHelpText, "估算精度 A（多日回测总偏差≤10%）；模型比例按官方额度权重估算")
+    }
 
     func testUnknownGradeIsTreatedAsNoEstimate() throws {
         let machineRow = MobileBreakdownRow(

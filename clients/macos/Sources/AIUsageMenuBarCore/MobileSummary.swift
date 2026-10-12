@@ -356,18 +356,15 @@ public struct MobileSourceModel: Codable, Equatable, Sendable, Identifiable {
 public struct MobileQuotaEstimateUnavailable: Codable, Equatable, Sendable {
     public let reason: String
     public let sampleIntervals: Int?
-    public let backtestMaxError: Double?
 
-    public init(reason: String, sampleIntervals: Int? = nil, backtestMaxError: Double? = nil) {
+    public init(reason: String, sampleIntervals: Int? = nil) {
         self.reason = reason
         self.sampleIntervals = sampleIntervals
-        self.backtestMaxError = backtestMaxError
     }
 
     enum CodingKeys: String, CodingKey {
         case reason
         case sampleIntervals = "sample_intervals"
-        case backtestMaxError = "backtest_max_error"
     }
 }
 
@@ -509,6 +506,8 @@ public struct MobileProviderQuota: Codable, Equatable, Sendable {
     public let sourceID: String?
     public let sourceType: String?
     public let windows: [MobileLimitWindow]
+    /// Previously verified values for explicitly labelled historical reference only.
+    public let lastSuccessfulWindows: [MobileLimitWindow]
 
     public init(
         status: String,
@@ -516,7 +515,8 @@ public struct MobileProviderQuota: Codable, Equatable, Sendable {
         lastVerifiedAt: String?,
         sourceID: String?,
         sourceType: String?,
-        windows: [MobileLimitWindow]
+        windows: [MobileLimitWindow],
+        lastSuccessfulWindows: [MobileLimitWindow] = []
     ) {
         self.status = status
         self.reason = reason
@@ -524,6 +524,7 @@ public struct MobileProviderQuota: Codable, Equatable, Sendable {
         self.sourceID = sourceID
         self.sourceType = sourceType
         self.windows = windows
+        self.lastSuccessfulWindows = lastSuccessfulWindows
     }
 
     public static func missing(reason: String? = "no_data") -> MobileProviderQuota {
@@ -545,6 +546,7 @@ public struct MobileProviderQuota: Codable, Equatable, Sendable {
         sourceID = try container.decodeIfPresent(String.self, forKey: .sourceID)
         sourceType = try container.decodeIfPresent(String.self, forKey: .sourceType)
         windows = try container.decodeIfPresent([MobileLimitWindow].self, forKey: .windows) ?? []
+        lastSuccessfulWindows = try container.decodeIfPresent([MobileLimitWindow].self, forKey: .lastSuccessfulWindows) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
@@ -554,6 +556,7 @@ public struct MobileProviderQuota: Codable, Equatable, Sendable {
         case sourceID = "source_id"
         case sourceType = "source_type"
         case windows
+        case lastSuccessfulWindows = "last_successful_windows"
     }
 }
 

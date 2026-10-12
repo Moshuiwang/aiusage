@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, Iterable
@@ -79,6 +80,8 @@ def parse_limit_window(payload: Dict[str, Any]) -> LimitWindow:
     reset_at = _require_iso_datetime(payload, "reset_at")
     observed_at = _require_iso_datetime(payload, "observed_at")
 
+    if payload.get("status") == "ok" and payload.get("confidence") == "observed":
+        _require_fields(payload, ("used_percent", "remaining_percent"))
     used_percent = _optional_percent(payload, "used_percent")
     remaining_percent = _optional_percent(payload, "remaining_percent")
     window_duration_minutes = _optional_positive_int(payload, "window_duration_minutes")
@@ -151,7 +154,7 @@ def _optional_percent(payload: Dict[str, Any], field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise LimitContractError("limit_schema_invalid", f"{field} must be a number")
     numeric = float(value)
-    if numeric < 0 or numeric > 100:
+    if not math.isfinite(numeric) or numeric < 0 or numeric > 100:
         raise LimitContractError("limit_schema_invalid", f"{field} must be between 0 and 100")
     return numeric
 

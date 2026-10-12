@@ -399,6 +399,8 @@ class ClaudeCliUsageProvider:
     def collect(self) -> List[LimitWindow]:
         try:
             result = self.runner.run(self.command, self.timeout, self.env)
+        except subprocess.TimeoutExpired as exc:
+            raise ClaudeProviderError("timeout", "Claude CLI usage read timed out") from exc
         except Exception as exc:
             raise ClaudeProviderError("provider_failed", f"Claude CLI /usage failed: {exc.__class__.__name__}") from exc
         if result.returncode != 0:

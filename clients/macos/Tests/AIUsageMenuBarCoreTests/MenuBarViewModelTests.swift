@@ -1221,6 +1221,40 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(fromToday.quotaRings, fromHistory.quotaRings)
     }
 
+    func testRecentSuccessfulQuotaIsExplicitHistoryAndExpiresWithoutBecomingAvailable() throws {
+        let summary = try loadFixture()
+        let window = MobileLimitWindow(sourceID: "history-source", provider: "claude", window: "week",
+            usedPercent: 33, remainingPercent: 67, resetAt: "2026-07-20T18:00:00+08:00",
+            windowDurationMinutes: 10080, observedAt: "2026-07-18T09:00:00+08:00",
+            sourceType: "official_cli", confidence: "observed", status: "ok", official: true)
+        var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(summary)) as? [String: Any])
+        let history = try JSONSerialization.jsonObject(with: JSONEncoder().encode([window]))
+        json["provider_slots"] = [["provider": "claude", "usage": ["status": "missing"],
+            "quota": ["status": "missing", "reason": "unavailable", "source_id": "history-source",
+                "last_verified_at": "2026-07-18T09:00:00+08:00", "windows": [], "last_successful_windows": history]]]
+        let loaded = try JSONDecoder().decode(MobileSummary.self, from: JSONSerialization.data(withJSONObject: json))
+        let fresh = MenuBarViewModel.build(from: loaded, selectedPeriodID: "today",
+            now: try date("2026-07-18T10:00:00+08:00"), deviceTimeZone: shanghaiTZForTests)
+        let ring = try XCTUnwrap(fresh.quotaRings.first { $0.id == "claude" })
+        XCTAssertFalse(ring.isAvailable)
+        XCTAssertEqual(ring.primaryPctText, "33%")
+        XCTAssertTrue(ring.availabilityText.contains("最近成功值"))
+        XCTAssertEqual(ring.resetCountdownText, "--")
+        XCTAssertTrue(ring.hoverRows.contains { $0.valueText.contains("33%") && $0.valueText.contains("最近成功值") })
+        for instant in ["2026-07-18T11:00:01+08:00", "2026-07-20T18:00:00+08:00"] {
+            let state = MenuBarViewModel.build(from: loaded, selectedPeriodID: "today",
+                now: try date(instant), deviceTimeZone: shanghaiTZForTests)
+            XCTAssertEqual(state.quotaRings.first { $0.id == "claude" }?.primaryPctText, "—")
+        }
+        var quota = (json["provider_slots"] as! [[String: Any]])[0]["quota"] as! [String: Any]
+        quota["source_id"] = "different-account"
+        json["provider_slots"] = [["provider": "claude", "usage": ["status": "missing"], "quota": quota]]
+        let other = try JSONDecoder().decode(MobileSummary.self, from: JSONSerialization.data(withJSONObject: json))
+        let state = MenuBarViewModel.build(from: other, selectedPeriodID: "today",
+            now: try date("2026-07-18T10:00:00+08:00"), deviceTimeZone: shanghaiTZForTests)
+        XCTAssertEqual(state.quotaRings.first { $0.id == "claude" }?.primaryPctText, "—")
+    }
+
     func testQuotaRingDegradesAvailabilityForNonObservedOrFailedWindows() throws {
         let summary = try loadFixture()
 

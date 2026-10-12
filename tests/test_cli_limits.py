@@ -433,6 +433,7 @@ class TestCliLimits(unittest.TestCase):
                 "codex",
                 [
                     {
+                        **json.loads((FIXTURES / "limits_official_sample.json").read_text(encoding="utf-8")),
                         "provider": "codex",
                         "window": "session",
                         "reset_at": "2026-06-08T00:00:00+08:00",

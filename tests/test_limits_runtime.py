@@ -26,6 +26,18 @@ class FailingProvider:
 
 
 class TestLimitsRuntime(unittest.TestCase):
+    def test_runtime_keeps_safe_provider_error_category_without_raw_message(self) -> None:
+        from ai_usage_widget.claude_limits_provider import ClaudeProviderError
+        class CategorizedFailure:
+            def collect(self):
+                raise ClaudeProviderError("timeout", "secret payload must not be retained")
+        result = LimitsRuntime(timezone="Asia/Shanghai", providers={"claude": CategorizedFailure()},
+            now_provider=lambda: "2026-06-03T10:00:00+08:00").collect(provider_names=["claude"])
+        self.assertEqual(result.provider_results[0].error_type, "timeout")
+        self.assertEqual(result.windows[0].status, "provider_failed")
+        self.assertFalse(result.windows[0].is_official)
+        self.assertNotIn("secret payload", repr(result))
+
     def test_runtime_collects_fake_provider_windows_in_memory_only(self) -> None:
         codex_window = LimitWindow(
             provider="codex",

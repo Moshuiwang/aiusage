@@ -24,7 +24,8 @@ final class QuotaUnavailableOwnerTests: XCTestCase {
             .flatMap(\.models).first { $0.id == "gpt-6-sol" })
         XCTAssertEqual(decoded.quotaEstimateUnavailable?.reason, "backtest_failed")
         XCTAssertEqual(decoded.quotaEstimateUnavailable?.sampleIntervals, 92)
-        XCTAssertNil(decoded.quotaEstimateUnavailable?.backtestMaxError)
+        let unavailableJSON = try JSONEncoder().encode(try XCTUnwrap(decoded.quotaEstimateUnavailable))
+        XCTAssertFalse(String(decoding: unavailableJSON, as: UTF8.self).contains("backtest_max_error"))
         XCTAssertNil(decoded.quotaEstimate)
     }
 
