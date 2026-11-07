@@ -4,7 +4,9 @@ compatibility_date = "2026-06-21"
 workers_dev = false
 
 [vars]
-AIUSAGE_TIMEZONE = "Asia/Shanghai"
+# #287：统计时区 = 用户常驻地（设备时区 Africa/Kinshasa，UTC+1，无夏令时）。改这里后需按
+# docs/architecture/database.md「统计时区」一节把近期 UTC 日写入 usage_rollup_dirty_days 重建汇总。
+AIUSAGE_TIMEZONE = "Africa/Kinshasa"
 AIUSAGE_BACKEND_MODE = "native_d1_production"
 
 [triggers]
