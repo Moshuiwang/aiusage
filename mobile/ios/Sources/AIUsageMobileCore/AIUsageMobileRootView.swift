@@ -557,8 +557,13 @@ struct QuotaRingsCard: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
             } else {
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(Array(groups.prefix(2)), id: \.id) { group in
+                // #287：按账户可能多于 2 个，每行 2 个自动换行，全部显示（原来写死只取前 2 个）。
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 8, alignment: .top), GridItem(.flexible(), spacing: 8, alignment: .top)],
+                    alignment: .leading,
+                    spacing: 8
+                ) {
+                    ForEach(groups, id: \.id) { group in
                         ProviderQuotaCard(group: group)
                             .frame(maxWidth: .infinity)
                     }
