@@ -250,16 +250,11 @@ function factStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D
       source_id, agent, client, window_start, window_end,
       ai_provider, ai_account_id, attribution_confidence, provenance
     ) DO UPDATE SET
+      -- D1 按「行 + 每个被 SET 触及的索引」计写入行数（Free 每天 10 万行）。冲突键列在冲突时
+      -- 必然相等，再赋值只会白白重写它们所在的全部索引（实测一次更新 9 行 → 3 行），所以不 SET。
       fact_id = excluded.fact_id,
-      source_id = excluded.source_id,
       machine_id = excluded.machine_id,
       os_user = excluded.os_user,
-      ai_provider = excluded.ai_provider,
-      ai_account_id = excluded.ai_account_id,
-      agent = excluded.agent,
-      client = excluded.client,
-      window_start = excluded.window_start,
-      window_end = excluded.window_end,
       timezone = excluded.timezone,
       input_tokens = excluded.input_tokens,
       output_tokens = excluded.output_tokens,
@@ -270,8 +265,6 @@ function factStatement(db: D1Database, fact: UsageHourlyFact, seenAt: string): D
       total_cost = excluded.total_cost,
       event_count = excluded.event_count,
       session_count = excluded.session_count,
-      attribution_confidence = excluded.attribution_confidence,
-      provenance = excluded.provenance,
       account_evidence_json = excluded.account_evidence_json,
       metadata_json = excluded.metadata_json,
       last_seen_at = excluded.last_seen_at
@@ -371,6 +364,8 @@ function hourlyFactModelStatement(db: D1Database, fact: UsageHourlyFact, model: 
   );
 }
 
+const LIMIT_HISTORY_KEEPALIVE_DAYS = 1 / 24; // 1 小时
+
 function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: string): D1PreparedStatement[] {
   const statements: D1PreparedStatement[] = [];
   if (window.status !== "provider_failed") {
@@ -409,11 +404,27 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
     window.reset_at, window.window_duration_minutes, window.source_type, window.confidence,
     window.status, window.observed_at, seenAt, seenAt,
   ));
+  // 历史只在读数变化、或距同一窗口上一条历史满 1 小时时记录（每条历史连索引写 4 行，
+  // 原来每次上报都记，7 天约 2 万行写入）。1 小时一条的保底给模型额度校准留采样点。
+  // 「上一条」按 observed_at 字符串倒序取（走 lookup 索引）；跨时区偏移时可能多记一条，不会漏记变化。
   statements.push(db.prepare(`
     INSERT INTO limit_window_history (
       source_id, provider, window, used_percent, remaining_percent, reset_at,
       window_duration_minutes, source_type, confidence, status, observed_at, recorded_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12
+    WHERE NOT EXISTS (
+      SELECT 1 FROM (
+        SELECT used_percent, remaining_percent, reset_at, window_duration_minutes, source_type,
+               confidence, status, observed_at
+        FROM limit_window_history
+        WHERE source_id = ?1 AND provider = ?2 AND window = ?3
+        ORDER BY observed_at DESC LIMIT 1
+      ) AS last
+      WHERE last.used_percent IS ?4 AND last.remaining_percent IS ?5 AND last.reset_at IS ?6
+        AND last.window_duration_minutes IS ?7 AND last.source_type IS ?8 AND last.confidence IS ?9
+        AND last.status IS ?10
+        AND julianday(?11) - julianday(last.observed_at) < ${LIMIT_HISTORY_KEEPALIVE_DAYS}
+    )
     ON CONFLICT(source_id, provider, window, observed_at) DO NOTHING
   `).bind(
     window.source_id, window.provider, window.window, window.used_percent, window.remaining_percent,
