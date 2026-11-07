@@ -18,6 +18,9 @@ export type ProviderSlotsRecord = {
   request: { method: string; path: string; auth: boolean };
   provider_slots: unknown;
   provider_usage_coverage: unknown;
+  //: #287：按账户分格（3.0 客户端读这个）。
+  account_slots: unknown;
+  account_usage_coverage: unknown;
 };
 
 export const providerSlotsEndpoints: Array<[endpoint: string, path: string]> = [
@@ -52,6 +55,8 @@ export async function collectProviderSlotsScenario(scenario: string): Promise<Pr
         request: { method: "GET", path: requestPath, auth: true },
         provider_slots: body.provider_slots,
         provider_usage_coverage: body.provider_usage_coverage,
+        account_slots: body.account_slots,
+        account_usage_coverage: body.account_usage_coverage,
       });
     }
     return collected;

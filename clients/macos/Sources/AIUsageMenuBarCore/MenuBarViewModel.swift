@@ -24,6 +24,8 @@ public struct MenuBarState: Equatable, Sendable {
     public let breakdownSections: [MenuDisplaySection]
     public let quotaRings: [QuotaRingData]
     public let providerUsageCoverageText: String?
+    /// #287：有账户身份的 provider 下，归属不了账户的本地 token 提示；没有就是 nil。
+    public let accountUsageCoverageText: String?
     /// #175：Server 按机器分组的卡片，每张卡展开显示该机器上各模型的用量与「占所属 Agent 周额度」估算。
     public let serverCards: [MenuServerCard]
     /// 标题栏「N 台 Server」只数在线（至少一个 source status == "ok"）的机器。
@@ -139,6 +141,8 @@ public enum AgentBranding {
 public struct QuotaRingData: Equatable, Sendable, Identifiable {
     public let id: String
     public let displayName: String
+    /// #287：「账户名 · 套餐」（如「Zhipeng · Max 5x」）；读不到账户身份的 provider 为 nil。
+    public let accountText: String?
     /// #177：单环视图用的主窗口填充比例（周窗口优先，否则 session 窗口；不可用时 0）——
     /// 与 primaryPctText 同口径，供新版单环圆环绘制。
     public let primaryFraction: Double
@@ -402,6 +406,7 @@ public enum MenuBarViewModel {
                 deviceTimeZone: deviceTimeZone
             ),
             providerUsageCoverageText: providerUsageCoverageText(summary.providerUsageCoverage),
+            accountUsageCoverageText: accountUsageCoverageText(summary.accountUsageCoverage),
             serverCards: cards,
             onlineServerCount: cards.filter(\.isOnline).count
         )
@@ -443,6 +448,33 @@ public enum MenuBarViewModel {
             return "暂无可信额度"
         }
         return "\(providerName(window.provider)) \(window.window) · \(Int(window.usedPercent.rounded()))% 已用"
+    }
+
+    private static func accountUsageCoverageText(_ coverage: [String: Int]) -> String? {
+        let order = ["claude", "codex", "antigravity"]
+        let parts = coverage
+            .filter { $0.value > 0 }
+            .sorted { (order.firstIndex(of: $0.key) ?? order.count, $0.key) < (order.firstIndex(of: $1.key) ?? order.count, $1.key) }
+            .map { "\(TokenFormat.compact($0.value)) \(providerDisplayName($0.key)) token" }
+        guard !parts.isEmpty else { return nil }
+        return "另有 " + parts.joined(separator: "、") + " 未能归属到账户"
+    }
+
+    static func providerDisplayName(_ provider: String) -> String {
+        switch canonicalProvider(provider) {
+        case "claude": return "Claude"
+        case "codex": return "Codex"
+        case "antigravity": return "Antigravity"
+        default: return provider.prefix(1).uppercased() + provider.dropFirst()
+        }
+    }
+
+    /// #287：套餐档位的展示名。`max_5x` → 「Max 5x」，`pro` → 「Pro」；未知档位按下划线拆词首字母大写。
+    static func planDisplayName(_ plan: String) -> String {
+        plan.split(separator: "_").map { word -> String in
+            guard let first = word.first, first.isLetter else { return String(word) }
+            return first.uppercased() + word.dropFirst()
+        }.joined(separator: " ")
     }
 
     private static func providerUsageCoverageText(_ coverage: MobileProviderUsageCoverage) -> String? {
@@ -784,27 +816,23 @@ public enum MenuBarViewModel {
         }
     }
 
+    /// #287：保留服务端给出的每一个账户格（同一 provider 可以多格，顺序以服务端为准）；
+    /// 三个固定 provider 中完全没有格子的补一个缺失占位，旧服务端（每 provider 一格）行为不变。
     private static func fixedProviderSlots(_ slots: [MobileProviderSlot]) -> [MobileProviderSlot] {
         let fixedProviders = ["claude", "codex", "antigravity"]
-        var slotsByProvider: [String: MobileProviderSlot] = [:]
-
+        var seenIDs = Set<String>()
+        var result: [MobileProviderSlot] = []
         for slot in slots {
             let provider = canonicalProvider(slot.provider)
-            guard fixedProviders.contains(provider), slotsByProvider[provider] == nil else { continue }
-            slotsByProvider[provider] = MobileProviderSlot(
-                provider: provider,
-                usage: slot.usage,
-                quota: slot.quota
-            )
+            guard fixedProviders.contains(provider) else { continue }
+            let normalized = MobileProviderSlot(provider: provider, usage: slot.usage, quota: slot.quota, account: slot.account)
+            guard seenIDs.insert(normalized.id).inserted else { continue }
+            result.append(normalized)
         }
-
-        return fixedProviders.map { provider in
-            slotsByProvider[provider] ?? MobileProviderSlot(
-                provider: provider,
-                usage: .missing,
-                quota: .missing()
-            )
+        for provider in fixedProviders where !result.contains(where: { $0.provider == provider }) {
+            result.append(MobileProviderSlot(provider: provider, usage: .missing, quota: .missing()))
         }
+        return result
     }
 
     private static func currentProviderWindows(_ slots: [MobileProviderSlot], now: Date) -> [MobileLimitWindow] {
@@ -906,11 +934,12 @@ public enum MenuBarViewModel {
         // 额度与所选时间段无关：更新时间以「现在」为参照，不参照所选 summary 的 generatedAt。
         let reference = isoFormatterBasic.string(from: now)
         let providerOrder = ["claude", "codex", "antigravity"]
-        return slotsWithWindows.sorted {
-            let lhs = providerOrder.firstIndex(of: canonicalProvider($0.0.provider)) ?? providerOrder.count
-            let rhs = providerOrder.firstIndex(of: canonicalProvider($1.0.provider)) ?? providerOrder.count
-            return lhs == rhs ? $0.0.provider < $1.0.provider : lhs < rhs
-        }.map { slot, wins in
+        // 按 provider 固定顺序；同 provider 内保持服务端顺序（服务端已按账户名排好）。
+        return slotsWithWindows.enumerated().sorted {
+            let lhs = providerOrder.firstIndex(of: canonicalProvider($0.element.0.provider)) ?? providerOrder.count
+            let rhs = providerOrder.firstIndex(of: canonicalProvider($1.element.0.provider)) ?? providerOrder.count
+            return lhs == rhs ? $0.offset < $1.offset : lhs < rhs
+        }.map(\.element).map { slot, wins in
             let provider = canonicalProvider(slot.provider)
             // Historical reference is supplied separately by the server, never inferred from current windows.
             let history = slot.quota.status == "missing" && ["unavailable", "failed", "provider_failed"].contains(slot.quota.reason ?? "")
@@ -930,12 +959,21 @@ public enum MenuBarViewModel {
                 .first
             let outerWindow = sessionWindow ?? otherWindow
             let verifiedAt = slot.quota.lastVerifiedAt ?? latestISOString(wins.compactMap(\.observedAt))
-            let name: String
-            switch provider {
-            case "claude": name = "Claude"
-            case "codex": name = "Codex"
-            case "antigravity": name = "Antigravity"
-            default: name = provider.prefix(1).uppercased() + provider.dropFirst()
+            let name = providerDisplayName(provider)
+            let accountText: String? = slot.account.map { account in
+                [account.label ?? "未命名账户", account.plan.map(planDisplayName)].compactMap { $0 }.joined(separator: " · ")
+            }
+            let planRow: QuotaHoverRow? = slot.account?.plan.map { plan in
+                var text = planDisplayName(plan)
+                if let since = slot.account?.planSince, let previous = slot.account?.previousPlan,
+                   let sinceDate = parseDate(since) {
+                    let formatter = DateFormatter()
+                    formatter.locale = Locale(identifier: "en_US_POSIX")
+                    formatter.timeZone = deviceTimeZone
+                    formatter.dateFormat = "M月d日"
+                    text += " · \(formatter.string(from: sinceDate))起（之前 \(planDisplayName(previous))）"
+                }
+                return QuotaHoverRow(label: "套餐", valueText: text)
             }
             // #203：Claude 只用周窗口展示（百分比、倒计时、悬停）——5 小时窗口的重置时间对用户
             // 没有意义；周窗口缺失时显示「—」，不退回 5 小时窗口。Codex 只有周窗口；Antigravity 不变。
@@ -998,7 +1036,7 @@ public enum MenuBarViewModel {
                 ]
             }
             return QuotaRingData(
-                id: provider, displayName: name,
+                id: slot.id, displayName: name, accountText: accountText,
                 primaryFraction: (primaryWindow?.usedPercent ?? 0) / 100.0,
                 outerPctText: history.isEmpty ? (outerWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--") : "--",
                 innerPctText: history.isEmpty ? (weekWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "--") : "--",
@@ -1013,7 +1051,7 @@ public enum MenuBarViewModel {
                 primaryPctNumberText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))" } ?? "—",
                 resetCountdownText: nearestResetWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 isAvailable: isAvailable,
-                hoverRows: hoverRows
+                hoverRows: hoverRows + [planRow].compactMap { $0 }
             )
         }
     }

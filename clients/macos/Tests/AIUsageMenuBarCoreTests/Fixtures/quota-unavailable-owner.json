@@ -676,6 +676,66 @@
     "other_provider_tokens": 0,
     "unattributed_tokens": 0
   },
+  "account_slots": [
+    {
+      "provider": "claude",
+      "usage": {
+        "status": "available",
+        "total_tokens": 4000,
+        "input_tokens": 4000,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      },
+      "account": null
+    },
+    {
+      "provider": "codex",
+      "usage": {
+        "status": "available",
+        "total_tokens": 3200,
+        "input_tokens": 3200,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      },
+      "account": null
+    },
+    {
+      "provider": "antigravity",
+      "usage": {
+        "status": "missing",
+        "total_tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_tokens": 0
+      },
+      "quota": {
+        "status": "missing",
+        "reason": "no_data",
+        "last_verified_at": null,
+        "source_id": null,
+        "source_type": null,
+        "windows": []
+      },
+      "account": null
+    }
+  ],
+  "account_usage_coverage": {},
   "metadata": {
     "backend_mode": "native_d1_unknown",
     "canonical_store": "cloudflare_d1",

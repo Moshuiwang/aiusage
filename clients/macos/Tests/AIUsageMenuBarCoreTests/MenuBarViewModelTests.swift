@@ -1229,6 +1229,8 @@ final class MenuBarViewModelTests: XCTestCase {
             sourceType: "official_cli", confidence: "observed", status: "ok", official: true)
         var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(summary)) as? [String: Any])
         let history = try JSONSerialization.jsonObject(with: JSONEncoder().encode([window]))
+        // 模拟旧服务端响应：只有 provider_slots（编码回写的缓存会带 account_slots，且优先于 provider_slots）。
+        json.removeValue(forKey: "account_slots")
         json["provider_slots"] = [["provider": "claude", "usage": ["status": "missing"],
             "quota": ["status": "missing", "reason": "unavailable", "source_id": "history-source",
                 "last_verified_at": "2026-07-18T09:00:00+08:00", "windows": [], "last_successful_windows": history]]]

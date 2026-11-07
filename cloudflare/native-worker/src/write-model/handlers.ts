@@ -7,6 +7,7 @@ import { accountObservationStatements, collectionReportStatements, factRevisionS
 import { latestSourceReportState, sourceHasNewerReport, upsertHourlyFact, upsertIfChanged } from "./upsert";
 import { rejectSensitiveLimitKeys, scanIngestSensitive, validateIngestPayload, validateLimitsPayload } from "./validate";
 import { WriteValidationError, acceptedAtFromEnv } from "./shared";
+import { formatDate, offsetMinutesAt, parseDateOnly, shiftDate, toOffsetIso } from "../read-model/shared";
 import type { AccuracyPlan, AnyRecord, UsageHourlyFact, IngestRequest } from "./shared";
 
 export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ body: AnyRecord; rowsWritten: number }> {
@@ -83,42 +84,82 @@ export async function handleIngestWrite(payload: unknown, env: Env): Promise<{ b
   };
 }
 
+/**
+ * 展示用 rollup 的重算。#287：usage_rollup_dirty_days 登记的是 **UTC 日**（触发器里拿不到
+ * 时区规则）；这里把每个脏 UTC 日换算成它覆盖到的 1–2 个统计时区本地日，再按本地日的起止时刻
+ * 重算。小时桶标签用该本地日午夜的偏移（夏令时切换当天的小时标签会差一小时，已知限制）。
+ */
 async function refreshDisplayRollups(db: D1Database, facts: UsageHourlyFact[] = [], plans: AccuracyPlan[] = []): Promise<void> {
   const requestedHours = JSON.stringify(facts.map((fact) => fact.window_start));
   const requestedRanges = JSON.stringify(plans.filter((plan) => plan.can_reconcile).map((plan) => ({ start: plan.coverage_start, end: plan.coverage_end })));
-  const requestedDay = `date IN (SELECT date(value, '+8 hours') FROM json_each(?)) OR EXISTS (
+  const requestedDay = `date IN (SELECT date(value) FROM json_each(?)) OR EXISTS (
     SELECT 1 FROM json_each(?) AS coverage
-    WHERE julianday(usage_rollup_dirty_days.date || 'T00:00:00+08:00') < julianday(json_extract(coverage.value, '$.end'))
-      AND julianday(usage_rollup_dirty_days.date || 'T00:00:00+08:00', '+1 day') > julianday(json_extract(coverage.value, '$.start'))
+    WHERE julianday(usage_rollup_dirty_days.date || 'T00:00:00Z') < julianday(json_extract(coverage.value, '$.end'))
+      AND julianday(usage_rollup_dirty_days.date || 'T00:00:00Z', '+1 day') > julianday(json_extract(coverage.value, '$.start'))
   )`;
   // Bound repair work, prioritizing this request. A large retry progresses across invocations.
   const dirty = await db.prepare(`SELECT date FROM usage_rollup_dirty_days
     ORDER BY CASE WHEN ${requestedDay} THEN 0 ELSE 1 END, date LIMIT 20`)
     .bind(requestedHours, requestedRanges).all<{ date: string }>();
-  const statements: D1PreparedStatement[] = [];
-  for (const { date } of dirty.results) {
-    const start = `${date}T00:00:00+08:00`;
-    const end = new Date(`${date}T00:00:00Z`);
-    end.setUTCDate(end.getUTCDate() + 1);
-    const endValue = `${end.toISOString().slice(0, 10)}T00:00:00+08:00`;
-    statements.push(db.prepare("DELETE FROM usage_hourly_rollups WHERE date(bucket_start, '+8 hours') = ?").bind(date));
-    statements.push(db.prepare(`
+  // 去重只在同一个 batch（同一事务）内做：跨 batch 复用「已重算」会让后一个 batch 确认一个
+  // 本地日却没在本事务里重算，期间并发写入的 fact 就会被漏掉（#287 审查）。
+  let batch: D1PreparedStatement[] = [];
+  let rebuiltInBatch = new Set<string>();
+  for (const { date: utcDay } of dirty.results) {
+    const localDays = localDaysCoveringUtcDay(utcDay);
+    let pending = localDays.filter((day) => !rebuiltInBatch.has(day));
+    if (batch.length && batch.length + pending.length * 4 + 1 > 25) {
+      await db.batch(batch);
+      batch = [];
+      rebuiltInBatch = new Set();
+      pending = localDays;
+    }
+    for (const localDay of pending) {
+      rebuiltInBatch.add(localDay);
+      batch.push(...localDayRollupStatements(db, localDay));
+    }
+    // Ack 与它覆盖的本地日重算在同一个 batch 里。
+    batch.push(db.prepare("DELETE FROM usage_rollup_dirty_days WHERE date = ?").bind(utcDay));
+  }
+  if (batch.length) await db.batch(batch);
+  const unfinished = await db.prepare(`SELECT 1 FROM usage_rollup_dirty_days WHERE ${requestedDay} LIMIT 1`)
+    .bind(requestedHours, requestedRanges).first();
+  if (unfinished) throw new Error("Usage projection repair remains pending; retry this payload");
+}
+
+function localDaysCoveringUtcDay(utcDay: string): string[] {
+  const start = new Date(`${utcDay}T00:00:00Z`);
+  const end = new Date(start.getTime() + 86400000 - 1);
+  return [...new Set([formatDate(start), formatDate(end)])];
+}
+
+function localDayRollupStatements(db: D1Database, localDay: string): D1PreparedStatement[] {
+  const start = toOffsetIso(parseDateOnly(localDay));
+  const end = toOffsetIso(parseDateOnly(shiftDate(localDay, 1)));
+  const offset = offsetMinutesAt(parseDateOnly(localDay));
+  const modifier = `${offset >= 0 ? "+" : ""}${offset} minutes`;
+  const suffix = start.slice(19);
+  const inDay = "julianday(window_start) >= julianday(?) AND julianday(window_start) < julianday(?)";
+  return [
+    db.prepare("DELETE FROM usage_hourly_rollups WHERE julianday(bucket_start) >= julianday(?) AND julianday(bucket_start) < julianday(?)")
+      .bind(start, end),
+    db.prepare(`
       INSERT INTO usage_hourly_rollups (
         bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
         attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
         reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
-      SELECT strftime('%Y-%m-%dT%H:00:00', window_start, '+8 hours') || '+08:00',
-             max(strftime('%Y-%m-%dT%H:%M:%S', window_end, '+8 hours')) || '+08:00',
+      SELECT strftime('%Y-%m-%dT%H:00:00', window_start, ?1) || ?2,
+             max(strftime('%Y-%m-%dT%H:%M:%S', window_end, ?1)) || ?2,
              source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
              attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
              sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
-      FROM usage_hourly_facts WHERE date(window_start, '+8 hours') = ?
-      GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, '+8 hours'), source_id, machine_id, os_user,
+      FROM usage_hourly_facts WHERE julianday(window_start) >= julianday(?3) AND julianday(window_start) < julianday(?4)
+      GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, ?1), source_id, machine_id, os_user,
                ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
-    `).bind(date));
-    statements.push(db.prepare("DELETE FROM usage_daily_rollups WHERE date = ? AND provenance <> 'historical_ccusage_fallback_v1'").bind(date));
-    statements.push(db.prepare(`
+    `).bind(modifier, suffix, start, end),
+    db.prepare("DELETE FROM usage_daily_rollups WHERE date = ? AND provenance <> 'historical_ccusage_fallback_v1'").bind(localDay),
+    db.prepare(`
       INSERT OR REPLACE INTO usage_daily_rollups (
         date, bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
         attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
@@ -127,18 +168,10 @@ async function refreshDisplayRollups(db: D1Database, facts: UsageHourlyFact[] = 
       SELECT ?, ?, ?, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
              attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
              sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
-      FROM usage_hourly_facts WHERE date(window_start, '+8 hours') = ?
+      FROM usage_hourly_facts WHERE ${inDay}
       GROUP BY source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
-    `).bind(date, start, endValue, date));
-    // Five statements per day: no chunk boundary can split rebuild from its acknowledgement.
-    statements.push(db.prepare("DELETE FROM usage_rollup_dirty_days WHERE date = ?").bind(date));
-  }
-  for (let offset = 0; offset < statements.length; offset += 25) {
-    await db.batch(statements.slice(offset, offset + 25));
-  }
-  const unfinished = await db.prepare(`SELECT 1 FROM usage_rollup_dirty_days WHERE ${requestedDay} LIMIT 1`)
-    .bind(requestedHours, requestedRanges).first();
-  if (unfinished) throw new Error("Usage projection repair remains pending; retry this payload");
+    `).bind(localDay, start, end, start, end),
+  ];
 }
 
 export async function handleLimitsWrite(payload: unknown, env: Env): Promise<{ body: AnyRecord; rowsWritten: number }> {

@@ -10,6 +10,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
     public let sources: [MobileSource]
     public let breakdown: MobileBreakdown
     public let limits: MobileLimits
+    /// #287：按账户分格的额度（3.0 服务端）。旧服务端没有这个字段时为空，额度退回 limits.windows。
+    public let accountSlots: [MobileAccountSlot]
 
     enum CodingKeys: String, CodingKey {
         case schemaVersion = "schema_version"
@@ -21,6 +23,21 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         case sources
         case breakdown
         case limits
+        case accountSlots = "account_slots"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        client = try container.decode(String.self, forKey: .client)
+        generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
+        timezone = try container.decodeIfPresent(String.self, forKey: .timezone)
+        period = try container.decode(MobilePeriod.self, forKey: .period)
+        trend = try container.decode(MobileTrend.self, forKey: .trend)
+        sources = try container.decode([MobileSource].self, forKey: .sources)
+        breakdown = try container.decode(MobileBreakdown.self, forKey: .breakdown)
+        limits = try container.decode(MobileLimits.self, forKey: .limits)
+        accountSlots = try container.decodeIfPresent([MobileAccountSlot].self, forKey: .accountSlots) ?? []
     }
 
     public init(
@@ -32,7 +49,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         trend: MobileTrend,
         sources: [MobileSource],
         breakdown: MobileBreakdown,
-        limits: MobileLimits
+        limits: MobileLimits,
+        accountSlots: [MobileAccountSlot] = []
     ) {
         self.schemaVersion = schemaVersion
         self.client = client
@@ -43,7 +61,40 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         self.sources = sources
         self.breakdown = breakdown
         self.limits = limits
+        self.accountSlots = accountSlots
     }
+}
+
+/// #287：一个账户（或读不到身份的 provider）的额度格。只解码 iPhone 需要的字段。
+public struct MobileAccountSlot: Codable, Equatable, Sendable {
+    public struct Account: Codable, Equatable, Sendable {
+        public let key: String
+        public let label: String?
+        public let plan: String?
+    }
+
+    public struct Quota: Codable, Equatable, Sendable {
+        public let status: String
+        public let sourceID: String?
+        public let windows: [MobileLimitWindow]
+
+        enum CodingKeys: String, CodingKey {
+            case status
+            case sourceID = "source_id"
+            case windows
+        }
+
+        public init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            status = try container.decodeIfPresent(String.self, forKey: .status) ?? "missing"
+            sourceID = try container.decodeIfPresent(String.self, forKey: .sourceID)
+            windows = try container.decodeIfPresent([MobileLimitWindow].self, forKey: .windows) ?? []
+        }
+    }
+
+    public let provider: String
+    public let account: Account?
+    public let quota: Quota
 }
 
 public extension MobileSummary {

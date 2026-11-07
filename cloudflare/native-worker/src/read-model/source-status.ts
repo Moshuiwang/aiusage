@@ -1,7 +1,7 @@
 import { machineDisplayName } from "./machine-names";
 /** #126：来源健康与版本视图（/api/summary 与 /api/health 共用产物）。 */
 import { evaluateCollectorRelease, publicVersionView } from "../version-contract";
-import { identityMatchesFilter, int, nowInTimezone, str } from "./shared";
+import { currentReportingTimezone, identityMatchesFilter, int, nowInTimezone, str } from "./shared";
 import type { SourceIdentity } from "./shared";
 
 function buildSourceStatus(
@@ -79,7 +79,7 @@ export function buildHealthSourceStatus(
   rows: Record<string, string | null>[],
   currentTime?: string | null,
 ): Record<string, unknown>[] {
-  const refTime = nowInTimezone("Asia/Shanghai", currentTime);
+  const refTime = nowInTimezone(currentReportingTimezone(), currentTime);
   const identities: Record<string, SourceIdentity> = {};
   for (const row of rows) {
     identities[str(row.source_id)] = {

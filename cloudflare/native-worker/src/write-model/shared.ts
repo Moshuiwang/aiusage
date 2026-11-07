@@ -100,6 +100,8 @@ type LimitWindow = {
   source_type: string;
   confidence: string;
   status: string;
+  //: #287：采集端识别出的账户资料；缺失表示这个来源不知道属于哪个账户。
+  account?: { fingerprint: string; plan: string; label: string | null };
 };
 
 export class WriteValidationError extends Error {

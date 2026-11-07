@@ -24,8 +24,10 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -124,3 +126,96 @@ def codex_account_fingerprint(auth_path: str | Path) -> str | None:
     if not stable_id:
         return None
     return compute_account_fingerprint("codex", stable_id)
+
+
+# ---------------------------------------------------------------------------
+# #287：账户资料 = 指纹 + 展示名 + 套餐。
+#
+# 用户有多个 Claude / OpenAI 账户，套餐也会变（例如 Max 20x → Max 5x），这些都必须由
+# 采集端自动识别，不能要求用户手工维护账户清单。只读本地登录资料里**非秘密**的字段：
+#
+# - Claude：``~/.claude.json`` 的 ``oauthAccount``（accountUuid / displayName /
+#   organizationRateLimitTier）。``.credentials.json`` 的 ``subscriptionType`` 在 TZ 上
+#   实测是陈旧值，不读。
+# - Codex：``auth.json`` 的 ``tokens.account_id`` 与 ``id_token`` 声明里的 ``name`` /
+#   ``chatgpt_plan_type``。只解码声明段，不校验签名（这里不做鉴权，只读展示信息），
+#   token 原文与邮箱从不进入结果。
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AccountProfile:
+    fingerprint: str
+    label: str | None
+    plan: str | None
+
+    def to_payload(self) -> dict[str, str]:
+        payload = {"fingerprint": self.fingerprint}
+        if self.label:
+            payload["label"] = self.label
+        if self.plan:
+            payload["plan"] = self.plan
+        return payload
+
+
+_CLAUDE_TIER_PREFIX = "default_claude_"
+_CLAUDE_TIER_ALIASES = {"ai": "pro"}
+
+
+def normalize_claude_plan(tier: Any) -> str | None:
+    """``default_claude_max_5x`` → ``max_5x``；``default_claude_ai`` → ``pro``；未知档位去前缀原样保留。"""
+    value = _clean_string(tier)
+    if value is None:
+        return None
+    if value.startswith(_CLAUDE_TIER_PREFIX):
+        value = value[len(_CLAUDE_TIER_PREFIX):]
+    return _CLAUDE_TIER_ALIASES.get(value, value) or None
+
+
+def claude_account_profile(config_path: str | Path) -> AccountProfile | None:
+    payload = _read_json_file(config_path)
+    stable_id = read_claude_stable_account_id(payload)
+    if not stable_id:
+        return None
+    oauth_account = payload["oauthAccount"]
+    return AccountProfile(
+        fingerprint=compute_account_fingerprint("claude", stable_id),
+        label=_safe_label(oauth_account.get("displayName")),
+        plan=normalize_claude_plan(oauth_account.get("organizationRateLimitTier")),
+    )
+
+
+def codex_account_profile(auth_path: str | Path) -> AccountProfile | None:
+    payload = _read_json_file(auth_path)
+    stable_id = read_codex_stable_account_id(payload)
+    if not stable_id:
+        return None
+    claims = _jwt_claims(payload["tokens"].get("id_token"))
+    auth_claims = claims.get("https://api.openai.com/auth")
+    plan = _clean_string(auth_claims.get("chatgpt_plan_type")) if isinstance(auth_claims, dict) else None
+    return AccountProfile(
+        fingerprint=compute_account_fingerprint("codex", stable_id),
+        label=_safe_label(claims.get("name")),
+        plan=plan,
+    )
+
+
+def _safe_label(value: Any) -> str | None:
+    """展示名本身可能就是邮箱（用户用邮箱当名字）；像邮箱的一律不上传。"""
+    label = _clean_string(value)
+    if label is None or "@" in label:
+        return None
+    return label
+
+
+def _jwt_claims(token: Any) -> dict[str, Any]:
+    """只解码 JWT 声明段；任何格式问题都返回空 dict（降级为不知道套餐，不中断采集）。"""
+    if not isinstance(token, str) or token.count(".") != 2:
+        return {}
+    segment = token.split(".")[1]
+    try:
+        decoded = base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+        claims = json.loads(decoded)
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return claims if isinstance(claims, dict) else {}

@@ -121,6 +121,14 @@ FRESH_INSTALL_TABLE_COLUMNS = {
         ('first_seen_at', 'TEXT', 1, None, 0),
         ('last_seen_at', 'TEXT', 1, None, 0),
     ],
+    "account_profiles": [
+        ('provider', 'TEXT', 1, None, 1),
+        ('account_fingerprint', 'TEXT', 1, None, 2),
+        ('plan', 'TEXT', 1, None, 3),
+        ('label', 'TEXT', 0, None, 0),
+        ('first_seen_at', 'TEXT', 1, None, 0),
+        ('last_seen_at', 'TEXT', 1, None, 0),
+    ],
     "ai_accounts": [
         ('provider', 'TEXT', 1, None, 1),
         ('account_id', 'TEXT', 1, None, 2),
@@ -421,6 +429,8 @@ FRESH_INSTALL_CREATED_INDEXES = {
     "device_enrollment_budget": {},
     "device_enrollment_requests": {"device_enrollment_expiry": (0, 0, ('expires_at',))},
     "account_observations": {
+    },
+    "account_profiles": {
     },
     "ai_accounts": {
     },
@@ -731,6 +741,8 @@ class TestD1SchemaMigration(unittest.TestCase):
         # WHEN 条件（补 total_cost），所以"0011 单独重放"不再等于 0001 的最终形状——必须
         # 把 0014 也接着重放一遍，才是这张表在真实部署库上真正会经历的完整升级链。
         rollup_cost_migration = (MIGRATIONS_DIR / "0014_rollup_cost_and_range_indexes.sql").read_text(encoding="utf-8")
+        # #287：0016 又把三个触发器改成登记 UTC 日，同样必须接着重放。
+        utc_dirty_day_migration = (MIGRATIONS_DIR / "0016_account_profiles.sql").read_text(encoding="utf-8")
         trigger_names = ["usage_rollup_dirty_insert", "usage_rollup_dirty_update", "usage_rollup_dirty_delete"]
         with sqlite3.connect(":memory:") as conn:
             conn.executescript(MIGRATION_SQL.read_text(encoding="utf-8"))
@@ -759,6 +771,7 @@ class TestD1SchemaMigration(unittest.TestCase):
             """)
             conn.executescript(migration)
             conn.executescript(rollup_cost_migration)
+            conn.executescript(utc_dirty_day_migration)
             for table in ("usage_rollup_dirty_days", "usage_reconciliation_ranges"):
                 self.assertEqual(_table_columns(conn, table), FRESH_INSTALL_TABLE_COLUMNS[table])
             self.assertEqual(conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger' ORDER BY name").fetchall(), expected_triggers)
@@ -770,14 +783,15 @@ class TestD1SchemaMigration(unittest.TestCase):
             conn.execute("DELETE FROM usage_rollup_dirty_days")
             conn.execute("UPDATE usage_hourly_facts SET last_seen_at = '2026-07-18T01:10:00Z'")
             self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [])
+            # #287：0016 起触发器登记 UTC 日（17:00Z 属于 UTC 当天），Worker 再换算成统计时区本地日。
             conn.execute("UPDATE usage_hourly_facts SET total_tokens = 200")
-            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-12",)])
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-11",)])
             conn.execute("DELETE FROM usage_rollup_dirty_days")
             conn.execute("UPDATE usage_hourly_facts SET window_start = '2026-07-12T17:00:00Z'")
-            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days ORDER BY date").fetchall(), [("2026-07-12",), ("2026-07-13",)])
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days ORDER BY date").fetchall(), [("2026-07-11",), ("2026-07-12",)])
             conn.execute("DELETE FROM usage_rollup_dirty_days")
             conn.execute("DELETE FROM usage_hourly_facts")
-            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-13",)])
+            self.assertEqual(conn.execute("SELECT date FROM usage_rollup_dirty_days").fetchall(), [("2026-07-12",)])
 
     def test_backfilled_indexes_match_their_owning_migration(self) -> None:
         """Every index a later migration declares must already exist in a 0001-only

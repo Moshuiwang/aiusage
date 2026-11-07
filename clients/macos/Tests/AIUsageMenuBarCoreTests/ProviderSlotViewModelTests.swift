@@ -8,6 +8,56 @@ import XCTest
 // cloudflare/native-worker/test/provider-slots-parity.test.ts. Never hand-edit it;
 // keep the test cases here read-only.
 final class ProviderSlotViewModelTests: XCTestCase {
+    // MARK: #287 按账户分格（owner：17-multi-account-plan-change.sql）
+
+    func testMultiAccountSlotsBecomeOneRingPerAccountWithPlan() throws {
+        let record = try goldenRecord(named: "17-multi-account-plan-change:mobile-summary")
+        XCTAssertEqual(record.accountSlots.count, 4) // 结构下限：Claude×2 + OpenAI + Antigravity
+        let state = MenuBarViewModel.build(
+            from: try summary(for: record, providerSlots: record.accountSlots),
+            selectedPeriodID: "today",
+            now: try date("2026-06-03T12:00:00+08:00"),
+            deviceTimeZone: shanghaiTZForTests
+        )
+        XCTAssertEqual(state.quotaRings.map(\.displayName), ["Claude", "Claude", "Codex", "Antigravity"])
+        XCTAssertEqual(state.quotaRings.map(\.accountText), ["Tony · Max 20x", "Zhipeng · Max 5x", "Em · Pro", nil])
+        XCTAssertEqual(state.quotaRings.map(\.primaryPctText), ["10%", "82%", "55%", "5%"])
+        XCTAssertEqual(Set(state.quotaRings.map(\.id)).count, 4) // 同 provider 两个账户 id 不能撞
+        XCTAssertTrue(state.quotaRings.allSatisfy(\.isAvailable))
+    }
+
+    func testPlanChangeIsShownInHoverRows() throws {
+        let record = try goldenRecord(named: "17-multi-account-plan-change:mobile-summary")
+        let state = MenuBarViewModel.build(
+            from: try summary(for: record, providerSlots: record.accountSlots),
+            selectedPeriodID: "today",
+            now: try date("2026-06-03T12:00:00+08:00"),
+            deviceTimeZone: shanghaiTZForTests
+        )
+        let zhipeng = try XCTUnwrap(state.quotaRings.first { $0.accountText == "Zhipeng · Max 5x" })
+        XCTAssertEqual(zhipeng.hoverRows.last, QuotaHoverRow(label: "套餐", valueText: "Max 5x · 6月1日起（之前 Max 20x）"))
+        let tony = try XCTUnwrap(state.quotaRings.first { $0.accountText == "Tony · Max 20x" })
+        XCTAssertEqual(tony.hoverRows.last, QuotaHoverRow(label: "套餐", valueText: "Max 20x"))
+    }
+
+    func testUnattributedAccountUsageIsSurfacedNotHidden() throws {
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "provider-slots-owner-fixture", withExtension: "json"))
+        let raw = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]]
+        let record = try XCTUnwrap(raw?.first { $0["name"] as? String == "17-multi-account-plan-change:mobile-summary" })
+        var mobile = try JSONSerialization.jsonObject(with: Data(contentsOf: try XCTUnwrap(Bundle.module.url(forResource: "mobile-summary", withExtension: "json")))) as! [String: Any]
+        mobile["account_slots"] = record["account_slots"]
+        mobile["account_usage_coverage"] = record["account_usage_coverage"]
+        let summary = try JSONDecoder().decode(MobileSummary.self, from: JSONSerialization.data(withJSONObject: mobile))
+        XCTAssertEqual(summary.providerSlots.count, 4) // account_slots 优先于 provider_slots
+        XCTAssertEqual(summary.accountUsageCoverage, ["claude": 400])
+        let state = MenuBarViewModel.build(from: summary, selectedPeriodID: "today", now: try date("2026-06-03T12:00:00+08:00"), deviceTimeZone: shanghaiTZForTests)
+        XCTAssertEqual(state.accountUsageCoverageText, "另有 400 Claude token 未能归属到账户")
+        // 缓存写回再读：账户身份不丢。
+        let roundTrip = try JSONDecoder().decode(MobileSummary.self, from: JSONEncoder().encode(summary))
+        XCTAssertEqual(roundTrip.providerSlots.compactMap(\.account?.label), ["Tony", "Zhipeng", "Em"])
+        XCTAssertEqual(roundTrip.accountUsageCoverage, ["claude": 400])
+    }
+
     func testDecodesOwnerProviderSlotsAndCoverage() throws {
         let record = try goldenRecord(named: "01-usage-and-quota:mobile-summary")
 
@@ -328,8 +378,8 @@ final class ProviderSlotViewModelTests: XCTestCase {
 
     func testEveryOwnerScenarioKeepsFixedSlotsAndShowsLastSuccessfulQuota() throws {
         let records = try allGoldenRecords()
-        // 场景数变化必须显式改这里。Worker 侧 provider-slots-parity.test.ts 有对称的 toBe(16)。
-        XCTAssertEqual(records.count, 16)
+        // 场景数变化必须显式改这里。Worker 侧 provider-slots-parity.test.ts 有对称的 toBe(17)。
+        XCTAssertEqual(records.count, 17)
 
         for record in records {
             let state = MenuBarViewModel.build(
@@ -359,11 +409,13 @@ final class ProviderSlotViewModelTests: XCTestCase {
         let name: String
         let providerSlots: [MobileProviderSlot]
         let coverage: MobileProviderUsageCoverage
+        let accountSlots: [MobileProviderSlot]
 
         enum CodingKeys: String, CodingKey {
             case name
             case providerSlots = "provider_slots"
             case coverage = "provider_usage_coverage"
+            case accountSlots = "account_slots"
         }
     }
 

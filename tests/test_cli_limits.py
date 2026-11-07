@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from ai_usage_widget import cli
-from ai_usage_widget.account_fingerprint import compute_account_fingerprint
+from ai_usage_widget.account_fingerprint import AccountProfile, compute_account_fingerprint
 from ai_usage_widget.limits import parse_limit_window
 from ai_usage_widget.limits_config import parse_limits_config
 from ai_usage_widget.limits_runtime import FixtureLimitsProvider
@@ -407,7 +407,7 @@ class TestCliLimits(unittest.TestCase):
         # #181：--provider-fixture 走的是离线 fixture，没有任何本机账户配置文件可读，
         # 指纹字段必须完全不出现——不能猜、不能补一个空字符串。
         for row in calls[0][2]["windows"]:
-            self.assertNotIn("account_fingerprint", row)
+            self.assertNotIn("account", row)
 
     def test_push_limits_end_to_end_attaches_account_fingerprint_via_limits_config(self) -> None:
         """#181 code review 补漏：之前只单测了两个辅助函数，`_run_push_limits` 里
@@ -477,7 +477,8 @@ class TestCliLimits(unittest.TestCase):
         windows = calls[0]["windows"]
         self.assertEqual(len(windows), 1)
         expected_fp = compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333")
-        self.assertEqual(windows[0]["account_fingerprint"], expected_fp)
+        self.assertEqual(windows[0]["account"]["fingerprint"], expected_fp)
+        self.assertNotIn("account_fingerprint", windows[0])
         # fixture 里带着的凭据原文绝不能出现在真正会被 POST 出去的 payload 里。
         payload_text = json.dumps(calls[0], ensure_ascii=False)
         self.assertNotIn("codex-fixture-refresh-token-secret", payload_text)
@@ -619,19 +620,34 @@ class TestAccountFingerprintsForLimitsWindows(unittest.TestCase):
             }
         )
 
-        fingerprints = cli._account_fingerprints_from_limits_config(limits_config)
+        fingerprints = cli._account_profiles_from_limits_config(limits_config)
 
         self.assertEqual(
-            fingerprints["codex-main"],
+            fingerprints["codex-main"].fingerprint,
             compute_account_fingerprint("codex", "33333333-3333-3333-3333-333333333333"),
         )
         self.assertEqual(
-            fingerprints["claude-main"],
+            fingerprints["claude-main"].fingerprint,
             compute_account_fingerprint("claude", "11111111-1111-1111-1111-111111111111"),
         )
+        self.assertEqual(len(fingerprints), 2)
+
+    def test_claude_cli_without_config_path_does_not_guess_home(self) -> None:
+        """没给 account_config_path 就不附账户：不能在测试/开发机上意外读真实 ~/.claude.json。"""
+        with tempfile.TemporaryDirectory() as home:
+            Path(home, ".claude.json").write_text(
+                (FIXTURES.parent / "fixtures" / "claude_account_config_sample.json").read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            limits_config = parse_limits_config(
+                {"timezone": "UTC", "providers": [{"provider": "claude", "source_id": "c-home", "cli": True}]}
+            )
+            with patch.dict(os.environ, {"HOME": home}):
+                profiles = cli._account_profiles_from_limits_config(limits_config)
+        self.assertEqual(profiles, {})
 
     def test_fingerprints_are_empty_when_no_limits_config(self) -> None:
-        self.assertEqual(cli._account_fingerprints_from_limits_config(None), {})
+        self.assertEqual(cli._account_profiles_from_limits_config(None), {})
 
     def test_fingerprints_omit_providers_without_a_configured_source_path(self) -> None:
         limits_config = parse_limits_config(
@@ -641,7 +657,7 @@ class TestAccountFingerprintsForLimitsWindows(unittest.TestCase):
             }
         )
 
-        fingerprints = cli._account_fingerprints_from_limits_config(limits_config)
+        fingerprints = cli._account_profiles_from_limits_config(limits_config)
 
         self.assertNotIn("codex-no-file", fingerprints)
 
@@ -657,11 +673,14 @@ class TestAccountFingerprintsForLimitsWindows(unittest.TestCase):
             }
         )
 
-        payload = cli._windows_payload_with_account_fingerprints(
-            [window], {"codex-main": "fp:codex:deadbeefdeadbeefdeadbeef"}
+        payload = cli._windows_payload_with_accounts(
+            [window], {"codex-main": AccountProfile("fp:codex:deadbeefdeadbeefdeadbeef", "Em", "pro")}
         )
 
-        self.assertEqual(payload[0]["account_fingerprint"], "fp:codex:deadbeefdeadbeefdeadbeef")
+        self.assertEqual(
+            payload[0]["account"],
+            {"fingerprint": "fp:codex:deadbeefdeadbeefdeadbeef", "label": "Em", "plan": "pro"},
+        )
         self.assertEqual(payload[0]["source_id"], "codex-main")
 
     def test_windows_payload_omits_fingerprint_key_when_not_available(self) -> None:
@@ -676,9 +695,9 @@ class TestAccountFingerprintsForLimitsWindows(unittest.TestCase):
             }
         )
 
-        payload = cli._windows_payload_with_account_fingerprints([window], {})
+        payload = cli._windows_payload_with_accounts([window], {"codex-unknown": None})
 
-        self.assertNotIn("account_fingerprint", payload[0])
+        self.assertNotIn("account", payload[0])
 
 
 if __name__ == "__main__":

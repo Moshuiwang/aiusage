@@ -1,6 +1,7 @@
 import { buildMobile, buildSummary } from "./read-model";
 import { runQuotaCalibration } from "./quota-calibration-cron";
 import { hasPendingRollups } from "./read-model/db";
+import { configureReportingTimezone, currentReportingTimezone, formatDate } from "./read-model/shared";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
@@ -29,6 +30,7 @@ const SUMMARY_CACHE_TTL_SECONDS = 60;
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    configureReportingTimezone(env.AIUSAGE_TIMEZONE);
     if (backendMode(env) === "native_d1_production" && !authTokens(env).length && !env.AIUSAGE_DEVICE_ADMIN_TOKEN?.trim()) {
       return json({
         status: "error",
@@ -112,7 +114,7 @@ export default {
         date,
         period,
         offset,
-        timezone: env.AIUSAGE_TIMEZONE ?? "Asia/Shanghai",
+        timezone: currentReportingTimezone(),
         machine: url.searchParams.get("machine"),
         account: url.searchParams.get("account"),
         currentTime: env.AIUSAGE_NOW,
@@ -135,6 +137,7 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
+    configureReportingTimezone(env.AIUSAGE_TIMEZONE);
     const scheduledTime = Number(controller.scheduledTime || 0)
       ? new Date(controller.scheduledTime)
       : new Date();
@@ -195,7 +198,7 @@ async function recordRejectedIngestAttempt(
   const observedAt = referenceTime(env);
   const now = observedAt.toISOString();
   const sourceIdClaimed = await claimedSourceId(payload, env.AIUSAGE_DB);
-  const day = dateInTimezone(observedAt, env.AIUSAGE_TIMEZONE ?? "Asia/Shanghai");
+  const day = formatDate(observedAt);
   await env.AIUSAGE_DB.prepare(`
     INSERT INTO rejected_ingest_attempts (
       source_id_claimed, error_type, path, day, first_seen_at, last_seen_at, count
@@ -254,28 +257,6 @@ function cacheResponse(cached: Response, status: "HIT"): Response {
   return new Response(cached.body, { status: cached.status, headers });
 }
 
-function dateInTimezone(date: Date, timezone: string): string {
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date);
-    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-    return `${values.year}-${values.month}-${values.day}`;
-  } catch (_invalidTimezone) {
-    return date.toISOString().slice(0, 10);
-  }
-}
-
 function currentDate(env: Env): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: env.AIUSAGE_TIMEZONE ?? "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(referenceTime(env));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
+  return formatDate(referenceTime(env));
 }

@@ -176,6 +176,7 @@ function parseLimitWindow(payload: AnyRecord): LimitWindow {
     source_type: optionalString(payload, "source_type", "unknown"),
     confidence: optionalString(payload, "confidence", "unknown"),
     status: optionalString(payload, "status", "unknown"),
+    account: limitWindowAccount(provider, payload.account),
   };
   if (window.source_type === "active_limits_cache" && (window.confidence === "observed" || window.status === "ok")) {
     throw new WriteValidationError(400, "limit_schema_invalid", "active_limits_cache cannot claim observed or current status");
@@ -184,6 +185,26 @@ function parseLimitWindow(payload: AnyRecord): LimitWindow {
     throw new WriteValidationError(400, "limit_schema_invalid", "reset_at must be later than observed_at when status is ok");
   }
   return window;
+}
+
+//: #287：账户展示名只允许短的人名式文本；像邮箱的直接丢弃（不让邮箱进 D1）。
+const ACCOUNT_LABEL_MAX_LENGTH = 64;
+const ACCOUNT_PLAN_PATTERN = /^[a-z0-9_]{1,40}$/;
+
+/**
+ * #287：window.account 是附加字段——指纹不合规才丢弃账户部分（返回 undefined），额度窗口照常写入，
+ * 与 account_observations 的「附加字段不能拖垮主数据」口径一致。
+ */
+function limitWindowAccount(provider: string, value: unknown): LimitWindow["account"] {
+  if (!isRecord(value)) return undefined;
+  const fingerprint = value.fingerprint;
+  if (typeof fingerprint !== "string" || !ACCOUNT_FINGERPRINT_PATTERN.test(fingerprint)) return undefined;
+  if (!fingerprint.startsWith(`fp:${provider.trim().toLowerCase()}:`)) return undefined;
+  // 附加字段里的单项不合规只丢该项：套餐记 unknown、展示名置空，账户归属（指纹）保留。
+  const plan = typeof value.plan === "string" && ACCOUNT_PLAN_PATTERN.test(value.plan) ? value.plan : "unknown";
+  const trimmed = typeof value.label === "string" ? value.label.trim() : "";
+  const label = trimmed && trimmed.length <= ACCOUNT_LABEL_MAX_LENGTH && !trimmed.includes("@") ? trimmed : null;
+  return { fingerprint, plan, label };
 }
 
 function scanIngestSensitive(value: unknown): void {

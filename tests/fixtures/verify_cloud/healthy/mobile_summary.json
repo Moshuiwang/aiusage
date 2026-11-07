@@ -536,6 +536,8 @@
     "other_provider_tokens": 0,
     "unattributed_tokens": 0
   },
+  "account_slots": [],
+  "account_usage_coverage": {},
   "metadata": {
     "backend_mode": "origin_direct",
     "canonical_store": "origin_sqlite",

@@ -102,9 +102,23 @@ function observedStale(observedAt: unknown, refTime: Date): boolean {
 }
 
 function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unknown>[] {
+  return buildLimitStatusBy(limits, refTime, (limit) => limit.provider.toLowerCase())
+    .map(({ slot_key: _slotKey, ...row }) => row);
+}
+
+/**
+ * 每个分组（默认按 provider；#287 按账户）在组内各来源里选一个当前可信来源。
+ * 选择规则与 provider 口径完全一致，只是「组」可以换：同一账户被多台机器读到时，
+ * 组内选来源，不跨组混合百分比。
+ */
+function buildLimitStatusBy(
+  limits: LimitRow[],
+  refTime: Date,
+  groupKey: (limit: LimitRow) => string,
+): (Record<string, unknown> & { slot_key: string })[] {
   const bySource = new Map<string, LimitRow[]>();
   for (const limit of limits) {
-    const key = `${limit.provider.toLowerCase()}\u0000${limit.source_id}`;
+    const key = `${groupKey(limit)}\u0000${limit.source_id}`;
     bySource.set(key, [...(bySource.get(key) ?? []), limit]);
   }
   const selected = new Map<string, { available: boolean; newest: number; source: string; rows: LimitRow[] }>();
@@ -112,7 +126,9 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
     const successful = rows.filter(effectiveLimitWindow);
     const failures = rows.filter((row) => row.status === "provider_failed");
     if (!successful.length && !failures.length) continue;
-    const [provider, source] = key.split("\u0000");
+    const separator = key.lastIndexOf("\u0000");
+    const provider = key.slice(0, separator);
+    const source = key.slice(separator + 1);
     const latestSuccess = Math.max(...successful.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
     const latestFailure = Math.max(...failures.map((row) => parseDate(row.observed_at)?.getTime() ?? Number.NEGATIVE_INFINITY));
     // 只在同一个来源内判断失败是否覆盖成功；其他设备失败不能遮住有效官方窗口。
@@ -127,7 +143,8 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
       selected.set(provider, { available, newest, source, rows });
     }
   }
-  return [...selected.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([provider, value]) => {
+  return [...selected.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([group, value]) => {
+    const provider = value.rows[0].provider.toLowerCase();
     const successful = value.rows.filter(effectiveLimitWindow);
     const failures = value.rows.filter((row) => row.status === "provider_failed");
     const trustedRows = successful.length ? successful : failures;
@@ -141,6 +158,7 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
     const stale = observedStale(freshest.observed_at, refTime);
     const unexpired = successful.some((row) => !limitWindowExpired(row, refTime));
     return {
+      slot_key: group,
       provider,
       source_id: value.source,
       observed_at: freshest.observed_at,
@@ -153,6 +171,7 @@ function buildLimitStatus(limits: LimitRow[], refTime: Date): Record<string, unk
 export {
   bestLimitWindows,
   buildLimitStatus,
+  buildLimitStatusBy,
   compareLimitRank,
   effectiveLimitWindow,
   lastVerifiedAtOf,

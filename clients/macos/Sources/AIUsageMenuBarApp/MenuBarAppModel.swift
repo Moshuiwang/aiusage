@@ -478,18 +478,19 @@ final class MenuBarAppModel: ObservableObject {
         return age >= 0 && age < interval && Self.isUsableCache(cached, key: selection.cacheKey, now: now())
     }
 
-    private static func summaryKeepingLastSuccessfulQuota(
+    static func summaryKeepingLastSuccessfulQuota(
         _ loaded: MobileSummary,
         fallback: MobileSummary?
     ) -> MobileSummary {
         guard let fallback else { return loaded }
 
-        let fallbackByProvider = Dictionary(uniqueKeysWithValues: fallback.providerSlots.map { ($0.provider, $0) })
-        var seenProviders = Set<String>()
+        // #287：按格子 id（账户键，没有账户时为 provider）对齐，同 provider 的不同账户互不顶替。
+        let fallbackByID = Dictionary(fallback.providerSlots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var seenIDs = Set<String>()
         var slots = loaded.providerSlots.map { slot -> MobileProviderSlot in
-            seenProviders.insert(slot.provider)
+            seenIDs.insert(slot.id)
             guard slot.quota.windows.isEmpty, slot.quota.lastSuccessfulWindows.isEmpty,
-                  let previous = fallbackByProvider[slot.provider],
+                  let previous = fallbackByID[slot.id],
                   !previous.quota.windows.isEmpty
             else {
                 return slot
@@ -504,16 +505,22 @@ final class MenuBarAppModel: ObservableObject {
                     sourceID: slot.quota.sourceID ?? previous.quota.sourceID,
                     sourceType: slot.quota.sourceType ?? previous.quota.sourceType,
                     windows: previous.quota.windows
-                )
+                ),
+                account: slot.account ?? previous.account
             )
         }
 
-        for previous in fallback.providerSlots where !seenProviders.contains(previous.provider) {
+        // #287：只有新响应里完全没有这个 provider 时才保留缓存格。按 id 判断会把 2.x 的 provider 级旧格、
+        // 或已被服务端移除的账户格追加成带旧百分比的「幽灵圆环」，且会随缓存写回永久留下。
+        let loadedProviders = Set(loaded.providerSlots.map(\.provider))
+        for previous in fallback.providerSlots
+        where !seenIDs.contains(previous.id) && !loadedProviders.contains(previous.provider) {
             slots.append(
                 MobileProviderSlot(
                     provider: previous.provider,
                     usage: .missing,
-                    quota: previous.quota
+                    quota: previous.quota,
+                    account: previous.account
                 )
             )
         }
@@ -529,7 +536,8 @@ final class MenuBarAppModel: ObservableObject {
             breakdown: loaded.breakdown,
             limits: loaded.limits,
             providerSlots: slots,
-            providerUsageCoverage: loaded.providerUsageCoverage
+            providerUsageCoverage: loaded.providerUsageCoverage,
+            accountUsageCoverage: loaded.accountUsageCoverage
         )
     }
 

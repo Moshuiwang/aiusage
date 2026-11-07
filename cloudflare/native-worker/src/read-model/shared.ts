@@ -101,69 +101,138 @@ type ProviderUsageTotals = {
   cache_tokens: number;
 };
 
+// ---------------------------------------------------------------------------
+// #287：统计时区。部署级常量（env.AIUSAGE_TIMEZONE），请求入口与 cron 入口各调用一次
+// configureReportingTimezone。同一部署所有请求写入的值相同，所以模块级状态不会在并发请求
+// 之间串值；测试里切换时区后须复位（undefined = 默认北京时间）。
+// 偏移按具体时刻用 Intl 计算，夏令时日自动得到 23/25 小时。
+// ---------------------------------------------------------------------------
+const DEFAULT_REPORTING_TIMEZONE = "Asia/Shanghai";
+let reportingTimezone = DEFAULT_REPORTING_TIMEZONE;
+
+function configureReportingTimezone(timezone: string | undefined | null): string {
+  const candidate = timezone && timezone.trim() ? timezone.trim() : DEFAULT_REPORTING_TIMEZONE;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: candidate });
+    reportingTimezone = candidate;
+  } catch (_invalidTimezone) {
+    reportingTimezone = DEFAULT_REPORTING_TIMEZONE;
+  }
+  return reportingTimezone;
+}
+
+function currentReportingTimezone(): string {
+  return reportingTimezone;
+}
+
+type LocalParts = { year: number; month: number; day: number; hour: number; minute: number; second: number };
+
+function localParts(date: Date): LocalParts {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: reportingTimezone, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(values.year), month: Number(values.month), day: Number(values.day),
+    hour: Number(values.hour) % 24, minute: Number(values.minute), second: Number(values.second),
+  };
+}
+
+/** 该时刻在统计时区的 UTC 偏移（分钟）。 */
+function offsetMinutesAt(date: Date): number {
+  const local = localParts(date);
+  const asUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+  return Math.round((asUtc - Math.floor(date.getTime() / 1000) * 1000) / 60000);
+}
+
+function offsetSuffix(minutes: number): string {
+  const sign = minutes < 0 ? "-" : "+";
+  const absolute = Math.abs(minutes);
+  return `${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+/** 纯日历运算：YYYY-MM-DD 加减天数，与时区和夏令时无关。 */
+function shiftDate(value: string, days: number): string {
+  const [year, month, day] = value.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return `${shifted.getUTCFullYear()}-${pad2(shifted.getUTCMonth() + 1)}-${pad2(shifted.getUTCDate())}`;
+}
+
 function periodWindowBounds(startDate: string | null, endDate: string): [string | null, string] {
   return [
-    startDate === null ? null : `${startDate}T00:00:00+08:00`,
-    `${formatDate(addDays(parseDateOnly(endDate), 1))}T00:00:00+08:00`,
+    startDate === null ? null : toOffsetIso(parseDateOnly(startDate)),
+    toOffsetIso(parseDateOnly(shiftDate(endDate, 1))),
   ];
 }
 
 function localDateFromWindowStart(value: unknown): string | null {
   const parsed = parseDate(str(value));
-  return parsed ? formatDateInShanghai(parsed) : null;
+  return parsed ? formatDate(parsed) : null;
 }
 
 function localHourFromWindowStart(value: unknown): string | null {
   const parsed = parseDate(str(value));
   if (!parsed) return null;
   const local = toOffsetIso(parsed);
-  return `${local.slice(0, 13)}:00:00+08:00`;
+  return `${local.slice(0, 13)}:00:00${local.slice(19)}`;
 }
 
 function hasTimezoneDesignator(value: unknown): boolean {
   return /(?:Z|[+-]\d{2}:?\d{2})$/.test(str(value).trim());
 }
 
+// #287：周期边界与日期轴全部是 YYYY-MM-DD 的纯日历运算，不经过「某时刻 + N×86400000 毫秒 → 本地日期」，
+// 否则夏令时日（23/25 小时）与 ≥ +13 的时区会错一天。
 function periodBounds(date: string, period: string, offset?: number): [Period, string | null, string] {
   const periodId: Period = ["today", "week", "month", "all"].includes(period) ? period as Period : "today";
   if (offset !== undefined) {
     // Offset navigation selects calendar periods. Existing date-only requests
     // continue to describe their established rolling reporting windows.
-    const anchor = new Date(`${date}T12:00:00Z`);
-    let start: Date;
-    let end: Date;
     if (periodId === "today") {
-      start = end = addDays(anchor, offset);
-    } else if (periodId === "week") {
-      start = addDays(anchor, -((anchor.getUTCDay() + 6) % 7) + offset * 7);
-      end = offset === 0 ? anchor : addDays(start, 6);
-    } else {
-      start = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() + offset, 1, 12));
-      end = offset === 0 ? anchor : new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0, 12));
+      const day = shiftDate(date, offset);
+      return [periodId, day, day];
     }
-    return [periodId, formatDate(start), formatDate(end)];
+    if (periodId === "week") {
+      const [year, month, day] = date.split("-").map(Number);
+      const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+      const start = shiftDate(date, -((weekday + 6) % 7) + offset * 7);
+      return [periodId, start, offset === 0 ? date : shiftDate(start, 6)];
+    }
+    const [year, month] = date.split("-").map(Number);
+    const first = new Date(Date.UTC(year, month - 1 + offset, 1));
+    const start = `${first.getUTCFullYear()}-${pad2(first.getUTCMonth() + 1)}-01`;
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    const end = `${last.getUTCFullYear()}-${pad2(last.getUTCMonth() + 1)}-${pad2(last.getUTCDate())}`;
+    return [periodId, start, offset === 0 ? date : end];
   }
-  const end = parseDateOnly(date);
   if (periodId === "today") return [periodId, date, date];
-  if (periodId === "week") return [periodId, formatDate(addDays(end, -6)), date];
-  if (periodId === "month") return [periodId, formatDate(addDays(end, -29)), date];
+  if (periodId === "week") return [periodId, shiftDate(date, -6), date];
+  if (periodId === "month") return [periodId, shiftDate(date, -29), date];
   return [periodId, null, date];
 }
 
 function dateAxis(startDate: string | null, endDate: string, rows: DailyRow[]): string[] {
   if (startDate === null) return Array.from(new Set(rows.map((row) => row.date))).sort();
   const result: string[] = [];
-  let current = parseDateOnly(startDate);
-  const end = parseDateOnly(endDate);
-  while (current <= end) {
-    result.push(formatDate(current));
-    current = addDays(current, 1);
+  for (let current = startDate; current <= endDate; current = shiftDate(current, 1)) {
+    result.push(current);
   }
   return result;
 }
 
+/** 统计时区里这一天的每个整点（夏令时日 23 或 25 个）。 */
 function hourAxis(date: string): string[] {
-  return Array.from({ length: 24 }, (_, index) => `${date}T${String(index).padStart(2, "0")}:00:00+08:00`);
+  const end = parseDateOnly(shiftDate(date, 1)).getTime();
+  const result: string[] = [];
+  for (let time = parseDateOnly(date).getTime(); time < end; time += 3600000) {
+    result.push(toOffsetIso(new Date(time)));
+  }
+  return result;
 }
 
 function identityMatchesFilter(identity: SourceIdentity | undefined, machineFilter?: string | null, accountFilter?: string | null): boolean {
@@ -177,7 +246,7 @@ function identityMatchesFilter(identity: SourceIdentity | undefined, machineFilt
 function accountHourlyRowInPeriod(row: Record<string, unknown>, startDate: string | null, endDate: string, _timezone: string): boolean {
   const windowStart = parseDate(str(row.window_start));
   if (!windowStart) return false;
-  const localDate = formatDateInShanghai(windowStart);
+  const localDate = formatDate(windowStart);
   if (localDate > endDate) return false;
   if (startDate === null) return true;
   return localDate >= startDate;
@@ -231,40 +300,28 @@ function nowInTimezone(_timezone: string, currentTime?: string | null): Date {
 }
 
 function toOffsetIso(date: Date): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const hour = String(Number(values.hour ?? "0") % 24).padStart(2, "0");
-  return `${formatDateInShanghai(date)}T${hour}:${values.minute ?? "00"}:${values.second ?? "00"}+08:00`;
+  const local = localParts(date);
+  return `${local.year}-${pad2(local.month)}-${pad2(local.day)}T${pad2(local.hour)}:${pad2(local.minute)}:${pad2(local.second)}`
+    + offsetSuffix(offsetMinutesAt(date));
 }
 
-function formatDateInShanghai(date: Date): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
+function formatDateInZone(date: Date): string {
+  const local = localParts(date);
+  return `${local.year}-${pad2(local.month)}-${pad2(local.day)}`;
 }
 
+/** 统计时区里这一天 00:00 的时刻。偏移取「当天午夜附近」的值，两次迭代覆盖夏令时切换。 */
 function parseDateOnly(value: string): Date {
-  return new Date(`${value}T00:00:00+08:00`);
+  const [year, month, day] = value.split("-").map(Number);
+  const naiveUtc = Date.UTC(year, month - 1, day);
+  let instant = naiveUtc - offsetMinutesAt(new Date(naiveUtc)) * 60000;
+  instant = naiveUtc - offsetMinutesAt(new Date(instant)) * 60000;
+  return new Date(instant);
 }
 
 function parseDate(value: string): Date | null {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getTime() + days * 86400000);
 }
 
 function addHours(value: string, hours: number): string {
@@ -273,7 +330,7 @@ function addHours(value: string, hours: number): string {
 }
 
 function formatDate(date: Date): string {
-  return formatDateInShanghai(date);
+  return formatDateInZone(date);
 }
 
 function int(value: unknown): number {
@@ -297,14 +354,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export {
   accountHourlyRowInPeriod,
   accountHourlyRowMatchesFilter,
-  addDays,
   addHours,
   aggregateAgentNames,
   asArray,
   dateAxis,
   emptyTokenTotals,
   formatDate,
-  formatDateInShanghai,
+  configureReportingTimezone,
+  currentReportingTimezone,
+  formatDateInZone,
+  offsetMinutesAt,
+  shiftDate,
   hasTimezoneDesignator,
   hourAxis,
   identityMatchesFilter,
@@ -364,6 +424,9 @@ type SummarySnapshot = {
   limits: LimitRow[];
   limit_status: Record<string, unknown>[];
   provider_slots: Record<string, unknown>[];
+  //: #287：按账户分格的额度与用量（菜单栏 / iPhone 的主数据）。
+  account_slots: Record<string, unknown>[];
+  account_usage_coverage: Record<string, { unattributed_tokens: number }>;
   provider_usage_coverage: Record<string, unknown>;
   account_hourly: Record<string, unknown>;
   ai_accounts: Record<string, unknown>[];

@@ -4,10 +4,11 @@ import { buildMobileSummary } from "../mobile-summary";
 import { buildVersionHealth } from "../version-contract";
 import { accountHourlyRowsToDailyRows, accountHourlyRowsToHourlyRows, accountHourlySummary } from "./account-hourly";
 import {
-  all, fetchAccountHourlyRows, fetchAiAccounts,
+  all, fetchAccountDirectory, fetchAccountHourlyRows, fetchAiAccounts,
   fetchHourlyModelRows, fetchLimitWindows, fetchQuotaCalibration, fetchSourceIdentities,
 } from "./db";
 import { buildLimitStatus, effectiveLimitWindow } from "./limits-select";
+import { buildAccountSlots } from "./account-slots";
 import { accumulateProviderUsage, buildProviderSlots, buildProviderUsageCoverage, providerTokensByItem } from "./provider-slots";
 import { indexQuotaCalibration, quotaEstimateForModel, quotaEstimateUnavailableForModel } from "./quota-estimate";
 import { buildSourceStatus } from "./source-status";
@@ -52,10 +53,12 @@ async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
     db, startDate, endDate, request.timezone, request.machine, request.account,
   );
   const aiAccounts = await fetchAiAccounts(db);
+  const accountDirectory = await fetchAccountDirectory(db);
   const quotaCalibrationByKey = indexQuotaCalibration(await fetchQuotaCalibration(db));
   return {
     refTime, periodId, startDate, endDate, hourAxisValues, identities,
     statusRows, accuracyRows, limits, allLimits, accountHourlyRows, costsByItem, aiAccounts, quotaCalibrationByKey,
+    accountDirectory,
   };
 }
 
@@ -344,8 +347,9 @@ function assembleSnapshot(
   aggregates: UsageAggregates,
   trendSection: ReturnType<typeof buildTrendSection>,
 ): SummarySnapshot {
-  const { refTime, periodId, startDate, endDate, statusRows, accuracyRows, identities, limits, allLimits, aiAccounts } = inputs;
-  const { accountHourly } = derived;
+  const { refTime, periodId, startDate, endDate, statusRows, accuracyRows, identities, limits, allLimits, aiAccounts, accountDirectory } = inputs;
+  const { accountHourly, filteredAccountHourlyRows } = derived;
+  const accountSlots = buildAccountSlots(allLimits, filteredAccountHourlyRows, accountDirectory, refTime);
   const {
     items, totalTokens, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens,
     byMachine, byAccount, byAgent, providerUsage,
@@ -386,6 +390,8 @@ function assembleSnapshot(
     limit_status: limitStatus,
     provider_slots: buildProviderSlots(providerUsage, allLimits, limitStatus, refTime),
     provider_usage_coverage: buildProviderUsageCoverage(providerUsage, totalTokens),
+    account_slots: accountSlots.slots,
+    account_usage_coverage: accountSlots.coverage,
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {

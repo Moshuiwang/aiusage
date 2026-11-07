@@ -225,6 +225,7 @@ export async function resetDatabase(db: D1Database): Promise<void> {
     "limit_windows",
     "limit_window_history",
     "account_observations",
+    "account_profiles",
     "quota_calibration",
     "source_identities",
     "usage_hourly",

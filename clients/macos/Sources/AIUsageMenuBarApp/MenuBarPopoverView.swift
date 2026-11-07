@@ -168,6 +168,12 @@ struct MenuBarPopoverView: View {
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if let accountCoverage = model.state.accountUsageCoverageText {
+                Label(accountCoverage, systemImage: "person.crop.circle.badge.questionmark")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             if !model.state.quotaRings.isEmpty {
                 MenuBarQuotaSectionView(rings: model.state.quotaRings)

@@ -25,6 +25,11 @@ export const macosOwnerFixturePath = path.join(
   repoRoot,
   "clients/macos/Tests/AIUsageMenuBarCoreTests/Fixtures/provider-slots-owner-fixture.json",
 );
+/** #287：iPhone 端同一份 mobile 半边（账户分格），与 macOS 份逐字节相同。 */
+export const iosOwnerFixturePath = path.join(
+  repoRoot,
+  "mobile/ios/Tests/AIUsageMobileCoreTests/Fixtures/provider-slots-owner-fixture.json",
+);
 
 export const token = "contract-test-token";
 export const timezone = "Asia/Shanghai";

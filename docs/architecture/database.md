@@ -45,6 +45,8 @@ Web、iPhone、Watch 和 macOS 菜单栏都通过 Cloudflare Worker API 读取�
 | `usage_hourly_rollups` | today 与小时趋势的权威汇总读模型。 | 账号归因维度 + `window_start` |
 | `usage_daily_rollups` | week/month/all 的权威日汇总读模型。 | 账号归因维度 + `window_start` |
 | `limit_windows` | 官方或结构化 provider 的额度窗口事实。 | `(source_id, provider, source_type, window)` |
+| `account_observations` | 来源 → 账户指纹的观测时间段（用量侧与额度侧共用，#181/#287）。 | `(source_id, provider, account_fingerprint)` |
+| `account_profiles` | 账户展示名与套餐时间段；同账户出现第二个套餐即套餐变化（#287）。 | `(provider, account_fingerprint, plan)` |
 
 SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个写入入口中执行。
 
@@ -140,3 +142,12 @@ SQLite 写入必须启用 WAL 和 `busy_timeout=5000`，这一点已经在两个
 - `display_preferences`
 
 这些只能作为未来 roadmap 或历史设计参考，不能当作当前可用字段。
+
+## 统计时区（#287）
+
+- `usage_rollup_dirty_days.date` 登记 **UTC 日**（触发器里拿不到时区规则）；Worker 按 `AIUSAGE_TIMEZONE`
+  把每个脏 UTC 日换算成覆盖到的 1–2 个本地日再重算 `usage_hourly_rollups` / `usage_daily_rollups`。
+- `usage_daily_rollups.date` 与 hourly `bucket_start` 标签按 `AIUSAGE_TIMEZONE`。改这个设置后需把要重算的
+  UTC 日写进 `usage_rollup_dirty_days`（按 `usage_hourly_facts.window_start` 的 UTC 日期）由 ingest 逐批重建；
+  只有日汇总、没有小时事实的历史日（`historical_ccusage_fallback_v1`）保持原时区切分。
+- 夏令时切换当天的小时桶标签用当日午夜偏移，可能差一小时（已知限制）。
