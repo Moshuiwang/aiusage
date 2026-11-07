@@ -108,7 +108,7 @@ async function refreshDisplayRollups(db: D1Database, facts: UsageHourlyFact[] = 
   for (const { date: utcDay } of dirty.results) {
     const localDays = localDaysCoveringUtcDay(utcDay);
     let pending = localDays.filter((day) => !rebuiltInBatch.has(day));
-    if (batch.length && batch.length + pending.length * 4 + 1 > 25) {
+    if (batch.length && batch.length + pending.length * LOCAL_DAY_ROLLUP_STATEMENTS + 1 > 25) {
       await db.batch(batch);
       batch = [];
       rebuiltInBatch = new Set();
@@ -133,44 +133,84 @@ function localDaysCoveringUtcDay(utcDay: string): string[] {
   return [...new Set([formatDate(start), formatDate(end)])];
 }
 
-function localDayRollupStatements(db: D1Database, localDay: string): D1PreparedStatement[] {
+/**
+ * 单个本地日的 rollup 重算，增量写：只写数值真正变化的格子，删掉已没有明细支撑的格子。
+ * 原来是整天 DELETE + INSERT（D1 把每个索引的重写都计入写入行数；10 个小时里改 1 个小时
+ * 实测 55 行，什么都没变也 15 行）。现在同样场景 ≤ 2 行，无变化 0 行。
+ * 小时桶标签用该本地日午夜的偏移（夏令时切换当天的小时标签会差一小时，已知限制）。
+ */
+const LOCAL_DAY_ROLLUP_STATEMENTS = 5;
+
+export function localDayRollupStatements(db: D1Database, localDay: string): D1PreparedStatement[] {
   const start = toOffsetIso(parseDateOnly(localDay));
   const end = toOffsetIso(parseDateOnly(shiftDate(localDay, 1)));
   const offset = offsetMinutesAt(parseDateOnly(localDay));
   const modifier = `${offset >= 0 ? "+" : ""}${offset} minutes`;
   const suffix = start.slice(19);
-  const inDay = "julianday(window_start) >= julianday(?) AND julianday(window_start) < julianday(?)";
+  const identity = "source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance";
+  const sameIdentity = (alias: string) => identity.split(", ")
+    .map((column) => `f.${column} = ${alias}.${column}`).join(" AND ");
+  const sums = `sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
+             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)`;
+  const valueColumns = ["input_tokens", "output_tokens", "cache_creation_tokens", "cache_read_tokens",
+    "reasoning_output_tokens", "total_tokens", "event_count", "session_count", "fact_count", "total_cost"];
+  const setChanged = (table: string, extra: string[]) => {
+    const columns = [...extra, ...valueColumns];
+    return `DO UPDATE SET ${columns.map((column) => `${column} = excluded.${column}`).join(", ")}
+      WHERE ${columns.map((column) => `${table}.${column} IS NOT excluded.${column}`).join(" OR ")}`;
+  };
   return [
-    db.prepare("DELETE FROM usage_hourly_rollups WHERE julianday(bucket_start) >= julianday(?) AND julianday(bucket_start) < julianday(?)")
-      .bind(start, end),
+    // 1. 删掉这一天里已没有明细支撑的小时格（明细被删除或改了身份）。
+    db.prepare(`
+      DELETE FROM usage_hourly_rollups AS r
+      WHERE julianday(r.bucket_start) >= julianday(?1) AND julianday(r.bucket_start) < julianday(?2)
+        AND NOT EXISTS (
+          SELECT 1 FROM usage_hourly_facts AS f
+          WHERE julianday(f.window_start) >= julianday(?1) AND julianday(f.window_start) < julianday(?2)
+            AND strftime('%Y-%m-%dT%H:00:00', f.window_start, ?3) || ?4 = r.bucket_start
+            AND ${sameIdentity("r")}
+        )
+    `).bind(start, end, modifier, suffix),
+    // 2. 小时格 upsert：数值不变则不写（冲突键列不在 SET 里，不重写索引）。
     db.prepare(`
       INSERT INTO usage_hourly_rollups (
-        bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
-        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+        bucket_start, bucket_end, ${identity}, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
         reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
       SELECT strftime('%Y-%m-%dT%H:00:00', window_start, ?1) || ?2,
              max(strftime('%Y-%m-%dT%H:%M:%S', window_end, ?1)) || ?2,
-             source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
-             attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
-             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
+             ${identity}, ${sums}
       FROM usage_hourly_facts WHERE julianday(window_start) >= julianday(?3) AND julianday(window_start) < julianday(?4)
-      GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, ?1), source_id, machine_id, os_user,
-               ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
+      GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, ?1), ${identity}
+      ON CONFLICT(bucket_start, ${identity}) ${setChanged("usage_hourly_rollups", ["bucket_end"])}
     `).bind(modifier, suffix, start, end),
-    db.prepare("DELETE FROM usage_daily_rollups WHERE date = ? AND provenance <> 'historical_ccusage_fallback_v1'").bind(localDay),
+    // 3. 删掉这一天已没有明细支撑的日汇总行（历史回填行不动）。
     db.prepare(`
-      INSERT OR REPLACE INTO usage_daily_rollups (
-        date, bucket_start, bucket_end, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
-        attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+      DELETE FROM usage_daily_rollups AS r
+      WHERE r.date = ?1 AND r.provenance <> 'historical_ccusage_fallback_v1'
+        AND NOT EXISTS (
+          SELECT 1 FROM usage_hourly_facts AS f
+          WHERE julianday(f.window_start) >= julianday(?2) AND julianday(f.window_start) < julianday(?3)
+            AND ${sameIdentity("r")}
+        )
+    `).bind(localDay, start, end),
+    // 4. 日汇总 upsert：数值不变则不写。
+    db.prepare(`
+      INSERT INTO usage_daily_rollups (
+        date, bucket_start, bucket_end, ${identity}, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
         reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
-      SELECT ?, ?, ?, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
-             attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
-             sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
-      FROM usage_hourly_facts WHERE ${inDay}
-      GROUP BY source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
-    `).bind(localDay, start, end, start, end),
+      SELECT ?1, ?2, ?3, ${identity}, ${sums}
+      FROM usage_hourly_facts WHERE julianday(window_start) >= julianday(?2) AND julianday(window_start) < julianday(?3)
+      GROUP BY ${identity}
+      ON CONFLICT(date, ${identity}) ${setChanged("usage_daily_rollups", [])}
+    `).bind(localDay, start, end),
+    // 5. 日的起止时刻只随统计时区变化；单独更新、且只在不同时写（bucket_start 带索引）。
+    db.prepare(`
+      UPDATE usage_daily_rollups SET bucket_start = ?2, bucket_end = ?3
+      WHERE date = ?1 AND provenance <> 'historical_ccusage_fallback_v1'
+        AND (bucket_start IS NOT ?2 OR bucket_end IS NOT ?3)
+    `).bind(localDay, start, end),
   ];
 }
 
