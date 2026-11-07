@@ -85,3 +85,38 @@ describe("周期与日期轴是纯日历运算（审查探针复现）", () => {
     expect(dateAxis("2026-10-23", "2026-10-26", [])).toEqual(["2026-10-23", "2026-10-24", "2026-10-25", "2026-10-26"]);
   });
 });
+
+describe("CPU：日期格式化器只建一次（Workers Free 单次 10ms CPU）", () => {
+  // 线上 tail 实测：/api/mobile/summary 每次 63–84ms CPU。本地基准：每个时刻约 85µs，几乎全花在
+  // 每次调用都 new Intl.DateTimeFormat 上；一次摘要处理几百到上千个时刻。
+  it("1000 个时刻的转换最多构造 1 个格式化器，且结果不变", () => {
+    configureReportingTimezone("Africa/Kinshasa");
+    const Original = Intl.DateTimeFormat;
+    let constructed = 0;
+    const counting = function (...args: ConstructorParameters<typeof Intl.DateTimeFormat>) {
+      constructed += 1;
+      return new Original(...args);
+    } as unknown as typeof Intl.DateTimeFormat;
+    const base = Date.parse("2026-11-01T00:00:00Z");
+    const outputs: string[] = [];
+    (Intl as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = counting;
+    try {
+      for (let i = 0; i < 1000; i += 1) {
+        const instant = new Date(base + i * 3600000);
+        outputs.push(toOffsetIso(instant), formatDate(instant));
+      }
+    } finally {
+      (Intl as { DateTimeFormat: typeof Intl.DateTimeFormat }).DateTimeFormat = Original;
+    }
+    expect(constructed).toBeLessThanOrEqual(1);
+    expect(outputs.slice(0, 2)).toEqual(["2026-11-01T01:00:00+01:00", "2026-11-01"]);
+    expect(outputs).toHaveLength(2000);
+  });
+
+  it("切换时区后用新时区（缓存不串时区）", () => {
+    configureReportingTimezone("Africa/Kinshasa");
+    expect(toOffsetIso(new Date("2026-11-07T23:30:00Z"))).toBe("2026-11-08T00:30:00+01:00");
+    configureReportingTimezone("Asia/Shanghai");
+    expect(toOffsetIso(new Date("2026-11-07T23:30:00Z"))).toBe("2026-11-08T07:30:00+08:00");
+  });
+});
