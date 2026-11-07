@@ -91,6 +91,30 @@ describe("额度历史只在数值变化或满 1 小时时记录", () => {
   });
 });
 
+describe("读取失败的占位记录同样去重", () => {
+  // 线上实测（2026-11-07 部署后）：provider_failed 占位的 reset_at = observed_at，每次都不同，
+  // 去重把它当成「变化」，Antigravity 每次上报都记一条历史。
+  it("失败占位 1 小时内只记一条，满 1 小时补记", async () => {
+    const { mf, db } = await acquireWorker({ AIUSAGE_NOW: "2026-06-03T12:00:00+08:00", AIUSAGE_TIMEZONE: "Asia/Shanghai" });
+    const fail = async (at: string) => {
+      const response = await mf.dispatchFetch("http://native.test/ingest-limits", {
+        method: "POST", headers: { Authorization: "Bearer contract-test-token", "Content-Type": "application/json" },
+        body: JSON.stringify({ schema_version: 1, observed_at: at, windows: [{
+          source_id: "antigravity-main", provider: "antigravity", window: "unknown", used_percent: 0, remaining_percent: 0,
+          reset_at: at, window_duration_minutes: 0, observed_at: at,
+          source_type: "provider_runtime", confidence: "missing", status: "provider_failed",
+        }] }),
+      });
+      expect(response.status).toBe(200);
+    };
+    for (const at of ["2026-06-03T10:00:00+08:00", "2026-06-03T10:05:00+08:00", "2026-06-03T10:30:00+08:00", "2026-06-03T11:05:00+08:00"]) {
+      await fail(at);
+    }
+    const history = (await db.prepare("SELECT observed_at FROM limit_window_history ORDER BY observed_at").all()).results;
+    expect(history).toEqual([{ observed_at: "2026-06-03T10:00:00+08:00" }, { observed_at: "2026-06-03T11:05:00+08:00" }]);
+  });
+});
+
 describe("单日汇总重算：只写真正变化的格子", () => {
   const day = "2026-06-03";
   async function seed(db: D1Database, hours: number[], tokensAt: (hour: number) => number) {

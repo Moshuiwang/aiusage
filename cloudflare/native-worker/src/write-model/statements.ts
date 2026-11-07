@@ -420,7 +420,8 @@ function limitWindowStatements(db: D1Database, window: LimitWindow, seenAt: stri
         WHERE source_id = ?1 AND provider = ?2 AND window = ?3
         ORDER BY observed_at DESC LIMIT 1
       ) AS last
-      WHERE last.used_percent IS ?4 AND last.remaining_percent IS ?5 AND last.reset_at IS ?6
+      -- 非 ok 的占位记录 reset_at 填的是当次观测时刻，没有意义，不参与比较（否则失败每次都被当成变化）。
+      WHERE last.used_percent IS ?4 AND last.remaining_percent IS ?5 AND (last.reset_at IS ?6 OR ?10 <> 'ok')
         AND last.window_duration_minutes IS ?7 AND last.source_type IS ?8 AND last.confidence IS ?9
         AND last.status IS ?10
         AND julianday(?11) - julianday(last.observed_at) < ${LIMIT_HISTORY_KEEPALIVE_DAYS}
