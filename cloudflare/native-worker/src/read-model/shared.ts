@@ -127,23 +127,40 @@ function currentReportingTimezone(): string {
 
 type LocalParts = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
+// Intl.DateTimeFormat 构造很贵（本地实测每次约 25–30µs），一次摘要要处理上千个时刻；
+// 按统计时区缓存一个实例。统计时区是部署常量，缓存不会在请求间串值。
+let cachedFormatter: { timezone: string; formatter: Intl.DateTimeFormat } | null = null;
+
+function zoneFormatter(): Intl.DateTimeFormat {
+  if (cachedFormatter?.timezone !== reportingTimezone) {
+    cachedFormatter = {
+      timezone: reportingTimezone,
+      formatter: new Intl.DateTimeFormat("en-CA", {
+        timeZone: reportingTimezone, hourCycle: "h23",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+      }),
+    };
+  }
+  return cachedFormatter.formatter;
+}
+
 function localParts(date: Date): LocalParts {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: reportingTimezone, hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const values: Record<string, string> = {};
+  for (const part of zoneFormatter().formatToParts(date)) values[part.type] = part.value;
   return {
     year: Number(values.year), month: Number(values.month), day: Number(values.day),
     hour: Number(values.hour) % 24, minute: Number(values.minute), second: Number(values.second),
   };
 }
 
-/** 该时刻在统计时区的 UTC 偏移（分钟）。 */
-function offsetMinutesAt(date: Date): number {
-  const local = localParts(date);
+function offsetFromParts(date: Date, local: LocalParts): number {
   const asUtc = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
   return Math.round((asUtc - Math.floor(date.getTime() / 1000) * 1000) / 60000);
+}
+
+/** 该时刻在统计时区的 UTC 偏移（分钟）。 */
+function offsetMinutesAt(date: Date): number {
+  return offsetFromParts(date, localParts(date));
 }
 
 function offsetSuffix(minutes: number): string {
@@ -302,7 +319,7 @@ function nowInTimezone(_timezone: string, currentTime?: string | null): Date {
 function toOffsetIso(date: Date): string {
   const local = localParts(date);
   return `${local.year}-${pad2(local.month)}-${pad2(local.day)}T${pad2(local.hour)}:${pad2(local.minute)}:${pad2(local.second)}`
-    + offsetSuffix(offsetMinutesAt(date));
+    + offsetSuffix(offsetFromParts(date, local));
 }
 
 function formatDateInZone(date: Date): string {
