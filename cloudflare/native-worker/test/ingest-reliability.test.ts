@@ -311,7 +311,8 @@ describe.sequential("history ACK and authoritative projection reliability", () =
       if (response.status === 200) break;
       expect(response.status).toBe(500);
       expect((await db.prepare("SELECT count(*) AS n FROM usage_rollup_dirty_days").first())?.n).toBe(6);
-      expect(await totals("usage_daily_rollups")).toEqual({ count: 20, tokens: 4000 });
+      // #287：脏日是 UTC 日；第 20 个 UTC 日还覆盖北京第 21 天的 00:00–08:00，顺带重算（21 天）。
+      expect(await totals("usage_daily_rollups")).toEqual({ count: 21, tokens: 4200 });
       expect(attempt).toBeLessThan(2);
     }
     expect(initializationAttempts).toBe(2);
@@ -379,7 +380,7 @@ describe.sequential("history ACK and authoritative projection reliability", () =
     expect(await totals("usage_daily_rollups")).toEqual({ count: 1, tokens: 100 });
   });
 
-  it("marks and rebuilds the Shanghai day when the incoming ISO offset crosses midnight", async () => {
+  it("marks the UTC day and rebuilds the Shanghai day when the incoming ISO offset crosses midnight", async () => {
     const payloads = await python(["generate"], [{ observed_at: observed(0), hours: [["2026-07-11T17:00:00+00:00", 100]] }]);
     await db.prepare("CREATE TRIGGER fail_timezone_rollup BEFORE INSERT ON usage_hourly_rollups BEGIN SELECT RAISE(ABORT, 'inspect canonical dirty day'); END").run();
     try {
@@ -388,7 +389,8 @@ describe.sequential("history ACK and authoritative projection reliability", () =
       });
       expect(response.status).toBe(500);
       await response.text();
-      expect((await db.prepare("SELECT date FROM usage_rollup_dirty_days").all()).results).toEqual([{ date: day }]);
+      // #287：触发器登记 UTC 日（17:00Z 属于 07-11）；重算时换算成北京的 07-12（下方断言）。
+      expect((await db.prepare("SELECT date FROM usage_rollup_dirty_days").all()).results).toEqual([{ date: "2026-07-11" }]);
     } finally { await db.prepare("DROP TRIGGER fail_timezone_rollup").run(); }
     await post(payloads[0]);
     expect((await db.prepare("SELECT bucket_start, total_tokens FROM usage_hourly_rollups").all()).results).toEqual([{ bucket_start: hour(day, 1), total_tokens: 100 }]);
@@ -449,5 +451,33 @@ describe.sequential("history ACK and authoritative projection reliability", () =
     expect(ownDaily).toEqual([{date: day, total_tokens: 100}, {date: "2026-07-13", total_tokens: 80}]);
     await assertSummary(day, 131);
     await assertSummary("2026-07-13", 80);
+  });
+});
+
+// #287：统计时区不是北京时间时，日界与小时桶都按配置时区（真实 Python payload → /ingest → 摘要）。
+describe.sequential("reporting timezone UTC+1 end to end", () => {
+  it("把 UTC 23:30 的用量算进本地次日，小时桶标签带 +01:00", async () => {
+    const { mf, db } = await acquireWorker({ AIUSAGE_NOW: "2026-11-08T12:00:00+01:00", AIUSAGE_TIMEZONE: "Africa/Kinshasa" });
+    const payloads = await python(["generate"], [{ observed_at: "2026-11-08T11:00:00+00:00", hours: [
+      ["2026-11-07T22:00:00+00:00", 40], // 本地 11-07 23:00
+      ["2026-11-07T23:00:00+00:00", 60], // 本地 11-08 00:00
+    ] }]);
+    const response = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(payloads[0]),
+    });
+    expect(response.status, await response.text()).toBe(200);
+    expect((await db.prepare("SELECT date, total_tokens FROM usage_daily_rollups ORDER BY date").all()).results)
+      .toEqual([{ date: "2026-11-07", total_tokens: 40 }, { date: "2026-11-08", total_tokens: 60 }]);
+    expect((await db.prepare("SELECT bucket_start FROM usage_hourly_rollups ORDER BY bucket_start").all()).results)
+      .toEqual([{ bucket_start: "2026-11-07T23:00:00+01:00" }, { bucket_start: "2026-11-08T00:00:00+01:00" }]);
+    expect((await db.prepare("SELECT count(*) AS n FROM usage_rollup_dirty_days").first())?.n).toBe(0);
+    for (const [date, tokens] of [["2026-11-07", 40], ["2026-11-08", 60]] as const) {
+      const summary = await mf.dispatchFetch(`http://native.test/api/mobile/summary?date=${date}&period=today`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const body = await summary.json() as RecordValue;
+      expect(body.timezone).toBe("Africa/Kinshasa");
+      expect(body.period.total_tokens, date).toBe(tokens);
+    }
   });
 });

@@ -364,6 +364,13 @@ class ClaudeSubprocessRunner:
         return ClaudeCommandResult(returncode=result.returncode, stdout=result.stdout, stderr=result.stderr)
 
 
+#: #287：TZ 实测 `/usage` 通常 6–7s，偶发 >20s（2026-11-07 连续 4 轮被 20s 硬超时掐断，
+#: 120 分钟后额度被隐藏）。定时器 30 分钟一次，单次 60s + 超时重试 1 次；最坏情况再加一次 60s 的
+#: 限额探测，合计约 3 分钟，不会与下一轮重叠，也不增加正常情况下的调用次数。
+CLAUDE_CLI_TIMEOUT_SECONDS = 60.0
+CLAUDE_CLI_TIMEOUT_RETRIES = 1
+
+
 class ClaudeCliUsageProvider:
     def __init__(
         self,
@@ -372,7 +379,7 @@ class ClaudeCliUsageProvider:
         limit_probe_command: list[str] | None = None,
         env: dict[str, str] | None = None,
         runner: ClaudeSubprocessRunner | None = None,
-        timeout: float = 20.0,
+        timeout: float = CLAUDE_CLI_TIMEOUT_SECONDS,
         observed_at_provider: Callable[[], str] | None = None,
     ) -> None:
         self.command = list(command) if command is not None else [
@@ -398,7 +405,7 @@ class ClaudeCliUsageProvider:
 
     def collect(self) -> List[LimitWindow]:
         try:
-            result = self.runner.run(self.command, self.timeout, self.env)
+            result = self._run_usage_with_retry()
         except subprocess.TimeoutExpired as exc:
             raise ClaudeProviderError("timeout", "Claude CLI usage read timed out") from exc
         except Exception as exc:
@@ -416,6 +423,16 @@ class ClaudeCliUsageProvider:
                     observed_at,
                     allow_unknown_subscription=_is_subscription_only_usage(result.stdout),
                 )
+
+    def _run_usage_with_retry(self) -> ClaudeCommandResult:
+        """只对超时重试，且只重试 CLAUDE_CLI_TIMEOUT_RETRIES 次；其他失败立即返回上层分类。"""
+        for attempt in range(CLAUDE_CLI_TIMEOUT_RETRIES + 1):
+            try:
+                return self.runner.run(self.command, self.timeout, self.env)
+            except subprocess.TimeoutExpired:
+                if attempt == CLAUDE_CLI_TIMEOUT_RETRIES:
+                    raise
+        raise AssertionError("unreachable")
 
     def _probe_limit_message(self, observed_at: str, *, allow_unknown_subscription: bool = False) -> List[LimitWindow]:
         try:

@@ -1,11 +1,13 @@
 /** #126：D1 数据访问与行整形（SQL 只出现在这里）。 */
 import { bestLimitWindows, limitWindowExpired, withoutSupersededActiveCache } from "./limits-select";
 import {
-  accountHourlyRowInPeriod, accountHourlyRowMatchesFilter, addDays, formatDate, int, itemKey,
-  localDateFromWindowStart, localEstimateSourceTypes, parseDateOnly, periodWindowBounds, str,
+  accountHourlyRowInPeriod, accountHourlyRowMatchesFilter, formatDate, int, itemKey,
+  localDateFromWindowStart, localEstimateSourceTypes, periodWindowBounds, shiftDate, str,
 } from "./shared";
 import type { LimitRow, ModelRow, SourceIdentity } from "./shared";
 import type { QuotaCalibrationRow } from "./quota-estimate";
+import { accountDirectoryFrom } from "./account-slots";
+import type { AccountDirectory, ObservationRow, ProfileRow } from "./account-slots";
 
 async function all<T>(db: D1Database, sql: string, params: unknown[] = []): Promise<T[]> {
   const result = await db.prepare(sql).bind(...params).all<T>();
@@ -120,9 +122,12 @@ async function fetchAccountHourlyRows(
 }
 
 export async function hasPendingRollups(db: D1Database, startDate: string | null = null, endDate: string | null = null): Promise<boolean> {
+  // #287：脏日是 UTC 日，本地日 [start, end] 可能覆盖到前后各一个 UTC 日。
+  const utcStart = startDate === null ? null : shiftDate(startDate, -1);
+  const utcEnd = endDate === null ? null : shiftDate(endDate, 1);
   const row = await db.prepare(
     "SELECT date FROM usage_rollup_dirty_days WHERE (? IS NULL OR date >= ?) AND (? IS NULL OR date <= ?) LIMIT 1",
-  ).bind(startDate, startDate, endDate, endDate).first();
+  ).bind(utcStart, utcStart, utcEnd, utcEnd).first();
   return row !== null;
 }
 
@@ -293,6 +298,17 @@ async function fetchHourlyModelRows(
   );
 }
 
+/** #287：账户目录（来源 → 账户、账户展示名与套餐时间段）。两张表都很小（每个来源/账户/套餐一行）。 */
+async function fetchAccountDirectory(db: D1Database): Promise<AccountDirectory> {
+  const observations = await all<ObservationRow>(db, `
+    SELECT source_id, provider, account_fingerprint, first_seen_at, last_seen_at FROM account_observations
+  `);
+  const profiles = await all<ProfileRow>(db, `
+    SELECT provider, account_fingerprint, plan, label, first_seen_at, last_seen_at FROM account_profiles
+  `);
+  return accountDirectoryFrom(observations, profiles);
+}
+
 async function fetchAiAccounts(db: D1Database): Promise<Record<string, unknown>[]> {
   const rows = await all<Record<string, unknown>>(
     db,
@@ -332,6 +348,7 @@ async function fetchQuotaCalibration(db: D1Database): Promise<QuotaCalibrationRo
 
 export {
   all,
+  fetchAccountDirectory,
   fetchAccountHourlyRows,
   fetchAccountRowsFromTable,
   fetchAiAccounts,

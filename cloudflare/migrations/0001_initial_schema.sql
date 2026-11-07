@@ -380,6 +380,7 @@ CREATE TABLE IF NOT EXISTS usage_reconciliation_ranges (
 );
 
 -- The queue is marked by canonical fact mutations in the same transaction.
+-- #287：登记的是 UTC 日；Worker 按统计时区换算成本地日再重算（触发器里拿不到时区规则）。
 CREATE TABLE IF NOT EXISTS usage_rollup_dirty_days (
   date TEXT NOT NULL PRIMARY KEY
 );
@@ -387,13 +388,13 @@ CREATE TABLE IF NOT EXISTS usage_rollup_dirty_days (
 CREATE TRIGGER IF NOT EXISTS usage_rollup_dirty_insert
 AFTER INSERT ON usage_hourly_facts
 BEGIN
-  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start)) ON CONFLICT(date) DO NOTHING;
 END;
 
 CREATE TRIGGER IF NOT EXISTS usage_rollup_dirty_delete
 AFTER DELETE ON usage_hourly_facts
 BEGIN
-  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start)) ON CONFLICT(date) DO NOTHING;
 END;
 
 -- Backfilled from 0014 P1（Codex 审查）：WHEN 条件曾经不含 total_cost，只改
@@ -412,8 +413,8 @@ WHEN OLD.source_id IS NOT NEW.source_id OR OLD.machine_id IS NOT NEW.machine_id
   OR OLD.total_tokens IS NOT NEW.total_tokens OR OLD.total_cost IS NOT NEW.total_cost
   OR OLD.event_count IS NOT NEW.event_count OR OLD.session_count IS NOT NEW.session_count
 BEGIN
-  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
-  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start, '+8 hours')) ON CONFLICT(date) DO NOTHING;
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(OLD.window_start)) ON CONFLICT(date) DO NOTHING;
+  INSERT INTO usage_rollup_dirty_days (date) VALUES (date(NEW.window_start)) ON CONFLICT(date) DO NOTHING;
 END;
 
 -- Backfilled from 0012: preserve historical limit window snapshots for quota analytics.
@@ -444,6 +445,17 @@ CREATE TABLE IF NOT EXISTS account_observations (
   first_seen_at TEXT NOT NULL,
   last_seen_at TEXT NOT NULL,
   PRIMARY KEY (source_id, provider, account_fingerprint)
+);
+
+-- Backfilled from 0016: #287 账户资料（展示名 + 套餐时间段）。
+CREATE TABLE IF NOT EXISTS account_profiles (
+  provider TEXT NOT NULL,
+  account_fingerprint TEXT NOT NULL,
+  plan TEXT NOT NULL,
+  label TEXT,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  PRIMARY KEY (provider, account_fingerprint, plan)
 );
 
 CREATE TABLE IF NOT EXISTS quota_calibration (

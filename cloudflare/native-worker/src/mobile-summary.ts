@@ -32,6 +32,10 @@ export type MobileSummary = {
   };
   provider_slots: Record<string, unknown>[];
   provider_usage_coverage: Record<string, unknown>;
+  //: #287：按账户分格。3.0 客户端只读这个；provider_slots 留给尚未升级的 2.x 客户端，
+  //: 全部客户端升级后删除（见 #287 收尾项）。
+  account_slots: Record<string, unknown>[];
+  account_usage_coverage: Record<string, { unattributed_tokens: number }>;
   metadata: Record<string, unknown>;
 };
 
@@ -115,6 +119,8 @@ export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
     },
     provider_slots: providerSlots(snapshot.provider_slots),
     provider_usage_coverage: providerUsageCoverage(snapshot.provider_usage_coverage),
+    account_slots: list<AnyRecord>(snapshot.account_slots).map(accountSlot),
+    account_usage_coverage: accountUsageCoverage(snapshot.account_usage_coverage),
     metadata: mobileMetadata(snapshot, windows, candidateWindows, generatedAt),
   };
 }
@@ -212,6 +218,31 @@ function providerSlot(provider: string, row: AnyRecord | undefined): AnyRecord {
         ? {last_successful_windows: quota.last_successful_windows} : {}),
     },
   };
+}
+
+// #287：账户格与 provider 格同一套裁剪（缺失额度不带百分比），外加账户身份。
+// 指纹只用作客户端的稳定键；展示名与套餐来自采集端识别，D1 里没有邮箱。
+function accountSlot(row: AnyRecord): AnyRecord {
+  const account = row.account && typeof row.account === "object" && !Array.isArray(row.account) ? dict(row.account) : null;
+  return {
+    ...providerSlot(str(row.provider), row),
+    account: account === null ? null : {
+      key: str(account.key),
+      label: typeof account.label === "string" ? account.label : null,
+      plan: typeof account.plan === "string" ? account.plan : null,
+      plan_since: typeof account.plan_since === "string" ? account.plan_since : null,
+      previous_plan: typeof account.previous_plan === "string" ? account.previous_plan : null,
+      source_ids: list<unknown>(account.source_ids).map(str),
+    },
+  };
+}
+
+function accountUsageCoverage(value: unknown): Record<string, { unattributed_tokens: number }> {
+  const result: Record<string, { unattributed_tokens: number }> = {};
+  for (const [provider, row] of Object.entries(dict(value))) {
+    result[provider] = { unattributed_tokens: int(dict(row).unattributed_tokens) };
+  }
+  return result;
 }
 
 function mobileLimitProviders(rows: AnyRecord[]): AnyRecord[] {

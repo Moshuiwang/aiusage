@@ -14,11 +14,26 @@ struct MenuBarQuotaSectionView: View {
         // 「Antigravity」，之前把名称/倒计时整个挪到圆环下方——偏离设计稿（圆环在左、
         // 名称+倒计时在右）。改回设计稿版式：每项按自身内容的自然宽度排布，项之间用
         // Spacer 均分剩余空间，不再强制等宽。
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(Array(rings.enumerated()), id: \.element.id) { index, ring in
-                MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
-                if index < rings.count - 1 {
-                    Spacer(minLength: 4)
+        // #287：账户数 ≤ 3 时单行（与原版式一致）；更多账户时两列网格，避免横向溢出弹窗宽度。
+        Group {
+            if rings.count <= 3 {
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(rings.enumerated()), id: \.element.id) { index, ring in
+                        MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
+                        if index < rings.count - 1 {
+                            Spacer(minLength: 4)
+                        }
+                    }
+                }
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 10
+                ) {
+                    ForEach(rings) { ring in
+                        MenuBarQuotaRingItem(data: ring, hoveredID: $hoveredQuotaID)
+                    }
                 }
             }
         }
@@ -61,6 +76,14 @@ struct MenuBarQuotaRingItem: View {
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                     .fixedSize()
+                if let accountText = data.accountText {
+                    // #287：多账户时区分是哪个账户、什么套餐。
+                    Text(accountText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                        .lineLimit(1)
+                        .fixedSize()
+                }
                 Text(data.isAvailable ? data.resetCountdownText : (data.isShowingLastSuccess ? "最近成功值" : "暂不可用"))
                     .font(.system(size: 10.5))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
@@ -119,7 +142,8 @@ struct MenuBarQuotaTooltip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(data.displayName).font(.system(size: 12, weight: .semibold))
+            Text([data.displayName, data.accountText].compactMap { $0 }.joined(separator: " · "))
+                .font(.system(size: 12, weight: .semibold))
             ForEach(data.hoverRows) { row in
                 HStack(alignment: .top, spacing: 8) {
                     Text(row.label)
@@ -131,6 +155,11 @@ struct MenuBarQuotaTooltip: View {
                         .lineLimit(2)
                 }
             }
+            // #287：官方额度已含网页、云端审核等全部使用；token 明细只来自本地设备。
+            Text("额度含网页、云端审核等全部使用；token 仅统计本地设备")
+                .font(.system(size: 10))
+                .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                .padding(.top, 2)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { macosOwnerFixturePath, providerSlotsGoldenPath } from "./golden/paths";
+import { iosOwnerFixturePath, macosOwnerFixturePath, providerSlotsGoldenPath } from "./golden/paths";
 import {
   collectProviderSlotsScenario,
   macosOwnerFixtureFrom,
@@ -51,6 +51,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
       "14-usage-without-canonical-provider",
       "15-two-accounts-one-provider",
       "16-healthy-source-with-other-failure",
+      "17-multi-account-plan-change",
     ]);
     expect(golden.length, "每个场景两个端点").toBe(goldenScenarios.length * providerSlotsEndpoints.length);
     for (const record of golden) {
@@ -75,6 +76,13 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     }, 60_000);
   }
 
+  it("iPhone owner fixture 与 macOS 份逐字节相同（#287 账户分格两端同源）", async () => {
+    const ios = await readFile(iosOwnerFixturePath, "utf8");
+    const macos = await readFile(macosOwnerFixturePath, "utf8");
+    expect(JSON.parse(ios).length).toBe(17);
+    expect(ios).toBe(macos);
+  });
+
   it("macOS owner fixture 就是 golden 的 mobile 半边，没有第二份手写事实", async () => {
     // 手写 fixture 会和现实脱节，且脱节方向正好是「实现者以为的样子」。
     // golden 的新鲜度由上面每个场景的重放保证，这里只需钉住「fixture 由 owner 派生」。
@@ -82,7 +90,7 @@ describe.sequential("provider slots golden 防陈旧守卫", () => {
     const derived = macosOwnerFixtureFrom(golden);
 
     expect(derived.length, "mobile 半边必须与场景数一致").toBe(goldenScenarios.length);
-    expect(derived.length, "场景数变化必须显式改这里").toBe(16);
+    expect(derived.length, "场景数变化必须显式改这里").toBe(17);
     expect(derived.length, "派生结果不能为空").toBeGreaterThan(0);
     expect(committed.map((record) => record.name), "fixture 覆盖的场景必须与 golden 一致")
       .toEqual(derived.map((record) => record.name));

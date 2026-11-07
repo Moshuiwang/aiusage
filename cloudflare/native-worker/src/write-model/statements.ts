@@ -63,7 +63,47 @@ function factWriteStatements(
 }
 
 function limitWriteStatements(db: D1Database, windows: LimitWindow[], seenAt: string): D1PreparedStatement[] {
-  return windows.flatMap((window) => limitWindowStatements(db, window, seenAt));
+  return [
+    ...windows.flatMap((window) => limitWindowStatements(db, window, seenAt)),
+    ...limitAccountStatements(db, windows),
+  ];
+}
+
+/**
+ * #287：额度来源 -> 账户（account_observations）与账户资料（account_profiles）。
+ * 一批里同一 (来源, 账户, 套餐) 只写一次，取这批里最新的观测时刻；两张表共用 6 小时节流，
+ * 不随上报频率线性放大 D1 写入。展示名变化立即生效（不受节流）。
+ */
+function limitAccountStatements(db: D1Database, windows: LimitWindow[]): D1PreparedStatement[] {
+  const latest = new Map<string, { window: LimitWindow; observedAt: string }>();
+  for (const window of windows) {
+    if (!window.account) continue;
+    const key = [window.source_id, window.provider.trim().toLowerCase(), window.account.fingerprint, window.account.plan].join("\u0000");
+    const existing = latest.get(key);
+    if (!existing || Date.parse(window.observed_at) > Date.parse(existing.observedAt)) {
+      latest.set(key, { window, observedAt: window.observed_at });
+    }
+  }
+  return [...latest.values()].flatMap(({ window, observedAt }) => {
+    const account = window.account!;
+    const provider = window.provider.trim().toLowerCase();
+    return [
+      ...accountObservationStatements(db, window.source_id, [
+        { provider, account_fingerprint: account.fingerprint, observed_at: observedAt },
+      ]),
+      db.prepare(`
+        INSERT INTO account_profiles (provider, account_fingerprint, plan, label, first_seen_at, last_seen_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider, account_fingerprint, plan) DO UPDATE SET
+          last_seen_at = CASE
+            WHEN julianday(excluded.last_seen_at) - julianday(account_profiles.last_seen_at) >= ${ACCOUNT_OBSERVATION_MIN_REWRITE_GAP_DAYS}
+              THEN excluded.last_seen_at ELSE account_profiles.last_seen_at END,
+          label = COALESCE(excluded.label, account_profiles.label)
+        WHERE julianday(excluded.last_seen_at) - julianday(account_profiles.last_seen_at) >= ${ACCOUNT_OBSERVATION_MIN_REWRITE_GAP_DAYS}
+           OR (excluded.label IS NOT NULL AND excluded.label IS NOT account_profiles.label)
+      `).bind(provider, account.fingerprint, account.plan, account.label, observedAt, observedAt),
+    ];
+  });
 }
 
 // #183-b：account_observations 只是「发现冲突」用的观察记录，不是逐条焊死用量归属的表。

@@ -142,6 +142,11 @@
 
 `GET /api/mobile/summary` 由 `/api/summary` 派生，只做 DTO 转换和字段裁剪，不重新聚合业务口径。
 
+#287 起额度与用量按**账户**分格：`account_slots[]`（每项 `provider`、`account{key,label,plan,plan_since,previous_plan,source_ids}`、
+`usage`、`quota`，`account` 为 null 表示该 provider 读不到账户身份）与 `account_usage_coverage{provider: {unattributed_tokens}}`。
+同一账户被多台机器读到时合成一格。`provider_slots[]` 仅为尚未升级的 2.x 客户端保留，全部客户端升到 3.0 后删除。
+`/ingest-limits` 的每个 window 可带 `account{fingerprint,label,plan}`（采集端自动识别，不含邮箱）；不合规时只丢弃账户部分。
+
 当前顶层字段：
 
 - `schema_version`

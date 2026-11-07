@@ -10,8 +10,12 @@ public struct MobileSummary: Codable, Equatable, Sendable {
     public let sources: [MobileSource]
     public let breakdown: MobileBreakdown
     public let limits: MobileLimits
+    /// #287：3.0 起是「按账户」的格子（服务端 account_slots）；同一 provider 可以有多格。
+    /// 只有旧服务端没有 account_slots 时才退回 provider_slots（每 provider 一格）。
     public let providerSlots: [MobileProviderSlot]
     public let providerUsageCoverage: MobileProviderUsageCoverage
+    /// #287：有账户身份的 provider 下归属不了账户的本地 token（按 provider）。
+    public let accountUsageCoverage: [String: Int]
 
     public init(
         schemaVersion: Int,
@@ -24,7 +28,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         breakdown: MobileBreakdown,
         limits: MobileLimits,
         providerSlots: [MobileProviderSlot] = [],
-        providerUsageCoverage: MobileProviderUsageCoverage = .unknown
+        providerUsageCoverage: MobileProviderUsageCoverage = .unknown,
+        accountUsageCoverage: [String: Int] = [:]
     ) {
         self.schemaVersion = schemaVersion
         self.client = client
@@ -37,6 +42,7 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         self.limits = limits
         self.providerSlots = providerSlots
         self.providerUsageCoverage = providerUsageCoverage
+        self.accountUsageCoverage = accountUsageCoverage
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,11 +56,37 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         sources = try container.decode([MobileSource].self, forKey: .sources)
         breakdown = try container.decode(MobileBreakdown.self, forKey: .breakdown)
         limits = try container.decode(MobileLimits.self, forKey: .limits)
-        providerSlots = try container.decodeIfPresent([MobileProviderSlot].self, forKey: .providerSlots) ?? []
+        if let accountSlots = try container.decodeIfPresent([MobileProviderSlot].self, forKey: .accountSlots) {
+            providerSlots = accountSlots
+        } else {
+            providerSlots = try container.decodeIfPresent([MobileProviderSlot].self, forKey: .providerSlots) ?? []
+        }
         providerUsageCoverage = try container.decodeIfPresent(
             MobileProviderUsageCoverage.self,
             forKey: .providerUsageCoverage
         ) ?? .unknown
+        let coverage = try container.decodeIfPresent([String: MobileAccountUsageCoverage].self, forKey: .accountUsageCoverage) ?? [:]
+        accountUsageCoverage = coverage.mapValues(\.unattributedTokens)
+    }
+
+    /// 本地缓存写回时统一写成 account_slots，读回来仍保留账户身份。
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        try container.encode(client, forKey: .client)
+        try container.encodeIfPresent(generatedAt, forKey: .generatedAt)
+        try container.encodeIfPresent(timezone, forKey: .timezone)
+        try container.encode(period, forKey: .period)
+        try container.encode(trend, forKey: .trend)
+        try container.encode(sources, forKey: .sources)
+        try container.encode(breakdown, forKey: .breakdown)
+        try container.encode(limits, forKey: .limits)
+        try container.encode(providerSlots, forKey: .accountSlots)
+        try container.encode(providerUsageCoverage, forKey: .providerUsageCoverage)
+        try container.encode(
+            accountUsageCoverage.mapValues(MobileAccountUsageCoverage.init(unattributedTokens:)),
+            forKey: .accountUsageCoverage
+        )
     }
 
     enum CodingKeys: String, CodingKey {
@@ -68,7 +100,64 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         case breakdown
         case limits
         case providerSlots = "provider_slots"
+        case accountSlots = "account_slots"
         case providerUsageCoverage = "provider_usage_coverage"
+        case accountUsageCoverage = "account_usage_coverage"
+    }
+}
+
+public struct MobileAccountUsageCoverage: Codable, Equatable, Sendable {
+    public let unattributedTokens: Int
+
+    public init(unattributedTokens: Int) {
+        self.unattributedTokens = unattributedTokens
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        unattributedTokens = try container.decodeIfPresent(Int.self, forKey: .unattributedTokens) ?? 0
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case unattributedTokens = "unattributed_tokens"
+    }
+}
+
+/// #287：格子所属的账户（采集端自动识别；展示名与套餐，没有邮箱）。
+public struct MobileSlotAccount: Codable, Equatable, Sendable {
+    public let key: String
+    public let label: String?
+    public let plan: String?
+    public let planSince: String?
+    public let previousPlan: String?
+    public let sourceIDs: [String]
+
+    public init(key: String, label: String?, plan: String?, planSince: String? = nil, previousPlan: String? = nil, sourceIDs: [String] = []) {
+        self.key = key
+        self.label = label
+        self.plan = plan
+        self.planSince = planSince
+        self.previousPlan = previousPlan
+        self.sourceIDs = sourceIDs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        key = try container.decode(String.self, forKey: .key)
+        label = try container.decodeIfPresent(String.self, forKey: .label)
+        plan = try container.decodeIfPresent(String.self, forKey: .plan)
+        planSince = try container.decodeIfPresent(String.self, forKey: .planSince)
+        previousPlan = try container.decodeIfPresent(String.self, forKey: .previousPlan)
+        sourceIDs = try container.decodeIfPresent([String].self, forKey: .sourceIDs) ?? []
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case key
+        case label
+        case plan
+        case planSince = "plan_since"
+        case previousPlan = "previous_plan"
+        case sourceIDs = "source_ids"
     }
 }
 
@@ -426,16 +515,19 @@ public struct MobileLimits: Codable, Equatable, Sendable {
 }
 
 public struct MobileProviderSlot: Codable, Equatable, Sendable, Identifiable {
-    public var id: String { provider }
+    /// #287：同一 provider 可有多个账户格，id 用账户键；没有账户身份时退回 provider。
+    public var id: String { account?.key ?? provider }
 
     public let provider: String
     public let usage: MobileProviderUsage
     public let quota: MobileProviderQuota
+    public let account: MobileSlotAccount?
 
-    public init(provider: String, usage: MobileProviderUsage, quota: MobileProviderQuota) {
+    public init(provider: String, usage: MobileProviderUsage, quota: MobileProviderQuota, account: MobileSlotAccount? = nil) {
         self.provider = provider
         self.usage = usage
         self.quota = quota
+        self.account = account
     }
 
     public init(from decoder: Decoder) throws {
@@ -443,12 +535,14 @@ public struct MobileProviderSlot: Codable, Equatable, Sendable, Identifiable {
         provider = try container.decode(String.self, forKey: .provider)
         usage = try container.decodeIfPresent(MobileProviderUsage.self, forKey: .usage) ?? .missing
         quota = try container.decodeIfPresent(MobileProviderQuota.self, forKey: .quota) ?? .missing()
+        account = try container.decodeIfPresent(MobileSlotAccount.self, forKey: .account)
     }
 
     enum CodingKeys: String, CodingKey {
         case provider
         case usage
         case quota
+        case account
     }
 }
 

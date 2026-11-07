@@ -33,19 +33,39 @@ class BrokenOAuthProvider:
 
 
 class TestClaudeCliAdapter(unittest.TestCase):
-    def test_timeout_is_classified_without_repeating_output_or_running_model_probe(self) -> None:
+    def test_timeout_retries_once_then_is_classified_without_output_or_model_probe(self) -> None:
+        """#287：TZ 实测偶发 >20s（手动重跑 6–7s 成功）。超时重试一次；两次都超时才报
+        timeout，且不跑会消耗额度的模型探测、不回显 CLI 输出。"""
         import subprocess
         class SlowRunner:
-            def __init__(self): self.calls = 0
+            def __init__(self): self.calls = []
             def run(self, command, timeout, env=None):
-                self.calls += 1
+                self.calls.append(command)
                 raise subprocess.TimeoutExpired(command, timeout, output="private provider output")
         runner = SlowRunner()
         with self.assertRaises(ClaudeProviderError) as caught:
             ClaudeCliUsageProvider(runner=runner).collect()
         self.assertEqual(caught.exception.error_type, "timeout")
         self.assertNotIn("private provider output", str(caught.exception))
-        self.assertEqual(runner.calls, 1)
+        self.assertEqual(len(runner.calls), 2)
+        self.assertTrue(all("/usage" in command for command in runner.calls))
+
+    def test_timeout_then_success_returns_windows(self) -> None:
+        import subprocess
+        cli_text = (FIXTURES / "claude_usage_cli.txt").read_text(encoding="utf-8")
+        class FlakyRunner:
+            def __init__(self): self.timeouts = []
+            def run(self, command, timeout, env=None):
+                self.timeouts.append(timeout)
+                if len(self.timeouts) == 1:
+                    raise subprocess.TimeoutExpired(command, timeout)
+                return ClaudeCommandResult(returncode=0, stdout=cli_text, stderr="")
+        runner = FlakyRunner()
+        windows = ClaudeCliUsageProvider(
+            runner=runner, observed_at_provider=lambda: "2026-06-03T10:01:00+08:00"
+        ).collect()
+        self.assertEqual([window.window for window in windows], ["session", "week"])
+        self.assertEqual(runner.timeouts, [60.0, 60.0])
 
     def test_cli_provider_runs_usage_command_and_parses_windows(self) -> None:
         cli_text = (FIXTURES / "claude_usage_cli.txt").read_text(encoding="utf-8")

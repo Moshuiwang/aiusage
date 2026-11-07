@@ -17,6 +17,7 @@ import path from "node:path";
 import { collectApiContractRecords } from "./api-contract-golden";
 import {
   apiContractGoldenPath,
+  iosOwnerFixturePath,
   macosOwnerFixturePath,
   providerSlotsGoldenPath,
   repoRoot,
@@ -64,6 +65,7 @@ export async function generateGoldens(): Promise<void> {
     const providerSlots = await collectProviderSlotsRecords();
     await writeJson(providerSlotsGoldenPath, providerSlots);
     await writeJson(macosOwnerFixturePath, macosOwnerFixtureFrom(providerSlots));
+    await writeJson(iosOwnerFixturePath, macosOwnerFixtureFrom(providerSlots));
 
     await writeJson(apiContractGoldenPath, await collectApiContractRecords());
   } finally {

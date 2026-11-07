@@ -1,5 +1,95 @@
 [
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-main",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "01-usage-and-quota:mobile-summary",
     "provider_slots": [
       {
@@ -102,6 +192,66 @@
     "scenario": "01-usage-and-quota"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "02-usage-without-quota:mobile-summary",
     "provider_slots": [
       {
@@ -174,6 +324,81 @@
     "scenario": "02-usage-without-quota"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "03-quota-without-usage:mobile-summary",
     "provider_slots": [
       {
@@ -261,6 +486,66 @@
     "scenario": "03-quota-without-usage"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "04-neither:mobile-summary",
     "provider_slots": [
       {
@@ -333,6 +618,81 @@
     "scenario": "04-neither"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-main",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 57.5,
+              "reset_at": "2026-06-03T16:00:00+08:00",
+              "source_id": "codex-main",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 42.5,
+              "window": "5h",
+              "window_duration_minutes": 300
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 1000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 1600
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "05-codex-quota-only:mobile-summary",
     "provider_slots": [
       {
@@ -420,6 +780,66 @@
     "scenario": "05-codex-quota-only"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T10:30:00+08:00",
+          "reason": "expired",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "06-expired-official-quota:mobile-summary",
     "provider_slots": [
       {
@@ -492,6 +912,82 @@
     "scenario": "06-expired-official-quota"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_successful_windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ],
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": "unavailable",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "07-provider-failed-after-success:mobile-summary",
     "provider_slots": [
       {
@@ -580,6 +1076,66 @@
     "scenario": "07-provider-failed-after-success"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-01T09:00:00+08:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "08-stale-official-with-local-estimate:mobile-summary",
     "provider_slots": [
       {
@@ -652,6 +1208,66 @@
     "scenario": "08-stale-official-with-local-estimate"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "unverified",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "09-local-estimate-only:mobile-summary",
     "provider_slots": [
       {
@@ -724,6 +1340,81 @@
     "scenario": "09-local-estimate-only"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "10-estimated-observation-newer-than-official:mobile-summary",
     "provider_slots": [
       {
@@ -811,6 +1502,66 @@
     "scenario": "10-estimated-observation-newer-than-official"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "11-aggregate-agent-with-canonical-provider:mobile-summary",
     "provider_slots": [
       {
@@ -883,6 +1634,66 @@
     "scenario": "11-aggregate-agent-with-canonical-provider"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00",
+          "reason": "stale",
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "12-naive-limit-timestamps:mobile-summary",
     "provider_slots": [
       {
@@ -955,6 +1766,85 @@
     "scenario": "12-naive-limit-timestamps"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "mistral",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 100,
+          "input_tokens": 700,
+          "output_tokens": 300,
+          "status": "available",
+          "total_tokens": 1100
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "13-third-party-provider-without-slot:mobile-summary",
     "provider_slots": [
       {
@@ -1027,6 +1917,81 @@
     "scenario": "13-third-party-provider-without-slot"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:03:00+08:00",
+          "reason": null,
+          "source_id": "claude-main",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:03:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 21.75,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-main",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 78.25,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "14-usage-without-canonical-provider:mobile-summary",
     "provider_slots": [
       {
@@ -1114,6 +2079,81 @@
     "scenario": "14-usage-without-canonical-provider"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:30:00+08:00",
+          "reason": null,
+          "source_id": "claude-second",
+          "source_type": "oauth_usage_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:30:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 60,
+              "reset_at": "2026-06-10T00:00:00+08:00",
+              "source_id": "claude-second",
+              "source_type": "oauth_usage_api",
+              "status": "ok",
+              "used_percent": 40,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 300,
+          "input_tokens": 2200,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 3100
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "15-two-accounts-one-provider:mobile-summary",
     "provider_slots": [
       {
@@ -1201,6 +2241,81 @@
     "scenario": "15-two-accounts-one-provider"
   },
   {
+    "account_slots": [
+      {
+        "account": null,
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:00:00+08:00",
+          "reason": null,
+          "source_id": "codex-macmini",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:00:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 80,
+              "reset_at": "2026-06-10T05:13:05+08:00",
+              "source_id": "codex-macmini",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 20,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": null,
+          "reason": "no_data",
+          "source_id": null,
+          "source_type": null,
+          "status": "missing",
+          "windows": []
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {},
     "name": "16-healthy-source-with-other-failure:mobile-summary",
     "provider_slots": [
       {
@@ -1286,5 +2401,293 @@
       "path": "/api/mobile/summary?date=2026-06-03&period=today"
     },
     "scenario": "16-healthy-source-with-other-failure"
+  },
+  {
+    "account_slots": [
+      {
+        "account": {
+          "key": "claude:fp:claude:bbbbbbbbbbbbbbbbbbbbbbbb",
+          "label": "Tony",
+          "plan": "max_20x",
+          "plan_since": null,
+          "previous_plan": null,
+          "source_ids": [
+            "tz-wangzhipeng"
+          ]
+        },
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:20:00+08:00",
+          "reason": null,
+          "source_id": "tz-wangzhipeng",
+          "source_type": "official_cli",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:20:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 90,
+              "reset_at": "2026-06-09T05:00:00+08:00",
+              "source_id": "tz-wangzhipeng",
+              "source_type": "official_cli",
+              "status": "ok",
+              "used_percent": 10,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": {
+          "key": "claude:fp:claude:aaaaaaaaaaaaaaaaaaaaaaaa",
+          "label": "Zhipeng",
+          "plan": "max_5x",
+          "plan_since": "2026-06-01T00:00:00+08:00",
+          "previous_plan": "max_20x",
+          "source_ids": [
+            "tz-wangzp"
+          ]
+        },
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:30:00+08:00",
+          "reason": null,
+          "source_id": "tz-wangzp",
+          "source_type": "official_cli",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:30:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 18,
+              "reset_at": "2026-06-08T02:00:00+08:00",
+              "source_id": "tz-wangzp",
+              "source_type": "official_cli",
+              "status": "ok",
+              "used_percent": 82,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 2000,
+          "output_tokens": 500,
+          "status": "available",
+          "total_tokens": 2500
+        }
+      },
+      {
+        "account": {
+          "key": "codex:fp:codex:cccccccccccccccccccccccc",
+          "label": "Em",
+          "plan": "pro",
+          "plan_since": null,
+          "previous_plan": null,
+          "source_ids": [
+            "mac-local-codex",
+            "tz-wangzp-codex"
+          ]
+        },
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:25:00+08:00",
+          "reason": null,
+          "source_id": "mac-local-codex",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:25:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 45,
+              "reset_at": "2026-06-08T02:56:00+08:00",
+              "source_id": "mac-local-codex",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 55,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "account": null,
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:40:00+08:00",
+          "reason": null,
+          "source_id": "antigravity-mac",
+          "source_type": "language_server",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:40:00+08:00",
+              "official": true,
+              "provider": "antigravity",
+              "remaining_percent": 95,
+              "reset_at": "2026-06-09T00:00:00+08:00",
+              "source_id": "antigravity-mac",
+              "source_type": "language_server",
+              "status": "ok",
+              "used_percent": 5,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "account_usage_coverage": {
+      "claude": {
+        "unattributed_tokens": 400
+      }
+    },
+    "name": "17-multi-account-plan-change:mobile-summary",
+    "provider_slots": [
+      {
+        "provider": "claude",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:30:00+08:00",
+          "reason": null,
+          "source_id": "tz-wangzp",
+          "source_type": "official_cli",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:30:00+08:00",
+              "official": true,
+              "provider": "claude",
+              "remaining_percent": 18,
+              "reset_at": "2026-06-08T02:00:00+08:00",
+              "source_id": "tz-wangzp",
+              "source_type": "official_cli",
+              "status": "ok",
+              "used_percent": 82,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 2300,
+          "output_tokens": 600,
+          "status": "available",
+          "total_tokens": 2900
+        }
+      },
+      {
+        "provider": "codex",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:25:00+08:00",
+          "reason": null,
+          "source_id": "mac-local-codex",
+          "source_type": "runtime_api",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:25:00+08:00",
+              "official": true,
+              "provider": "codex",
+              "remaining_percent": 45,
+              "reset_at": "2026-06-08T02:56:00+08:00",
+              "source_id": "mac-local-codex",
+              "source_type": "runtime_api",
+              "status": "ok",
+              "used_percent": 55,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      },
+      {
+        "provider": "antigravity",
+        "quota": {
+          "last_verified_at": "2026-06-03T11:40:00+08:00",
+          "reason": null,
+          "source_id": "antigravity-mac",
+          "source_type": "language_server",
+          "status": "available",
+          "windows": [
+            {
+              "confidence": "observed",
+              "observed_at": "2026-06-03T11:40:00+08:00",
+              "official": true,
+              "provider": "antigravity",
+              "remaining_percent": 95,
+              "reset_at": "2026-06-09T00:00:00+08:00",
+              "source_id": "antigravity-mac",
+              "source_type": "language_server",
+              "status": "ok",
+              "used_percent": 5,
+              "window": "week",
+              "window_duration_minutes": 10080
+            }
+          ]
+        },
+        "usage": {
+          "cache_tokens": 0,
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "status": "missing",
+          "total_tokens": 0
+        }
+      }
+    ],
+    "provider_usage_coverage": {
+      "attributed_tokens": 2900,
+      "other_provider_tokens": 0,
+      "status": "complete",
+      "total_tokens": 2900,
+      "unattributed_tokens": 0
+    },
+    "request": {
+      "auth": true,
+      "method": "GET",
+      "path": "/api/mobile/summary?date=2026-06-03&period=today"
+    },
+    "scenario": "17-multi-account-plan-change"
   }
 ]

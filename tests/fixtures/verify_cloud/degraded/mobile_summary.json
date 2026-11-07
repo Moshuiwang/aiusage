@@ -177,6 +177,8 @@
     "other_provider_tokens": 60000,
     "unattributed_tokens": 40000
   },
+  "account_slots": [],
+  "account_usage_coverage": {},
   "metadata": {
     "backend_mode": "origin_direct",
     "canonical_store": "origin_sqlite",

@@ -57,6 +57,37 @@ public func limitGroups(from windows: [MobileLimitWindow]) -> [LimitWindowGroup]
     }
 }
 
+/// #287：额度分组。3.0 服务端按账户分格（同一 provider 可以多个账户）；只展示当前可信（available）
+/// 的格子，不把失败/过期的账户当额度显示。旧服务端没有 account_slots 时退回按 limits.windows 分组。
+public func limitGroups(for summary: MobileSummary) -> [LimitWindowGroup] {
+    guard !summary.accountSlots.isEmpty else { return limitGroups(from: summary.limits.windows) }
+    return summary.accountSlots.compactMap { slot in
+        // 服务端对不可用的格子已清空 windows（mobile-summary.ts providerSlot）；status 判断是同一口径的双保险。
+        guard slot.quota.status == "available", !slot.quota.windows.isEmpty else { return nil }
+        return LimitWindowGroup(
+            id: slot.account?.key ?? slot.provider,
+            provider: slot.provider,
+            sourceID: slot.quota.sourceID ?? "",
+            windows: slot.quota.windows.sorted { lhs, rhs in
+                if lhs.window.lowercased().contains("week") != rhs.window.lowercased().contains("week") {
+                    return lhs.window.lowercased().contains("week")
+                }
+                return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+            },
+            accountLabel: slot.account?.label,
+            accountPlanLabel: slot.account?.plan.map(planDisplayName)
+        )
+    }
+}
+
+/// `max_5x` → 「Max 5x」，`pro` → 「Pro」；与菜单栏同口径。
+public func planDisplayName(_ plan: String) -> String {
+    plan.split(separator: "_").map { word -> String in
+        guard let first = word.first, first.isLetter else { return String(word) }
+        return first.uppercased() + word.dropFirst()
+    }.joined(separator: " ")
+}
+
 public struct QuotaWindowDisplayState: Equatable, Sendable {
     public let rowText: String
     public let percent: Int?
@@ -242,7 +273,7 @@ public enum MobileViewModel {
                 primaryLimitText: limitText(observedLimit),
                 trendPoints: summary.trend.points,
                 topSources: Array(visibleMachineRows.prefix(3)),
-                refreshGroups: Array(limitGroups(from: summary.limits.windows).prefix(3))
+                refreshGroups: Array(limitGroups(for: summary).prefix(4))
             ),
             sources: visibleSources,
             breakdown: visibleBreakdown,

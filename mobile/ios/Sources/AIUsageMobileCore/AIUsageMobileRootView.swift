@@ -192,7 +192,7 @@ struct PeriodScrollView: View {
                 }
 
                 if !summary.limits.windows.isEmpty {
-                    QuotaRingsCard(limits: summary.limits)
+                    QuotaRingsCard(groups: limitGroups(for: summary))
                 }
 
                 PeriodSourcesCard(
@@ -540,11 +540,7 @@ struct ChartTooltip: View {
 // MARK: - Quota Rings Card
 
 struct QuotaRingsCard: View {
-    let limits: MobileLimits
-
-    private var groups: [LimitWindowGroup] {
-        limitGroups(from: limits.windows)
-    }
+    let groups: [LimitWindowGroup]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
