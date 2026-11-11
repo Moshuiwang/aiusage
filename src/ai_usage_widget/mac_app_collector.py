@@ -89,7 +89,8 @@ def run_job(root, job):
         # LaunchServices does not inherit the user's interactive PATH.
         home = Path.home()
         os.environ['PATH'] = ':'.join([str(home / '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin',
-                                       '/usr/bin', '/bin', str(home / '.npm-global/bin'), os.environ.get('PATH', '')])
+                                       '/usr/sbin', '/sbin', '/usr/bin', '/bin',
+                                       str(home / '.npm-global/bin'), os.environ.get('PATH', '')])
         if job == 'usage':
             argv = ['push', '--config', str(device_path), '--lock-file', str(root / 'collector/usage.lock')]
         else:

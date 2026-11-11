@@ -144,7 +144,7 @@ class TestAntigravityLimitsProvider(unittest.TestCase):
 
         windows = parse_antigravity_user_status(payload)
 
-        self.assertEqual(len(windows), 2)
+        self.assertEqual([w.window for w in windows], ["session", "week", "claude_gpt_session", "claude_gpt_week"])
         session_w = windows[0]
         self.assertEqual(session_w.provider, "antigravity")
         self.assertEqual(session_w.window, "session")
@@ -168,6 +168,93 @@ class TestAntigravityLimitsProvider(unittest.TestCase):
         self.assertEqual(week_w.confidence, "observed")
         self.assertEqual(week_w.status, "ok")
         self.assertTrue(week_w.is_official)
+
+        claude_gpt_session = windows[2]
+        self.assertEqual(claude_gpt_session.window, "claude_gpt_session")
+        self.assertAlmostEqual(claude_gpt_session.used_percent, 0.0)
+        self.assertEqual(claude_gpt_session.window_duration_minutes, 300)
+
+        claude_gpt_week = windows[3]
+        self.assertEqual(claude_gpt_week.window, "claude_gpt_week")
+        self.assertAlmostEqual(claude_gpt_week.used_percent, 0.0)
+        self.assertEqual(claude_gpt_week.window_duration_minutes, 10080)
+
+    def test_quota_summary_maps_all_three_pools_including_claude_gpt_and_argon(self) -> None:
+        payload = {
+            "observed_at": "2026-11-11T11:30:00+01:00",
+            "response": {
+                "groups": [
+                    {
+                        "displayName": "Gemini Models",
+                        "buckets": [
+                            {
+                                "bucketId": "gemini-weekly",
+                                "window": "weekly",
+                                "remainingFraction": 0.9989,
+                                "resetTime": "2026-11-18T10:24:56Z",
+                            },
+                            {
+                                "bucketId": "gemini-5h",
+                                "window": "5h",
+                                "remainingFraction": 0.9963,
+                                "resetTime": "2026-11-11T15:24:56Z",
+                            },
+                        ],
+                    },
+                    {
+                        "displayName": "Claude and GPT models",
+                        "buckets": [
+                            {
+                                "bucketId": "3p-weekly",
+                                "window": "weekly",
+                                "remainingFraction": 0.4936,
+                                "resetTime": "2026-11-18T09:25:39Z",
+                            },
+                            {
+                                "bucketId": "3p-5h",
+                                "window": "5h",
+                                "remainingFraction": 0.0078,
+                                "resetTime": "2026-11-11T14:25:39Z",
+                            },
+                        ],
+                    },
+                    {
+                        "displayName": "Gemini 4 Argon",
+                        "buckets": [
+                            {
+                                "bucketId": "gemini-argon-wtu-weekly",
+                                "window": "weekly",
+                                "remainingFraction": 0.9513,
+                                "resetTime": "2026-11-18T09:25:19Z",
+                            }
+                        ],
+                    },
+                ]
+            },
+        }
+        windows = parse_antigravity_user_status(payload)
+        by_name = {w.window: w for w in windows}
+        self.assertEqual(
+            list(by_name.keys()),
+            ["session", "week", "claude_gpt_session", "claude_gpt_week", "argon_week"],
+        )
+        self.assertAlmostEqual(by_name["week"].used_percent, 0.11, places=2)
+        self.assertAlmostEqual(by_name["claude_gpt_week"].used_percent, 50.64, places=2)
+        self.assertEqual(by_name["claude_gpt_week"].window_duration_minutes, 10080)
+        self.assertAlmostEqual(by_name["claude_gpt_session"].used_percent, 99.22, places=2)
+        self.assertEqual(by_name["claude_gpt_session"].window_duration_minutes, 300)
+        self.assertAlmostEqual(by_name["argon_week"].used_percent, 4.87, places=2)
+        self.assertEqual(by_name["argon_week"].window_duration_minutes, 10080)
+
+    def test_collect_preserves_user_status_error_when_fallback_reader_is_unconfigured(self) -> None:
+        provider = AntigravityLimitsProvider(
+            user_status_reader=lambda: (_ for _ in ()).throw(
+                AntigravityProviderError("provider_unavailable", "language server not running")
+            )
+        )
+        with self.assertRaises(AntigravityProviderError) as ctx:
+            provider.collect()
+        self.assertEqual(ctx.exception.error_type, "provider_unavailable")
 
     def test_quota_summary_handles_direct_groups_and_percent_fields(self) -> None:
         payload = {

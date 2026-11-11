@@ -43,6 +43,7 @@ struct MenuBarPopoverView: View {
             } else {
                 ScrollView {
                     mainContent
+                        .frame(width: MenuBarPopoverLayout.width)
                 }
             }
         }
