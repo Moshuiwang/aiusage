@@ -951,8 +951,14 @@ public enum MenuBarViewModel {
                     return observed <= now && now.timeIntervalSince(observed) <= 120 * 60 && reset > now
                 } : []
             let bestWindows = bestWindowPerType(history.isEmpty ? wins : history)
-            let sessionWindow = bestWindows.first(where: isSessionLimitWindow)
-            let weekWindow = bestWindows.first(where: isWeekLimitWindow)
+            let sessionWindows = bestWindows
+                .filter(isSessionLimitWindow)
+                .sorted(by: isHigherPriorityPoolWindow)
+            let weekWindows = bestWindows
+                .filter(isWeekLimitWindow)
+                .sorted(by: isHigherPriorityPoolWindow)
+            let sessionWindow = sessionWindows.first
+            let weekWindow = weekWindows.first
             let otherWindow = bestWindows
                 .filter { !isSessionLimitWindow($0) && !isWeekLimitWindow($0) }
                 .sorted { $0.windowDurationMinutes < $1.windowDurationMinutes }
@@ -976,21 +982,14 @@ public enum MenuBarViewModel {
                 return QuotaHoverRow(label: "套餐", valueText: text)
             }
             // #203：Claude 只用周窗口展示（百分比、倒计时、悬停）——5 小时窗口的重置时间对用户
-            // 没有意义；周窗口缺失时显示「—」，不退回 5 小时窗口。Codex 只有周窗口；Antigravity 不变。
+            // 没有意义；周窗口缺失时显示「—」，不退回 5 小时窗口。Codex 只有周窗口；Antigravity 主环优先显示周窗口。
             let displayOuterWindow = provider == "claude" ? nil : outerWindow
             let hasVisibleWindow = displayOuterWindow != nil || weekWindow != nil
             // 「最近成功值」（quota 非 available 但保留了旧窗口）也必须降级，不当可信额度展示。
             let isAvailable = slot.quota.status == "available" && hasVisibleWindow
             let isShowingLastSuccess = !isAvailable && !history.isEmpty && hasVisibleWindow
             let primaryWindow = isAvailable || isShowingLastSuccess ? (weekWindow ?? displayOuterWindow) : nil
-            let nearestResetWindow = [displayOuterWindow, weekWindow]
-                .filter { _ in isAvailable }
-                .compactMap { $0 }
-                .compactMap { window -> (MobileLimitWindow, Date)? in
-                    guard let reset = parseDate(window.resetAt) else { return nil }
-                    return (window, reset)
-                }
-                .min { $0.1 < $1.1 }?.0
+            let countdownWindow = isAvailable ? primaryWindow : nil
             let availabilityTextValue = isShowingLastSuccess ? "最近成功值 · 本次更新失败" : quotaAvailabilityText(slot.quota, hasVisibleWindow: hasVisibleWindow)
             let updatedTextValue = compactDateTime(verifiedAt, reference: reference, suffix: isShowingLastSuccess ? "核对" : "更新", timezone: deviceTimeZone) ?? "未更新"
             // Current windows never become available through cached values. #281 exposes only
@@ -999,26 +998,34 @@ public enum MenuBarViewModel {
             // （如 Codex），不能在悬停浮层里造出一条「额度 — · --」的空占位行。
             let hoverRows: [QuotaHoverRow]
             if isAvailable {
-                hoverRows = [
-                    weekWindow.map { window in
-                        QuotaHoverRow(
-                            label: windowLabel(window),
-                            valueText: [
-                                "\(Int(window.usedPercent.rounded()))%",
-                                resetMomentText(window.resetAt, timezone: deviceTimeZone, now: now) ?? "--",
-                            ].joined(separator: " · ")
-                        )
-                    },
-                    displayOuterWindow.map { window in
-                        QuotaHoverRow(
-                            label: windowLabel(window),
-                            valueText: [
-                                "\(Int(window.usedPercent.rounded()))%",
-                                resetMomentText(window.resetAt, timezone: deviceTimeZone, now: now) ?? "--",
-                            ].joined(separator: " · ")
-                        )
-                    },
-                ].compactMap { $0 }
+                if provider == "antigravity", bestWindows.contains(where: { antigravityPoolKey(for: $0) != "gemini" }) {
+                    hoverRows = antigravityMultiPoolHoverRows(
+                        from: bestWindows,
+                        timezone: deviceTimeZone,
+                        now: now
+                    )
+                } else {
+                    hoverRows = [
+                        weekWindow.map { window in
+                            QuotaHoverRow(
+                                label: windowLabel(window),
+                                valueText: [
+                                    "\(Int(window.usedPercent.rounded()))%",
+                                    resetMomentText(window.resetAt, timezone: deviceTimeZone, now: now) ?? "--",
+                                ].joined(separator: " · ")
+                            )
+                        },
+                        displayOuterWindow.map { window in
+                            QuotaHoverRow(
+                                label: windowLabel(window),
+                                valueText: [
+                                    "\(Int(window.usedPercent.rounded()))%",
+                                    resetMomentText(window.resetAt, timezone: deviceTimeZone, now: now) ?? "--",
+                                ].joined(separator: " · ")
+                            )
+                        },
+                    ].compactMap { $0 }
+                }
             } else if isShowingLastSuccess, let primaryWindow {
                 hoverRows = [
                     QuotaHoverRow(label: "参考", valueText: "最近成功值 \(Int(primaryWindow.usedPercent.rounded()))%"),
@@ -1049,7 +1056,7 @@ public enum MenuBarViewModel {
                 brandColor: brandColor(for: provider),
                 primaryPctText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
                 primaryPctNumberText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))" } ?? "—",
-                resetCountdownText: nearestResetWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
+                resetCountdownText: countdownWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 isAvailable: isAvailable,
                 hoverRows: hoverRows + [planRow].compactMap { $0 }
             )
@@ -1117,6 +1124,80 @@ public enum MenuBarViewModel {
             return true
         }
         return window.windowDurationMinutes >= 7 * 24 * 60
+    }
+
+    private static func isHigherPriorityPoolWindow(_ lhs: MobileLimitWindow, _ rhs: MobileLimitWindow) -> Bool {
+        if lhs.usedPercent != rhs.usedPercent {
+            return lhs.usedPercent > rhs.usedPercent
+        }
+        let lhsCanonical = lhs.window == "week" || lhs.window == "session"
+        let rhsCanonical = rhs.window == "week" || rhs.window == "session"
+        if lhsCanonical != rhsCanonical {
+            return lhsCanonical
+        }
+        return lhs.window < rhs.window
+    }
+
+    private static func antigravityPoolKey(for window: MobileLimitWindow) -> String {
+        let lower = window.window.lowercased()
+        if lower.hasPrefix("claude_gpt_") || lower.hasPrefix("3p-") || lower.hasPrefix("3p_") {
+            return "claude_gpt"
+        }
+        if lower.hasPrefix("argon_") || lower.contains("argon") {
+            return "argon"
+        }
+        return "gemini"
+    }
+
+    private static func antigravityPoolDisplayName(_ poolKey: String) -> String {
+        switch poolKey {
+        case "claude_gpt": return "Claude/GPT"
+        case "argon": return "Argon"
+        case "gemini": return "Gemini"
+        default: return planDisplayName(poolKey)
+        }
+    }
+
+    private static func antigravityMultiPoolHoverRows(
+        from windows: [MobileLimitWindow],
+        timezone: TimeZone,
+        now: Date
+    ) -> [QuotaHoverRow] {
+        let grouped = Dictionary(grouping: windows, by: antigravityPoolKey)
+        let poolOrder = ["claude_gpt", "argon", "gemini"]
+        let sortedPools = grouped.keys.sorted { lhs, rhs in
+            let lhsWindows = grouped[lhs] ?? []
+            let rhsWindows = grouped[rhs] ?? []
+            let lhsWeekPct = lhsWindows.first(where: isWeekLimitWindow)?.usedPercent
+                ?? lhsWindows.first(where: isSessionLimitWindow)?.usedPercent ?? -1
+            let rhsWeekPct = rhsWindows.first(where: isWeekLimitWindow)?.usedPercent
+                ?? rhsWindows.first(where: isSessionLimitWindow)?.usedPercent ?? -1
+            if lhsWeekPct != rhsWeekPct {
+                return lhsWeekPct > rhsWeekPct
+            }
+            let lhsIdx = poolOrder.firstIndex(of: lhs) ?? poolOrder.count
+            let rhsIdx = poolOrder.firstIndex(of: rhs) ?? poolOrder.count
+            return lhsIdx == rhsIdx ? lhs < rhs : lhsIdx < rhsIdx
+        }
+        var rows: [QuotaHoverRow] = []
+        for pool in sortedPools {
+            let poolWindows = grouped[pool] ?? []
+            let poolName = antigravityPoolDisplayName(pool)
+            let weekWin = poolWindows.filter(isWeekLimitWindow).sorted(by: isHigherPriorityPoolWindow).first
+            let sessionWin = poolWindows.filter(isSessionLimitWindow).sorted(by: isHigherPriorityPoolWindow).first
+            for win in [weekWin, sessionWin].compactMap({ $0 }) {
+                rows.append(
+                    QuotaHoverRow(
+                        label: "\(poolName) \(windowLabel(win))",
+                        valueText: [
+                            "\(Int(win.usedPercent.rounded()))%",
+                            resetMomentText(win.resetAt, timezone: timezone, now: now) ?? "--",
+                        ].joined(separator: " · ")
+                    )
+                )
+            }
+        }
+        return rows
     }
 
     /// #177 第四轮真机反馈：额度悬停浮层的重置时刻改用具体时间点，不再是倒计时——圆环旁的

@@ -1136,7 +1136,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(claude.primaryFraction, 0)
     }
 
-    func testAntigravityRingKeepsNearestResetWindowUnchangedByClaudeRule() throws {
+    func testAntigravityRingUsesWeeklyCountdownWhileKeepingFiveHourHoverRow() throws {
         let now = try date("2026-07-18T10:00:00+08:00")
         let rings = try ringsFor([
             providerSlot(provider: "antigravity", windows: [
@@ -1149,8 +1149,53 @@ final class MenuBarViewModelTests: XCTestCase {
         ], now: now)
         let antigravity = try XCTUnwrap(rings.first { $0.id == "antigravity" })
         let codex = try XCTUnwrap(rings.first { $0.id == "codex" })
-        XCTAssertNotEqual(antigravity.resetCountdownText, codex.resetCountdownText, "Antigravity 本次不改：仍取最近重置窗口")
-        XCTAssertEqual(antigravity.hoverRows.count, 2)
+        XCTAssertEqual(antigravity.resetCountdownText, codex.resetCountdownText, "Antigravity 有周窗口时主环倒计时显示周重置倒计时")
+        XCTAssertEqual(antigravity.hoverRows.count, 2, "Antigravity 悬停浮层仍保留 7d 与 5h 两个窗口")
+    }
+
+    func testAntigravityMultiPoolRingSelectsHighestWeeklyPoolAndListsAllPoolsInHoverRows() throws {
+        let now = try date("2026-11-11T19:30:00+08:00")
+        let observed = "2026-11-11T19:25:00+08:00"
+        func poolWindow(_ window: String, used: Double, resetAt: String, minutes: Int) -> MobileLimitWindow {
+            MobileLimitWindow(
+                sourceID: "antigravity-main",
+                provider: "antigravity",
+                window: window,
+                usedPercent: used,
+                remainingPercent: 100 - used,
+                resetAt: resetAt,
+                windowDurationMinutes: minutes,
+                observedAt: observed,
+                sourceType: "language_server",
+                confidence: "observed",
+                status: "ok",
+                official: true
+            )
+        }
+        let rings = try ringsFor([
+            providerSlot(provider: "antigravity", windows: [
+                poolWindow("session", used: 0.4, resetAt: "2026-11-11T15:24:56Z", minutes: 300),
+                poolWindow("week", used: 0.1, resetAt: "2026-11-18T10:24:56Z", minutes: 10080),
+                poolWindow("claude_gpt_session", used: 99.2, resetAt: "2026-11-11T14:25:39Z", minutes: 300),
+                poolWindow("claude_gpt_week", used: 50.6, resetAt: "2026-11-18T09:25:39Z", minutes: 10080),
+                poolWindow("argon_week", used: 4.9, resetAt: "2026-11-18T09:25:19Z", minutes: 10080),
+            ]),
+        ], now: now)
+        let antigravity = try XCTUnwrap(rings.first { $0.id == "antigravity" })
+        XCTAssertTrue(antigravity.isAvailable)
+        XCTAssertEqual(antigravity.primaryPctText, "51%")
+        XCTAssertEqual(antigravity.primaryPctNumberText, "51")
+        XCTAssertEqual(antigravity.primaryFraction, 0.506, accuracy: 0.001)
+        XCTAssertEqual(antigravity.resetCountdownText, "6d 21h")
+        XCTAssertEqual(
+            antigravity.hoverRows.map(\.label),
+            ["Claude/GPT 7d", "Claude/GPT 5h", "Argon 7d", "Gemini 7d", "Gemini 5h"]
+        )
+        XCTAssertTrue(antigravity.hoverRows[0].valueText.hasPrefix("51% · "), "got: \(antigravity.hoverRows[0].valueText)")
+        XCTAssertTrue(antigravity.hoverRows[1].valueText.hasPrefix("99% · "), "got: \(antigravity.hoverRows[1].valueText)")
+        XCTAssertTrue(antigravity.hoverRows[2].valueText.hasPrefix("5% · "), "got: \(antigravity.hoverRows[2].valueText)")
+        XCTAssertTrue(antigravity.hoverRows[3].valueText.hasPrefix("0% · "), "got: \(antigravity.hoverRows[3].valueText)")
+        XCTAssertTrue(antigravity.hoverRows[4].valueText.hasPrefix("0% · "), "got: \(antigravity.hoverRows[4].valueText)")
     }
 
     func testQuotaRingDisplayNameForAntigravityAndFixedBrandColors() throws {
@@ -1443,8 +1488,8 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(ring.hoverRows.count, 2)
         let sessionRow = try XCTUnwrap(ring.hoverRows.first { $0.valueText.contains("40%") })
         XCTAssertTrue(sessionRow.valueText.contains("今天 18:00"), "got: \(sessionRow.valueText)")
-        // 圆环旁的倒计时保持原有格式不变（不受本次改动影响）。
-        XCTAssertEqual(ring.resetCountdownText, "8h 0min")
+        // 圆环旁的倒计时对应主环选中的周窗口倒计时（1d 14h），而悬停浮层显示具体重置时刻。
+        XCTAssertEqual(ring.resetCountdownText, "1d 14h")
 
         let weekRow = try XCTUnwrap(ring.hoverRows.first { $0.valueText.contains("26%") })
         XCTAssertTrue(weekRow.valueText.contains("7月20日 周一 00:00"), "got: \(weekRow.valueText)")

@@ -61,10 +61,17 @@ class AntigravityLimitsProvider:
         except AntigravityProviderError as exc:
             if exc.error_type not in USER_STATUS_FALLBACK_ERRORS:
                 raise
+            user_status_error = exc
         else:
             return parse_antigravity_user_status(user_status_payload)
 
-        return parse_antigravity_command_model_configs(self.command_model_configs_reader())
+        try:
+            config_payload = self.command_model_configs_reader()
+        except AntigravityProviderError:
+            if self.command_model_configs_reader is _unsupported_command_model_configs_reader:
+                raise user_status_error
+            raise
+        return parse_antigravity_command_model_configs(config_payload)
 
 
 def _parse_windows(container: Any, *, observed_at: str, source_type: str) -> List[LimitWindow]:
@@ -118,14 +125,11 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
     res_obj = payload.get("response") if isinstance(payload.get("response"), dict) else payload
     groups = res_obj.get("groups") if isinstance(res_obj, dict) else None
     if isinstance(groups, list) and groups:
-        gemini_group = next(
-            (g for g in groups if isinstance(g, dict) and "gemini" in str(g.get("displayName", "")).lower()),
-            None
-        )
-        target_group = gemini_group if gemini_group is not None else groups[0]
-        if isinstance(target_group, dict) and isinstance(target_group.get("buckets"), list):
-            res_windows: Dict[str, Any] = {}
-            for b in target_group["buckets"]:
+        valid_groups = [g for g in groups if isinstance(g, dict) and isinstance(g.get("buckets"), list)]
+        res_windows: Dict[str, Any] = {}
+        for group in valid_groups:
+            prefix = _group_pool_prefix(group, total_groups=len(valid_groups))
+            for b in group["buckets"]:
                 if not isinstance(b, dict):
                     continue
                 win_id = str(b.get("window") or b.get("bucketId") or "").lower()
@@ -135,26 +139,36 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
                     rem_frac = float(rem_pct) / 100.0
                 reset_time = b.get("resetTime") or b.get("reset_time") or b.get("resetAt") or b.get("resetsAt")
                 if "week" in win_id:
-                    res_windows["week"] = {
+                    res_windows[f"{prefix}week"] = {
                         "remainingFraction": rem_frac,
                         "resetAt": reset_time,
                         "windowDurationMins": 10080,
                     }
                 elif "5h" in win_id or "session" in win_id or "hour" in win_id:
-                    res_windows["session"] = {
+                    res_windows[f"{prefix}session"] = {
                         "remainingFraction": rem_frac,
                         "resetAt": reset_time,
                         "windowDurationMins": 300,
                     }
-            if res_windows:
-                ordered_windows = {}
-                for k in ("session", "day", "week", "month"):
-                    if k in res_windows:
-                        ordered_windows[k] = res_windows[k]
-                for k, v in res_windows.items():
-                    if k not in ordered_windows:
-                        ordered_windows[k] = v
-                return ordered_windows
+        if res_windows:
+            ordered_windows = {}
+            preferred_order = (
+                "session",
+                "day",
+                "week",
+                "month",
+                "claude_gpt_session",
+                "claude_gpt_week",
+                "argon_session",
+                "argon_week",
+            )
+            for k in preferred_order:
+                if k in res_windows:
+                    ordered_windows[k] = res_windows[k]
+            for k, v in res_windows.items():
+                if k not in ordered_windows:
+                    ordered_windows[k] = v
+            return ordered_windows
 
     # 2. Fallback to GetUserStatus cascadeModelConfigData
     for name in ("cascadeModelConfigData", "cascade_model_config_data"):
@@ -189,6 +203,22 @@ def _limits_container(payload: Dict[str, Any]) -> Any:
                     }
 
     raise LimitContractError("limit_schema_invalid", "Antigravity payload must include limits or windows")
+
+
+def _group_pool_prefix(group: Dict[str, Any], *, total_groups: int) -> str:
+    display_name = str(group.get("displayName", "")).strip().lower()
+    buckets = group.get("buckets") if isinstance(group.get("buckets"), list) else []
+    bucket_ids = [str(b.get("bucketId", "")).strip().lower() for b in buckets if isinstance(b, dict)]
+    if "argon" in display_name or any("argon" in bid for bid in bucket_ids):
+        return "argon_"
+    if "claude" in display_name or "gpt" in display_name or any(bid.startswith("3p") for bid in bucket_ids):
+        return "claude_gpt_"
+    if "gemini" in display_name or any(bid.startswith("gemini") for bid in bucket_ids) or total_groups == 1:
+        return ""
+    slug = "".join(ch if ch.isalnum() else "_" for ch in display_name).strip("_")
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return f"{slug}_" if slug else ""
 
 
 def _window_items(container: Any) -> List[tuple[str, Dict[str, Any]]]:
@@ -312,10 +342,14 @@ def live_language_server_status_reader(timeout: float = 2.0) -> Dict[str, Any]:
         raise AntigravityProviderError("provider_unavailable", "Antigravity language server process is not running")
 
     # Find listening ports for PID
+    import os
+    import shutil
+
+    lsof_bin = shutil.which("lsof") or ("/usr/sbin/lsof" if os.path.exists("/usr/sbin/lsof") else "lsof")
     ports = []
     try:
         lsof_out = subprocess.check_output(
-            ["lsof", "-a", "-nP", "-p", str(target_pid), "-iTCP", "-sTCP:LISTEN"],
+            [lsof_bin, "-a", "-nP", "-p", str(target_pid), "-iTCP", "-sTCP:LISTEN"],
             text=True,
             stderr=subprocess.DEVNULL,
         )
