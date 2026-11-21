@@ -4,12 +4,42 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from ai_usage_widget.limits_doctor import run_limits_doctor
 
 
 class TestLimitsDoctor(unittest.TestCase):
+    def test_antigravity_cli_checks_agy_without_probing_desktop(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as config:
+            json.dump({
+                "timezone": "Asia/Shanghai",
+                "providers": [{"provider": "antigravity", "cli": True}],
+            }, config)
+            config.flush()
+            with patch("ai_usage_widget.limits_doctor.language_server_readiness", return_value="not_running") as desktop:
+                report = run_limits_doctor(config.name, command_resolver=lambda name: "/usr/bin/agy" if name == "agy" else None)
+
+        self.assertTrue(report["success"])
+        self.assertEqual(report["providers"][0]["checks"][0]["name"], "antigravity.cli_command")
+        desktop.assert_not_called()
+
+    def test_antigravity_cli_doctor_uses_the_configured_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "agy"
+            binary.touch(mode=0o700)
+            config = Path(directory) / "limits.json"
+            config.write_text(json.dumps({
+                "timezone": "Asia/Shanghai",
+                "providers": [{"provider": "antigravity", "cli": True, "env": {"PATH": directory}}],
+            }), encoding="utf-8")
+            with patch.dict(os.environ, {"PATH": ""}):
+                report = run_limits_doctor(str(config))
+
+        self.assertTrue(report["success"])
+        self.assertNotIn(directory, json.dumps(report))
+
     def test_antigravity_reports_local_readiness_without_credentials_or_rpc(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as config:
             json.dump({

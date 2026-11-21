@@ -29,6 +29,7 @@ class LimitsProviderConfig:
     #: 跟上面 ``auth_file``（登录 token 用）是两份不同文件，不能假设复用同一份。
     #: 完全可选——不给就不算指纹，直推路径行为不变。
     account_config_path: str | None = None
+    antigravity_cli: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,8 @@ def _summarize_provider(provider: LimitsProviderConfig) -> Dict[str, Any]:
                 "claude_cli": provider.claude_cli,
             }
         )
+    if provider.provider == "antigravity" and provider.antigravity_cli:
+        summary["antigravity_cli"] = True
     return summary
 
 
@@ -157,6 +160,7 @@ def _parse_provider(payload: Any) -> LimitsProviderConfig:
             enabled=enabled,
             source_id=source_id,
             env=env,
+            antigravity_cli=_bool(payload, "cli", default=False),
         )
 
     raise ConfigError(f"unsupported limits provider: {provider}")

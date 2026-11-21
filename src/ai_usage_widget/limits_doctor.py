@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -60,13 +61,19 @@ def _doctor_provider(provider: LimitsProviderConfig, resolver: CommandResolver) 
     if provider.provider == "claude":
         return _doctor_claude(provider, resolver)
     if provider.provider == "antigravity":
-        status = language_server_readiness()
-        ready = status == "ok"
+        if provider.antigravity_cli:
+            path = (provider.env or {}).get("PATH")
+            if resolver is shutil.which and path is not None:
+                resolver = partial(shutil.which, path=path)
+            check = _command_check("antigravity.cli_command", "agy", resolver)
+        else:
+            status = language_server_readiness()
+            check = _check("antigravity.language_server", status, ok=status == "ok", configured=True)
         return {
             "provider": provider.provider,
             "source_id": provider.source_id or provider.provider,
-            "ready": ready,
-            "checks": [_check("antigravity.language_server", status, ok=ready, configured=True)],
+            "ready": check["ok"],
+            "checks": [check],
         }
     return {
         "provider": provider.provider,
