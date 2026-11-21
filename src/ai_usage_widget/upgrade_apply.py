@@ -132,7 +132,7 @@ def stop_mac_app(app):
 
 
 def launch_mac_app(app):
-    return subprocess.run(['open',str(app)],capture_output=True,timeout=15).returncode==0
+    return subprocess.run(['open', str(app), '--args', '--verify-upgrade'], capture_output=True, timeout=15).returncode == 0
 
 
 def wait_mac_collector(root):
@@ -151,20 +151,51 @@ def wait_mac_collector(root):
                 time.sleep(0.5)
 
 
-def mac_health(root, manifest, started):
-    root=Path(root);deadline=time.monotonic()+480
-    status_path=root/'collector/status.json';cache=root/'summaries/today-offset0.json'
-    while time.monotonic()<deadline:
+def mac_summary_is_healthy(directory, *, newer_than):
+    caches = [directory / 'today-offset0.json', *directory.glob('client-today-*-offset0.json')]
+    for cache in caches:
         try:
-            if status_path.stat().st_mtime>started:
-                status=json.loads(status_path.read_text())
-                if status.get('collector_version')==manifest['collector_version']:
-                    jobs=[status.get(name,{}) for name in ('usage','limits')]
-                    if any(job.get('success') is False for job in jobs):return False
-                    if all(job.get('success') is True for job in jobs) and 0 <= time.time() - cache.stat().st_mtime <= 600:
-                        summary=json.loads(cache.read_text())
-                        if isinstance(summary.get('sources'), list) and summary['sources']:return True
-        except (OSError,ValueError):pass
+            if not newer_than < cache.stat().st_mtime <= time.time():
+                continue
+            summary = json.loads(cache.read_text())
+            if isinstance(summary, dict) and isinstance(summary.get('sources'), list) and summary['sources']:
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def mac_health(root, manifest, started):
+    root = Path(root)
+    collector = root / 'collector'
+    try:
+        settings = json.loads((collector / 'settings.json').read_text())
+    except FileNotFoundError:
+        settings = {}
+    except (OSError, ValueError):
+        return False
+    if not isinstance(settings, dict):
+        return False
+    collects_in_app = settings.get('enabled') is True
+    deadline = time.monotonic() + 480
+    status_path = collector / 'status.json'
+    while time.monotonic() < deadline:
+        if not collects_in_app:
+            if mac_summary_is_healthy(root / 'summaries', newer_than=started):
+                return True
+        else:
+            try:
+                status = json.loads(status_path.read_text()) if status_path.stat().st_mtime > started else {}
+                if status.get('collector_version') == manifest['collector_version']:
+                    jobs = [status.get(name, {}) for name in ('usage', 'limits')]
+                    if any(job.get('success') is False for job in jobs):
+                        return False
+                    if all(job.get('success') is True for job in jobs) and mac_summary_is_healthy(
+                        root / 'summaries', newer_than=time.time() - 600
+                    ):
+                        return True
+            except (OSError, ValueError):
+                pass
         time.sleep(1)
     return False
 

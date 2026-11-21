@@ -77,7 +77,10 @@ final class StatusBarController: NSObject {
         setupPopover()
         bindStatusTitle()
         startRefreshTimer()
-        model.refresh()
+        // The updater needs a summary fetched by the newly launched app, even if its old cache is fresh.
+        let verifyingToday = ProcessInfo.processInfo.arguments.contains("--verify-upgrade")
+            && model.selection == MenuPeriodSelection(periodID: "today")
+        model.refresh(force: verifyingToday)
         if model.selection != MenuPeriodSelection(periodID: "today") { model.refreshToday() }
         model.prefetchCommonPeriods()
         collector.start()
