@@ -739,6 +739,7 @@ final class MenuBarAppModelTests: XCTestCase {
             cachedSummaries: cached,
             cacheFreshnessInterval: 300,
             now: { now },
+            deviceTimeZoneProvider: { shanghaiTZForTests },
             loadSummary: loader.load
         )
 
@@ -1241,7 +1242,11 @@ final class MenuBarAppModelTests: XCTestCase {
     func testHistoryKeepsSeparateCacheAndTodaysMenuBarValue() async throws {
         let loader = ControlledSummaryLoader()
         let paths = try temporaryRuntimePaths()
-        let model = MenuBarAppModel(paths: paths, config: testConfig(), loadSummary: loader.load)
+        let now = try date("2026-06-25T12:00:00+08:00")
+        let model = MenuBarAppModel(
+            paths: paths, config: testConfig(), now: { now },
+            deviceTimeZoneProvider: { shanghaiTZForTests }, loadSummary: loader.load
+        )
         model.refresh()
         try await loader.waitForRequestCount(1)
         await loader.complete(period: "today", summary: try summary(periodID: "today", totalTokens: 100))
@@ -1252,7 +1257,9 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertEqual(request.offset, -1)
         XCTAssertEqual(model.selectedOffset, -1)
         XCTAssertFalse(model.hasLoadedUsableSummary)
-        await loader.complete(period: "today:-1", summary: try summary(periodID: "today", totalTokens: 900))
+        await loader.complete(period: "today:-1", summary: try summaryWithDate(
+            periodID: "today", date: "2026-06-24", startDate: "2026-06-24", totalTokens: 900
+        ))
         await waitUntil { !model.isLoading }
         XCTAssertEqual(model.summary.period.totalTokens, 900)
         XCTAssertEqual(model.statusState.statusTitle, "100")
@@ -1318,13 +1325,13 @@ final class MenuBarAppModelTests: XCTestCase {
     }
 
     func testFreshCacheFastPathInvalidatesSameSelectionRequest() async throws {
+        let now = try date("2026-06-25T12:00:00+08:00")
         for shouldFail in [false, true] {
             let loader = ControlledSummaryLoader()
-            let now = Date()
             let model = MenuBarAppModel(
                 paths: try temporaryRuntimePaths(), config: testConfig(),
                 cachedSummaries: ["today": CachedMenuSummary(summary: try summary(periodID: "today", totalTokens: 100), fetchedAt: now)],
-                now: { now }, loadSummary: loader.load
+                now: { now }, deviceTimeZoneProvider: { shanghaiTZForTests }, loadSummary: loader.load
             )
             model.refresh(force: true)
             try await loader.waitForRequestCount(1)
