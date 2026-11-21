@@ -8,6 +8,17 @@ from ai_usage_widget.limits_config import ConfigError, load_limits_config, parse
 
 
 class TestLimitsConfig(unittest.TestCase):
+    def test_antigravity_cli_is_an_explicit_boolean_opt_in(self) -> None:
+        payload = {"timezone": "Asia/Shanghai", "providers": [{"provider": "antigravity"}]}
+        self.assertFalse(getattr(parse_limits_config(payload).enabled_providers[0], "antigravity_cli", False))
+        payload["providers"][0]["cli"] = True
+        config = parse_limits_config(payload)
+        self.assertTrue(getattr(config.enabled_providers[0], "antigravity_cli", False))
+        self.assertTrue(summarize_limits_config(config)["providers"][0]["antigravity_cli"])
+        payload["providers"][0]["cli"] = "true"
+        with self.assertRaises(ConfigError):
+            parse_limits_config(payload)
+
     def test_parse_limits_config_outputs_enabled_providers_and_paths(self) -> None:
         config = parse_limits_config(
             {

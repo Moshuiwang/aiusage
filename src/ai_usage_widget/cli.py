@@ -36,6 +36,7 @@ from .limits_scheduler import LimitsSchedulerConfig, install_limits_scheduler
 from .mswusage_codex import build_report as build_mswusage_codex_report, read_local_codex_jsonl_lines
 from .mswusage_claude import build_report as build_mswusage_claude_report, read_local_claude_jsonl_lines
 from .mswusage_antigravity import build_report as build_mswusage_antigravity_report, read_local_antigravity_events
+from .antigravity_cli_limits_provider import AntigravityCliLimitsProvider
 from .antigravity_limits_provider import AntigravityLimitsProvider
 from .pusher import DevicePusher
 from .cloud_push import run_cli as run_cloud_push
@@ -652,7 +653,9 @@ def _providers_from_limits_config(configs: list[LimitsProviderConfig]):
                 providers[runtime_key] = _tag_provider(claude_cli_provider, provider_name="claude", source_id=runtime_key)
         elif provider_config.provider == "antigravity":
             providers[runtime_key] = _tag_provider(
-                AntigravityLimitsProvider(),
+                AntigravityCliLimitsProvider(env=provider_config.env)
+                if provider_config.antigravity_cli
+                else AntigravityLimitsProvider(),
                 provider_name="antigravity",
                 source_id=runtime_key,
             )
