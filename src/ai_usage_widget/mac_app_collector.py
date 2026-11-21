@@ -16,6 +16,7 @@ import threading
 import time
 
 from .cli import main as cli_main
+from .limits_config import ConfigError, parse_limits_config, runtime_id
 
 INTERVAL = 1800
 TIMEOUT = 240
@@ -90,7 +91,7 @@ def _limits_config_for_job(path, device, home):
     source_id = device.get('source_id')
     providers = config.get('providers') if isinstance(config, dict) else None
     if not isinstance(source_id, str) or not source_id or not isinstance(providers, list) or not all(isinstance(item, dict) for item in providers):
-        yield str(path), None
+        yield str(path), None, set()
         return
 
     generated_claude = {
@@ -105,6 +106,16 @@ def _limits_config_for_job(path, device, home):
 
     optional_source = None
     has_configured_antigravity = any(str(item.get('provider')).strip() == 'antigravity' for item in providers)
+    configured_antigravity = set()
+    if has_configured_antigravity:
+        try:
+            parsed = parse_limits_config(config)
+        except ConfigError:
+            pass  # Let the CLI report invalid configuration normally.
+        else:
+            configured_antigravity = {
+                runtime_id(item) for item in parsed.enabled_providers if item.provider == 'antigravity'
+            }
     used_sources = {
         str(item.get('source_id') or item.get('provider')).strip()
         for item in providers if item.get('enabled', True)
@@ -119,7 +130,7 @@ def _limits_config_for_job(path, device, home):
         changed = True
 
     if not changed:
-        yield str(path), None
+        yield str(path), None, configured_antigravity
         return
     # A failed upgrade restores the prior bundle, not its settings files.
     # Keep auto-discovery job-local so the restored app reads identical bytes.
@@ -127,14 +138,23 @@ def _limits_config_for_job(path, device, home):
         json.dump(config, candidate)
         candidate.flush()
         candidate.seek(0)
-        yield f'/dev/fd/{candidate.fileno()}', optional_source
+        yield f'/dev/fd/{candidate.fileno()}', optional_source, configured_antigravity
 
 
-def _delivered_with_optional_source_offline(result, optional_source):
-    if optional_source is None or result.get('delivered') is not True or result.get('success') is not False:
+def _delivered_with_optional_source_offline(result, optional_source, configured_antigravity):
+    if optional_source is None and not configured_antigravity:
         return False
-    failures = [item for item in result['providers'] if item.get('status') != 'ok']
-    return len(failures) == 1 and failures[0].get('source_id') == optional_source and failures[0].get('error_type') == 'provider_unavailable'
+    if result.get('delivered') is not True or result.get('success') is not False:
+        return False
+    providers = result['providers']
+    failures = [item for item in providers if item.get('status') != 'ok']
+    if len(failures) != 1 or failures[0].get('error_type') != 'provider_unavailable':
+        return False
+    source_id = failures[0].get('source_id')
+    if optional_source is not None and source_id == optional_source:
+        return True
+    # An explicit source may degrade only if another source collected usable quota.
+    return source_id in configured_antigravity and len(providers) > 1
 
 
 def run_job(root, job):
@@ -153,6 +173,7 @@ def run_job(root, job):
                                        str(home / '.npm-global/bin'), os.environ.get('PATH', '')])
         output = io.StringIO()
         optional_source = None
+        configured_antigravity = set()
         with contextlib.ExitStack() as resources:
             if job == 'usage':
                 argv = ['push', '--config', str(device_path), '--lock-file', str(root / 'collector/usage.lock')]
@@ -160,7 +181,9 @@ def run_job(root, job):
                 endpoint = device['server_url'].rstrip('/')
                 if not endpoint.endswith('/ingest'):
                     return 2
-                limits_path, optional_source = resources.enter_context(_limits_config_for_job(root / 'collector/limits.json', device, home))
+                limits_path, optional_source, configured_antigravity = resources.enter_context(
+                    _limits_config_for_job(root / 'collector/limits.json', device, home)
+                )
                 argv = ['push-limits', '--limits-config', limits_path,
                         '--url', endpoint[:-len('/ingest')] + '/ingest-limits', '--token-env', token_env,
                         '--config', str(device_path), '--lock-file', str(root / 'collector/limits.lock')]
@@ -172,7 +195,7 @@ def run_job(root, job):
             return code or 2
         if result.get('error_type') == 'outbox_queued':
             return 75
-        if code == 1 and _delivered_with_optional_source_offline(result, optional_source):
+        if code == 1 and _delivered_with_optional_source_offline(result, optional_source, configured_antigravity):
             return LIMITS_DELIVERED_PARTIAL
         if code:
             return code

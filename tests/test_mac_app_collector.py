@@ -115,6 +115,81 @@ class MacAppCollectorTests(unittest.TestCase):
         ):
             self.assertEqual(collector.run_job(self.root, 'limits'), 1)
 
+    def test_explicit_antigravity_offline_with_delivered_codex_keeps_upgrade_healthy(self):
+        from ai_usage_widget.upgrade_apply import mac_health
+        from ai_usage_widget.version_contract import COLLECTOR_VERSION
+
+        device = self.root / 'collector/device.json'
+        device.write_text(json.dumps({**collector.read_json(device), 'source_id': 'mac-test'}))
+        limits = self.root / 'collector/limits.json'
+        original = json.dumps({'timezone': 'Asia/Shanghai', 'providers': [
+            {'provider': 'antigravity', 'source_id': 'configured-ag'},
+            {'provider': 'codex', 'source_id': 'mac-test-codex', 'auth_file': '/test/codex/auth.json'},
+        ]}).encode()
+        limits.write_bytes(original)
+        summaries = self.root / 'summaries'
+        summaries.mkdir()
+        (summaries / 'today-offset0.json').write_text('{"sources":[{}]}')
+        codex = load_fixture_providers(str(Path(__file__).parent / 'fixtures/limits_runtime_fixture.json'))['codex']
+
+        with (
+            patch.object(collector.Path, 'home', return_value=self.root),
+            patch.object(AntigravityLimitsProvider, 'collect', side_effect=AntigravityProviderError('provider_unavailable', 'offline')),
+            patch.object(cli.CodexWhamProvider, 'collect', return_value=codex.collect()),
+            patch('ai_usage_widget.limits_runtime._default_now', return_value='2026-06-03T10:02:00+08:00'),
+            patch.object(cli, '_outbox_config_for_push_limits', return_value=None),
+            patch.object(cli, 'push_limits_payload', return_value={'success': True, 'windows_written': 2}) as push,
+        ):
+            code = collector.run_job(self.root, 'limits')
+
+        self.assertEqual(code, collector.LIMITS_DELIVERED_PARTIAL)
+        windows = {window['source_id']: window for window in push.call_args.args[2]['windows']}
+        self.assertEqual(windows['configured-ag']['status'], 'provider_failed')
+        self.assertFalse(windows['configured-ag']['official'])
+        self.assertTrue(windows['mac-test-codex']['official'])
+        self.assertEqual(limits.read_bytes(), original)
+        collector.write_status(self.root, {'usage': collector.job_status('usage', 0), 'limits': collector.job_status('limits', code)})
+        self.assertEqual(collector.read_json(self.root / 'collector/status.json')['limits'],
+                         {'success': True, 'exit_code': collector.LIMITS_DELIVERED_PARTIAL, 'partial': True})
+        self.assertTrue(mac_health(self.root, {'collector_version': COLLECTOR_VERSION}, 0))
+
+    def test_explicit_antigravity_does_not_hide_provider_or_delivery_errors(self):
+        device = self.root / 'collector/device.json'
+        device.write_text(json.dumps({**collector.read_json(device), 'source_id': 'mac-test'}))
+        limits = self.root / 'collector/limits.json'
+        limits.write_text(json.dumps({'timezone': 'Asia/Shanghai', 'providers': [
+            {'provider': 'antigravity', 'source_id': 'configured-ag'},
+            {'provider': 'codex', 'source_id': 'mac-test-codex', 'auth_file': '/test/codex/auth.json'},
+        ]}))
+        codex = load_fixture_providers(str(Path(__file__).parent / 'fixtures/limits_runtime_fixture.json'))['codex']
+
+        with (
+            patch.object(collector.Path, 'home', return_value=self.root),
+            patch.object(AntigravityLimitsProvider, 'collect') as antigravity,
+            patch.object(cli.CodexWhamProvider, 'collect', return_value=codex.collect()) as codex_collect,
+            patch('ai_usage_widget.limits_runtime._default_now', return_value='2026-06-03T10:02:00+08:00'),
+            patch.object(cli, '_outbox_config_for_push_limits', return_value=None) as outbox,
+            patch.object(cli, 'push_limits_payload', return_value={'success': True, 'windows_written': 2}) as push,
+            patch.object(cli, 'deliver_limits_payload', return_value={'delivered': False, 'queued': True}),
+        ):
+            antigravity.side_effect = AntigravityProviderError('unauthorized', 'denied')
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
+
+            antigravity.side_effect = AntigravityProviderError('provider_unavailable', 'offline')
+            codex_collect.side_effect = ValueError('unavailable')
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
+
+            codex_collect.side_effect = None
+            push.side_effect = ValueError('delivery failed')
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
+
+            outbox.return_value = object()
+            code = collector.run_job(self.root, 'limits')
+            self.assertFalse(collector.job_status('limits', code)['success'])
+
+            limits.write_text('{"timezone":"Asia/Shanghai","providers":[{"provider":"antigravity","enabled":"true"}]}')
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
+
     def test_offline_discovery_does_not_hide_required_provider_or_delivery_failure(self):
         device = self.root / 'collector/device.json'
         device.write_text(json.dumps({**collector.read_json(device), 'source_id': 'mac-test'}))
