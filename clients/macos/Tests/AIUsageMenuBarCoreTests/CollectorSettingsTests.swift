@@ -1,8 +1,44 @@
 import Foundation
+import SystemConfiguration
 import XCTest
 @testable import AIUsageMenuBarCore
 
 final class CollectorSettingsTests: XCTestCase {
+    func testMissingLocalHostNameRequiresAnExplicitSourceAndPreservesPairing() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CollectorSettingsStore(root: root, localHostName: nil)
+        XCTAssertEqual(store.defaultSourceID, "")
+        XCTAssertThrowsError(try store.configure(server: "https://example.test", token: "", sourceID: "", home: root, awaitingApproval: true))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.deviceURL.path))
+        try store.configure(server: "https://example.test", token: "", sourceID: "explicit-mba", home: root, awaitingApproval: true)
+        XCTAssertEqual(store.sourceIDs, ["explicit-mba"])
+        XCTAssertFalse(store.hasToken)
+        try store.configure(server: "https://example.test", token: "test-device", sourceID: "explicit-mba", home: root)
+        let renamed = CollectorSettingsStore(root: root, localHostName: "New-Network-Name")
+        try renamed.configure(server: "https://example.test", token: "", sourceID: "different", home: root)
+        let device = try JSONSerialization.jsonObject(with: Data(contentsOf: renamed.deviceURL)) as! [String: Any]
+        XCTAssertEqual(device["machine"] as? String, "explicit-mba")
+        XCTAssertEqual(device["host"] as? String, "explicit-mba")
+        XCTAssertEqual(renamed.sourceIDs, ["explicit-mba"])
+        XCTAssertTrue(renamed.hasToken)
+    }
+
+    func testNewConnectionUsesConfiguredLocalHostNameForMachineAndHost() throws {
+        guard let localName = SCDynamicStoreCopyLocalHostName(nil) as String?, !localName.isEmpty else {
+            throw XCTSkip("The test Mac has no local hostname set")
+        }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CollectorSettingsStore(root: root)
+        XCTAssertTrue(store.defaultSourceID.hasPrefix(localName + "-"))
+        try store.configure(server: "https://example.test", token: "secret-test", sourceID: "given-source", home: root)
+        let device = try JSONSerialization.jsonObject(with: Data(contentsOf: store.deviceURL)) as! [String: Any]
+        XCTAssertEqual(device["machine"] as? String, localName)
+        XCTAssertEqual(device["host"] as? String, localName)
+        XCTAssertEqual(device["source_id"] as? String, "given-source")
+    }
+
     func testSetupWritesPrivateFilesAndPreservesSourceAndOutboxOnReconnect() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

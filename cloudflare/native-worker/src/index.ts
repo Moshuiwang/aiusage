@@ -1,7 +1,7 @@
 import { buildMobile, buildSummary } from "./read-model";
 import { runQuotaCalibration } from "./quota-calibration-cron";
-import { hasPendingRollups } from "./read-model/db";
-import { configureReportingTimezone, currentReportingTimezone, formatDate } from "./read-model/shared";
+import { hasPendingRollups, HOURLY_ROLLUP_RETENTION_DAYS } from "./read-model/db";
+import { configureReportingTimezone, currentReportingTimezone, formatDate, isValidClientTimezone } from "./read-model/shared";
 import { backupCanonicalTables, MONTHLY_BACKUP_CRON } from "./backup";
 import { syncDailyRollupsToSupabase } from "./supabase-sync";
 import { handleIngestWrite, handleLimitsWrite, WriteValidationError } from "./write-model";
@@ -25,8 +25,8 @@ export interface Env {
   AIUSAGE_SUPABASE_SECRET_KEY?: string;
 }
 
-const HOURLY_ROLLUP_RETENTION_DAYS = 30;
 const SUMMARY_CACHE_TTL_SECONDS = 60;
+const CLIENT_WEEK_MONTH_TIMEZONE = "Asia/Shanghai";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -86,8 +86,33 @@ export default {
       if (!(await canRead(request, env))) {
         return json({ status: "error", error_type: "auth_required", message: "Authentication required" }, await deviceIdentity(request, env) ? 403 : 401);
       }
+      const rawOffset = url.searchParams.get("offset");
+      const requestedDate = url.searchParams.get("date");
+      const period = url.searchParams.get("period") ?? "today";
+      const clientStatistics = url.searchParams.get("statistics") === "client";
+      const offset = rawOffset === null
+        ? (clientStatistics && requestedDate === null && ["today", "week", "month"].includes(period) ? 0 : undefined)
+        : Number(rawOffset);
+      if (rawOffset !== null && (!/^-?\d+$/.test(rawOffset) || !Number.isSafeInteger(offset)
+        || offset! > 0 || offset! < -12000 || !["today", "week", "month"].includes(period)
+        || (period === "today" && offset! < -6))) {
+        return json({ status: "error", error_type: "invalid_history_offset", message: "Invalid history offset" }, 400);
+      }
+      const serviceTimezone = currentReportingTimezone();
+      let timezone = serviceTimezone;
+      if (clientStatistics && period === "today" && offset === 0) {
+        const clientTimezone = url.searchParams.get("timezone") ?? "";
+        if (!isValidClientTimezone(clientTimezone)) {
+          return json({ status: "error", error_type: "invalid_timezone", message: "Expected an IANA time zone for today" }, 400);
+        }
+        timezone = clientTimezone;
+      } else if (clientStatistics && (period === "week" || period === "month")) {
+        timezone = CLIENT_WEEK_MONTH_TIMEZONE;
+      }
+      const refTime = referenceTime(env);
+      const date = (offset === undefined ? requestedDate : null) ?? formatDate(refTime, timezone);
       let cacheKey = request.method === "GET" && env.AIUSAGE_DISABLE_SUMMARY_CACHE !== "true"
-        ? await summaryCacheKey(request, env)
+        ? await summaryCacheKey(request, env, clientStatistics ? { date, timezone, serviceTimezone } : undefined)
         : null;
       if (cacheKey && await hasPendingRollups(env.AIUSAGE_DB)) {
         try { await caches.default.delete(cacheKey); } catch (_exc) { /* Cache is optional. */ }
@@ -101,23 +126,15 @@ export default {
           // Cache availability must not affect a user's ability to read current data.
         }
       }
-      const rawOffset = url.searchParams.get("offset");
-      const offset = rawOffset === null ? undefined : Number(rawOffset);
-      const period = url.searchParams.get("period") ?? "today";
-      if (rawOffset !== null && (!/^-?\d+$/.test(rawOffset) || !Number.isSafeInteger(offset)
-        || offset! > 0 || offset! < -12000 || !["today", "week", "month"].includes(period)
-        || (period === "today" && offset! < -6))) {
-        return json({ status: "error", error_type: "invalid_history_offset", message: "Invalid history offset" }, 400);
-      }
-      const date = offset === undefined ? (url.searchParams.get("date") ?? currentDate(env)) : currentDate(env);
       const requestParams = {
         date,
         period,
         offset,
-        timezone: currentReportingTimezone(),
+        timezone,
+        serviceTimezone: clientStatistics ? serviceTimezone : undefined,
         machine: url.searchParams.get("machine"),
         account: url.searchParams.get("account"),
-        currentTime: env.AIUSAGE_NOW,
+        currentTime: clientStatistics ? refTime.toISOString() : env.AIUSAGE_NOW,
         backendMode: backendMode(env),
       };
       const payload = url.pathname === "/api/mobile/summary"
@@ -225,11 +242,19 @@ async function claimedSourceId(payload: unknown, db: D1Database): Promise<string
   return known?.source_id === value ? value : "unknown";
 }
 
-async function summaryCacheKey(request: Request, env: Env): Promise<Request> {
+async function summaryCacheKey(
+  request: Request, env: Env, calendar?: { date: string; timezone: string; serviceTimezone: string },
+): Promise<Request> {
   const cacheUrl = new URL(request.url);
   cacheUrl.protocol = "https:";
   cacheUrl.hostname = `${env.AIUSAGE_CACHE_NAMESPACE ?? "default"}.aiusage-summary-cache.invalid`;
   cacheUrl.port = "";
+  if (calendar) {
+    cacheUrl.searchParams.set("timezone", calendar.timezone);
+    cacheUrl.searchParams.set("__calendar_date", calendar.date);
+    cacheUrl.searchParams.set("__service_timezone", calendar.serviceTimezone);
+    cacheUrl.searchParams.sort();
+  }
   const credential = request.headers.get("Authorization") ?? request.headers.get("Cookie") ?? "unprotected";
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(credential));
   cacheUrl.searchParams.set("__auth", Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join(""));
@@ -255,8 +280,4 @@ function cacheResponse(cached: Response, status: "HIT"): Response {
   headers.set("X-AIUsage-Cache", status);
   headers.set("Cache-Control", "private, no-store");
   return new Response(cached.body, { status: cached.status, headers });
-}
-
-function currentDate(env: Env): string {
-  return formatDate(referenceTime(env));
 }

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from subprocess import CompletedProcess, TimeoutExpired
 
 from ai_usage_widget import cli
 from ai_usage_widget import mac_app_collector as collector
@@ -48,6 +49,63 @@ class MacAppCollectorTests(unittest.TestCase):
     def test_buffered_limits_are_not_reported_as_delivered(self):
         with patch.object(collector, 'cli_main', side_effect=lambda argv: (print('{"success":true,"delivered":false}'), 0)[1]):
             self.assertEqual(collector.run_job(self.root, 'limits'), 75)
+
+    def test_usage_replaces_legacy_ip_labels_without_changing_pairing_or_release_metadata(self):
+        device = self.root / 'collector/device.json'
+        current = self.root / 'current'
+        current.mkdir()
+        revision = 'a' * 40
+        (current / 'release.json').write_text(json.dumps({'revision': revision}))
+        config = {
+            **collector.read_json(device), 'schema_version': 1, 'source_id': 'paired-device',
+            'platform': 'darwin', 'timezone': 'Africa/Abidjan', 'os_user': 'test-user',
+            'outbox': {'enabled': True, 'path': str(self.root / 'collector/outbox.sqlite')},
+        }
+        with (
+            patch.dict(os.environ),
+            patch.object(collector.sys, 'platform', 'darwin'),
+            patch.object(collector.subprocess, 'run', return_value=CompletedProcess([], 0, 'Test-Mac\n', '')) as scutil,
+            patch.object(cli, 'DevicePusher') as pusher,
+        ):
+            pusher.return_value.push.return_value = {'success': True, 'delivered': True}
+            for address in ('192.0.2.7', '2001:db8::7'):
+                with self.subTest(address=address):
+                    original = json.dumps({**config, 'machine': address, 'host': address}).encode()
+                    device.write_bytes(original)
+                    self.assertEqual(collector.run_job(self.root, 'usage'), 0)
+                    effective = pusher.call_args.args[0]
+                    self.assertEqual((effective.machine, effective.host), ('Test-Mac', 'Test-Mac'))
+                    self.assertEqual(effective.source_id, config['source_id'])
+                    self.assertEqual(effective.timezone, config['timezone'])
+                    self.assertEqual(str(effective.outbox.path), config['outbox']['path'])
+                    self.assertEqual(os.environ['CUSTOM_TOKEN'], 'private-test-token')
+                    self.assertEqual(os.environ['AI_USAGE_BUILD_SHA'], revision)
+                    self.assertEqual(device.read_bytes(), original)
+            self.assertEqual(scutil.call_args.args[0], ['/usr/sbin/scutil', '--get', 'LocalHostName'])
+
+    def test_usage_preserves_explicit_or_unresolvable_device_names(self):
+        device = self.root / 'collector/device.json'
+        config = {**collector.read_json(device), 'schema_version': 1}
+        resolved = CompletedProcess([], 0, 'Test-Mac\n', '')
+        for platform, machine, host, expected_lookup, result in (
+            ('darwin', 'Named Mac', '192.0.2.5', False, resolved),
+            ('darwin', '192.0.2.5', 'separate.local', False, resolved),
+            ('linux', '192.0.2.5', '192.0.2.5', False, resolved),
+            ('darwin', '192.0.2.5', '192.0.2.5', True, TimeoutExpired('scutil', 2)),
+            ('darwin', '192.0.2.5', '192.0.2.5', True, CompletedProcess([], 0, '192.0.2.6\n', '')),
+        ):
+            with self.subTest(platform=platform, machine=machine, host=host, result=result):
+                original = json.dumps({**config, 'platform': platform, 'machine': machine, 'host': host}).encode()
+                device.write_bytes(original)
+                with (
+                    patch.object(collector.sys, 'platform', 'darwin'),
+                    patch.object(collector.subprocess, 'run', side_effect=result if isinstance(result, Exception) else None, return_value=result) as scutil,
+                    patch.object(collector, 'cli_main', side_effect=lambda _: (print('{"success":true,"delivered":true}'), 0)[1]) as run,
+                ):
+                    self.assertEqual(collector.run_job(self.root, 'usage'), 0)
+                self.assertEqual(run.call_args.args[0][2], str(device))
+                self.assertEqual(scutil.called, expected_lookup)
+                self.assertEqual(device.read_bytes(), original)
 
     def test_offline_auto_discovered_antigravity_keeps_upgrade_healthy_without_rewriting_limits(self):
         from ai_usage_widget.upgrade_apply import mac_health

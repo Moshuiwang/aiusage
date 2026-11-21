@@ -5,12 +5,19 @@ public struct MobileSummaryClientConfig: Equatable, Sendable {
     public let bearerToken: String?
     public let period: String
     public let offset: Int
+    public let usesClientStatistics: Bool
+    public let timezone: String?
 
-    public init(baseURL: URL, bearerToken: String?, period: String, offset: Int = 0) {
+    public init(
+        baseURL: URL, bearerToken: String?, period: String, offset: Int = 0,
+        usesClientStatistics: Bool = false, timezone: String? = nil
+    ) {
         self.baseURL = baseURL
         self.bearerToken = bearerToken
         self.period = period
         self.offset = offset
+        self.usesClientStatistics = usesClientStatistics
+        self.timezone = timezone
     }
 }
 
@@ -76,7 +83,14 @@ public struct MobileSummaryClient {
         guard var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false) else {
             throw MobileSummaryClientError.invalidURL
         }
-        components.queryItems = [URLQueryItem(name: "period", value: config.period), URLQueryItem(name: "offset", value: String(config.offset))]
+        var query = [URLQueryItem(name: "period", value: config.period), URLQueryItem(name: "offset", value: String(config.offset))]
+        if config.usesClientStatistics {
+            query.append(URLQueryItem(name: "statistics", value: "client"))
+            if config.period == "today", config.offset == 0, let timezone = config.timezone {
+                query.append(URLQueryItem(name: "timezone", value: timezone))
+            }
+        }
+        components.queryItems = query
         guard let url = components.url else {
             throw MobileSummaryClientError.invalidURL
         }

@@ -84,7 +84,7 @@ function accountHourlySummary(rows: Record<string, unknown>[]): Record<string, u
   };
 }
 
-function accountHourlyRowsToDailyRows(rows: Record<string, unknown>[]): DailyRow[] {
+function accountHourlyRowsToDailyRows(rows: Record<string, unknown>[], timezone?: string): DailyRow[] {
   const buckets = new Map<string, {
     source_id: string;
     date: string;
@@ -99,7 +99,7 @@ function accountHourlyRowsToDailyRows(rows: Record<string, unknown>[]): DailyRow
     provenances: Set<string>;
   }>();
   for (const row of rows) {
-    const date = localDateFromWindowStart(row.window_start);
+    const date = localDateFromWindowStart(row.window_start, timezone);
     if (!date) continue;
     const sourceId = str(row.source_id);
     const agent = str(row.agent);
@@ -147,7 +147,7 @@ function accountHourlyRowsToDailyRows(rows: Record<string, unknown>[]): DailyRow
     }));
 }
 
-function accountHourlyRowsToHourlyRows(rows: Record<string, unknown>[]): TimedRow[] {
+function accountHourlyRowsToHourlyRows(rows: Record<string, unknown>[], timezone?: string): TimedRow[] {
   const buckets = new Map<string, {
     source_id: string;
     hour: string;
@@ -162,7 +162,7 @@ function accountHourlyRowsToHourlyRows(rows: Record<string, unknown>[]): TimedRo
     provenances: Set<string>;
   }>();
   for (const row of rows) {
-    const hour = localHourFromWindowStart(row.window_start);
+    const hour = localHourFromWindowStart(row.window_start, timezone);
     if (!hour) continue;
     const sourceId = str(row.source_id);
     const agent = str(row.agent);

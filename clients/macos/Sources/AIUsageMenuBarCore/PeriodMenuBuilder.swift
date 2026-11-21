@@ -36,18 +36,18 @@ public enum PeriodMenuBuilder {
         periodID: String,
         now: Date,
         timezone: String?,
+        localTodayTimezone: String? = nil,
         selectedOffset: Int = 0,
         cached: (MenuPeriodSelection) -> MobileSummary?
     ) -> [PeriodMenuRow] {
-        let tz = timezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = tz
-        let today = calendar.startOfDay(for: now)
-
         let count = periodID == "today" ? 7 : 6
         return (0..<count).map { index in
             let offset = -index
             let selection = MenuPeriodSelection(periodID: periodID, offset: offset)
+            let rowTimezone = selection.isCurrentToday ? (localTodayTimezone ?? timezone) : timezone
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = rowTimezone.flatMap(TimeZone.init(identifier:)) ?? TimeZone(identifier: "Asia/Shanghai")!
+            let today = calendar.startOfDay(for: now)
             let bounds = periodBounds(periodID: periodID, offset: offset, today: today, calendar: calendar)
             let title = titleText(periodID: periodID, offset: offset, bounds: bounds, calendar: calendar)
             let subtitle = subtitleText(periodID: periodID, offset: offset, bounds: bounds, calendar: calendar)

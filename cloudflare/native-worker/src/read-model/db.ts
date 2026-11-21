@@ -4,10 +4,14 @@ import {
   accountHourlyRowInPeriod, accountHourlyRowMatchesFilter, formatDate, int, itemKey,
   localDateFromWindowStart, localEstimateSourceTypes, periodWindowBounds, shiftDate, str,
 } from "./shared";
-import type { LimitRow, ModelRow, SourceIdentity } from "./shared";
+import type { LimitRow, ModelRow, SourceIdentity, UsageIncompleteReason } from "./shared";
 import type { QuotaCalibrationRow } from "./quota-estimate";
 import { accountDirectoryFrom } from "./account-slots";
 import type { AccountDirectory, ObservationRow, ProfileRow } from "./account-slots";
+import { withStableMachineName } from "./machine-names";
+
+export const HOURLY_ROLLUP_RETENTION_DAYS = 30;
+const HOUR_MS = 3_600_000;
 
 async function all<T>(db: D1Database, sql: string, params: unknown[] = []): Promise<T[]> {
   const result = await db.prepare(sql).bind(...params).all<T>();
@@ -89,34 +93,57 @@ async function fetchLimitWindows(db: D1Database, refTime: Date | null): Promise<
 async function fetchAccountHourlyRows(
   db: D1Database, startDate: string | null, endDate: string, timezone: string,
   machineFilter?: string | null, accountFilter?: string | null,
-): Promise<{ rows: Record<string, unknown>[]; costsByItem: Map<string, number> }> {
-  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
+  identities: Record<string, SourceIdentity> = {},
+  rebucket?: { now: Date; serviceTimezone: string; checkDailyArchive: boolean },
+): Promise<{ rows: Record<string, unknown>[]; costsByItem: Map<string, number>; usageIncompleteReason?: UsageIncompleteReason }> {
+  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate, timezone);
+  if (rebucket && startDate !== null && startInclusive !== null) {
+    const pending = await hasPendingRollups(db, startDate, endDate);
+    const startTime = Date.parse(startInclusive);
+    const fractionalBoundary = [startTime, Date.parse(endExclusive)].some(time => time % HOUR_MS !== 0);
+    const [serviceStart, serviceEnd] = periodWindowBounds(startDate, endDate, rebucket.serviceTimezone);
+    const fractionalRollups = [serviceStart!, serviceEnd].some(time => Date.parse(time) % HOUR_MS !== 0);
+    // The existing prune uses local bucket text against a UTC cutoff. Keep a whole day
+    // of margin and use facts for the entire window if it may straddle the retention edge.
+    const pastHourlyRetention = startTime < rebucket.now.getTime() - (HOURLY_ROLLUP_RETENTION_DAYS - 1) * 24 * HOUR_MS;
+    let rows = (pending || fractionalBoundary || fractionalRollups || pastHourlyRetention)
+      ? []
+      : await fetchAccountRowsFromTable(db, "usage_hourly_rollups", startInclusive, endExclusive, identities);
+    if (!rows.length) rows = await fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive, identities);
+    rows = preferLegacyHourlyBackfillRows(rows, true);
+    const costsByItem = factCostsByItem(rows.filter(row => accountHourlyRowMatchesFilter(row, machineFilter, accountFilter)), timezone);
+    const legacyDailyOnly = rebucket.checkDailyArchive
+      && await hasOverlappingArchivedDailyRows(db, startInclusive, endExclusive, identities, machineFilter, accountFilter);
+    const usageIncompleteReason = legacyDailyOnly ? "legacy_daily_only"
+      : fractionalBoundary ? "hourly_boundary_approximate" : undefined;
+    return { rows, costsByItem, usageIncompleteReason };
+  }
   const rollupTable = startDate === endDate ? "usage_hourly_rollups" : "usage_daily_rollups";
   const pending = await hasPendingRollups(db, startDate, endDate);
-  const rollupRows = pending ? [] : await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive);
+  const rollupRows = pending ? [] : await fetchAccountRowsFromTable(db, rollupTable, startInclusive, endExclusive, identities);
   if (rollupRows.length > 0) {
     const inPeriod = rollupRows.filter((row) =>
       accountHourlyRowInPeriod(row, startDate, endDate, timezone)
     );
     const rows = rollupTable === "usage_daily_rollups"
-      ? preferHistoricalDailyFallbackRows(inPeriod)
+      ? preferHistoricalDailyFallbackRows(inPeriod, timezone)
       : preferLegacyHourlyBackfillRows(inPeriod);
     const filteredForCost = inPeriod.filter((row) => accountHourlyRowMatchesFilter(row, machineFilter, accountFilter));
-    return { rows, costsByItem: factCostsByItem(filteredForCost) };
+    return { rows, costsByItem: factCostsByItem(filteredForCost, timezone) };
   }
-  const rawFacts = (await fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive))
+  const rawFacts = (await fetchAccountRowsFromTable(db, "usage_hourly_facts", startInclusive, endExclusive, identities))
     .filter((row) => accountHourlyRowInPeriod(row, startDate, endDate, timezone));
-  const costsByItem = factCostsByItem(rawFacts.filter((row) => accountHourlyRowMatchesFilter(row, machineFilter, accountFilter)));
+  const costsByItem = factCostsByItem(rawFacts.filter((row) => accountHourlyRowMatchesFilter(row, machineFilter, accountFilter)), timezone);
   const facts = preferLegacyHourlyBackfillRows(rawFacts);
   if (rollupTable === "usage_daily_rollups") {
     // Archived daily totals are themselves the retained historical source and
     // may have no hourly facts. Keep their existing precedence during recovery.
-    const archived = (await fetchAccountRowsFromTable(db, "usage_daily_rollups", startInclusive, endExclusive))
+    const archived = (await fetchAccountRowsFromTable(db, "usage_daily_rollups", startInclusive, endExclusive, identities))
       .filter(row => row.provenance === "historical_ccusage_fallback_v1"
         && accountHourlyRowInPeriod(row, startDate, endDate, timezone));
-    const archiveKeys = new Set(archived.map(row => itemKey(str(row.source_id), localDateFromWindowStart(row.window_start) ?? "", str(row.agent))));
-    const uncoveredFacts = facts.filter(row => !archiveKeys.has(itemKey(str(row.source_id), localDateFromWindowStart(row.window_start) ?? "", str(row.agent))));
-    return { rows: preferHistoricalDailyFallbackRows([...uncoveredFacts, ...archived]), costsByItem };
+    const archiveKeys = new Set(archived.map(row => itemKey(str(row.source_id), localDateFromWindowStart(row.window_start, timezone) ?? "", str(row.agent))));
+    const uncoveredFacts = facts.filter(row => !archiveKeys.has(itemKey(str(row.source_id), localDateFromWindowStart(row.window_start, timezone) ?? "", str(row.agent))));
+    return { rows: preferHistoricalDailyFallbackRows([...uncoveredFacts, ...archived], timezone), costsByItem };
   }
   return { rows: facts, costsByItem };
 }
@@ -131,12 +158,12 @@ export async function hasPendingRollups(db: D1Database, startDate: string | null
   return row !== null;
 }
 
-function preferHistoricalDailyFallbackRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+function preferHistoricalDailyFallbackRows(rows: Record<string, unknown>[], timezone?: string): Record<string, unknown>[] {
   const fallbackKeys = new Set(
     rows
       .filter((row) => row.provenance === "historical_ccusage_fallback_v1")
       .map((row) => {
-        const date = localDateFromWindowStart(row.window_start);
+        const date = localDateFromWindowStart(row.window_start, timezone);
         return date ? itemKey(str(row.source_id), date, str(row.agent)) : "";
       })
       .filter(Boolean),
@@ -148,14 +175,14 @@ function preferHistoricalDailyFallbackRows(rows: Record<string, unknown>[]): Rec
         && str(row.agent).toLowerCase() === "all"
       )
       .map((row) => {
-        const date = localDateFromWindowStart(row.window_start);
+        const date = localDateFromWindowStart(row.window_start, timezone);
         return date ? `${str(row.source_id)}\u0000${date}` : "";
       })
       .filter(Boolean),
   );
   if (!fallbackKeys.size) return rows;
   return rows.filter((row) => {
-    const date = localDateFromWindowStart(row.window_start);
+    const date = localDateFromWindowStart(row.window_start, timezone);
     if (!date) return true;
     const sourceDateKey = `${str(row.source_id)}\u0000${date}`;
     if (sourceDateFallbackKeys.has(sourceDateKey)) {
@@ -166,19 +193,34 @@ function preferHistoricalDailyFallbackRows(rows: Record<string, unknown>[]): Rec
   });
 }
 
-function preferLegacyHourlyBackfillRows(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+function preferLegacyHourlyBackfillRows(rows: Record<string, unknown>[], byInstant = false): Record<string, unknown>[] {
+  const hourKey = (row: Record<string, unknown>) => {
+    const start = str(row.window_start);
+    return itemKey(str(row.source_id), byInstant ? String(Date.parse(start)) : start, str(row.agent));
+  };
   const keys = new Set(
-    rows
-      .filter((row) => row.provenance === "legacy_hourly_archive_backfill_v1")
-      .map((row) =>
-        `${str(row.source_id)}\u0000${str(row.window_start)}\u0000${str(row.agent)}`
-      ),
+    rows.filter(row => row.provenance === "legacy_hourly_archive_backfill_v1").map(hourKey),
   );
   if (!keys.size) return rows;
-  return rows.filter((row) => {
-    const key = `${str(row.source_id)}\u0000${str(row.window_start)}\u0000${str(row.agent)}`;
-    return !keys.has(key) || row.provenance === "legacy_hourly_archive_backfill_v1";
-  });
+  return rows.filter(row => !keys.has(hourKey(row)) || row.provenance === "legacy_hourly_archive_backfill_v1");
+}
+
+async function hasOverlappingArchivedDailyRows(
+  db: D1Database, startInclusive: string, endExclusive: string, identities: Record<string, SourceIdentity>,
+  machineFilter?: string | null, accountFilter?: string | null,
+): Promise<boolean> {
+  // Search the preceding two days as a daily window can start before the new day
+  // boundary and still overlap it. The bucket-start range keeps the expression index usable.
+  const rows = await all<Record<string, unknown>>(db, `
+    SELECT d.source_id, d.machine_id, COALESCE(m.machine_name, d.machine_id) AS machine_name, d.os_user
+    FROM usage_daily_rollups d
+    LEFT JOIN machines m ON m.machine_id = d.machine_id
+    WHERE julianday(d.bucket_start) >= julianday(?) - 2
+      AND julianday(d.bucket_start) < julianday(?)
+      AND julianday(d.bucket_end) > julianday(?)
+      AND d.provenance = 'historical_ccusage_fallback_v1'
+  `, [startInclusive, endExclusive, startInclusive]);
+  return rows.some(row => accountHourlyRowMatchesFilter(withStableMachineName(row, identities), machineFilter, accountFilter));
 }
 
 async function fetchAccountRowsFromTable(
@@ -186,6 +228,7 @@ async function fetchAccountRowsFromTable(
   table: "usage_hourly_rollups" | "usage_daily_rollups" | "usage_hourly_facts",
   startInclusive: string | null,
   endExclusive: string,
+  identities: Record<string, SourceIdentity> = {},
 ): Promise<Record<string, unknown>[]> {
   const periodWhere = startInclusive === null
     ? "julianday(f.window_start) < julianday(?)"
@@ -217,14 +260,14 @@ async function fetchAccountRowsFromTable(
     `,
     params,
   );
-  return rows;
+  return rows.map(row => withStableMachineName(row, identities));
 }
 
-function factCostsByItem(rows: Record<string, unknown>[]): Map<string, number> {
+function factCostsByItem(rows: Record<string, unknown>[], timezone: string): Map<string, number> {
   const totals = new Map<string, number>();
   for (const row of rows) {
     if (row.total_cost === null || row.total_cost === undefined) continue;
-    const date = localDateFromWindowStart(row.window_start);
+    const date = localDateFromWindowStart(row.window_start, timezone);
     if (!date) continue;
     const key = itemKey(str(row.source_id), date, str(row.agent));
     totals.set(key, (totals.get(key) ?? 0) + Number(row.total_cost));
@@ -239,8 +282,9 @@ async function fetchHourlyModelRows(
   timezone: string,
   machineFilter?: string | null,
   accountFilter?: string | null,
+  identities: Record<string, SourceIdentity> = {},
 ): Promise<ModelRow[]> {
-  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate);
+  const [startInclusive, endExclusive] = periodWindowBounds(startDate, endDate, timezone);
   const periodWhere = startInclusive === null
     ? "julianday(f.window_start) < julianday(?)"
     : "julianday(f.window_start) >= julianday(?) AND julianday(f.window_start) < julianday(?)";
@@ -263,8 +307,8 @@ async function fetchHourlyModelRows(
   const aggregated = new Map<string, ModelRow>();
   for (const row of rows) {
     if (!accountHourlyRowInPeriod(row, startDate, endDate, timezone)) continue;
-    if (!accountHourlyRowMatchesFilter(row, machineFilter, accountFilter)) continue;
-    const date = localDateFromWindowStart(row.window_start);
+    if (!accountHourlyRowMatchesFilter(withStableMachineName(row, identities), machineFilter, accountFilter)) continue;
+    const date = localDateFromWindowStart(row.window_start, timezone);
     if (!date) continue;
     const sourceId = str(row.source_id);
     const agent = str(row.agent);

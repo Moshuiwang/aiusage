@@ -641,6 +641,9 @@ final class MenuBarAppModelTests: XCTestCase {
             "收到系统时区变化通知后，不重启 App 也必须用新时区重新渲染"
         )
         XCTAssertEqual(model.state.periodTitleSuffix, "（北京时间）")
+        try await loader.waitForRequestCount(1)
+        await loader.complete(period: "today", summary: todaySummary)
+        await waitUntil { !model.isLoading }
     }
 
     /// 切到历史周期（如「本周」）后，会显示那份历史快照里更早的同步时间，而不是设备实际
@@ -1071,6 +1074,102 @@ final class MenuBarAppModelTests: XCTestCase {
         XCTAssertTrue(model.errorMessage?.hasPrefix("读取失败") == true)
     }
 
+    func testLocalTodayCacheCannotBecomeServiceHistoryOrAnotherTimeZoneToday() async throws {
+        let paths = try temporaryRuntimePaths()
+        let loader = ControlledSummaryLoader()
+        let utc = try XCTUnwrap(TimeZone(identifier: "Africa/Abidjan"))
+        let now = try date("2026-06-25T23:30:00Z")
+        let model = MenuBarAppModel(
+            paths: paths, config: testConfig(), now: { now },
+            deviceTimeZoneProvider: { utc }, loadSummary: loader.load
+        )
+        model.refresh()
+        try await loader.waitForTotalRequestCount(1)
+        await loader.complete(period: "today", summary: try summaryWithDate(
+            periodID: "today", date: "2026-06-25", startDate: "2026-06-25",
+            totalTokens: 701, timezone: utc.identifier, serviceTimezone: "Africa/Kinshasa"
+        ))
+        await waitUntil { !model.isLoading }
+        XCTAssertEqual(model.state.periodTitleSuffix, "（本机时区）")
+        let rows = model.periodMenuRows(for: "today")
+        XCTAssertEqual(rows[0].totalText, "701")
+        XCTAssertEqual(rows[0].subtitle, rows[1].subtitle, "At this instant, both different day windows start on June 25 in their own zone")
+        XCTAssertEqual(rows[1].totalText, "—")
+
+        let nextDay = now.addingTimeInterval(60 * 60)
+        let sameZone = SummaryCache.loadSummaries(paths: paths, now: now, localTimezone: utc.identifier)
+        XCTAssertEqual(sameZone["today"]?.summary.period.totalTokens, 701)
+        let differentZone = SummaryCache.loadSummaries(paths: paths, now: now, localTimezone: "Africa/Accra")
+        XCTAssertNil(differentZone["today"], "The timezone name is part of the cache scope even when offsets happen to match")
+        let caches = SummaryCache.loadSummaries(paths: paths, now: nextDay, localTimezone: utc.identifier)
+        XCTAssertNil(caches["today:-1"], "A previous local today must never become a historical service day")
+    }
+
+    func testInFlightTodayCannotPublishAfterSystemZoneChange() async throws {
+        let loader = ControlledSummaryLoader()
+        let utc = try XCTUnwrap(TimeZone(identifier: "Africa/Abidjan"))
+        let box = TimeZoneBox(utc)
+        let now = try date("2026-06-25T23:30:00Z")
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(), now: { now },
+            deviceTimeZoneProvider: { box.timeZone }, loadSummary: loader.load
+        )
+        model.refresh()
+        try await loader.waitForTotalRequestCount(1)
+        box.timeZone = shanghaiTZForTests
+        await loader.complete(period: "today", summary: try summaryWithDate(
+            periodID: "today", date: "2026-06-25", startDate: "2026-06-25", totalTokens: 888,
+            timezone: utc.identifier, serviceTimezone: "Africa/Kinshasa"
+        ))
+        await yieldToMainActor()
+        XCTAssertNotEqual(model.summary.period.totalTokens, 888)
+        XCTAssertNil(model.todaySummary)
+        try await loader.waitForTotalRequestCount(2)
+        await loader.complete(period: "today", summary: try summaryWithDate(
+            periodID: "today", date: "2026-06-26", startDate: "2026-06-26", totalTokens: 999,
+            timezone: shanghaiTZForTests.identifier, serviceTimezone: "Africa/Kinshasa"
+        ))
+        await waitUntil { !model.isLoading }
+        XCTAssertEqual(model.statusState.statusTitle, "999")
+    }
+
+    func testPrefetchWeekAndMonthIsIndependentOfDeviceTimezone() async throws {
+        let loader = ControlledSummaryLoader()
+        let utc = try XCTUnwrap(TimeZone(identifier: "Africa/Abidjan"))
+        let now = try date("2026-06-25T23:30:00Z")
+        let box = TimeZoneBox(utc)
+        let model = MenuBarAppModel(
+            paths: try temporaryRuntimePaths(), config: testConfig(defaultPeriod: "week"), now: { now },
+            deviceTimeZoneProvider: { box.timeZone }, loadSummary: loader.load
+        )
+        model.prefetchCommonPeriods()
+        try await loader.waitForTotalRequestCount(2)
+
+        for period in ["week", "month"] {
+            let config = try await loader.config(for: period)
+            XCTAssertTrue(config.usesClientStatistics)
+            XCTAssertNil(config.timezone)
+        }
+        box.timeZone = shanghaiTZForTests
+        NotificationCenter.default.post(name: .NSSystemTimeZoneDidChange, object: nil)
+        try await loader.waitForTotalRequestCount(3)
+        let todayRequest = try await loader.config(for: "today")
+        XCTAssertEqual(todayRequest.timezone, shanghaiTZForTests.identifier)
+        for (period, start) in [("week", "2026-06-22"), ("month", "2026-06-01"), ("today", "2026-06-26")] {
+            await loader.complete(period: period, summary: try summaryWithDate(
+                periodID: period, date: "2026-06-26", startDate: start, totalTokens: 721,
+                serviceTimezone: "Africa/Kinshasa"
+            ))
+        }
+        await waitUntil { model.todaySummary != nil && model.summary.period.totalTokens == 721 }
+        XCTAssertEqual(model.state.periodTitleSuffix, "（北京时间）")
+        XCTAssertEqual(model.periodMenuRows(for: "month")[0].totalText, "721")
+        model.prefetchCommonPeriods()
+        await yieldToMainActor()
+        let requestCount = await loader.totalRequestCount()
+        XCTAssertEqual(requestCount, 3, "Changing the local timezone must not trigger additional week or month requests")
+    }
+
     func testHistorySurvivesRestartAndRelativeOffsetChanges() throws {
         let paths = try temporaryRuntimePaths()
         let historical = try summaryWithDate(periodID: "today", date: "2026-06-24", startDate: "2026-06-24", totalTokens: 900)
@@ -1493,14 +1592,18 @@ final class MenuBarAppModelTests: XCTestCase {
         date: String,
         startDate: String,
         totalTokens: Int,
-        generatedAt: String = "2026-06-25T12:00:00+08:00"
+        generatedAt: String = "2026-06-25T12:00:00+08:00",
+        timezone: String = "Asia/Shanghai",
+        serviceTimezone: String? = nil
     ) throws -> MobileSummary {
+        let serviceTimezoneJSON = serviceTimezone.map { "\"\($0)\"" } ?? "null"
         let json = """
         {
           "schema_version": 1,
           "client": "macos",
           "generated_at": "\(generatedAt)",
-          "timezone": "Asia/Shanghai",
+          "timezone": "\(timezone)",
+          "service_timezone": \(serviceTimezoneJSON),
           "period": {
             "id": "\(periodID)",
             "date": "\(date)",

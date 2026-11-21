@@ -1,6 +1,6 @@
 /** #126：today 小时趋势、残差回填与守恒封顶。 */
 import {
-  asArray, emptyTokenTotals, int, isCodexAgent, isRecord, metadataFromStr, str, sumTokenType, toOffsetIso,
+  asArray, emptyTokenTotals, int, isCodexAgent, isRecord, metadataFromStr, str, sumTokenType, localHourFromWindowStart,
 } from "./shared";
 import type { DailyRow, TimedRow } from "./shared";
 
@@ -80,7 +80,7 @@ function fillTodayHourlyResidual(trend: Record<string, unknown>, refTime: Date, 
   cache_tokens: number;
   excluded_daily?: Record<string, number>;
   excluded_hourly?: Record<string, number>;
-}): void {
+}, timezone?: string): void {
   const points = asArray<Record<string, unknown>>(trend.points);
   const axis = asArray<string>(trend.axis);
   if (!points.length || !axis.length) return;
@@ -94,7 +94,7 @@ function fillTodayHourlyResidual(trend: Record<string, unknown>, refTime: Date, 
     cache: Math.max(int(totals.cache_tokens) - excludedDaily.cache - (sumTokenType(trend, "cache") - excludedHourly.cache), 0),
   };
   if (residualTotal <= 0 && Object.values(tokenResiduals).every((value) => value <= 0)) return;
-  const refHour = toOffsetIso(new Date(Math.floor(refTime.getTime() / 3600000) * 3600000));
+  const refHour = localHourFromWindowStart(refTime.toISOString(), timezone) ?? "";
   const targetHour = axis.includes(refHour) ? refHour : axis[axis.length - 1];
   const index = axis.indexOf(targetHour);
   const point = points[index];

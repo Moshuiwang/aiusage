@@ -1,4 +1,5 @@
 import Foundation
+import SystemConfiguration
 
 public enum CollectorSetupError: Error, LocalizedError {
     case invalidServer, missingToken, invalidSource, changedServer
@@ -15,7 +16,17 @@ public enum CollectorSetupError: Error, LocalizedError {
 /// Connection and collection settings belong to the current OS user, outside the App bundle.
 public struct CollectorSettingsStore {
     public let root: URL
-    public init(root: URL) { self.root = root }
+    private let localHostName: String?
+
+    public init(root: URL) {
+        self.init(root: root, localHostName: SCDynamicStoreCopyLocalHostName(nil) as String?)
+    }
+
+    init(root: URL, localHostName: String?) {
+        self.root = root
+        self.localHostName = localHostName.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     public var directory: URL { root.appendingPathComponent("collector") }
     public var deviceURL: URL { directory.appendingPathComponent("device.json") }
     public var settingsURL: URL { directory.appendingPathComponent("settings.json") }
@@ -23,6 +34,14 @@ public struct CollectorSettingsStore {
     public var statusURL: URL { directory.appendingPathComponent("status.json") }
     public var isEnabled: Bool { (read(settingsURL)["enabled"] as? Bool) == true }
     public var sourceID: String? { read(deviceURL)["source_id"] as? String }
+    public var defaultSourceID: String {
+        guard let localHostName else { return "" }
+        let identifier = (localHostName + "-" + NSUserName()).map { char in
+            char.isASCII && (char.isLetter || char.isNumber || char == "-") ? char : "-"
+        }
+        return String(identifier.drop(while: { $0 == "-" }).prefix(128))
+    }
+
     public var server: String { read(root.appendingPathComponent("config.json"))["server_url"] as? String ?? "https://aiusage.chunbai.com" }
 
     public var enrollmentURL: URL { directory.appendingPathComponent("enrollment.json") }
@@ -69,9 +88,10 @@ public struct CollectorSettingsStore {
         }
         var device = read(deviceURL)
         if device.isEmpty {
+            let localMachine = localHostName ?? sourceID
             device = ["schema_version": 1, "source_id": sourceID, "platform": "darwin",
-                      "timezone": "Asia/Shanghai", "machine": ProcessInfo.processInfo.hostName,
-                      "host": ProcessInfo.processInfo.hostName, "os_user": NSUserName(),
+                      "timezone": "Asia/Shanghai", "machine": localMachine,
+                      "host": localMachine, "os_user": NSUserName(),
                       "token_env": "AI_USAGE_INGEST_TOKEN",
                       "outbox": ["enabled": true, "path": directory.appendingPathComponent("outbox.sqlite").path]]
         }

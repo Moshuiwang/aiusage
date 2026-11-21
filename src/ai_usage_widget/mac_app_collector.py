@@ -17,6 +17,7 @@ import time
 
 from .cli import main as cli_main
 from .limits_config import ConfigError, parse_limits_config, runtime_id
+from .macos_identity import is_ip_literal, macos_local_hostname
 
 INTERVAL = 1800
 TIMEOUT = 240
@@ -157,6 +158,26 @@ def _delivered_with_optional_source_offline(result, optional_source, configured_
     return source_id in configured_antigravity and len(providers) > 1
 
 
+@contextlib.contextmanager
+def _usage_config_for_job(path, device):
+    machine = device.get('machine')
+    # The old App wrote the same OS-provided value to both fields on first setup.
+    if (device.get('platform') == 'darwin' and device.get('schema_version') == 1
+            and isinstance(machine, str) and machine == device.get('host') and is_ip_literal(machine)):
+        local_name = macos_local_hostname()
+        if local_name:
+            from .upgrade_apply import populate_release_environment
+            populate_release_environment(path)
+            # Keep the saved pairing configuration byte-for-byte intact on failed upgrades.
+            with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as candidate:
+                json.dump({**device, 'machine': local_name, 'host': local_name}, candidate)
+                candidate.flush()
+                candidate.seek(0)
+                yield f'/dev/fd/{candidate.fileno()}'
+                return
+    yield str(path)
+
+
 def run_job(root, job):
     try:
         device_path = root / 'collector/device.json'
@@ -176,7 +197,8 @@ def run_job(root, job):
         configured_antigravity = set()
         with contextlib.ExitStack() as resources:
             if job == 'usage':
-                argv = ['push', '--config', str(device_path), '--lock-file', str(root / 'collector/usage.lock')]
+                config_path = resources.enter_context(_usage_config_for_job(device_path, device))
+                argv = ['push', '--config', config_path, '--lock-file', str(root / 'collector/usage.lock')]
             else:
                 endpoint = device['server_url'].rstrip('/')
                 if not endpoint.endswith('/ingest'):

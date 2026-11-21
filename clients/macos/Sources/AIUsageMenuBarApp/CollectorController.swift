@@ -87,11 +87,9 @@ final class CollectorController {
         let server = NSTextField(string: store.server)
         let token = NSSecureTextField(string: "")
         token.placeholderString = "新机器留空申请授权；已有连接留空保留"
-        let defaultID = (ProcessInfo.processInfo.hostName + "-" + NSUserName()).map { char in
-            char.isASCII && (char.isLetter || char.isNumber || char == "-") ? String(char) : "-"
-        }.joined()
-        let source = NSTextField(string: store.sourceID ?? defaultID)
+        let source = NSTextField(string: store.sourceID ?? store.defaultSourceID)
         source.isEditable = store.sourceID == nil
+        if source.stringValue.isEmpty { source.placeholderString = "请填写本机唯一标识" }
         for (label, field) in [("服务地址", server), ("访问令牌", token), ("本机来源标识", source)] {
             form.addArrangedSubview(NSTextField(labelWithString: label))
             form.addArrangedSubview(field)

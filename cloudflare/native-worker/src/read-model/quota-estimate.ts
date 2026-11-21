@@ -87,11 +87,11 @@ export function indexQuotaCalibration(rows: QuotaCalibrationRow[]): Map<string, 
 }
 
 /** 周期起点到 min(周期终点, 今天) 之间的天数（含首尾两端），用于月视图的周均折算。 */
-function elapsedDaysInPeriod(startDate: string, endDate: string, refTime: Date): number | null {
-  const today = formatDate(refTime);
+function elapsedDaysInPeriod(startDate: string, endDate: string, refTime: Date, timezone?: string): number | null {
+  const today = formatDate(refTime, timezone);
   const effectiveEnd = endDate < today ? endDate : today;
-  const startMs = parseDateOnly(startDate).getTime();
-  const endMs = parseDateOnly(effectiveEnd).getTime();
+  const startMs = parseDateOnly(startDate, timezone).getTime();
+  const endMs = parseDateOnly(effectiveEnd, timezone).getTime();
   if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return null;
   return Math.round((endMs - startMs) / 86400000) + 1;
 }
@@ -109,6 +109,7 @@ export function quotaEstimateForModel(
   endDate: string,
   refTime: Date,
   calibrationByKey: Map<string, QuotaCalibrationRow>,
+  timezone?: string,
 ): QuotaEstimate | undefined {
   if (quotaEstimateUnavailableForModel(provider, modelName, periodId, refTime, calibrationByKey)) return undefined;
   if (!isProvider(provider)) return undefined;
@@ -124,7 +125,7 @@ export function quotaEstimateForModel(
   }
   if (periodId === "month") {
     if (startDate === null) return undefined;
-    const days = elapsedDaysInPeriod(startDate, endDate, refTime);
+    const days = elapsedDaysInPeriod(startDate, endDate, refTime, timezone);
     if (days === null || days <= 0) return undefined;
     const weeks = days / 7;
     return { percent: rawPercent / weeks, grade: calibration.grade, basis: "weekly_average" };
