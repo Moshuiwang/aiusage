@@ -84,6 +84,8 @@ class UpgradeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / 'summaries').mkdir()
+            (root / 'collector').mkdir()
+            (root / 'collector/settings.json').write_text('{"enabled": true}')
             cache = root / 'summaries/today-offset0.json'
             shutil.copyfile(fixture, cache)
             write_status(root, {'usage': {'success': True}, 'limits': {'success': True}})
@@ -102,6 +104,8 @@ class UpgradeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / 'summaries').mkdir()
+            (root / 'collector').mkdir()
+            (root / 'collector/settings.json').write_text('{"enabled": true}')
             cache = root / 'summaries/today-offset0.json'
             shutil.copyfile(fixture, cache)
             started = time.time()
@@ -112,6 +116,45 @@ class UpgradeTests(unittest.TestCase):
             os.utime(cache, (started - 601, started - 601))
             with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
                 self.assertFalse(mac_health(root, {'collector_version': version_contract.COLLECTOR_VERSION}, started))
+
+    def test_mac_without_app_collection_uses_new_nonempty_summary(self):
+        import os
+        import shutil
+        import time
+
+        from ai_usage_widget.mac_app_collector import write_status
+        from ai_usage_widget.upgrade_apply import mac_health
+
+        fixture = Path(__file__).parent / 'fixtures/verify_cloud/healthy/mobile_summary.json'
+        manifest = {'collector_version': version_contract.COLLECTOR_VERSION}
+        cases = (
+            ('no settings and fresh summary', None, 'today-offset0.json', True, True, None, True),
+            ('paused and fresh local today', False, 'client-today-Africa-Abidjan-offset0.json', True, True, False, True),
+            ('cached before upgrade', None, 'today-offset0.json', False, True, None, False),
+            ('empty sources', None, 'today-offset0.json', True, False, None, False),
+            ('enabled with upload failure', True, 'today-offset0.json', True, True, False, False),
+            ('enabled with uploads successful', True, 'client-today-Africa-Abidjan-offset0.json', True, True, True, True),
+        )
+        for label, enabled, name, fresh, has_sources, upload_ok, expected in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root / 'summaries').mkdir()
+                if enabled is not None:
+                    (root / 'collector').mkdir()
+                    (root / 'collector/settings.json').write_text(json.dumps({'enabled': enabled}))
+                cache = root / 'summaries' / name
+                shutil.copyfile(fixture, cache)
+                if not has_sources:
+                    summary = json.loads(cache.read_text())
+                    summary['sources'] = []
+                    cache.write_text(json.dumps(summary))
+                started = time.time() - 1
+                if not fresh:
+                    os.utime(cache, (started - 1, started - 1))
+                if upload_ok is not None:
+                    write_status(root, {'usage': {'success': True}, 'limits': {'success': upload_ok}})
+                with patch('ai_usage_widget.upgrade_apply.time.monotonic', side_effect=[0, 0, 500]), patch('ai_usage_widget.upgrade_apply.time.sleep'):
+                    self.assertIs(mac_health(root, manifest, started), expected)
 
     def test_mac_failed_health_restores_app_and_keeps_runtime_config(self):
         with tempfile.TemporaryDirectory() as folder:
