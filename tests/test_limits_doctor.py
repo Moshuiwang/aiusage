@@ -4,11 +4,41 @@ import json
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from ai_usage_widget.limits_doctor import run_limits_doctor
 
 
 class TestLimitsDoctor(unittest.TestCase):
+    def test_antigravity_reports_local_readiness_without_credentials_or_rpc(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as config:
+            json.dump({
+                "timezone": "Asia/Shanghai",
+                "providers": [{"provider": "antigravity", "source_id": "local"}],
+            }, config)
+            config.flush()
+            with patch("subprocess.check_output", side_effect=[
+                "42 /Applications/Antigravity.app/language_server_mac --csrf_token sample-secret",
+                "p42\nn127.0.0.1:59999\n",
+            ]), patch("urllib.request.OpenerDirector.open") as open_rpc:
+                report = run_limits_doctor(config.name)
+
+        self.assertTrue(report["success"])
+        self.assertEqual(report["providers"][0]["source_id"], "local")
+        self.assertEqual(report["providers"][0]["checks"][0]["name"], "antigravity.language_server")
+        self.assertNotIn("sample-secret", json.dumps(report))
+        open_rpc.assert_not_called()
+
+    def test_antigravity_reports_not_running_without_claiming_readiness(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as config:
+            json.dump({"timezone": "Asia/Shanghai", "providers": [{"provider": "antigravity"}]}, config)
+            config.flush()
+            with patch("subprocess.check_output", return_value=""):
+                report = run_limits_doctor(config.name)
+
+        self.assertFalse(report["success"])
+        self.assertEqual(report["providers"][0]["checks"][0]["status"], "not_running")
+
     def test_missing_config_path_returns_json_failure(self) -> None:
         report = run_limits_doctor(None, command_resolver=lambda _: None)
 

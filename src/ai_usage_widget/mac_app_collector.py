@@ -11,6 +11,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -18,6 +19,7 @@ from .cli import main as cli_main
 
 INTERVAL = 1800
 TIMEOUT = 240
+LIMITS_DELIVERED_PARTIAL = 10
 _STOP = threading.Event()
 _CHILD = None
 
@@ -77,6 +79,64 @@ def write_status(root, status):
     os.replace(temp, path)
 
 
+@contextlib.contextmanager
+def _limits_config_for_job(path, device, home):
+    try:
+        config = read_json(path)
+    except FileNotFoundError:
+        config = {'timezone': device.get('timezone') or 'Asia/Shanghai', 'providers': []}
+    except (OSError, ValueError):
+        config = None  # Leave explicit malformed settings for normal CLI validation.
+    source_id = device.get('source_id')
+    providers = config.get('providers') if isinstance(config, dict) else None
+    if not isinstance(source_id, str) or not source_id or not isinstance(providers, list) or not all(isinstance(item, dict) for item in providers):
+        yield str(path), None
+        return
+
+    generated_claude = {
+        'provider': 'claude', 'source_id': source_id + '-claude',
+        'auth_file': str(home / '.claude/.credentials.json'),
+    }
+    changed = False
+    for index, item in enumerate(providers):
+        if item == generated_claude:
+            providers[index] = {**item, 'cli': True}
+            changed = True
+
+    optional_source = None
+    has_configured_antigravity = any(str(item.get('provider')).strip() == 'antigravity' for item in providers)
+    used_sources = {
+        str(item.get('source_id') or item.get('provider')).strip()
+        for item in providers if item.get('enabled', True)
+    }
+    if not has_configured_antigravity and source_id not in used_sources and any(
+        (home / '.gemini' / name).is_dir() for name in ('antigravity', 'antigravity-cli', 'antigravity-ide')
+    ):
+        # Existing credentials already own the device's source ID. Do not add
+        # a new authorization scope or replace a user-configured quota source.
+        providers.append({'provider': 'antigravity', 'source_id': source_id})
+        optional_source = source_id
+        changed = True
+
+    if not changed:
+        yield str(path), None
+        return
+    # A failed upgrade restores the prior bundle, not its settings files.
+    # Keep auto-discovery job-local so the restored app reads identical bytes.
+    with tempfile.TemporaryFile(mode='w+', encoding='utf-8') as candidate:
+        json.dump(config, candidate)
+        candidate.flush()
+        candidate.seek(0)
+        yield f'/dev/fd/{candidate.fileno()}', optional_source
+
+
+def _delivered_with_optional_source_offline(result, optional_source):
+    if optional_source is None or result.get('delivered') is not True or result.get('success') is not False:
+        return False
+    failures = [item for item in result['providers'] if item.get('status') != 'ok']
+    return len(failures) == 1 and failures[0].get('source_id') == optional_source and failures[0].get('error_type') == 'provider_unavailable'
+
+
 def run_job(root, job):
     try:
         device_path = root / 'collector/device.json'
@@ -91,24 +151,29 @@ def run_job(root, job):
         os.environ['PATH'] = ':'.join([str(home / '.local/bin'), '/opt/homebrew/bin', '/usr/local/bin',
                                        '/usr/sbin', '/sbin', '/usr/bin', '/bin',
                                        str(home / '.npm-global/bin'), os.environ.get('PATH', '')])
-        if job == 'usage':
-            argv = ['push', '--config', str(device_path), '--lock-file', str(root / 'collector/usage.lock')]
-        else:
-            endpoint = device['server_url'].rstrip('/')
-            if not endpoint.endswith('/ingest'):
-                return 2
-            argv = ['push-limits', '--limits-config', str(root / 'collector/limits.json'),
-                    '--url', endpoint[:-len('/ingest')] + '/ingest-limits', '--token-env', token_env,
-                    '--config', str(device_path), '--lock-file', str(root / 'collector/limits.lock')]
         output = io.StringIO()
-        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
-            code = cli_main(argv)
+        optional_source = None
+        with contextlib.ExitStack() as resources:
+            if job == 'usage':
+                argv = ['push', '--config', str(device_path), '--lock-file', str(root / 'collector/usage.lock')]
+            else:
+                endpoint = device['server_url'].rstrip('/')
+                if not endpoint.endswith('/ingest'):
+                    return 2
+                limits_path, optional_source = resources.enter_context(_limits_config_for_job(root / 'collector/limits.json', device, home))
+                argv = ['push-limits', '--limits-config', limits_path,
+                        '--url', endpoint[:-len('/ingest')] + '/ingest-limits', '--token-env', token_env,
+                        '--config', str(device_path), '--lock-file', str(root / 'collector/limits.lock')]
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                code = cli_main(argv)
         try:
             result = json.loads(output.getvalue())
         except ValueError:
             return code or 2
         if result.get('error_type') == 'outbox_queued':
             return 75
+        if code == 1 and _delivered_with_optional_source_offline(result, optional_source):
+            return LIMITS_DELIVERED_PARTIAL
         if code:
             return code
         if result.get('delivered') is False:
@@ -117,6 +182,14 @@ def run_job(root, job):
     except Exception:
         # Collector exceptions can contain paths and credentials; only an exit status leaves the helper.
         return 2
+
+
+def job_status(job, code):
+    partial = job == 'limits' and code == LIMITS_DELIVERED_PARTIAL
+    status = {'success': code == 0 or partial, 'exit_code': code}
+    if partial:
+        status['partial'] = True
+    return status
 
 
 def job_command(root, job):
@@ -186,7 +259,7 @@ def daemon(root, parent_pid=None):
                     if schedule.due(job, now):
                         code = execute_job(root, job)
                         schedule.finished(job, time.monotonic())
-                        status[job] = {'success': code == 0, 'exit_code': code}
+                        status[job] = job_status(job, code)
                         write_status(root, status)
                 _STOP.wait(30)
     except AlreadyRunning:

@@ -2408,7 +2408,7 @@
         "account": {
           "key": "claude:fp:claude:bbbbbbbbbbbbbbbbbbbbbbbb",
           "label": "Tony",
-          "plan": "max_20x",
+          "plan": "Max 20x",
           "plan_since": null,
           "previous_plan": null,
           "source_ids": [
@@ -2451,9 +2451,9 @@
         "account": {
           "key": "claude:fp:claude:aaaaaaaaaaaaaaaaaaaaaaaa",
           "label": "Zhipeng",
-          "plan": "max_5x",
+          "plan": "Max 5x",
           "plan_since": "2026-06-01T00:00:00+08:00",
-          "previous_plan": "max_20x",
+          "previous_plan": "Max 20x",
           "source_ids": [
             "tz-wangzp"
           ]
@@ -2494,7 +2494,7 @@
         "account": {
           "key": "codex:fp:codex:cccccccccccccccccccccccc",
           "label": "Em",
-          "plan": "pro",
+          "plan": "Pro 20x",
           "plan_since": null,
           "previous_plan": null,
           "source_ids": [

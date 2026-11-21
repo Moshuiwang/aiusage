@@ -224,14 +224,15 @@ function providerSlot(provider: string, row: AnyRecord | undefined): AnyRecord {
 // 指纹只用作客户端的稳定键；展示名与套餐来自采集端识别，D1 里没有邮箱。
 function accountSlot(row: AnyRecord): AnyRecord {
   const account = row.account && typeof row.account === "object" && !Array.isArray(row.account) ? dict(row.account) : null;
+  const provider = str(row.provider);
   return {
-    ...providerSlot(str(row.provider), row),
+    ...providerSlot(provider, row),
     account: account === null ? null : {
       key: str(account.key),
       label: typeof account.label === "string" ? account.label : null,
-      plan: typeof account.plan === "string" ? account.plan : null,
+      plan: safePlanLabel(provider, account.plan),
       plan_since: typeof account.plan_since === "string" ? account.plan_since : null,
-      previous_plan: typeof account.previous_plan === "string" ? account.previous_plan : null,
+      previous_plan: safePlanLabel(provider, account.previous_plan),
       source_ids: list<unknown>(account.source_ids).map(str),
     },
   };

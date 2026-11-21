@@ -187,6 +187,69 @@ describe("单日汇总重算：只写真正变化的格子", () => {
     await rebuild(db);
     expect(await snapshot(db)).toEqual({ hourly: [], daily: [] });
   });
+
+  it.each([
+    { name: "小时", statementIndex: 0, table: "usage_hourly_rollups", budget: 1500 },
+    { name: "日", statementIndex: 2, table: "usage_daily_rollups", budget: 500 },
+  ])("#303 $name汇总清理的读量不随同来源的历史事实膨胀", async ({ statementIndex, table, budget }) => {
+    const { db } = await acquireWorker({ AIUSAGE_TIMEZONE: "Asia/Shanghai" });
+    const midnight = Date.parse(`${day}T00:00:00+08:00`);
+    const hour = 3_600_000;
+    const accounts = Array.from({ length: 8 }, (_, index) => `account-${index}`);
+    const window = Array.from({ length: 24 }, (_, index) => index * hour);
+    const history = Array.from({ length: 30 }, (_, index) => (index - 30) * 24 * hour);
+    const facts = [...history, 0, 24 * hour].flatMap((dayOffset) =>
+      window.flatMap((hourOffset) =>
+        accounts.map((account, index) => {
+          const instant = midnight + dayOffset + hourOffset;
+          // 同一统计日的源数据可带不同偏移。字符串字面值不可用作时间范围。
+          const offset = index % 2 === 0 ? 0 : 330;
+          const iso = (time: number) => new Date(time + offset * 60_000).toISOString()
+            .replace("Z", offset === 0 ? "Z" : "+05:30");
+          return [`${account}-${instant}`, account, iso(instant), iso(instant + hour)];
+        })
+      )
+    );
+    await db.prepare(`
+      INSERT INTO usage_hourly_facts (
+        fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+        window_start, window_end, timezone, attribution_confidence, provenance, first_seen_at, last_seen_at
+      )
+      SELECT json_extract(value, '$[0]'), 'source', 'machine', 'user', 'codex',
+        json_extract(value, '$[1]'), 'codex', 'cli', json_extract(value, '$[2]'),
+        json_extract(value, '$[3]'), 'Asia/Shanghai', 'observed', 'test',
+        json_extract(value, '$[2]'), json_extract(value, '$[2]')
+      FROM json_each(?)
+    `).bind(JSON.stringify(facts)).run();
+    await db.batch(localDayRollupStatements(db, day));
+    await db.batch(localDayRollupStatements(db, "2026-06-04"));
+
+    // 下一天仍有相同身份，当天无事实的旧格应删除；历史回填的日格则保留。
+    await db.prepare(`UPDATE usage_daily_rollups SET provenance = 'historical_ccusage_fallback_v1'
+      WHERE date = ? AND ai_account_id = 'account-1'`).bind(day).run();
+    await db.prepare(`DELETE FROM usage_hourly_facts
+      WHERE ai_account_id IN ('account-0', 'account-1') AND julianday(window_start) >= julianday(?)
+        AND julianday(window_start) < julianday(?)`).bind(`${day}T00:00:00+08:00`, "2026-06-04T00:00:00+08:00").run();
+    await db.prepare(`UPDATE usage_hourly_facts SET client = NULL
+      WHERE fact_id = ?`).bind(`account-2-${midnight}`).run();
+
+    const deletion = await localDayRollupStatements(db, day)[statementIndex].run();
+    const counts = await db.prepare(`SELECT ai_account_id, count(*) AS count FROM ${table}
+      WHERE julianday(bucket_start) >= julianday(?) AND julianday(bucket_start) < julianday(?)
+      GROUP BY ai_account_id ORDER BY ai_account_id`).bind(`${day}T00:00:00+08:00`, "2026-06-04T00:00:00+08:00").all();
+    expect(counts.results).toEqual(accounts.slice(statementIndex === 0 ? 2 : 1).map((account) => ({
+      ai_account_id: account,
+      count: statementIndex === 0 ? (account === "account-2" ? 23 : 24) : 1,
+    })));
+    expect(deletion.meta.rows_written).toBe(statementIndex === 0 ? 49 : 1);
+    expect(deletion.meta.rows_read, "清理应只读目标统计日，而不是为每个汇总格重扫同源历史").toBeLessThanOrEqual(budget);
+    expect(await db.prepare(`SELECT count(*) AS count FROM ${table}
+      WHERE julianday(bucket_start) >= julianday(?)`).bind("2026-06-04T00:00:00+08:00").first())
+      .toEqual({ count: statementIndex === 0 ? 192 : 8 });
+    const repeated = await localDayRollupStatements(db, day)[statementIndex].run();
+    expect(repeated.meta.rows_written).toBe(0);
+    expect(repeated.meta.rows_read).toBeLessThanOrEqual(budget);
+  });
 });
 
 it("单日重算语句数与分批常量一致（分批按它计算 25 条上限）", async () => {

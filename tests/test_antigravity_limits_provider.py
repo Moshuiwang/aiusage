@@ -2,11 +2,14 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import datetime
 from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
 
 from ai_usage_widget.antigravity_limits_provider import (
     AntigravityLimitsProvider,
     AntigravityProviderError,
+    live_language_server_status_reader,
     parse_antigravity_command_model_configs,
     parse_antigravity_user_status,
 )
@@ -32,6 +35,45 @@ class RecordingReader:
 
 
 class TestAntigravityLimitsProvider(unittest.TestCase):
+    def test_live_reader_continues_after_invalid_and_unresponsive_candidates(self) -> None:
+        payload = json.loads((FIXTURES / "antigravity_quota_summary.json").read_text(encoding="utf-8"))
+        process_listing = "\n".join([
+            "  100 /Applications/Antigravity.app/language_server_mac --csrf_token",
+            "  200 /Applications/Antigravity.app/language_server_mac --csrf_token=unresponsive",
+            "  300 /Applications/Antigravity.app/language_server_mac --csrf_token working",
+        ])
+        requested = []
+
+        def command(args, **kwargs):
+            if args[0] == "ps":
+                self.assertIn("-U", args)
+                return process_listing
+            pid = args[args.index("-p") + 1]
+            self.assertIn(pid, {"200", "300"})
+            return f"p{pid}\nn127.0.0.1:{51_000 + int(pid)}\n"
+
+        def open_rpc(request, **kwargs):
+            csrf = request.get_header("X-codeium-csrf-token")
+            requested.append(csrf)
+            if csrf == "unresponsive":
+                raise TimeoutError
+            response = Mock(status=200)
+            response.read.return_value = json.dumps(payload).encode()
+            context = MagicMock()
+            context.__enter__.return_value = response
+            return context
+
+        with (
+            patch("subprocess.check_output", side_effect=command),
+            patch("urllib.request.OpenerDirector.open", side_effect=open_rpc),
+            patch("ai_usage_widget.antigravity_limits_provider.datetime") as clock,
+        ):
+            clock.now.return_value = datetime.fromisoformat(payload["observed_at"])
+            result = live_language_server_status_reader()
+
+        self.assertEqual(requested, ["unresponsive"] * 4 + ["working"])
+        self.assertTrue(parse_antigravity_user_status(result)[0].is_official)
+
     def test_user_status_fixture_maps_language_server_windows(self) -> None:
         payload = json.loads((FIXTURES / "antigravity_user_status.json").read_text(encoding="utf-8"))
 

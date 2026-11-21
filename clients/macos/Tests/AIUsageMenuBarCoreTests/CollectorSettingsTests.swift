@@ -113,4 +113,35 @@ final class CollectorSettingsTests: XCTestCase {
         }
     }
 
+    func testNewPairingReservesTheDeviceSourceForJobLocalDiscovery() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let claude = root.appendingPathComponent(".claude/.credentials.json")
+        try FileManager.default.createDirectory(at: claude.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: claude)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".gemini/antigravity-ide"), withIntermediateDirectories: true)
+        let store = CollectorSettingsStore(root: root)
+
+        try store.configure(server: "https://example.test", token: "", sourceID: "mac-test", home: root, awaitingApproval: true)
+
+        let config = try JSONSerialization.jsonObject(with: Data(contentsOf: store.limitsURL)) as! [String: Any]
+        let providers = try XCTUnwrap(config["providers"] as? [[String: Any]])
+        XCTAssertEqual(providers.first(where: { $0["provider"] as? String == "claude" })?["cli"] as? Bool, true)
+        XCTAssertFalse(providers.contains(where: { $0["provider"] as? String == "antigravity" }))
+        XCTAssertEqual(store.sourceIDs, ["mac-test", "mac-test-claude"])
+        XCTAssertFalse(store.isEnabled)
+    }
+
+    func testCollectorStatusShowsPartialLimitsDelivery() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = CollectorSettingsStore(root: root)
+        try store.configure(server: "https://example.test", token: "test-device", sourceID: "mac-test", home: root)
+        try Data("""
+            {"usage":{"success":true,"exit_code":0},"limits":{"success":true,"exit_code":10,"partial":true}}
+            """.utf8).write(to: store.statusURL)
+
+        XCTAssertEqual(store.statusText(isRunning: true), "本机数据已上报，部分额度暂不可用")
+    }
+
 }

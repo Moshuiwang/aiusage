@@ -6,6 +6,18 @@ import XCTest
 
 @MainActor
 final class ServerCardLayoutTests: XCTestCase {
+    func testDeviceIconsDistinguishMacMiniAndMacBook() {
+        let macMini = ServerIcon(platform: "darwin", title: "Mac mini").symbolName
+        XCTAssertEqual(macMini, "macmini")
+        XCTAssertNotNil(NSImage(systemSymbolName: macMini, accessibilityDescription: nil))
+        XCTAssertEqual(ServerIcon(platform: "darwin", title: "MacBook Air").symbolName, "laptopcomputer")
+    }
+
+    func testSmallPositiveBarKeepsItsScale() {
+        let height = MenuBarTrendChartView.scaledBarHeight(ratio: 0.01, ceilingFraction: 0.8, chartHeight: 92)
+        XCTAssertEqual(height, 0.736, accuracy: 0.0001)
+    }
+
     func testLongModelNameWrapsInsteadOfDroppingVisibleContent() {
         _ = NSApplication.shared
         let suite = "aiusage.layout-test.\(UUID().uuidString)"
@@ -48,6 +60,7 @@ final class ServerCardLayoutTests: XCTestCase {
                 brandColor: AgentBranding.color(for: id),
                 primaryPctText: pct,
                 primaryPctNumberText: String(pct.dropLast()),
+                primaryWindowLabel: "7d",
                 resetCountdownText: countdown,
                 isAvailable: true,
                 hoverRows: []
