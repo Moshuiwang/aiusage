@@ -5,7 +5,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from ai_usage_widget import cli
 from ai_usage_widget import mac_app_collector as collector
+from ai_usage_widget.antigravity_limits_provider import AntigravityLimitsProvider, AntigravityProviderError
+from ai_usage_widget.limits_runtime import load_fixture_providers
 
 
 class MacAppCollectorTests(unittest.TestCase):
@@ -45,6 +48,94 @@ class MacAppCollectorTests(unittest.TestCase):
     def test_buffered_limits_are_not_reported_as_delivered(self):
         with patch.object(collector, 'cli_main', side_effect=lambda argv: (print('{"success":true,"delivered":false}'), 0)[1]):
             self.assertEqual(collector.run_job(self.root, 'limits'), 75)
+
+    def test_offline_auto_discovered_antigravity_keeps_upgrade_healthy_without_rewriting_limits(self):
+        from ai_usage_widget.upgrade_apply import mac_health
+        from ai_usage_widget.version_contract import COLLECTOR_VERSION
+
+        device = self.root / 'collector/device.json'
+        device.write_text(json.dumps({**collector.read_json(device), 'source_id': 'mac-test'}))
+        (self.root / '.gemini/antigravity').mkdir(parents=True)
+        limits = self.root / 'collector/limits.json'
+        original = b'{"timezone":"Asia/Shanghai","providers":[]}\n'
+        limits.write_bytes(original)
+        summaries = self.root / 'summaries'
+        summaries.mkdir()
+        (summaries / 'today-offset0.json').write_text('{"sources":[{}]}')
+        codex = load_fixture_providers(str(Path(__file__).parent / 'fixtures/limits_runtime_fixture.json'))['codex']
+
+        with (
+            patch.object(collector.Path, 'home', return_value=self.root),
+            patch.object(AntigravityLimitsProvider, 'collect', side_effect=AntigravityProviderError('provider_unavailable', 'offline')),
+            patch.object(cli.CodexWhamProvider, 'collect', return_value=codex.collect()),
+            patch('ai_usage_widget.limits_runtime._default_now', return_value='2026-06-03T10:02:00+08:00'),
+            patch.object(cli, '_outbox_config_for_push_limits', return_value=None),
+            patch.object(cli, 'push_limits_payload', return_value={'success': True, 'windows_written': 1}) as push,
+        ):
+            configured_codex = json.dumps({'timezone': 'Asia/Shanghai', 'providers': [
+                {'provider': 'codex', 'source_id': 'mac-test-codex', 'auth_file': '/test/codex/auth.json'},
+            ]}).encode()
+            for saved in (original, configured_codex, None):
+                with self.subTest(saved=saved):
+                    if saved is None:
+                        limits.unlink()
+                    else:
+                        limits.write_bytes(saved)
+                    code = collector.run_job(self.root, 'limits')
+                    self.assertEqual(code, collector.LIMITS_DELIVERED_PARTIAL)
+                    windows = push.call_args.args[2]['windows']
+                    window = windows[-1]
+                    self.assertEqual((window['provider'], window['source_id'], window['status']), ('antigravity', 'mac-test', 'provider_failed'))
+                    self.assertEqual(window['confidence'], 'missing')
+                    self.assertFalse(window['official'])
+                    if saved == configured_codex:
+                        self.assertTrue(windows[0]['official'])
+                    if saved is None:
+                        self.assertFalse(limits.exists())
+                    else:
+                        self.assertEqual(limits.read_bytes(), saved)
+                    collector.write_status(self.root, {'usage': collector.job_status('usage', 0), 'limits': collector.job_status('limits', code)})
+                    report = collector.read_json(self.root / 'collector/status.json')
+                    self.assertTrue(report['limits']['partial'])
+                    self.assertTrue(mac_health(self.root, {'collector_version': COLLECTOR_VERSION}, 0))
+
+    def test_explicit_antigravity_offline_remains_a_failed_job(self):
+        device = self.root / 'collector/device.json'
+        device.write_text(json.dumps({**collector.read_json(device), 'source_id': 'mac-test'}))
+        (self.root / '.gemini/antigravity').mkdir(parents=True)
+        (self.root / 'collector/limits.json').write_text(json.dumps({
+            'timezone': 'Asia/Shanghai',
+            'providers': [{'provider': 'antigravity', 'source_id': 'explicit-ag'}],
+        }))
+        with (
+            patch.object(collector.Path, 'home', return_value=self.root),
+            patch.object(AntigravityLimitsProvider, 'collect', side_effect=AntigravityProviderError('provider_unavailable', 'offline')),
+            patch.object(cli, '_outbox_config_for_push_limits', return_value=None),
+            patch.object(cli, 'push_limits_payload', return_value={'success': True, 'windows_written': 1}),
+        ):
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
+
+    def test_offline_discovery_does_not_hide_required_provider_or_delivery_failure(self):
+        device = self.root / 'collector/device.json'
+        device.write_text(json.dumps({**collector.read_json(device), 'source_id': 'mac-test'}))
+        (self.root / '.gemini/antigravity').mkdir(parents=True)
+        limits = self.root / 'collector/limits.json'
+        limits.write_text(json.dumps({'timezone': 'Asia/Shanghai', 'providers': [
+            {'provider': 'codex', 'source_id': 'mac-test-codex', 'auth_file': '/test/codex/auth.json'},
+        ]}))
+        with (
+            patch.object(collector.Path, 'home', return_value=self.root),
+            patch.object(AntigravityLimitsProvider, 'collect', side_effect=AntigravityProviderError('provider_unavailable', 'offline')),
+            patch.object(cli.CodexWhamProvider, 'collect', side_effect=ValueError('unavailable')),
+            patch.object(cli, '_outbox_config_for_push_limits', return_value=None),
+            patch.object(cli, 'push_limits_payload', return_value={'success': True, 'windows_written': 2}) as push,
+        ):
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
+            self.assertEqual(len(push.call_args.args[2]['windows']), 2)
+
+            limits.write_text('{"timezone":"Asia/Shanghai","providers":[]}')
+            push.side_effect = ValueError('delivery failed')
+            self.assertEqual(collector.run_job(self.root, 'limits'), 1)
 
     def test_buffered_usage_is_classified_from_stderr_without_logging_payload(self):
         import sys

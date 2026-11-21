@@ -20,7 +20,7 @@ final class ProviderSlotViewModelTests: XCTestCase {
             deviceTimeZone: shanghaiTZForTests
         )
         XCTAssertEqual(state.quotaRings.map(\.displayName), ["Claude", "Claude", "Codex", "Antigravity"])
-        XCTAssertEqual(state.quotaRings.map(\.accountText), ["Tony · Max 20x", "Zhipeng · Max 5x", "Em · Pro", nil])
+        XCTAssertEqual(state.quotaRings.map(\.accountText), ["Tony · Max 20x", "Zhipeng · Max 5x", "Em · Pro 20x", nil])
         XCTAssertEqual(state.quotaRings.map(\.primaryPctText), ["10%", "82%", "55%", "5%"])
         XCTAssertEqual(Set(state.quotaRings.map(\.id)).count, 4) // 同 provider 两个账户 id 不能撞
         XCTAssertTrue(state.quotaRings.allSatisfy(\.isAvailable))

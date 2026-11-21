@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List
+import json
+import os
+import re
+import shutil
+import ssl
+import subprocess
+import urllib.request
+from datetime import datetime, timezone
+from http.client import HTTPException
+from typing import Any, Callable, Dict, Iterator, List
 
 from .limits import LimitContractError, LimitWindow, parse_limit_window
 
@@ -312,94 +321,104 @@ def _unsupported_command_model_configs_reader() -> Dict[str, Any]:
     raise AntigravityProviderError("unsupported", "Antigravity GetCommandModelConfigs reader is not configured")
 
 
-def live_language_server_status_reader(timeout: float = 2.0) -> Dict[str, Any]:
-    import json
-    import ssl
-    import subprocess
-    import urllib.request
-    from datetime import datetime, timezone as dt_timezone
-
+def _language_server_candidates(timeout: float) -> Iterator[tuple[int, str]]:
     try:
-        ps_out = subprocess.check_output(["ps", "aux"], text=True, stderr=subprocess.DEVNULL)
-    except Exception as exc:
-        raise AntigravityProviderError("provider_unavailable", f"failed to check processes: {exc}")
-
-    csrf_token = None
-    target_pid = None
+        ps_out = subprocess.check_output(
+            ["ps", "-ww", "-U", str(os.getuid()), "-o", "pid=,command="],
+            text=True, stderr=subprocess.DEVNULL, timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError):
+        raise AntigravityProviderError("provider_unavailable", "unable to check Antigravity processes") from None
     for line in ps_out.splitlines():
-        if "language_server" in line and "--csrf_token" in line:
-            parts = line.split()
-            for i, p in enumerate(parts):
-                if p == "--csrf_token" and i + 1 < len(parts):
-                    csrf_token = parts[i + 1]
-                elif p.startswith("--csrf_token="):
-                    csrf_token = p.split("=", 1)[1]
-            if len(parts) >= 2 and parts[1].isdigit():
-                target_pid = int(parts[1])
-            break
+        fields = line.split(maxsplit=1)
+        if len(fields) != 2 or not fields[0].isdigit():
+            continue
+        pid, command = fields
+        executable = command.partition(" --")[0]
+        if not re.search(r"(?:^|/)language_server[^\s/]*(?:\s|$)", executable):
+            continue
+        token = re.search(r"(?:^|\s)--csrf_token(?:=|\s+)(?!-)([^\s]+)", command)
+        if token:
+            yield int(pid), token.group(1)
 
-    if not csrf_token or not target_pid:
-        raise AntigravityProviderError("provider_unavailable", "Antigravity language server process is not running")
 
-    # Find listening ports for PID
-    import os
-    import shutil
-
-    lsof_bin = shutil.which("lsof") or ("/usr/sbin/lsof" if os.path.exists("/usr/sbin/lsof") else "lsof")
-    ports = []
+def _listening_ports(pid: int, timeout: float) -> list[int]:
+    lsof_bin = shutil.which("lsof") or "/usr/sbin/lsof"
     try:
         lsof_out = subprocess.check_output(
-            [lsof_bin, "-a", "-nP", "-p", str(target_pid), "-iTCP", "-sTCP:LISTEN"],
-            text=True,
-            stderr=subprocess.DEVNULL,
+            [lsof_bin, "-a", "-nP", "-p", str(pid), "-i4TCP", "-sTCP:LISTEN", "-Fn"],
+            text=True, stderr=subprocess.DEVNULL, timeout=timeout,
         )
-        for line in lsof_out.splitlines():
-            # Format: ... TCP 127.0.0.1:58435 (LISTEN) or TCP *:58435 (LISTEN)
-            parts = line.split()
-            for part in parts:
-                if ":" in part and "(" not in part:
-                    port_str = part.rsplit(":", 1)[-1]
-                    if port_str.isdigit():
-                        p = int(port_str)
-                        if p not in ports:
-                            ports.append(p)
-    except Exception:
-        pass
+    except (OSError, subprocess.SubprocessError):
+        return []
+    ports: list[int] = []
+    for line in lsof_out.splitlines():
+        address, separator, port = line.partition(":")
+        if separator and address in {"n127.0.0.1", "n*", "n0.0.0.0"} and port.isdigit():
+            number = int(port)
+            if 0 < number <= 65535 and number not in ports:
+                ports.append(number)
+    return ports
 
-    if not ports:
-        raise AntigravityProviderError("provider_unavailable", f"no listening ports found for language_server PID {target_pid}")
 
+def language_server_readiness(timeout: float = 2.0) -> str:
+    try:
+        found = False
+        for pid, _ in _language_server_candidates(timeout):
+            found = True
+            if _listening_ports(pid, timeout):
+                return "ok"
+        return "no_listening_port" if found else "not_running"
+    except AntigravityProviderError:
+        return "process_check_failed"
+
+
+class _NoLoopbackRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def live_language_server_status_reader(timeout: float = 2.0) -> Dict[str, Any]:
+    # The local language server can present a self-signed certificate. The CSRF
+    # key must stay on the PID's IPv4 loopback listener, even with proxy settings
+    # or a redirect in the response.
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-
-    last_error = None
-    endpoints = [
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}), _NoLoopbackRedirect(), urllib.request.HTTPSHandler(context=ctx),
+    )
+    endpoints = (
         "/exa.language_server_pb.LanguageServerService/RetrieveUserQuotaSummary",
         "/exa.language_server_pb.LanguageServerService/GetUserStatus",
-    ]
-    for port in ports:
-        for scheme in ("https", "http"):
-            for endpoint in endpoints:
-                url = f"{scheme}://127.0.0.1:{port}{endpoint}"
-                req = urllib.request.Request(
-                    url,
-                    data=b"{}",
-                    headers={
-                        "Content-Type": "application/json",
-                        "x-codeium-csrf-token": csrf_token,
-                    },
-                    method="POST",
-                )
-                try:
-                    with urllib.request.urlopen(req, context=ctx if scheme == "https" else None, timeout=timeout) as resp:
-                        if resp.status == 200:
-                            payload = json.loads(resp.read().decode("utf-8"))
-                            observed_at = datetime.now(dt_timezone.utc).astimezone().isoformat()
-                            payload["observed_at"] = observed_at
-                            return payload
-                except Exception as exc:
-                    last_error = exc
-                    continue
+    )
+    invalid_payload = False
+    for pid, csrf_token in _language_server_candidates(timeout):
+        for port in _listening_ports(pid, timeout):
+            for scheme in ("https", "http"):
+                for endpoint in endpoints:
+                    request = urllib.request.Request(
+                        f"{scheme}://127.0.0.1:{port}{endpoint}",
+                        data=b"{}",
+                        headers={"Content-Type": "application/json", "x-codeium-csrf-token": csrf_token},
+                        method="POST",
+                    )
+                    try:
+                        with opener.open(request, timeout=timeout) as response:
+                            if response.status != 200:
+                                continue
+                            payload = json.loads(response.read())
+                        if not isinstance(payload, dict):
+                            invalid_payload = True
+                            continue
+                        payload["observed_at"] = datetime.now(timezone.utc).isoformat()
+                        parse_antigravity_user_status(payload)
+                        return payload
+                    except ValueError:
+                        invalid_payload = True
+                    except (OSError, HTTPException):
+                        continue
 
-    raise AntigravityProviderError("provider_unavailable", f"unable to connect to Antigravity language_server RPC: {last_error}")
+    if invalid_payload:
+        raise AntigravityProviderError("limit_schema_invalid", "Antigravity returned no valid quota windows")
+    raise AntigravityProviderError("provider_unavailable", "unable to contact the Antigravity language server")

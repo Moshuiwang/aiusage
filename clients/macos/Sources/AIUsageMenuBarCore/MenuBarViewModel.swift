@@ -28,8 +28,9 @@ public struct MenuBarState: Equatable, Sendable {
     public let accountUsageCoverageText: String?
     /// #175：Server 按机器分组的卡片，每张卡展开显示该机器上各模型的用量与「占所属 Agent 周额度」估算。
     public let serverCards: [MenuServerCard]
-    /// 标题栏「N 台 Server」只数在线（至少一个 source status == "ok"）的机器。
+    /// 至少一个来源状态为 "ok" 的设备数量。
     public let onlineServerCount: Int
+    public var deviceCountText: String { "\(onlineServerCount) 台在线 / \(serverCards.count) 台设备" }
 }
 
 /// #175：一台机器一张 Server 卡。
@@ -161,7 +162,9 @@ public struct QuotaRingData: Equatable, Sendable, Identifiable {
     /// #177：不带 % 的主窗口占比数字（如 "26"），不可用时 "—"——视图拼一次单独字号的 %，
     /// 避免 primaryPctText 已带 % 时再次拼接出「26%%」。
     public let primaryPctNumberText: String
-    /// 所有可见窗口中最近一次重置的倒计时（如 "3d 23h"），不可用时 "--"。
+    /// 主环实际显示的额度窗口，例如 "7d"、"5h"；无可展示窗口时为 nil。
+    public let primaryWindowLabel: String?
+    /// 主额度窗口的重置倒计时（如 "3d 23h"），不可用时 "--"。
     public let resetCountdownText: String
     /// 仅当官方观测且状态正常的窗口存在时为 true。
     public let isAvailable: Bool
@@ -363,6 +366,7 @@ public enum MenuBarViewModel {
         let nonFuturePoints = zip(summary.trend.points, futureFlags).filter { !$0.1 }.map(\.0)
         let maxTokens = nonFuturePoints.map(\.tokens).max() ?? 0
         let ceiling = maxTokens > 0 ? ceilingValue(maxTokens) : 1
+        let ceilingUnit = summary.trend.granularity == "hour" ? "/h" : ""
 
         let cards = serverCards(
             summary.breakdown,
@@ -394,7 +398,7 @@ public enum MenuBarViewModel {
             ),
             trendBars: bars,
             trendLegendTotals: aggregatedSegments(nonFuturePoints),
-            trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) : "",
+            trendRefCeilingText: maxTokens > 0 ? ceilingText(ceiling) + ceilingUnit : "",
             trendCeilingFraction: maxTokens > 0 ? Double(maxTokens) / Double(ceiling) : 1.0,
             limitRows: sortedLimits(limitWindows).map {
                 limitRow($0, generatedAt: summary.generatedAt, timezone: summary.timezone, deviceTimeZone: deviceTimeZone)
@@ -502,21 +506,21 @@ public enum MenuBarViewModel {
     }
 
     /// #186：小时横轴标注前缀，与 timezoneAnnotation 用同一套判断——Asia/Shanghai 用「北京 」，
-    /// 其余时区用「服务区 」。
+    /// 其余时区用「服务时区 」。
     private static func timezoneAxisPrefix(_ summaryTimeZone: TimeZone) -> String {
-        summaryTimeZone.identifier == "Asia/Shanghai" ? "北京 " : "服务区 "
+        summaryTimeZone.identifier == "Asia/Shanghai" ? "北京 " : "服务时区 "
     }
 
-    /// #177：用量区总量下方的分项文案，缓存段用命中率百分比而不是原始 token 数。
+    /// 缓存占比包含读、写缓存，分母为当期总 token。
     private static func tokenBreakdownText(_ period: MobilePeriod) -> String {
-        let total = max(period.totalTokens, 0)
-        let cacheTokens = min(max(period.cacheTokens, 0), max(total, 0))
-        let cacheRate = total > 0 ? Double(cacheTokens) / Double(total) * 100 : 0
-        let cacheText = String(format: "%.1f%%", locale: Locale(identifier: "en_US_POSIX"), cacheRate)
+        let total = period.totalTokens
+        let cacheTokens = max(period.cacheTokens, 0)
+        let cacheShare = total > 0 ? Double(cacheTokens) / Double(total) * 100 : 0
+        let cacheText = String(format: "%.1f%%", locale: Locale(identifier: "en_US_POSIX"), cacheShare)
         return [
             "输入 \(TokenFormat.compact(period.inputTokens))",
             "输出 \(TokenFormat.compact(period.outputTokens))",
-            "缓存命中 \(cacheText)",
+            "缓存 \(TokenFormat.compact(cacheTokens))（占比 \(cacheText)）",
         ].joined(separator: " · ")
     }
 
@@ -982,7 +986,7 @@ public enum MenuBarViewModel {
                 return QuotaHoverRow(label: "套餐", valueText: text)
             }
             // #203：Claude 只用周窗口展示（百分比、倒计时、悬停）——5 小时窗口的重置时间对用户
-            // 没有意义；周窗口缺失时显示「—」，不退回 5 小时窗口。Codex 只有周窗口；Antigravity 主环优先显示周窗口。
+            // 没有意义；周窗口缺失时显示「—」，不退回 5 小时窗口。其他提供方优先显示周窗口。
             let displayOuterWindow = provider == "claude" ? nil : outerWindow
             let hasVisibleWindow = displayOuterWindow != nil || weekWindow != nil
             // 「最近成功值」（quota 非 available 但保留了旧窗口）也必须降级，不当可信额度展示。
@@ -1056,6 +1060,7 @@ public enum MenuBarViewModel {
                 brandColor: brandColor(for: provider),
                 primaryPctText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))%" } ?? "—",
                 primaryPctNumberText: primaryWindow.map { "\(Int($0.usedPercent.rounded()))" } ?? "—",
+                primaryWindowLabel: primaryWindow.map(windowLabel),
                 resetCountdownText: countdownWindow.flatMap { timeRemainingText($0.resetAt, now: now) } ?? "--",
                 isAvailable: isAvailable,
                 hoverRows: hoverRows + [planRow].compactMap { $0 }
@@ -1379,13 +1384,13 @@ public enum MenuBarViewModel {
 }
 
 public enum MenuTrendSelection {
-    public static func nearestBar(in bars: [MenuTrendBar], xLocation: Double, width: Double) -> MenuTrendBar? {
-        guard !bars.isEmpty, width > 0 else {
+    public static func nearestBar(in bars: [MenuTrendBar], xLocation: Double, width: Double, spacing: Double = 0) -> MenuTrendBar? {
+        guard !bars.isEmpty, width.isFinite, width > 0, spacing.isFinite, spacing >= 0, xLocation.isFinite else {
             return nil
         }
         let clampedX = min(max(xLocation, 0), width)
-        let slotWidth = width / Double(bars.count)
-        let index = min(max(Int(clampedX / slotWidth), 0), bars.count - 1)
+        let slotWidth = (width + spacing) / Double(bars.count)
+        let index = min(Int((clampedX + spacing / 2) / slotWidth), bars.count - 1)
         return bars[index]
     }
 }

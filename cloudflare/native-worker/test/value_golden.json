@@ -635,7 +635,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -668,7 +668,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -701,7 +701,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -734,7 +734,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unknown",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": false
             }
           },
@@ -767,7 +767,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unsupported",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -1249,7 +1249,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -3120,7 +3120,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -3153,7 +3153,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -3186,7 +3186,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -3219,7 +3219,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unknown",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": false
             }
           },
@@ -3252,7 +3252,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unsupported",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -3502,7 +3502,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -5480,7 +5480,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -5513,7 +5513,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -5546,7 +5546,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -5579,7 +5579,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unknown",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": false
             }
           },
@@ -5612,7 +5612,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unsupported",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -6184,7 +6184,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -8519,7 +8519,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -8552,7 +8552,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -8585,7 +8585,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -8618,7 +8618,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unknown",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": false
             }
           },
@@ -8651,7 +8651,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unsupported",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -8887,7 +8887,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -10816,7 +10816,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -10849,7 +10849,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -11045,7 +11045,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -12191,7 +12191,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -12360,7 +12360,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -13749,7 +13749,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -13782,7 +13782,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -13815,7 +13815,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           },
@@ -13848,7 +13848,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unknown",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": false
             }
           },
@@ -13881,7 +13881,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "unsupported",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -14131,7 +14131,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },
@@ -15787,7 +15787,7 @@
               "release_channel": null,
               "rollback_target_version": null,
               "state": "update_available",
-              "target_collector_version": "0.5.0",
+              "target_collector_version": "0.5.1",
               "verified": true
             }
           }
@@ -15956,7 +15956,7 @@
             "ingest_schema_version": 1,
             "min_supported_collector_version": "0.1.0",
             "read_model_version": "1.0.0",
-            "target_collector_version": "0.5.0"
+            "target_collector_version": "0.5.1"
           }
         }
       },

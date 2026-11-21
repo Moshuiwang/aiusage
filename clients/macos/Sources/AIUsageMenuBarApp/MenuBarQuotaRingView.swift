@@ -53,6 +53,11 @@ struct MenuBarQuotaRingItem: View {
         Color(red: data.brandColor.red, green: data.brandColor.green, blue: data.brandColor.blue, opacity: data.brandColor.opacity)
     }
 
+    private var quotaStatus: String {
+        let status = data.isAvailable ? data.resetCountdownText : (data.isShowingLastSuccess ? "最近成功值" : "暂不可用")
+        return [data.primaryWindowLabel, status].compactMap { $0 }.joined(separator: " · ")
+    }
+
     var body: some View {
         // #177 第三轮真机反馈：回到设计稿版式——圆环在左，名称 + 倒计时在右侧纵排。
         // 名称 11pt semibold 一行完整显示，不缩放/不截断；容器（MenuBarQuotaSectionView）
@@ -72,7 +77,7 @@ struct MenuBarQuotaRingItem: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                Text(data.isAvailable ? data.resetCountdownText : (data.isShowingLastSuccess ? "最近成功值" : "暂不可用"))
+                Text(quotaStatus)
                     .font(.system(size: 10.5))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .lineLimit(1)

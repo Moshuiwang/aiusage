@@ -87,7 +87,7 @@ class LimitsRuntime:
                 windows = [_normalize_window_source_id(window, source_id) for window in provider.collect()]
             except Exception as exc:
                 category = getattr(exc, "error_type", "provider_failed")
-                if category not in {"timeout", "unauthorized", "missing_credentials", "provider_failed", "unsupported", "limit_schema_invalid", "claude_cli_schema_invalid"}:
+                if category not in {"timeout", "unauthorized", "missing_credentials", "provider_failed", "provider_unavailable", "unsupported", "limit_schema_invalid", "claude_cli_schema_invalid"}:
                     category = "provider_failed"
                 windows = [_failed_window(provider_label, seen_at, source_id=source_id)]
                 all_windows.extend(windows)

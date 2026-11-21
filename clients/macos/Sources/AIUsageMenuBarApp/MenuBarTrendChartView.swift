@@ -13,6 +13,9 @@ struct MenuBarTrendChartView: View {
     @State private var hoveredBar: MenuTrendBar?
 
     private let chartHeight: CGFloat = 92
+    private let barSpacing: CGFloat = 4
+    private let axisHeight: CGFloat = 12
+    private let axisGap: CGFloat = 6
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -36,41 +39,36 @@ struct MenuBarTrendChartView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .offset(y: -9)
 
-                    HStack(alignment: .bottom, spacing: 4) {
-                        ForEach(bars) { bar in
-                            // #177 真机反馈：删除柱子上方的系统 .help 小浮层——它会被 Popover 右边缘截断，
-                            // 且下方图例 legendRow 已经联动显示该柱的时间与数值，浮层是多余的重复展示。
-                            stackedBar(bar)
-                                .frame(maxWidth: .infinity)
-                                .opacity(dimmed(bar) ? 0.4 : 1)
+                    HStack(spacing: barSpacing) {
+                        ForEach(Array(bars.enumerated()), id: \.element.id) { index, bar in
+                            VStack(spacing: axisGap) {
+                                stackedBar(bar)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: chartHeight, alignment: .bottom)
+                                    .opacity(dimmed(bar) ? 0.4 : 1)
+                                axisLabel(bar, at: index)
+                            }
+                            .frame(maxWidth: .infinity)
                         }
                     }
-                    .frame(height: chartHeight, alignment: .bottom)
-                }
-                .frame(height: chartHeight, alignment: .top)
-                .contentShape(Rectangle())
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active(let loc):
-                        let nearest = MenuTrendSelection.nearestBar(in: bars, xLocation: Double(loc.x), width: Double(geo.size.width))
-                        // 鼠标在同一根柱子内移动时 nearest 不变——不写 state，避免无效刷新。
-                        if hoveredBar?.id != nearest?.id { hoveredBar = nearest }
-                    case .ended:
-                        hoveredBar = nil
-                    }
-                }
-            }
-            .frame(height: chartHeight)
 
-            HStack {
-                ForEach(bars.filter { !$0.label.isEmpty }) { bar in
-                    Text(bar.label)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
-                        .frame(maxWidth: .infinity)
+                    Color.clear
+                        .frame(height: chartHeight)
+                        .contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let loc):
+                                let nearest = MenuTrendSelection.nearestBar(
+                                    in: bars, xLocation: Double(loc.x), width: Double(geo.size.width), spacing: Double(barSpacing)
+                                )
+                                if hoveredBar?.id != nearest?.id { hoveredBar = nearest }
+                            case .ended:
+                                hoveredBar = nil
+                            }
+                        }
                 }
             }
-            .frame(height: 12)
+            .frame(height: chartHeight + axisGap + axisHeight)
 
             legendRow
         }
@@ -82,18 +80,35 @@ struct MenuBarTrendChartView: View {
         return hoveredBar.id != bar.id
     }
 
+    private func axisLabel(_ bar: MenuTrendBar, at index: Int) -> some View {
+        let alignment: Alignment = index == 0 ? .leading : index == bars.count - 1 ? .trailing : .center
+        return Color.clear.frame(height: axisHeight)
+            .overlay(alignment: alignment) {
+                if !bar.label.isEmpty {
+                    Text(bar.label)
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Color(nsColor: .tertiaryLabelColor))
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+    }
+
+    static func scaledBarHeight(ratio: Double, ceilingFraction: Double, chartHeight: CGFloat) -> CGFloat {
+        chartHeight * CGFloat(ratio * ceilingFraction)
+    }
+
     @ViewBuilder
     private func stackedBar(_ bar: MenuTrendBar) -> some View {
         if bar.isFuture {
             RoundedRectangle(cornerRadius: 2)
                 .fill(Color.primary.opacity(0.12))
-                .frame(height: 4)
+                .frame(height: 1)
         } else if bar.totalTokens == 0 || bar.segments.isEmpty {
             RoundedRectangle(cornerRadius: 3)
                 .fill(Color.primary.opacity(0.10))
-                .frame(height: 4)
+                .frame(height: 1)
         } else {
-            let height = max(4, chartHeight * CGFloat(bar.ratio * max(ceilingFraction, 0.05)))
+            let height = Self.scaledBarHeight(ratio: bar.ratio, ceilingFraction: ceilingFraction, chartHeight: chartHeight)
             VStack(spacing: 0) {
                 // segments 自底向上排列，VStack 自顶向下绘制，反转后 Claude 在底。
                 ForEach(bar.segments.reversed()) { segment in

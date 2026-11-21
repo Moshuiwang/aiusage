@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { accountDirectoryFrom, buildAccountSlots } from "../src/read-model/account-slots";
 import type { LimitRow } from "../src/read-model/shared";
+import { withWorker } from "./golden/harness";
 
 const now = new Date("2026-11-07T12:00:00Z");
 const fpZ = "fp:claude:aaaaaaaaaaaaaaaaaaaaaaaa";
@@ -145,5 +146,35 @@ describe("账户目录", () => {
     ], []);
     expect(dir.accountFor("claude", "s")).toBe(fpT);
     expect(dir.accountFor("claude", "unknown")).toBeNull();
+  });
+});
+
+it("#299 在 mobile summary 中统一显示当前和上一个套餐，D1 原始套餐不变", async () => {
+  await withWorker({ now: now.toISOString() }, async ({ fetchRaw, db }) => {
+    const before = "2026-11-06T11:30:00Z";
+    const after = "2026-11-07T11:30:00Z";
+    for (const [plan, observedAt] of [["pro", before], ["prolite", after]]) {
+      const pushed = await fetchRaw({ method: "POST", path: "/ingest-limits", auth: true, body: {
+        schema_version: 1,
+        observed_at: observedAt,
+        windows: [{
+          ...limit("codex-main", "codex", { observed_at: observedAt }),
+          account: { fingerprint: fpO, plan, label: "Codex Test" },
+        }],
+      } });
+      expect(pushed.status).toBe(200);
+    }
+
+    const result = await fetchRaw({ method: "GET", path: "/api/mobile/summary?period=today", auth: true });
+    expect(result.status).toBe(200);
+    const summary = JSON.parse(result.body.toString());
+    expect(slotOf(summary.account_slots, "Codex Test", "codex").account).toMatchObject({
+      plan: "Pro 5x",
+      previous_plan: "Pro 20x",
+      plan_since: after,
+    });
+    const profiles = await db.prepare("SELECT plan FROM account_profiles WHERE account_fingerprint = ? ORDER BY first_seen_at")
+      .bind(fpO).all<{ plan: string }>();
+    expect(profiles.results.map(({ plan }) => plan)).toEqual(["pro", "prolite"]);
   });
 });

@@ -66,10 +66,18 @@ private struct MenuBarServerCardView: View {
         HStack(spacing: 10) {
             ServerIcon(platform: card.platform, title: card.title, size: 30)
             VStack(alignment: .leading, spacing: 1) {
-                Text(card.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .lineLimit(2)
-                    .help(card.title)
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(card.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .lineLimit(2)
+                        .help(card.title)
+                    if !card.isOnline {
+                        Text("离线")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                            .fixedSize()
+                    }
+                }
                 Text(card.subtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))

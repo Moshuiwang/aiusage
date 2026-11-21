@@ -5,6 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+from .antigravity_limits_provider import language_server_readiness
 from .limits_config import ConfigError, LimitsProviderConfig, load_limits_config
 
 
@@ -58,6 +59,15 @@ def _doctor_provider(provider: LimitsProviderConfig, resolver: CommandResolver) 
         return _doctor_codex(provider, resolver)
     if provider.provider == "claude":
         return _doctor_claude(provider, resolver)
+    if provider.provider == "antigravity":
+        status = language_server_readiness()
+        ready = status == "ok"
+        return {
+            "provider": provider.provider,
+            "source_id": provider.source_id or provider.provider,
+            "ready": ready,
+            "checks": [_check("antigravity.language_server", status, ok=ready, configured=True)],
+        }
     return {
         "provider": provider.provider,
         "ready": False,

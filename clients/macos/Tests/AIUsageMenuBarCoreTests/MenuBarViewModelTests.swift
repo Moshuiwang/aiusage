@@ -18,7 +18,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(state.periodTitleSuffix, "")
         XCTAssertEqual(state.dateRangeText, "2026-05-27 ～ 2026-06-02")
         XCTAssertEqual(state.heroTotalText, "5.0K")
-        XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · 缓存命中 16.0%")
+        XCTAssertEqual(state.tokenBreakdownText, "输入 2.8K · 输出 1.4K · 缓存 800（占比 16.0%）")
         XCTAssertEqual(state.healthText, "2/2 正常")
         XCTAssertEqual(state.primaryLimitText, "暂无可信额度")
         // #177 Opus 审查：headerUpdatedText 锁具体值而不是宽松的 hasSuffix；跨天分支见
@@ -68,6 +68,61 @@ final class MenuBarViewModelTests: XCTestCase {
         // 换算到洛杉矶是 "2026-06-01T19:40:00-07:00"，与 now 换算后的洛杉矶日历日同一天（06-01），
         // 按本机时区显示为 "19:40 更新"（不是北京时间的 "10:40 更新"）。
         XCTAssertEqual(state.headerUpdatedText, "19:40 更新")
+    }
+
+    func testHourlyTrendLabelsUseServiceTimezoneAndHourlyCeiling() throws {
+        let summary = try loadFixture()
+        let points = (0..<24).map { hour in
+            MobileTrendPoint(
+                bucket: String(format: "2026-06-02T%02d:00:00+01:00", hour),
+                label: String(hour), tokens: hour == 0 ? 80_000_000 : 0,
+                inputTokens: 0, outputTokens: 0, cacheTokens: 0, cacheRatio: 0
+            )
+        }
+        let source = MobileSummary(
+            schemaVersion: summary.schemaVersion, client: summary.client,
+            generatedAt: summary.generatedAt, timezone: "Africa/Kinshasa",
+            period: summary.period,
+            trend: MobileTrend(period: "today", granularity: "hour", startDate: "2026-06-02", endDate: "2026-06-02", points: points),
+            sources: summary.sources, breakdown: summary.breakdown, limits: summary.limits
+        )
+        let state = MenuBarViewModel.build(
+            from: source, selectedPeriodID: "today", now: try date("2026-06-03T01:00:00+01:00"),
+            deviceTimeZone: shanghaiTZForTests
+        )
+
+        XCTAssertEqual(state.periodTitleSuffix, "（服务时区）")
+        XCTAssertEqual(state.trendBars.indices.filter { !state.trendBars[$0].label.isEmpty }, [0, 12, 23])
+        XCTAssertEqual(state.trendBars.map(\.label).filter { !$0.isEmpty }, ["服务时区 0点", "服务时区 12点", "服务时区 23点"])
+        XCTAssertEqual(state.trendRefCeilingText, "100M/h")
+        XCTAssertEqual(
+            MenuTrendSelection.nearestBar(in: state.trendBars, xLocation: 12, width: 320, spacing: 4)?.id,
+            points[1].bucket
+        )
+    }
+
+    func testDeviceCountIncludesOfflineCards() throws {
+        let summary = try loadFixture()
+        let offlineSource = try XCTUnwrap(summary.sources.first { $0.machine == "macbook-pro" })
+        let sources = summary.sources.map { source in
+            guard source.sourceID == offlineSource.sourceID else { return source }
+            return MobileSource(
+                sourceID: source.sourceID, machine: source.machine, osUser: source.osUser,
+                platform: source.platform, displayName: source.displayName, status: "stale",
+                lastObservedAt: source.lastObservedAt, lastPushedAt: source.lastPushedAt, errorMessage: nil
+            )
+        }
+        let state = MenuBarViewModel.build(
+            from: MobileSummary(
+                schemaVersion: summary.schemaVersion, client: summary.client, generatedAt: summary.generatedAt,
+                timezone: summary.timezone, period: summary.period, trend: summary.trend,
+                sources: sources, breakdown: summary.breakdown, limits: summary.limits
+            ),
+            selectedPeriodID: "week", now: try date("2026-06-02T11:00:00+08:00"), deviceTimeZone: shanghaiTZForTests
+        )
+
+        XCTAssertEqual(state.serverCards.filter { !$0.isOnline }.map(\.title), ["macbook-pro"])
+        XCTAssertEqual(state.deviceCountText, "1 台在线 / 2 台设备")
     }
 
     // #177 Opus 审查：headerUpdatedText 锁「HH:mm 更新」（同日）与「MM-dd HH:mm 更新」（跨天）两个分支的具体值。
@@ -1134,6 +1189,7 @@ final class MenuBarViewModelTests: XCTestCase {
         XCTAssertEqual(claude.primaryPctText, "—")
         XCTAssertEqual(claude.resetCountdownText, "--")
         XCTAssertEqual(claude.primaryFraction, 0)
+        XCTAssertNil(claude.primaryWindowLabel)
     }
 
     func testAntigravityRingUsesWeeklyCountdownWhileKeepingFiveHourHoverRow() throws {
@@ -1150,7 +1206,27 @@ final class MenuBarViewModelTests: XCTestCase {
         let antigravity = try XCTUnwrap(rings.first { $0.id == "antigravity" })
         let codex = try XCTUnwrap(rings.first { $0.id == "codex" })
         XCTAssertEqual(antigravity.resetCountdownText, codex.resetCountdownText, "Antigravity 有周窗口时主环倒计时显示周重置倒计时")
+        XCTAssertEqual(antigravity.primaryWindowLabel, "7d")
+        XCTAssertEqual(codex.primaryWindowLabel, "7d")
         XCTAssertEqual(antigravity.hoverRows.count, 2, "Antigravity 悬停浮层仍保留 7d 与 5h 两个窗口")
+    }
+
+    func testPrimaryQuotaWindowIsLabeledWhenWeeklyWindowExpires() throws {
+        let now = try date("2026-07-18T10:00:00+08:00")
+        let providers = ["codex", "antigravity"]
+        let rings = try ringsFor(providers.map { provider in
+            providerSlot(provider: provider, windows: [
+                ringWindow(provider, "session", used: 5, resetAt: "2026-07-18T12:00:00+08:00", minutes: 300),
+                ringWindow(provider, "week", used: 39, resetAt: "2026-07-18T09:55:00+08:00", minutes: 10080),
+            ])
+        }, now: now)
+
+        for provider in providers {
+            let ring = try XCTUnwrap(rings.first { $0.id == provider })
+            XCTAssertTrue(ring.isAvailable)
+            XCTAssertEqual(ring.primaryWindowLabel, "5h")
+            XCTAssertEqual(ring.primaryPctText, "5%")
+        }
     }
 
     func testAntigravityMultiPoolRingSelectsHighestWeeklyPoolAndListsAllPoolsInHoverRows() throws {

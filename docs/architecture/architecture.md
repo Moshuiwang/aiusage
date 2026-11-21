@@ -26,21 +26,13 @@ flowchart LR
     limits["push-limits"] --> ingestLimits["POST /ingest-limits<br/>Cloudflare Worker"]
     ingest --> d1["Cloudflare D1<br/>SQLite-compatible canonical store"]
     ingestLimits --> d1
-    d1 --> webApi["GET /api/summary"]
+    d1 --> summaryApi["GET /api/summary<br/>summary DTO"]
     d1 --> mobileApi["GET /api/mobile/summary<br/>mobile_summary DTO"]
-    webApi --> dashboard["clients/web<br/>Web dashboard"]
-    mobileApi --> iphone["clients/ios<br/>iPhone App / iOS Widget / Watch companion"]
-    mobileApi --> android["clients/android<br/>Android App / Widget"]
-    mobileApi --> desktop["clients/macos + clients/windows<br/>light desktop entries"]
+    mobileApi --> iphone["mobile/ios<br/>iPhone App / iOS Widget / Watch companion"]
+    mobileApi --> mac["clients/macos<br/>macOS 菜单栏"]
 ```
 
-用户现在真实看到的是 Web dashboard 和 iPhone App / Widget 的只读结果。后续 Android、macOS、Windows 也必须沿用同一套 read model 和 DTO：Web 是完整 dashboard，iOS / Android 是移动查看，macOS / Windows 是轻量入口。它们不执行采集，不执行 SSH，不重新定义 token / limits 口径。
-
-> **产品范围决定（#199，2026-09-27，尚未实施）**：产品只支持 macOS 菜单栏 popover 和 iPhone 端。
-> Web dashboard（`webApi`/`dashboard` 一支）已决定整体废弃；Android、Windows 客户端方向随之搁置。
-> 上面的流程图和依赖方向仍按当前代码描述，未按该决定裁剪——废弃尚未落地，删除前需先盘点确认
-> Mac/iPhone 无调用（见 #199 验收清单）。Mac 菜单栏与 iPhone 已经只读 `mobileApi`
-> (`/api/mobile/summary`)，不读 `webApi`。
+macOS 菜单栏和 iPhone 通过 `/api/mobile/summary` 读取服务端摘要。展示层使用服务端给出的 token 和额度口径。Web dashboard 已随 #199 移除，`/api/summary` 仍是需要认证的 JSON 接口。Android 和 Windows 客户端暂未排期。
 
 模型周额度校准（epic #180）在 D1 之上加了一段每日批处理：`quota-calibration-cron.ts` 每日 cron
 按 provider 轮换读取 28 天官方周额度读数与小时用量，写回 `quota_calibration` 表；`read-model` 读它
@@ -85,10 +77,10 @@ CLI / HTTP handler / clients
 
 | 模块 | Owner 职责 | 禁止承载 |
 | --- | --- | --- |
-| `cloudflare/native-worker/src/index.ts` | HTTP 路由分发、summary 缓存、静态文件（`cloudflare/native-worker/static/`）。#126 起认证/登录 cookie 在 `auth.ts`、`/api/health` 装配与 backendMode 在 `health.ts`、响应工具在 `http.ts`。 | 不承载业务口径计算。 |
+| `cloudflare/native-worker/src/index.ts` | HTTP 路由分发及 summary 缓存。认证在 `auth.ts`，`/api/health` 装配与 backendMode 在 `health.ts`，响应工具在 `http.ts`。 | 不承载业务口径计算。 |
 | `cloudflare/native-worker/src/write-model/`（barrel `write-model.ts`，#126 目录化） | Ingest contract、payload 校验、敏感字段边界、D1 upsert。校验在 `validate.ts`、归一化在 `normalize.ts`、SQL 语句在 `statements.ts`、幂等 upsert 在 `upsert.ts`、对账在 `accuracy.ts`、编排在 `handlers.ts`。 | 不构建展示快照。 |
 | `cloudflare/native-worker/src/read-model/`（barrel `read-model.ts`，#126 目录化） | `/api/summary` 的唯一 read model owner，负责 period/filter/trend/limits/hourly residual。SQL 在 `db.ts`、来源健康在 `source-status.ts`、趋势在 `trend.ts`、账户小时在 `account-hourly.ts`、额度甄选在 `limits-select.ts`、槽位在 `provider-slots.ts`、编排在 `summary.ts`。 | 不把口径分散到 Web、Mobile 或 route。 |
-| `cloudflare/native-worker/src/mobile-summary.ts` | 把 Web summary snapshot 转成移动端和轻量客户端 DTO。 | 不重新定义 usage 业务口径。 |
+| `cloudflare/native-worker/src/mobile-summary.ts` | 把通用 summary 转成 Mac 和移动端 DTO。 | 不重新定义 usage 业务口径。 |
 | `cloudflare/native-worker/src/version-contract.ts` | 服务端版本判定：四态、最低支持版本策略、wire 校验与脱敏。 | —— |
 | `cloudflare/migrations/` | D1 schema 与迁移；守卫是 `tests/test_d1_schema_migration.py` 的显式列布局快照。 | —— |
 | `cloudflare/native-worker/src/quota-calibration-cron.ts` + `src/calibration/` | 每日 cron 按 provider 轮换拟合模型周额度校准系数，覆盖写 `quota_calibration`。 | 不摸 D1 之外的状态；纯计算内核不直接查 D1。 |

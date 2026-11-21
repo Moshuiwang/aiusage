@@ -161,14 +161,18 @@ export function localDayRollupStatements(db: D1Database, localDay: string): D1Pr
   };
   return [
     // 1. 删掉这一天里已没有明细支撑的小时格（明细被删除或改了身份）。
+    // 先按时间索引取当天事实。显式 TEXT 让临时索引同时包含小时桶与身份。
     db.prepare(`
+      WITH supported_hours AS MATERIALIZED (
+        SELECT CAST(strftime('%Y-%m-%dT%H:00:00', window_start, ?3) || ?4 AS TEXT) AS bucket_start, ${identity}
+        FROM usage_hourly_facts
+        WHERE julianday(window_start) >= julianday(?1) AND julianday(window_start) < julianday(?2)
+      )
       DELETE FROM usage_hourly_rollups AS r
       WHERE julianday(r.bucket_start) >= julianday(?1) AND julianday(r.bucket_start) < julianday(?2)
         AND NOT EXISTS (
-          SELECT 1 FROM usage_hourly_facts AS f
-          WHERE julianday(f.window_start) >= julianday(?1) AND julianday(f.window_start) < julianday(?2)
-            AND strftime('%Y-%m-%dT%H:00:00', f.window_start, ?3) || ?4 = r.bucket_start
-            AND ${sameIdentity("r")}
+          SELECT 1 FROM supported_hours AS f
+          WHERE f.bucket_start = r.bucket_start AND ${sameIdentity("r")}
         )
     `).bind(start, end, modifier, suffix),
     // 2. 小时格 upsert：数值不变则不写（冲突键列不在 SET 里，不重写索引）。
@@ -186,12 +190,15 @@ export function localDayRollupStatements(db: D1Database, localDay: string): D1Pr
     `).bind(modifier, suffix, start, end),
     // 3. 删掉这一天已没有明细支撑的日汇总行（历史回填行不动）。
     db.prepare(`
+      WITH supported_day AS MATERIALIZED (
+        SELECT DISTINCT ${identity}
+        FROM usage_hourly_facts
+        WHERE julianday(window_start) >= julianday(?2) AND julianday(window_start) < julianday(?3)
+      )
       DELETE FROM usage_daily_rollups AS r
       WHERE r.date = ?1 AND r.provenance <> 'historical_ccusage_fallback_v1'
         AND NOT EXISTS (
-          SELECT 1 FROM usage_hourly_facts AS f
-          WHERE julianday(f.window_start) >= julianday(?2) AND julianday(f.window_start) < julianday(?3)
-            AND ${sameIdentity("r")}
+          SELECT 1 FROM supported_day AS f WHERE ${sameIdentity("r")}
         )
     `).bind(localDay, start, end),
     // 4. 日汇总 upsert：数值不变则不写。

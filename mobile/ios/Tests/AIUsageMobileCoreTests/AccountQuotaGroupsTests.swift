@@ -19,7 +19,7 @@ final class AccountQuotaGroupsTests: XCTestCase {
         XCTAssertEqual(groups.count, 4) // 结构下限：Claude×2 + OpenAI + Antigravity
         XCTAssertEqual(groups.map(\.provider), ["claude", "claude", "codex", "antigravity"])
         XCTAssertEqual(groups.map(\.accountLabel), ["Tony", "Zhipeng", "Em", nil])
-        XCTAssertEqual(groups.map(\.accountPlanLabel), ["Max 20x", "Max 5x", "Pro", nil])
+        XCTAssertEqual(groups.map(\.accountPlanLabel), ["Max 20x", "Max 5x", "Pro 20x", nil])
         XCTAssertEqual(groups.map { $0.windows.map(\.usedPercent) }, [[10], [82], [55], [5]])
         XCTAssertEqual(Set(groups.map(\.id)).count, 4)
     }

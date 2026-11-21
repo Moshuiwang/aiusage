@@ -75,7 +75,7 @@ struct MenuBarPopoverView: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text("AI Usage")
                     .font(.system(size: 15, weight: .semibold))
-                Text("\(model.state.headerUpdatedText) · \(model.state.onlineServerCount) 台 Server")
+                Text("\(model.state.headerUpdatedText) · \(model.state.deviceCountText)")
                     .font(.system(size: 11))
                     .foregroundStyle(secondaryTextColor)
             }
@@ -217,11 +217,13 @@ struct ServerIcon: View {
     }
 
     /// #177：中性灰图标，只按平台/机型区分形状，不再用彩色区分 Server。
-    private var symbolName: String {
+    var symbolName: String {
         let p = (platform ?? "").lowercased()
-        let t = title.lowercased()
+        let t = title.lowercased().replacingOccurrences(of: "-", with: " ")
 
-        if p == "darwin" || t.contains("mac") || t.contains("macbook") {
+        if t.contains("mac mini") || t.contains("macmini") {
+            return "macmini"
+        } else if p == "darwin" || p == "macos" || t.contains("mac") {
             return "laptopcomputer"
         } else if t.contains("aws") || t.contains("cloud") || t.contains("ec2") || t.contains("gcp") || t.contains("azure") {
             return "cloud.fill"

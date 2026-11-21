@@ -85,15 +85,15 @@ describe.sequential("native TS Worker collector version contract", () => {
   it("accepts an optional collector_release block and echoes the flattened version block", async () => {
     const response = await ingest(ingestPayload({
       collector_release: {
-        collector_version: "0.5.0",
+        collector_version: "0.5.1",
         config_schema_version: 1,
         parser_schema_version: 2,
         release_channel: "stable",
         build_sha: "0a1b2c3d4e5",
         last_upgrade: {
           status: "succeeded",
-          from_version: "0.2.0",
-          to_version: "0.5.0",
+          from_version: "0.5.0",
+          to_version: "0.5.1",
           finished_at: "2026-06-02T10:00:00+08:00",
         },
       },
@@ -103,17 +103,17 @@ describe.sequential("native TS Worker collector version contract", () => {
     expect(response.status).toBe(200);
     expect(body.status).toBe("accepted");
     expect(body.version).toEqual({
-      collector_version: "0.5.0",
+      collector_version: "0.5.1",
       config_schema_version: 1,
       parser_schema_version: 2,
       release_channel: "stable",
       build_sha: "0a1b2c3d4e5",
       last_upgrade_status: "succeeded",
-      last_upgrade_from_version: "0.2.0",
-      last_upgrade_to_version: "0.5.0",
+      last_upgrade_from_version: "0.5.0",
+      last_upgrade_to_version: "0.5.1",
       last_upgrade_finished_at: "2026-06-02T10:00:00+08:00",
       min_supported_collector_version: "0.1.0",
-      target_collector_version: "0.5.0",
+      target_collector_version: "0.5.1",
       rollback_target_version: null,
       state: "current",
       reason: "collector_version_current",
@@ -135,13 +135,14 @@ describe.sequential("native TS Worker collector version contract", () => {
 
   it("keeps known fields and nulls the rest for a partial collector_release", async () => {
     const response = await ingest(ingestPayload({
-      collector_release: { collector_version: "0.2.0" },
+      collector_release: { collector_version: "0.5.0" },
     }));
     const body = await response.json<AnyRecord>();
 
     expect(response.status).toBe(200);
     expect(body.version.state).toBe("update_available");
     expect(body.version.reason).toBe("collector_version_behind_target");
+    expect(body.version.target_collector_version).toBe("0.5.1");
     expect(body.version.release_channel).toBeNull();
     expect(body.version.build_sha).toBeNull();
     expect(body.version.config_schema_version).toBeNull();

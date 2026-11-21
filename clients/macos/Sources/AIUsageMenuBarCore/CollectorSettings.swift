@@ -81,15 +81,16 @@ public struct CollectorSettingsStore {
         display["refresh_interval_seconds"] = display["refresh_interval_seconds"] ?? 600
         display["default_period"] = display["default_period"] ?? "today"
         try write(display, to: root.appendingPathComponent("config.json"))
+        let deviceSourceID = device["source_id"] as? String ?? sourceID
         if !FileManager.default.fileExists(atPath: limitsURL.path) {
             var providers: [[String: Any]] = []
             let codex = home.appendingPathComponent(".codex/auth.json")
             if FileManager.default.fileExists(atPath: codex.path) {
-                providers.append(["provider": "codex", "source_id": sourceID + "-codex", "auth_file": codex.path])
+                providers.append(["provider": "codex", "source_id": deviceSourceID + "-codex", "auth_file": codex.path])
             }
             let claude = home.appendingPathComponent(".claude/.credentials.json")
             if FileManager.default.fileExists(atPath: claude.path) {
-                providers.append(["provider": "claude", "source_id": sourceID + "-claude", "auth_file": claude.path])
+                providers.append(["provider": "claude", "source_id": deviceSourceID + "-claude", "auth_file": claude.path, "cli": true])
             }
             try write(["schema_version": 1, "timezone": "Asia/Shanghai", "providers": providers], to: limitsURL)
         }
@@ -114,7 +115,10 @@ public struct CollectorSettingsStore {
         guard isRunning else { return "本机采集未运行" }
         let status = read(statusURL)
         let jobs = ["usage", "limits"].compactMap { status[$0] as? [String: Any] }
-        if jobs.count == 2, jobs.allSatisfy({ $0["success"] as? Bool == true }) { return "本机用量与额度已上报" }
+        if jobs.count == 2, jobs.allSatisfy({ $0["success"] as? Bool == true }) {
+            if jobs.contains(where: { $0["partial"] as? Bool == true }) { return "本机数据已上报，部分额度暂不可用" }
+            return "本机用量与额度已上报"
+        }
         if jobs.contains(where: { $0["exit_code"] as? Int == 75 }) { return "本机数据已缓冲，等待网络恢复后补推" }
         if jobs.contains(where: { $0["success"] as? Bool == false }) { return "本机采集失败，将在下次定时重试" }
         return "正在采集本机用量与额度…"
