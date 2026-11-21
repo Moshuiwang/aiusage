@@ -71,6 +71,12 @@ def _build_gen_metadata(
     return _encode_proto_field(1, 2, f1_body)
 
 
+def _build_agy_gen_metadata(model: str, counts: dict[int, int]) -> bytes:
+    usage = b"".join(_encode_proto_field(field, 0, value) for field, value in counts.items())
+    generation = _encode_proto_field(4, 2, usage) + _encode_proto_field(19, 2, model.encode())
+    return _encode_proto_field(1, 2, generation)
+
+
 class TestMswusageAntigravity(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -146,6 +152,75 @@ class TestMswusageAntigravity(unittest.TestCase):
         d0 = report["daily"][0]
         self.assertEqual(d0["date"], "2026-09-24")
         self.assertEqual(d0["total_tokens"], 28000)
+
+    def test_agy_first_and_resumed_turns_use_their_own_hours_and_token_counts(self) -> None:
+        root = self.conv_dir.parent / "antigravity-cli" / "conversations"
+        root.mkdir(parents=True)
+        db_path = root / "agy-session.db"
+        self._create_sample_db(db_path, [])
+        first_at = int(datetime.fromisoformat("2026-11-21T23:59:57+00:00").timestamp())
+        resumed_at = first_at + 8
+        started = _encode_proto_field(1, 2, _encode_proto_field(1, 0, first_at))
+        # The second turn still carries the conversation start, plus its later step timestamps.
+        later = started + b"".join(
+            _encode_proto_field(field, 2, _encode_proto_field(1, 0, resumed_at))
+            for field in (6, 7, 8, 32)
+        )
+        with sqlite3.connect(db_path) as conn:
+            for idx, step_type, metadata, counts in (
+                (1, 14, started, {1: 1418, 2: 10089, 3: 268, 6: 24, 9: 255, 10: 13}),
+                (2, 15, later, {1: 1418, 2: 2560, 3: 116, 5: 8035, 6: 24, 9: 107, 10: 9}),
+            ):
+                data = _build_agy_gen_metadata("gemini-neon", counts)
+                conn.execute("INSERT INTO steps VALUES (?, ?, 3, ?)", (idx, step_type, metadata))
+                conn.execute("INSERT INTO gen_metadata VALUES (?, ?, ?)", (idx, data, len(data)))
+
+        events = read_local_antigravity_events(roots=[root])
+        keys = ("timestamp_sec", "input_tokens", "output_tokens", "cache_read_tokens", "reasoning_output_tokens", "total_tokens")
+        self.assertEqual([tuple(row[key] for key in keys) for row in events], [
+            (first_at, 10089, 268, 0, 255, 10357),
+            (resumed_at, 2560, 116, 8035, 107, 10711),
+        ])
+        report = build_report(events, timezone="UTC")
+        self.assertEqual([(row["hour"], row["total_tokens"]) for row in report["hourly"]], [
+            ("2026-11-21T23:00:00+00:00", 10357),
+            ("2026-11-22T00:00:00+00:00", 10711),
+        ])
+        self.assertEqual([row["total_tokens"] for row in report["daily"]], [10357, 10711])
+        self.assertEqual(report["hourly"][1]["model_breakdowns"][0]["total_tokens"], 10711)
+
+    def test_agy_without_reasoning_still_uses_new_input_and_output_fields(self) -> None:
+        root = self.conv_dir.parent / "antigravity-cli" / "conversations"
+        root.mkdir(parents=True)
+        db_path = root / "agy-simple-session.db"
+        self._create_sample_db(db_path, [])
+        ts = _encode_proto_field(1, 0, 1790212200)
+        data = _build_agy_gen_metadata("gemini-neon", {1: 1418, 2: 10070, 3: 5, 6: 24, 10: 5})
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("INSERT INTO steps VALUES (1, 14, 3, ?)", (_encode_proto_field(1, 2, ts),))
+            conn.execute("INSERT INTO gen_metadata VALUES (1, ?, ?)", (data, len(data)))
+
+        [event] = read_local_antigravity_events(roots=[root])
+        self.assertEqual((event["input_tokens"], event["output_tokens"], event["reasoning_output_tokens"]), (10070, 5, 0))
+        self.assertEqual(event["total_tokens"], 10075)
+
+    def test_legacy_format_in_cli_directory_retains_old_usage_fields(self) -> None:
+        root = self.conv_dir.parent / "antigravity-cli" / "conversations"
+        root.mkdir(parents=True)
+        db_path = root / "old-cli-session.db"
+        self._create_sample_db(db_path, [])
+        ts = _encode_proto_field(1, 0, 1790212200)
+        metadata = _encode_proto_field(1, 2, ts) + _encode_proto_field(7, 2, ts)
+        data = _build_agy_gen_metadata("gemini-3.1-pro", {1: 100, 2: 20, 3: 150, 5: 30, 6: 3})
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("INSERT INTO steps VALUES (1, 15, 3, ?)", (metadata,))
+            conn.execute("INSERT INTO gen_metadata VALUES (1, ?, ?)", (data, len(data)))
+
+        [event] = read_local_antigravity_events(roots=[root])
+        self.assertEqual(event["input_tokens"], 100)
+        self.assertEqual(event["output_tokens"], 20)
+        self.assertEqual(event["reasoning_output_tokens"], 3)
+        self.assertEqual(event["total_tokens"], 150)
 
     def test_corrupted_data_and_empty_db_handled_gracefully(self) -> None:
         empty_db = self.conv_dir / "empty.db"

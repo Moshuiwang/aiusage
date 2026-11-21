@@ -18,7 +18,7 @@ from .usage_models import add_model_usage, finalize_model_usage, model_name
 
 PROVENANCE = "mswusage_antigravity_token_count"
 COLLECTOR_VERSION = "0.2.0"
-PARSER_SCHEMA_VERSION = 1
+PARSER_SCHEMA_VERSION = 2
 TOKEN_FIELDS = (
     "input_tokens",
     "output_tokens",
@@ -149,6 +149,7 @@ def _database_snapshot(db_path: Path):
 
 def _extract_snapshot_events(db_path: Path, snapshot_path: Path) -> list[dict]:
     events: list[dict] = []
+    cli_session = db_path.parent.name == "conversations" and db_path.parent.parent.name == "antigravity-cli"
     conn = sqlite3.connect(snapshot_path)
     try:
         cursor = conn.cursor()
@@ -165,17 +166,7 @@ def _extract_snapshot_events(db_path: Path, snapshot_path: Path) -> list[dict]:
             if not step_meta_bytes or not gen_data_bytes:
                 continue
             try:
-                # 1. Parse timestamp from steps.metadata
                 step_meta = _parse_proto(step_meta_bytes)
-                ts_field = step_meta.get(7) or step_meta.get(6) or step_meta.get(8) or step_meta.get(32)
-                if not ts_field:
-                    continue
-                ts_proto = _parse_proto(ts_field[0][1])
-                sec = ts_proto.get(1, [(0, 0)])[0][1]
-                if not sec or sec <= 0:
-                    continue
-
-                # 2. Parse UsageMetadata & model from gen_metadata.data
                 gen_top = _parse_proto(gen_data_bytes)
                 f1_list = gen_top.get(1)
                 if not f1_list:
@@ -188,11 +179,25 @@ def _extract_snapshot_events(db_path: Path, snapshot_path: Path) -> list[dict]:
 
                 if 4 not in f1:
                     continue
-                f4 = _parse_proto(f1[4][0][1])
-                prompt_tokens = int(f4.get(1, [(0, 0)])[0][1])
-                output_tokens = int(f4.get(2, [(0, 0)])[0][1])
-                cached_tokens = int(f4.get(5, [(0, 0)])[0][1])
-                thoughts_tokens = int(f4.get(6, [(0, 0)])[0][1])
+                usage = _parse_proto(f1[4][0][1])
+                # New agy usage carries distinct reasoning/visible-output fields. Timestamp
+                # field 1 alone is not enough to identify it in a directory with old sessions.
+                cli_started_at = _timestamp_at(step_meta, (1,)) if cli_session else None
+                new_cli = cli_started_at is not None and any(
+                    usage.get(field, [(-1, 0)])[0][0] == 0 for field in (9, 10)
+                )
+                # Resumed steps retain the original conversation start. Prefer the step's own time.
+                sec = _timestamp_at(step_meta, (7, 6, 8, 32)) or (cli_started_at if new_cli else None)
+                if sec is None:
+                    continue
+
+                input_field, output_field, reasoning_field = (2, 3, 9) if new_cli else (1, 2, 6)
+                prompt_tokens = _usage_count(usage, input_field)
+                output_tokens = _usage_count(usage, output_field)
+                cached_tokens = _usage_count(usage, 5)
+                thoughts_tokens = _usage_count(usage, reasoning_field)
+                # agy prints input + output as total. Store cache separately and include it in
+                # the ledger total. Reasoning tokens are already included in the output count.
                 total_tokens = prompt_tokens + output_tokens + cached_tokens
 
                 if total_tokens <= 0:
@@ -217,6 +222,25 @@ def _extract_snapshot_events(db_path: Path, snapshot_path: Path) -> list[dict]:
     finally:
         conn.close()
     return events
+
+
+def _timestamp_at(metadata: dict[int, list[tuple[int, Any]]], fields: tuple[int, ...]) -> int | None:
+    for field in fields:
+        wire, payload = metadata.get(field, [(-1, None)])[0]
+        if wire != 2:
+            continue
+        try:
+            seconds = _usage_count(_parse_proto(payload), 1)
+        except IndexError:
+            continue
+        if 0 < seconds <= 253402300799:
+            return seconds
+    return None
+
+
+def _usage_count(usage: dict[int, list[tuple[int, Any]]], field: int) -> int:
+    wire, count = usage.get(field, [(-1, 0)])[0]
+    return count if wire == 0 else 0
 
 
 def build_report(
