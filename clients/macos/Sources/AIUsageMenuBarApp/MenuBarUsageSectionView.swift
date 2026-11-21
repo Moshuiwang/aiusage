@@ -65,6 +65,11 @@ struct MenuBarUsageSectionView: View {
                     .foregroundStyle(Color(nsColor: .secondaryLabelColor))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+                if let reason = model.usageIncompleteText {
+                    Text(reason)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color(nsColor: .secondaryLabelColor))
+                }
             }
 
             MenuBarTrendChartView(

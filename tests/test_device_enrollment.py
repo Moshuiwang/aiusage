@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from subprocess import CompletedProcess
 from unittest.mock import patch
 import io
 
@@ -9,6 +10,28 @@ from ai_usage_widget.device_enrollment import begin, finish, request_json, Enrol
 
 
 class EnrollmentTests(unittest.TestCase):
+    def test_darwin_pairing_sends_stable_hostname_and_keeps_pending_scope(self):
+        with (
+            tempfile.TemporaryDirectory() as folder,
+            patch('sys.platform', 'darwin'),
+            patch('platform.system', return_value='Darwin'),
+            patch('platform.node', return_value='192.0.2.7'),
+            patch('subprocess.run', return_value=CompletedProcess([], 0, 'Test-Mac\n', '')) as local_name,
+        ):
+            path = Path(folder) / 'pending.json'
+            sent = []
+
+            def api(url, method, body):
+                sent.append(body)
+                return {'request_id': 'request', 'user_code': 'ABC123', 'expires_at': 'later'}
+
+            begin('https://example.test', path, ['paired-device'], True, api=api)
+            begin('https://example.test', path, ['paired-device'], True, api=api)
+            self.assertEqual(sent[0]['machine'], 'Test-Mac')
+            self.assertEqual(sent[0]['source_ids'], ['paired-device'])
+            self.assertEqual(sent[0], sent[1])
+            local_name.assert_called_once()
+
     def test_all_device_http_methods_use_product_identity_and_preserve_authorization(self):
         captured = []
         class Opener:

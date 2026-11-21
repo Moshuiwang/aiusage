@@ -22,9 +22,10 @@ import type { MobileSummary } from "../mobile-summary";
 
 /** 阶段 1：读取 D1 输入与时间/周期边界。所有 SELECT 都发生在这里或 db.ts。 */
 async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
-  const refTime = nowInTimezone(request.timezone, request.currentTime);
+  const { timezone, serviceTimezone } = request;
+  const refTime = nowInTimezone(timezone, request.currentTime);
   const [periodId, startDate, endDate] = periodBounds(request.date, request.period, request.offset);
-  const hourAxisValues = periodId === "today" ? hourAxis(endDate) : [];
+  const hourAxisValues = periodId === "today" ? hourAxis(endDate, timezone) : [];
   const identities = await fetchSourceIdentities(db);
   const statusRows = await all<Record<string, string | null>>(
     db,
@@ -46,11 +47,14 @@ async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
   );
   const limits = await fetchLimitWindows(
     db,
-    periodId === "today" && endDate === formatDate(refTime) ? refTime : null,
+    periodId === "today" && endDate === formatDate(refTime, timezone) ? refTime : null,
   );
   const allLimits = await fetchLimitWindows(db, null);
-  const { rows: accountHourlyRows, costsByItem } = await fetchAccountHourlyRows(
-    db, startDate, endDate, request.timezone, request.machine, request.account,
+  const rebucket = serviceTimezone !== undefined && timezone !== serviceTimezone
+    ? { now: refTime, serviceTimezone, checkDailyArchive: periodId === "week" || periodId === "month" }
+    : undefined;
+  const { rows: accountHourlyRows, costsByItem, usageIncompleteReason } = await fetchAccountHourlyRows(
+    db, startDate, endDate, timezone, request.machine, request.account, identities, rebucket,
   );
   const aiAccounts = await fetchAiAccounts(db);
   const accountDirectory = await fetchAccountDirectory(db);
@@ -58,7 +62,7 @@ async function loadSummaryInputs(db: D1Database, request: SummaryRequest) {
   return {
     refTime, periodId, startDate, endDate, hourAxisValues, identities,
     statusRows, accuracyRows, limits, allLimits, accountHourlyRows, costsByItem, aiAccounts, quotaCalibrationByKey,
-    accountDirectory,
+    accountDirectory, usageIncompleteReason,
   };
 }
 
@@ -66,7 +70,7 @@ type SummaryInputs = Awaited<ReturnType<typeof loadSummaryInputs>>;
 
 /** 阶段 2：过滤与投影——把账户小时行派生成日行/时行/模型分解等视图输入。 */
 async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: SummaryInputs) {
-  const { periodId, startDate, endDate, accountHourlyRows, costsByItem, refTime, quotaCalibrationByKey } = inputs;
+  const { periodId, startDate, endDate, accountHourlyRows, costsByItem, refTime, quotaCalibrationByKey, identities } = inputs;
   const filteredAccountHourlyRows = accountHourlyRows.filter((row) =>
     accountHourlyRowMatchesFilter(row, request.machine, request.account),
   );
@@ -74,18 +78,18 @@ async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: 
     filteredAccountHourlyRows
       .filter((row) => row.provenance === "historical_ccusage_fallback_v1")
       .map((row) => {
-        const date = localDateFromWindowStart(row.window_start);
+        const date = localDateFromWindowStart(row.window_start, request.timezone);
         return date ? itemKey(str(row.source_id), date, str(row.agent)) : "";
       })
       .filter(Boolean),
   );
-  const canonicalProviderTokens = providerTokensByItem(filteredAccountHourlyRows);
-  const rows = accountHourlyRowsToDailyRows(filteredAccountHourlyRows).map((row) => ({
+  const canonicalProviderTokens = providerTokensByItem(filteredAccountHourlyRows, request.timezone);
+  const rows = accountHourlyRowsToDailyRows(filteredAccountHourlyRows, request.timezone).map((row) => ({
     ...row,
     total_cost: costsByItem.get(itemKey(row.source_id, row.date, row.agent)) ?? null,
   }));
   const modelRows = await fetchHourlyModelRows(
-    db, startDate, endDate, request.timezone, request.machine, request.account,
+    db, startDate, endDate, request.timezone, request.machine, request.account, identities,
   );
   const allowed = new Set(rows.map((row) => itemKey(row.source_id, row.date, row.agent)));
   const allowedModelRows = modelRows.filter((row) => {
@@ -93,7 +97,7 @@ async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: 
     return allowed.has(key) && !historicalFallbackKeys.has(key);
   });
   const hourlyRows = periodId === "today"
-    ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows)
+    ? accountHourlyRowsToHourlyRows(filteredAccountHourlyRows, request.timezone)
     : [];
   const accountHourly = accountHourlySummary(filteredAccountHourlyRows);
 
@@ -115,7 +119,7 @@ async function deriveUsageRows(db: D1Database, request: SummaryRequest, inputs: 
     // #183-b：quota_estimate 缺省而不是给 null——grade=none/系数过期/模型族未知/该族
     // 在 quota_calibration 里没有行，任何一种情况都不下发这个字段。
     const quotaEstimate = quotaEstimateForModel(
-      str(row.agent), str(row.model_name), tokens, periodId, startDate, endDate, refTime, quotaCalibrationByKey,
+      str(row.agent), str(row.model_name), tokens, periodId, startDate, endDate, refTime, quotaCalibrationByKey, request.timezone,
     );
     if (quotaEstimate) breakdown.quota_estimate = quotaEstimate;
     else breakdown.quota_estimate_unavailable = quotaEstimateUnavailableForModel(
@@ -289,7 +293,7 @@ function aggregateUsage(request: SummaryRequest, inputs: SummaryInputs, derived:
 type UsageAggregates = ReturnType<typeof aggregateUsage>;
 
 /** 阶段 4：趋势区块——today 走小时轴（残差回填 + 守恒封顶），其余周期走日轴。 */
-function buildTrendSection(inputs: SummaryInputs, derived: DerivedRows, aggregates: UsageAggregates) {
+function buildTrendSection(inputs: SummaryInputs, derived: DerivedRows, aggregates: UsageAggregates, timezone: string) {
   const { periodId, startDate, endDate, hourAxisValues, refTime } = inputs;
   const { rows, hourlyRows } = derived;
   const {
@@ -307,7 +311,7 @@ function buildTrendSection(inputs: SummaryInputs, derived: DerivedRows, aggregat
       cache_tokens: cacheCreationTokens + cacheReadTokens,
       excluded_daily: codexContext.skip_residual ? codexContext.daily : undefined,
       excluded_hourly: codexContext.skip_residual ? codexContext.hourly : undefined,
-    });
+    }, timezone);
     capTodayHourlyToPeriodTotals(trend, {
       total_tokens: totalTokens,
       input_tokens: inputTokens,
@@ -361,8 +365,10 @@ function assembleSnapshot(
   );
   const snapshot: SummarySnapshot = {
     schema_version: 1,
-    generated_at: toOffsetIso(refTime),
+    generated_at: toOffsetIso(refTime, request.timezone),
     timezone: request.timezone,
+    ...(request.serviceTimezone !== undefined ? { service_timezone: request.serviceTimezone } : {}),
+    ...(inputs.usageIncompleteReason !== undefined ? { usage_incomplete_reason: inputs.usageIncompleteReason } : {}),
     summary: {
       date: endDate,
       period: periodId,
@@ -395,7 +401,7 @@ function assembleSnapshot(
     account_hourly: accountHourly,
     ai_accounts: aiAccounts,
     metadata: {
-      ...summaryMetadata(refTime, limits, normalizedBackendMode(request.backendMode), "cloudflare_d1"),
+      ...summaryMetadata(refTime, limits, normalizedBackendMode(request.backendMode), "cloudflare_d1", request.timezone),
       codex_hourly: {
         drift: codexContext.drift,
       },
@@ -410,7 +416,7 @@ export async function buildSummary(db: D1Database, request: SummaryRequest): Pro
   const inputs = await loadSummaryInputs(db, request);
   const derived = await deriveUsageRows(db, request, inputs);
   const aggregates = aggregateUsage(request, inputs, derived);
-  const trendSection = buildTrendSection(inputs, derived, aggregates);
+  const trendSection = buildTrendSection(inputs, derived, aggregates, request.timezone);
   return assembleSnapshot(request, inputs, derived, aggregates, trendSection);
 }
 
@@ -423,6 +429,7 @@ function summaryMetadata(
   limits: LimitRow[],
   backendMode: string,
   canonicalStore: string,
+  timezone?: string,
 ): Record<string, unknown> {
   const effective = limits.filter((limit) => effectiveLimitWindow(limit));
   const observed = effective
@@ -432,7 +439,7 @@ function summaryMetadata(
   return {
     backend_mode: backendMode,
     canonical_store: canonicalStore,
-    read_model_generated_at: toOffsetIso(refTime),
+    read_model_generated_at: toOffsetIso(refTime, timezone),
     freshness_status: effective.length ? "ok" : "unknown",
     limits_observed_at: observed.length ? observed[observed.length - 1] : null,
   };

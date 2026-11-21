@@ -1,11 +1,13 @@
 /** #126：read-model 内部共享的类型、常量与纯工具。叶子模块，不 import 兄弟模块。 */
 
 export type Period = "today" | "week" | "month" | "all";
+export type UsageIncompleteReason = "legacy_daily_only" | "hourly_boundary_approximate";
 
 export interface SummaryRequest {
   date: string;
   period: string;
   timezone: string;
+  serviceTimezone?: string;
   machine?: string | null;
   account?: string | null;
   currentTime?: string | null;
@@ -113,7 +115,7 @@ let reportingTimezone = DEFAULT_REPORTING_TIMEZONE;
 function configureReportingTimezone(timezone: string | undefined | null): string {
   const candidate = timezone && timezone.trim() ? timezone.trim() : DEFAULT_REPORTING_TIMEZONE;
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: candidate });
+    zoneFormatter(candidate);
     reportingTimezone = candidate;
   } catch (_invalidTimezone) {
     reportingTimezone = DEFAULT_REPORTING_TIMEZONE;
@@ -127,26 +129,34 @@ function currentReportingTimezone(): string {
 
 type LocalParts = { year: number; month: number; day: number; hour: number; minute: number; second: number };
 
-// Intl.DateTimeFormat 构造很贵（本地实测每次约 25–30µs），一次摘要要处理上千个时刻；
-// 按统计时区缓存一个实例。统计时区是部署常量，缓存不会在请求间串值。
-let cachedFormatter: { timezone: string; formatter: Intl.DateTimeFormat } | null = null;
+// A small cache avoids repeated Intl construction without retaining every requested timezone.
+const zoneFormatters = new Map<string, Intl.DateTimeFormat>();
 
-function zoneFormatter(): Intl.DateTimeFormat {
-  if (cachedFormatter?.timezone !== reportingTimezone) {
-    cachedFormatter = {
-      timezone: reportingTimezone,
-      formatter: new Intl.DateTimeFormat("en-CA", {
-        timeZone: reportingTimezone, hourCycle: "h23",
-        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
-      }),
-    };
-  }
-  return cachedFormatter.formatter;
+function zoneFormatter(timezone: string): Intl.DateTimeFormat {
+  const cached = zoneFormatters.get(timezone);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  if (zoneFormatters.size >= 16) zoneFormatters.delete(zoneFormatters.keys().next().value!);
+  zoneFormatters.set(timezone, formatter);
+  return formatter;
 }
 
-function localParts(date: Date): LocalParts {
+function isValidClientTimezone(timezone: string): boolean {
+  if (!/^[A-Za-z][A-Za-z0-9_+/-]{0,79}$/.test(timezone)) return false;
+  try {
+    zoneFormatter(timezone);
+    return true;
+  } catch (_invalidTimezone) {
+    return false;
+  }
+}
+
+function localParts(date: Date, timezone: string): LocalParts {
   const values: Record<string, string> = {};
-  for (const part of zoneFormatter().formatToParts(date)) values[part.type] = part.value;
+  for (const part of zoneFormatter(timezone).formatToParts(date)) values[part.type] = part.value;
   return {
     year: Number(values.year), month: Number(values.month), day: Number(values.day),
     hour: Number(values.hour) % 24, minute: Number(values.minute), second: Number(values.second),
@@ -159,8 +169,8 @@ function offsetFromParts(date: Date, local: LocalParts): number {
 }
 
 /** 该时刻在统计时区的 UTC 偏移（分钟）。 */
-function offsetMinutesAt(date: Date): number {
-  return offsetFromParts(date, localParts(date));
+function offsetMinutesAt(date: Date, timezone = reportingTimezone): number {
+  return offsetFromParts(date, localParts(date, timezone));
 }
 
 function offsetSuffix(minutes: number): string {
@@ -180,22 +190,22 @@ function shiftDate(value: string, days: number): string {
   return `${shifted.getUTCFullYear()}-${pad2(shifted.getUTCMonth() + 1)}-${pad2(shifted.getUTCDate())}`;
 }
 
-function periodWindowBounds(startDate: string | null, endDate: string): [string | null, string] {
+function periodWindowBounds(startDate: string | null, endDate: string, timezone = reportingTimezone): [string | null, string] {
   return [
-    startDate === null ? null : toOffsetIso(parseDateOnly(startDate)),
-    toOffsetIso(parseDateOnly(shiftDate(endDate, 1))),
+    startDate === null ? null : toOffsetIso(parseDateOnly(startDate, timezone), timezone),
+    toOffsetIso(parseDateOnly(shiftDate(endDate, 1), timezone), timezone),
   ];
 }
 
-function localDateFromWindowStart(value: unknown): string | null {
+function localDateFromWindowStart(value: unknown, timezone = reportingTimezone): string | null {
   const parsed = parseDate(str(value));
-  return parsed ? formatDate(parsed) : null;
+  return parsed ? formatDate(parsed, timezone) : null;
 }
 
-function localHourFromWindowStart(value: unknown): string | null {
+function localHourFromWindowStart(value: unknown, timezone = reportingTimezone): string | null {
   const parsed = parseDate(str(value));
   if (!parsed) return null;
-  const local = toOffsetIso(parsed);
+  const local = toOffsetIso(parsed, timezone);
   return `${local.slice(0, 13)}:00:00${local.slice(19)}`;
 }
 
@@ -243,11 +253,11 @@ function dateAxis(startDate: string | null, endDate: string, rows: DailyRow[]): 
 }
 
 /** 统计时区里这一天的每个整点（夏令时日 23 或 25 个）。 */
-function hourAxis(date: string): string[] {
-  const end = parseDateOnly(shiftDate(date, 1)).getTime();
+function hourAxis(date: string, timezone = reportingTimezone): string[] {
+  const end = parseDateOnly(shiftDate(date, 1), timezone).getTime();
   const result: string[] = [];
-  for (let time = parseDateOnly(date).getTime(); time < end; time += 3600000) {
-    result.push(toOffsetIso(new Date(time)));
+  for (let time = parseDateOnly(date, timezone).getTime(); time < end; time += 3600000) {
+    result.push(toOffsetIso(new Date(time), timezone));
   }
   return result;
 }
@@ -260,10 +270,10 @@ function identityMatchesFilter(identity: SourceIdentity | undefined, machineFilt
   return true;
 }
 
-function accountHourlyRowInPeriod(row: Record<string, unknown>, startDate: string | null, endDate: string, _timezone: string): boolean {
+function accountHourlyRowInPeriod(row: Record<string, unknown>, startDate: string | null, endDate: string, timezone: string): boolean {
   const windowStart = parseDate(str(row.window_start));
   if (!windowStart) return false;
-  const localDate = formatDate(windowStart);
+  const localDate = formatDate(windowStart, timezone);
   if (localDate > endDate) return false;
   if (startDate === null) return true;
   return localDate >= startDate;
@@ -316,23 +326,23 @@ function nowInTimezone(_timezone: string, currentTime?: string | null): Date {
   return new Date();
 }
 
-function toOffsetIso(date: Date): string {
-  const local = localParts(date);
+function toOffsetIso(date: Date, timezone = reportingTimezone): string {
+  const local = localParts(date, timezone);
   return `${local.year}-${pad2(local.month)}-${pad2(local.day)}T${pad2(local.hour)}:${pad2(local.minute)}:${pad2(local.second)}`
     + offsetSuffix(offsetFromParts(date, local));
 }
 
-function formatDateInZone(date: Date): string {
-  const local = localParts(date);
+function formatDateInZone(date: Date, timezone = reportingTimezone): string {
+  const local = localParts(date, timezone);
   return `${local.year}-${pad2(local.month)}-${pad2(local.day)}`;
 }
 
 /** 统计时区里这一天 00:00 的时刻。偏移取「当天午夜附近」的值，两次迭代覆盖夏令时切换。 */
-function parseDateOnly(value: string): Date {
+function parseDateOnly(value: string, timezone = reportingTimezone): Date {
   const [year, month, day] = value.split("-").map(Number);
   const naiveUtc = Date.UTC(year, month - 1, day);
-  let instant = naiveUtc - offsetMinutesAt(new Date(naiveUtc)) * 60000;
-  instant = naiveUtc - offsetMinutesAt(new Date(instant)) * 60000;
+  let instant = naiveUtc - offsetMinutesAt(new Date(naiveUtc), timezone) * 60000;
+  instant = naiveUtc - offsetMinutesAt(new Date(instant), timezone) * 60000;
   return new Date(instant);
 }
 
@@ -346,8 +356,8 @@ function addHours(value: string, hours: number): string {
   return parsed ? toOffsetIso(new Date(parsed.getTime() + hours * 3600000)) : value;
 }
 
-function formatDate(date: Date): string {
-  return formatDateInZone(date);
+function formatDate(date: Date, timezone = reportingTimezone): string {
+  return formatDateInZone(date, timezone);
 }
 
 function int(value: unknown): number {
@@ -385,6 +395,7 @@ export {
   hasTimezoneDesignator,
   hourAxis,
   identityMatchesFilter,
+  isValidClientTimezone,
   int,
   isCodexAgent,
   isRecord,
@@ -428,6 +439,8 @@ type SummarySnapshot = {
   schema_version: number;
   generated_at: string;
   timezone: string;
+  service_timezone?: string;
+  usage_incomplete_reason?: UsageIncompleteReason;
   summary: SummaryPeriodBlock;
   groups: {
     by_machine: Record<string, unknown>[];

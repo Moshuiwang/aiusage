@@ -13,6 +13,7 @@ from .collector_store import (
     DEFAULT_OUTBOX_PATH,
     OutboxConfig,
 )
+from .macos_identity import is_ip_literal, macos_local_hostname
 from .version_contract import DEFAULT_RELEASE_CHANNEL, RELEASE_CHANNELS
 
 
@@ -142,11 +143,22 @@ def validate_device_config(data: Dict[str, Any]) -> DeviceConfig:
             "Unsupported device release_channel: " + ", ".join(RELEASE_CHANNELS) + " expected"
         )
 
+    host = data.get("host", "unknown")
+    machine = data.get("machine")
+    if platform == "darwin" and (not machine or "host" not in data):
+        local_name = macos_local_hostname()
+        if "host" not in data and local_name:
+            host = local_name
+        if not machine:
+            machine = local_name or socket.gethostname() or str(host)
+            if is_ip_literal(machine):
+                machine = "Mac"
+
     return DeviceConfig(
         schema_version=int(data.get("schema_version", 1)),
         source_id=str(data["source_id"]),
-        host=str(data.get("host", "unknown")),
-        machine=str(data.get("machine") or socket.gethostname() or data.get("host", "unknown")),
+        host=str(host),
+        machine=str(machine or socket.gethostname() or host),
         os_user=str(data.get("os_user", "unknown")),
         platform=platform,
         timezone=str(data["timezone"]),

@@ -26,10 +26,10 @@ function usageProviderKey(agent: unknown): string {
 
 // 按 canonical ai_provider 把每个 (source_id, date, agent) 的用量拆开。ledger 行整条替换
 // 同 key 的行，所以分项之和恒等于该 item 的总量，归属是精确切分而不是估算。
-function providerTokensByItem(rows: Record<string, unknown>[]): Map<string, Map<string, ProviderUsageTotals>> {
+function providerTokensByItem(rows: Record<string, unknown>[], timezone?: string): Map<string, Map<string, ProviderUsageTotals>> {
   const result = new Map<string, Map<string, ProviderUsageTotals>>();
   for (const row of rows) {
-    const date = localDateFromWindowStart(row.window_start);
+    const date = localDateFromWindowStart(row.window_start, timezone);
     if (!date) continue;
     const key = itemKey(str(row.source_id), date, str(row.agent));
     const provider = slotProviderKey(row.ai_provider);

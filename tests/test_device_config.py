@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import unittest
+from subprocess import CompletedProcess
+from unittest.mock import patch
 
 from ai_usage_widget.config import (
     ConfigError,
@@ -41,6 +43,20 @@ class TestDeviceConfig(unittest.TestCase):
 
         self.assertEqual(cfg.host, "ai.chunbai.com")
         self.assertEqual(cfg.machine, "VM-0-3-ubuntu")
+
+    def test_darwin_defaults_use_local_hostname_and_preserve_explicit_fields(self) -> None:
+        data = {key: value for key, value in self.fixtures["mac"].items() if key not in {"machine", "host"}}
+        with (
+            patch("sys.platform", "darwin"),
+            patch("socket.gethostname", return_value="192.0.2.7"),
+            patch("subprocess.run", return_value=CompletedProcess([], 0, "Test-Mac\n", "")) as local_name,
+        ):
+            config = validate_device_config(data)
+            self.assertEqual((config.machine, config.host), ("Test-Mac", "Test-Mac"))
+            local_name.assert_called_once()
+            config = validate_device_config({**data, "machine": "Custom Mac", "host": "custom.test"})
+            self.assertEqual((config.machine, config.host), ("Custom Mac", "custom.test"))
+            local_name.assert_called_once()
 
     def test_missing_required_fields(self) -> None:
         """验证缺少 source_id, server_url, timezone, platform 时抛出 ConfigError"""

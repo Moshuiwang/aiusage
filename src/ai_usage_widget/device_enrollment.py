@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 import getpass
 from .http_identity import PRODUCT_USER_AGENT
+from .macos_identity import is_ip_literal, macos_local_hostname
 
 
 class EnrollmentError(ValueError):
@@ -76,11 +77,15 @@ def begin(server, pending_path, source_ids, read_requested, *, api=request_json)
         if state['server'] != server or state['source_ids'] != source_ids or state['read_requested'] != read_requested:
             raise EnrollmentError('已有待处理申请，请先处理或删除本机申请文件')
     else:
+        system = platform.system().lower()
+        if system not in ('darwin', 'linux'):
+            raise EnrollmentError('当前仅支持 macOS 和 Linux')
+        machine = (macos_local_hostname() if system == 'darwin' else None) or platform.node()
+        if system == 'darwin' and (not machine or is_ip_literal(machine)):
+            machine = 'Mac'
         state = {'server':server, 'source_ids':source_ids, 'read_requested':read_requested,
                  'credential':'dvc_'+secrets.token_hex(32), 'request_secret':secrets.token_hex(32),
-                 'machine':platform.node(), 'os_user':getpass.getuser(), 'platform':platform.system().lower()}
-        if state['platform'] not in ('darwin','linux'):
-            raise EnrollmentError('当前仅支持 macOS 和 Linux')
+                 'machine':machine, 'os_user':getpass.getuser(), 'platform':system}
         # Persist before sending so interrupted registration can be retried without losing the credential.
         private_write(path, json.dumps(state))
     body = {key:state[key] for key in ('source_ids','read_requested','machine','os_user','platform')}

@@ -144,18 +144,13 @@ function sourceIdentityStatement(db: D1Database, identity: AnyRecord, seenAt: st
       machine = excluded.machine,
       os_user = excluded.os_user,
       platform = excluded.platform,
-      last_seen_at = CASE
-        WHEN excluded.last_seen_at >= source_identities.last_seen_at THEN excluded.last_seen_at
-        ELSE source_identities.last_seen_at
-      END
-    WHERE source_identities.host IS NOT excluded.host
-       OR source_identities.machine IS NOT excluded.machine
-       OR source_identities.os_user IS NOT excluded.os_user
-       OR source_identities.platform IS NOT excluded.platform
-       OR (
-         excluded.last_seen_at >= source_identities.last_seen_at
-         AND source_identities.last_seen_at IS NOT excluded.last_seen_at
-       )
+      last_seen_at = excluded.last_seen_at
+    WHERE julianday(excluded.last_seen_at) >= julianday(source_identities.last_seen_at)
+      AND (source_identities.host IS NOT excluded.host
+        OR source_identities.machine IS NOT excluded.machine
+        OR source_identities.os_user IS NOT excluded.os_user
+        OR source_identities.platform IS NOT excluded.platform
+        OR source_identities.last_seen_at IS NOT excluded.last_seen_at)
   `).bind(identity.source_id, identity.host, identity.machine, identity.os_user, identity.platform, seenAt, seenAt);
 }
 

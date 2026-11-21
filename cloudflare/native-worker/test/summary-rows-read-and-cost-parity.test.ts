@@ -45,7 +45,7 @@ function dateNDaysBefore(base: string, n: number): string {
 }
 
 /** 装配一批 facts + models：3 来源 x 2 agent x 35 天，每天一条 fact，约一半带 total_cost。 */
-async function seedRepresentativeDataset(db: D1Database): Promise<void> {
+async function seedRepresentativeDataset(db: D1Database, latestDate = TODAY, hours = [9]): Promise<void> {
   const now = NOW;
   const identityStatements: D1PreparedStatement[] = [];
   for (const sourceId of SOURCES) {
@@ -70,42 +70,45 @@ async function seedRepresentativeDataset(db: D1Database): Promise<void> {
   const factStatements: D1PreparedStatement[] = [];
   const modelStatements: D1PreparedStatement[] = [];
   for (let dayOffset = 0; dayOffset < HISTORY_DAYS; dayOffset += 1) {
-    const date = dateNDaysBefore(TODAY, dayOffset);
+    const date = dateNDaysBefore(latestDate, dayOffset);
     for (const sourceId of SOURCES) {
       for (const agent of AGENTS) {
-        factSeq += 1;
-        const factId = `rr-fact-${factSeq}`;
-        const windowStart = `${date}T09:00:00+08:00`;
-        const windowEnd = `${date}T09:59:59+08:00`;
-        const input = 1000 + factSeq;
-        const output = 2000 + factSeq;
-        // 一半的条目带 total_cost，一半是 NULL——覆盖 SUM 跳过 NULL 的分支。
-        const cost = factSeq % 2 === 0 ? 0.01 * factSeq : null;
-        factStatements.push(db.prepare(`
-          INSERT INTO usage_hourly_facts (
-            fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
-            window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
-            cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count, session_count,
-            attribution_confidence, provenance, first_seen_at, last_seen_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          factId, sourceId, sourceId, "tester", agent, `${agent}-main`, agent, agent,
-          windowStart, windowEnd, timezone, input, output, 0,
-          0, 0, input + output, cost, 1, 1,
-          "observed", "local-ledger", now, now,
-        ));
-        for (const model of MODELS[agent]) {
-          const modelInput = Math.floor(input / MODELS[agent].length);
-          const modelOutput = Math.floor(output / MODELS[agent].length);
-          modelStatements.push(db.prepare(`
-            INSERT INTO usage_hourly_models (
-              fact_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
-              reasoning_output_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        for (const hourNumber of hours) {
+          const hour = String(hourNumber).padStart(2, "0");
+          factSeq += 1;
+          const factId = `rr-fact-${factSeq}`;
+          const windowStart = `${date}T${hour}:00:00+08:00`;
+          const windowEnd = `${date}T${hour}:59:59+08:00`;
+          const input = 1000 + factSeq;
+          const output = 2000 + factSeq;
+          // 一半的条目带 total_cost，一半是 NULL——覆盖 SUM 跳过 NULL 的分支。
+          const cost = factSeq % 2 === 0 ? 0.01 * factSeq : null;
+          factStatements.push(db.prepare(`
+            INSERT INTO usage_hourly_facts (
+              fact_id, source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+              window_start, window_end, timezone, input_tokens, output_tokens, cache_creation_tokens,
+              cache_read_tokens, reasoning_output_tokens, total_tokens, total_cost, event_count, session_count,
+              attribution_confidence, provenance, first_seen_at, last_seen_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
-            factId, model, modelInput, modelOutput, 0, 0,
-            0, modelInput + modelOutput, cost === null ? null : cost / MODELS[agent].length, now, now,
+            factId, sourceId, sourceId, "tester", agent, `${agent}-main`, agent, agent,
+            windowStart, windowEnd, timezone, input, output, 0,
+            0, 0, input + output, cost, 1, 1,
+            "observed", "local-ledger", now, now,
           ));
+          for (const model of MODELS[agent]) {
+            const modelInput = Math.floor(input / MODELS[agent].length);
+            const modelOutput = Math.floor(output / MODELS[agent].length);
+            modelStatements.push(db.prepare(`
+              INSERT INTO usage_hourly_models (
+                fact_id, model, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
+                reasoning_output_tokens, total_tokens, total_cost, first_seen_at, last_seen_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              factId, model, modelInput, modelOutput, 0, 0,
+              0, modelInput + modelOutput, cost === null ? null : cost / MODELS[agent].length, now, now,
+            ));
+          }
         }
       }
     }
@@ -114,7 +117,7 @@ async function seedRepresentativeDataset(db: D1Database): Promise<void> {
   // 周期下这会产生*两条*不同的 daily rollup 行（GROUP BY 含 client），逼着 costsByItem
   // 的 "按更细分组键求和、再按 itemKey 汇总一次" 那条路径真的跨多行相加，而不是每个
   // itemKey 永远只对应一行（原种子每天每 source/agent 只有一条 fact，测不出这条路径）。
-  const extraDay = TODAY;
+  const extraDay = latestDate;
   const extraFactId = "rr-fact-extra-multi-row";
   factStatements.push(db.prepare(`
     INSERT INTO usage_hourly_facts (
@@ -144,7 +147,7 @@ async function seedRepresentativeDataset(db: D1Database): Promise<void> {
  * usage_rollup_dirty_days——让 fetchAccountHourlyRows 走"非 pending"的 rollup 读取路径，
  * 这正是本次改动要覆盖的路径。
  */
-async function populateRollupsAndMarkClean(db: D1Database): Promise<void> {
+async function populateRollupsAndMarkClean(db: D1Database, offsetHours: 1 | 8 = 8): Promise<void> {
   await db.batch([
     db.prepare(`
       INSERT INTO usage_hourly_rollups (
@@ -152,13 +155,13 @@ async function populateRollupsAndMarkClean(db: D1Database): Promise<void> {
         attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
         reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
-      SELECT strftime('%Y-%m-%dT%H:00:00', window_start, '+8 hours') || '+08:00',
-             max(strftime('%Y-%m-%dT%H:%M:%S', window_end, '+8 hours')) || '+08:00',
+      SELECT strftime('%Y-%m-%dT%H:00:00', window_start, '+${offsetHours} hours') || '+0${offsetHours}:00',
+             max(strftime('%Y-%m-%dT%H:%M:%S', window_end, '+${offsetHours} hours')) || '+0${offsetHours}:00',
              source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
              attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
              sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
       FROM usage_hourly_facts
-      GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, '+8 hours'), source_id, machine_id, os_user,
+      GROUP BY strftime('%Y-%m-%dT%H:00:00', window_start, '+${offsetHours} hours'), source_id, machine_id, os_user,
                ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
     `),
     db.prepare(`
@@ -167,12 +170,12 @@ async function populateRollupsAndMarkClean(db: D1Database): Promise<void> {
         attribution_confidence, provenance, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
         reasoning_output_tokens, total_tokens, event_count, session_count, fact_count, total_cost
       )
-      SELECT date(window_start, '+8 hours'), date(window_start, '+8 hours') || 'T00:00:00+08:00',
-             date(window_start, '+8 hours') || 'T23:59:59+08:00', source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
+      SELECT date(window_start, '+${offsetHours} hours'), date(window_start, '+${offsetHours} hours') || 'T00:00:00+0${offsetHours}:00',
+             date(window_start, '+${offsetHours} hours') || 'T23:59:59+0${offsetHours}:00', source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client,
              attribution_confidence, provenance, sum(input_tokens), sum(output_tokens), sum(cache_creation_tokens), sum(cache_read_tokens),
              sum(reasoning_output_tokens), sum(total_tokens), sum(event_count), sum(session_count), count(*), sum(total_cost)
       FROM usage_hourly_facts
-      GROUP BY date(window_start, '+8 hours'), source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
+      GROUP BY date(window_start, '+${offsetHours} hours'), source_id, machine_id, os_user, ai_provider, ai_account_id, agent, client, attribution_confidence, provenance
     `),
     db.prepare("DELETE FROM usage_rollup_dirty_days"),
   ]);
@@ -405,5 +408,39 @@ describe("#190：summary rows_read 基线 + 优化前后输出 parity", () => {
       // fetchFactRows 再读一次），这里用 prepare 调用次数直接证明合并成了一次。
       expect(factsOnlyPrepareCount).toBe(1);
     });
+  });
+});
+
+it("#306: client calendar costs use one bounded hourly rollup read for each recent period", async () => {
+  const date = "2026-11-22";
+  const currentTime = "2026-11-22T12:00:00Z";
+  const serviceTimezone = "Africa/Kinshasa";
+  await withWorker({ now: currentTime }, async ({ db }) => {
+    await seedRepresentativeDataset(db, date, [3, 9, 15, 21]);
+    await populateRollupsAndMarkClean(db, 1);
+    const { db: countedDb, rowsRead, reset } = wrapDb(db);
+    const report: Record<string, { service: number; client: number }> = {};
+    for (const [period, zone, start, end] of [
+      ["today", "Etc/UTC", "2026-11-22T00:00:00Z", "2026-11-23T00:00:00Z"],
+      ["week", "Asia/Shanghai", "2026-11-16T00:00:00+08:00", "2026-11-23T00:00:00+08:00"],
+      ["month", "Asia/Shanghai", "2026-11-01T00:00:00+08:00", "2026-11-23T00:00:00+08:00"],
+    ] as const) {
+      const request = { date, period, offset: 0, timezone: serviceTimezone, currentTime };
+      reset();
+      await buildSummary(countedDb, request);
+      const serviceRows = rowsRead.total;
+      reset();
+      const summary = await buildSummary(countedDb, { ...request, timezone: zone, serviceTimezone });
+      const oracle = await db.prepare(`
+        SELECT sum(total_tokens) AS tokens FROM usage_hourly_facts
+        WHERE julianday(window_start) >= julianday(?) AND julianday(window_start) < julianday(?)
+      `).bind(start, end).first<number>("tokens");
+      expect(summary.summary.total_tokens).toBe(oracle);
+      expect(rowsRead.rollupsHourly).toBeGreaterThan(0);
+      expect(rowsRead.factsOnlyRows).toBe(0);
+      expect(rowsRead.total).toBeLessThan(serviceRows * 2);
+      report[period] = { service: serviceRows, client: rowsRead.total };
+    }
+    console.log(`[#306 cold D1 rows_read] ${JSON.stringify(report)}`);
   });
 });

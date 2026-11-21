@@ -337,8 +337,12 @@ public enum MenuBarViewModel {
         // #186：仅当本机时区与 summary.timezone 的当前 UTC 偏移不同时才标注——国内使用时
         // （本机时区 == 服务时区）界面必须与现状逐字一致，不能无条件加标注。
         let tzDiffers = deviceTimeZone.secondsFromGMT(for: now) != summaryTimeZone.secondsFromGMT(for: now)
-        let periodTitleSuffix = tzDiffers ? timezoneAnnotation(summaryTimeZone) : ""
-        let hourAxisPrefix = tzDiffers ? timezoneAxisPrefix(summaryTimeZone) : nil
+        let hasClientStatistics = summary.serviceTimezone != nil
+        let isLocalToday = hasClientStatistics && selectedPeriodID == "today" && selectedOffset == 0
+        let isBeijingPeriod = hasClientStatistics && (selectedPeriodID == "week" || selectedPeriodID == "month")
+        let periodTitleSuffix = isLocalToday ? "（本机时区）"
+            : isBeijingPeriod ? "（北京时间）" : (tzDiffers ? timezoneAnnotation(summaryTimeZone) : "")
+        let hourAxisPrefix = isLocalToday ? "本机 " : (tzDiffers ? timezoneAxisPrefix(summaryTimeZone) : nil)
         let okCount = summary.sources.filter { $0.status == "ok" }.count
         let problemCount = summary.sources.filter { $0.status != "ok" && $0.status != "disabled" }.count
         let displaySlots = fixedProviderSlots(summary.providerSlots)

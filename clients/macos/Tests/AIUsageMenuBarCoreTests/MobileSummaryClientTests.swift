@@ -41,6 +41,22 @@ final class MobileSummaryClientTests: XCTestCase {
         }
     }
 
+    func testClientStatisticsUsesDeviceTimezoneOnlyForCurrentToday() async throws {
+        let baseURL = try XCTUnwrap(URL(string: "https://example.test"))
+        let zone = "Africa/Abidjan"
+        for (period, offset) in [("today", 0), ("today", -1), ("week", 0), ("week", -1), ("month", -1)] {
+            let transport = RecordingTransport(data: try fixtureData(), statusCode: 200)
+            let client = MobileSummaryClient(config: MobileSummaryClientConfig(
+                baseURL: baseURL, bearerToken: nil, period: period, offset: offset,
+                usesClientStatistics: true, timezone: zone
+            ), transport: transport)
+            _ = try await client.load()
+            let query = try XCTUnwrap(transport.requests.first?.url?.query)
+            let expected = "period=\(period)&offset=\(offset)&statistics=client"
+            XCTAssertEqual(query, period == "today" && offset == 0 ? expected + "&timezone=\(zone)" : expected)
+        }
+    }
+
     func testClientRejectsUnauthorizedResponse() async throws {
         let transport = RecordingTransport(data: Data("{}".utf8), statusCode: 401)
         let client = MobileSummaryClient(

@@ -481,3 +481,137 @@ describe.sequential("reporting timezone UTC+1 end to end", () => {
     }
   });
 });
+
+describe.sequential("client calendar periods", () => {
+  it("uses independent local todays, Beijing weeks and months, and the existing service history", async () => {
+    const now = "2026-06-01T12:00:00Z";
+    const { mf, db } = await acquireWorker({ AIUSAGE_NOW: now, AIUSAGE_TIMEZONE: "Africa/Kinshasa" });
+    const hours = [
+      ["2026-05-31T15:00:00Z", 1],
+      ["2026-05-31T16:00:00Z", 2],
+      ["2026-05-31T23:00:00Z", 4],
+      ["2026-06-01T00:00:00Z", 8],
+      ["2026-06-01T15:00:00Z", 16],
+      ["2026-06-01T16:00:00Z", 32],
+    ];
+    const [payload] = await python(["generate"], [{ observed_at: now, hours }]);
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const ingest = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST", headers, body: JSON.stringify(payload),
+    });
+    expect(ingest.status, await ingest.text()).toBe(200);
+    const persisted = (await db.prepare("SELECT window_start, total_tokens FROM usage_hourly_facts")
+      .all<{ window_start: string; total_tokens: number }>()).results;
+    expect(persisted).toHaveLength(hours.length);
+    const sum = (start: string, end: string) => persisted
+      .filter(row => Date.parse(row.window_start) >= Date.parse(start) && Date.parse(row.window_start) < Date.parse(end))
+      .reduce((total, row) => total + row.total_tokens, 0);
+    const read = async (query: string, route = "mobile/summary") => {
+      const response = await mf.dispatchFetch(`http://native.test/api/${route}?${query}`, { headers });
+      expect(response.status).toBe(200);
+      return await response.json() as RecordValue;
+    };
+    const utc = "statistics=client&timezone=Etc%2FUTC";
+    const beijing = "statistics=client&timezone=Asia%2FShanghai";
+    const [air, mini, week, otherWeek, month, otherMonth, yesterday, service, all, serviceAll, lastMonth] = await Promise.all([
+      read(`period=today&offset=0&${utc}`),
+      read(`period=today&offset=0&${beijing}`),
+      read(`period=week&offset=0&${utc}`),
+      read(`period=week&offset=0&${beijing}`),
+      read(`period=month&offset=0&${utc}`, "summary"),
+      read(`period=month&offset=0&${beijing}`, "summary"),
+      read(`period=today&offset=-1&${beijing}`),
+      read("period=today&offset=-1"),
+      read(`period=all&${utc}`),
+      read("period=all"),
+      read(`period=month&offset=-1&${utc}`),
+    ]);
+    for (const [result, zone, start, end] of [
+      [air, "Etc/UTC", "2026-06-01T00:00:00+00:00", "2026-06-02T00:00:00+00:00"],
+      [mini, "Asia/Shanghai", "2026-06-01T00:00:00+08:00", "2026-06-02T00:00:00+08:00"],
+    ] as const) {
+      const expected = sum(start, end);
+      expect(result.timezone).toBe(zone);
+      expect(result.service_timezone).toBe("Africa/Kinshasa");
+      expect(result.period.total_tokens).toBe(expected);
+      expect(result.trend.points[0].bucket).toBe(start);
+      expect(result.trend.points.reduce((total: number, row: RecordValue) => total + row.tokens, 0)).toBe(expected);
+      expect(result.breakdown.by_source.reduce((total: number, row: RecordValue) => total + row.tokens, 0)).toBe(expected);
+      expect(result.usage_incomplete_reason).toBeUndefined();
+    }
+    expect(week).toEqual(otherWeek);
+    expect(month).toEqual(otherMonth);
+    expect(week.timezone).toBe("Asia/Shanghai");
+    expect(month.timezone).toBe("Asia/Shanghai");
+    const beijingTotal = sum("2026-06-01T00:00:00+08:00", "2026-06-02T00:00:00+08:00");
+    expect(week.period).toMatchObject({ start_date: "2026-06-01", end_date: "2026-06-01", total_tokens: beijingTotal });
+    expect(month.summary).toMatchObject({ start_date: "2026-06-01", end_date: "2026-06-01", total_tokens: beijingTotal });
+    expect(lastMonth.period).toMatchObject({ start_date: "2026-05-01", end_date: "2026-05-31", total_tokens: 1 });
+    expect(yesterday.timezone).toBe("Africa/Kinshasa");
+    expect(yesterday.period).toEqual(service.period);
+    expect(all.period).toEqual(serviceAll.period);
+    expect(all.timezone).toBe(serviceAll.timezone);
+    expect(service.service_timezone).toBeUndefined();
+    const invalid = await mf.dispatchFetch("http://native.test/api/mobile/summary?period=today&offset=0&statistics=client&timezone=NoSuch%2FZone", { headers });
+    expect(invalid.status).toBe(400);
+  });
+
+  it("marks overlapping old day-only totals as incomplete and uses bounded facts after hourly retention", async () => {
+    const now = "2026-07-01T12:00:00Z";
+    const { mf, db } = await acquireWorker({ AIUSAGE_NOW: now, AIUSAGE_TIMEZONE: "Africa/Kinshasa" });
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const [payload] = await python(["generate"], [{ observed_at: now, hours: [
+      ["2026-05-31T16:00:00Z", 20],
+      ["2026-06-29T03:00:00Z", 10],
+    ] }]);
+    const ingest = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST", headers, body: JSON.stringify(payload),
+    });
+    expect(ingest.status, await ingest.text()).toBe(200);
+    // Retention leaves the newer rollup intact, so checking for any hourly row would miss 20 tokens.
+    await db.prepare("DELETE FROM usage_hourly_rollups WHERE julianday(bucket_start) < julianday(?)")
+      .bind("2026-06-01T00:00:00Z").run();
+    const operations = await python(["legacy-daily"], [{ date: "2026-05-31", source_id: "legacy-only", tokens: 301 }]);
+    await db.prepare(operations[0][0]).bind(...operations[0][1]).run();
+    // Simulate the archived date as recorded by the deployed UTC+1 reporting job.
+    await db.prepare("UPDATE usage_daily_rollups SET bucket_start = ?, bucket_end = ? WHERE source_id = ?")
+      .bind("2026-05-31T00:00:00+01:00", "2026-06-01T00:00:00+01:00", "legacy-only").run();
+    const read = async (params: string) => {
+      const response = await mf.dispatchFetch(`http://native.test/api/mobile/summary?${params}`, { headers });
+      expect(response.status).toBe(200);
+      return await response.json() as RecordValue;
+    };
+    const client = await read("period=month&offset=-1&statistics=client");
+    expect(client.usage_incomplete_reason).toBe("legacy_daily_only");
+    expect(client.period).toMatchObject({ start_date: "2026-06-01", end_date: "2026-06-30", total_tokens: 30 });
+    const old = await read("period=month&offset=-2");
+    expect(old.period.total_tokens).toBe(321);
+    expect(old.usage_incomplete_reason).toBeUndefined();
+  });
+
+  it("uses the selected zone before the server day changes and labels fractional boundaries", async () => {
+    const now = "2026-05-31T20:00:00Z";
+    const { mf } = await acquireWorker({ AIUSAGE_NOW: now, AIUSAGE_TIMEZONE: "Africa/Kinshasa" });
+    const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+    const [payload] = await python(["generate"], [{ observed_at: now, hours: [
+      ["2026-05-31T18:00:00Z", 20],
+      ["2026-05-31T19:00:00Z", 10],
+    ] }]);
+    const ingest = await mf.dispatchFetch("http://native.test/ingest", {
+      method: "POST", headers, body: JSON.stringify(payload),
+    });
+    expect(ingest.status, await ingest.text()).toBe(200);
+    const read = async (timezone: string) => {
+      const response = await mf.dispatchFetch(`http://native.test/api/summary?period=today&statistics=client&timezone=${encodeURIComponent(timezone)}`, { headers });
+      expect(response.status).toBe(200);
+      return await response.json() as RecordValue;
+    };
+    const [india, utc] = await Promise.all([read("Asia/Kolkata"), read("Etc/UTC")]);
+    expect(india.usage_incomplete_reason).toBe("hourly_boundary_approximate");
+    expect(india.summary).toMatchObject({ start_date: "2026-06-01", total_tokens: 10 });
+    expect(india.trend.axis[0]).toBe("2026-06-01T00:00:00+05:30");
+    expect(india.trend.points[0].total_tokens).toBe(10);
+    expect(utc.summary).toMatchObject({ start_date: "2026-05-31", total_tokens: 30 });
+    expect(utc.usage_incomplete_reason).toBeUndefined();
+  });
+});

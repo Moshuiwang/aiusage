@@ -11,4 +11,5 @@ public struct MenuPeriodSelection: Equatable, Sendable {
     }
 
     public var cacheKey: String { offset == 0 ? periodID : "\(periodID):\(offset)" }
+    public var isCurrentToday: Bool { periodID == "today" && offset == 0 }
 }

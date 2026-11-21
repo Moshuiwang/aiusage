@@ -1,4 +1,4 @@
-import type { SummarySnapshot } from "./read-model/shared";
+import type { SummarySnapshot, UsageIncompleteReason } from "./read-model/shared";
 import { CLOUD_SOURCE_ID, CLOUD_SOURCE_LABEL, displaySourceId, sourceAgents, sourceBreakdown } from "./source-breakdown";
 
 type AnyRecord = Record<string, unknown>;
@@ -13,6 +13,8 @@ export type MobileSummary = {
   client: "ios";
   generated_at: string;
   timezone: string;
+  service_timezone?: string;
+  usage_incomplete_reason?: UsageIncompleteReason;
   period: Record<string, unknown>;
   trend: Record<string, unknown>;
   sources: Record<string, unknown>[];
@@ -85,6 +87,8 @@ export function buildMobileSummary(snapshot: SummarySnapshot): MobileSummary {
     client: "ios",
     generated_at: snapshot.generated_at,
     timezone: snapshot.timezone,
+    ...(snapshot.service_timezone !== undefined ? { service_timezone: snapshot.service_timezone } : {}),
+    ...(snapshot.usage_incomplete_reason !== undefined ? { usage_incomplete_reason: snapshot.usage_incomplete_reason } : {}),
     period: {
       id: summary.period || "today",
       date: summary.date,

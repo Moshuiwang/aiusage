@@ -1,10 +1,11 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { Miniflare } from "miniflare";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { acquireWorker, applySchema, bundleWorker } from "./golden/harness";
 import { apiContractGoldenPath, fixedNow, repoRoot, token } from "./golden/paths";
 import { refreshDisplayRollups } from "../src/write-model/handlers";
+import worker from "../src/index";
 
 describe.sequential("native TS Worker web surface", () => {
   let mf: Miniflare;
@@ -477,6 +478,48 @@ describe.sequential("native TS Worker web surface", () => {
       expect(response.headers.get("Cache-Control")).toBeNull();
     } finally {
       await mf.dispose();
+    }
+  });
+
+  it("separates opted-in cache entries at local midnight and shares Beijing periods across clients", async () => {
+    const db = await mf.getD1Database("AIUSAGE_DB");
+    await refreshDisplayRollups(db);
+    expect(await db.prepare("SELECT count(*) AS n FROM usage_rollup_dirty_days").first("n")).toBe(0);
+
+    const entries = new Map<string, Response>();
+    vi.stubGlobal("caches", { default: {
+      match: async (key: Request) => entries.get(key.url)?.clone(),
+      put: async (key: Request, value: Response) => { entries.set(key.url, value); },
+      delete: async (key: Request) => entries.delete(key.url),
+    } });
+    let now = "2026-06-03T23:59:59Z";
+    const read = async (period: string, timezone: string) => {
+      const url = `http://native.test/api/mobile/summary?period=${period}&offset=0&statistics=client&timezone=${encodeURIComponent(timezone)}`;
+      const response = await worker.fetch(new Request(url, { headers: { Authorization: `Bearer ${token}` } }), {
+        AIUSAGE_DB: db, AIUSAGE_TOKEN: token, AIUSAGE_TIMEZONE: "Asia/Shanghai", AIUSAGE_NOW: now,
+      });
+      expect(response.status).toBe(200);
+      return { cache: response.headers.get("X-AIUsage-Cache"), body: await response.json() as Record<string, any> };
+    };
+    try {
+      const utc = await read("today", "Etc/UTC");
+      const beijing = await read("today", "Asia/Shanghai");
+      expect(utc.cache).toBe("MISS");
+      expect(beijing.cache).toBe("MISS");
+      expect(utc.body.period.start_date).toBe("2026-06-03");
+      expect(beijing.body.period.start_date).toBe("2026-06-04");
+      expect((await read("today", "Etc/UTC")).cache).toBe("HIT");
+      now = "2026-06-04T00:00:00Z";
+      const newDay = await read("today", "Etc/UTC");
+      expect(newDay.cache).toBe("MISS");
+      expect(newDay.body.period.start_date).toBe("2026-06-04");
+      const week = await read("week", "Etc/UTC");
+      const shared = await read("week", "Asia/Shanghai");
+      expect(week.cache).toBe("MISS");
+      expect(shared.cache).toBe("HIT");
+      expect(shared.body).toEqual(week.body);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

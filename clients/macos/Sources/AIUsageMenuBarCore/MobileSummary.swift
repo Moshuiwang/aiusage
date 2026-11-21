@@ -5,6 +5,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
     public let client: String
     public let generatedAt: String?
     public let timezone: String?
+    public let serviceTimezone: String?
+    public let usageIncompleteReason: String?
     public let period: MobilePeriod
     public let trend: MobileTrend
     public let sources: [MobileSource]
@@ -29,12 +31,16 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         limits: MobileLimits,
         providerSlots: [MobileProviderSlot] = [],
         providerUsageCoverage: MobileProviderUsageCoverage = .unknown,
-        accountUsageCoverage: [String: Int] = [:]
+        accountUsageCoverage: [String: Int] = [:],
+        serviceTimezone: String? = nil,
+        usageIncompleteReason: String? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.client = client
         self.generatedAt = generatedAt
         self.timezone = timezone
+        self.serviceTimezone = serviceTimezone
+        self.usageIncompleteReason = usageIncompleteReason
         self.period = period
         self.trend = trend
         self.sources = sources
@@ -51,6 +57,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         client = try container.decode(String.self, forKey: .client)
         generatedAt = try container.decodeIfPresent(String.self, forKey: .generatedAt)
         timezone = try container.decodeIfPresent(String.self, forKey: .timezone)
+        serviceTimezone = try container.decodeIfPresent(String.self, forKey: .serviceTimezone)
+        usageIncompleteReason = try container.decodeIfPresent(String.self, forKey: .usageIncompleteReason)
         period = try container.decode(MobilePeriod.self, forKey: .period)
         trend = try container.decode(MobileTrend.self, forKey: .trend)
         sources = try container.decode([MobileSource].self, forKey: .sources)
@@ -76,6 +84,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         try container.encode(client, forKey: .client)
         try container.encodeIfPresent(generatedAt, forKey: .generatedAt)
         try container.encodeIfPresent(timezone, forKey: .timezone)
+        try container.encodeIfPresent(serviceTimezone, forKey: .serviceTimezone)
+        try container.encodeIfPresent(usageIncompleteReason, forKey: .usageIncompleteReason)
         try container.encode(period, forKey: .period)
         try container.encode(trend, forKey: .trend)
         try container.encode(sources, forKey: .sources)
@@ -94,6 +104,8 @@ public struct MobileSummary: Codable, Equatable, Sendable {
         case client
         case generatedAt = "generated_at"
         case timezone
+        case serviceTimezone = "service_timezone"
+        case usageIncompleteReason = "usage_incomplete_reason"
         case period
         case trend
         case sources
