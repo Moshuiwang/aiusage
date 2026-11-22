@@ -23,11 +23,16 @@ describe("historical macOS machine names", () => {
   });
 
   it("preserves different sources, users and named devices", () => {
+    const genericMac = { ...historical, machine_id: "Mac", machine_name: "Mac" };
     for (const row of [
       { ...historical, source_id: "different-mac" },
       { ...historical, os_user: "different-user" },
       { ...historical, machine_name: "ExplicitName" },
       { ...historical, machine_id: "explicit-machine-id" },
+      { ...genericMac, source_id: "different-mac" },
+      { ...genericMac, os_user: "different-user" },
+      { ...genericMac, machine_name: "ExplicitName" },
+      { ...genericMac, machine_id: "custom-id", machine_name: "custom-id" },
     ]) {
       expect(withStableMachineName(row, identities)).toBe(row);
     }
@@ -43,9 +48,12 @@ describe("historical macOS machine names", () => {
   });
 });
 
-it("shows one paired Mac across network changes and preserves another source on the old address", async () => {
+it.each([
+  { oldName: "192.0.2.8", period: "week&offset=0" },
+  { oldName: "Mac", period: "month&offset=0&statistics=client" },
+])("shows one paired Mac while preserving another source named $oldName", async ({ oldName, period }) => {
   const days = ["2026-09-21", "2026-09-22", "2026-09-23"];
-  const names = ["192.0.2.8", "192.0.2.19", "MacBook-Air.local"];
+  const names = [oldName, "192.0.2.19", "MacBook-Air.local"];
   await withWorker({ now: "2026-09-23T12:05:00+08:00" }, async ({ fetchRaw }) => {
     for (const [index, day] of days.entries()) {
       const [mac, linux] = collectModelPayloads(day);
@@ -57,7 +65,7 @@ it("shows one paired Mac across network changes and preserves another source on 
         expect(response.status).toBe(200);
       }
     }
-    const path = "/api/mobile/summary?period=week&offset=0";
+    const path = `/api/mobile/summary?period=${period}`;
     const response = await fetchRaw({ method: "GET", path, auth: true });
     expect(response.status).toBe(200);
     const summary = JSON.parse(response.body.toString());
