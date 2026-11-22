@@ -28,14 +28,15 @@ function isIpAddress(value: string): boolean {
   }
 }
 
-/** Historical IP names can be replaced once the same paired source reports a stable name. */
+/** Historical IP names and the collector's "Mac" fallback can use the same source's stable name. */
 export function withStableMachineName<T extends Record<string, unknown>>(
   row: T,
   identities: Record<string, SourceIdentity>,
 ): T {
   const { source_id, machine_id, machine_name, os_user } = row;
   if (typeof source_id !== "string" || !Object.hasOwn(identities, source_id)) return row;
-  if (typeof machine_id !== "string" || machine_name !== machine_id || !isIpAddress(machine_id)) return row;
+  if (typeof machine_id !== "string" || machine_name !== machine_id) return row;
+  if (machine_id !== "Mac" && !isIpAddress(machine_id)) return row;
   const identity = identities[source_id];
   const stableName = identity.machine?.trim();
   if (identity.platform !== "darwin" || !os_user || identity.os_user !== os_user || !stableName || isIpAddress(stableName)) {
